@@ -14,6 +14,26 @@ class ApiClient {
     this.baseUrl = `${trimmed}/api`;
   }
 
+  private logRequestFailure(details: {
+    url: string;
+    method: string;
+    status?: number;
+    statusText?: string;
+    contentType?: string;
+    headers?: HeadersInit;
+    body?: unknown;
+    error?: unknown;
+  }): void {
+    const normalizedBody = typeof details.body === 'string'
+      ? details.body.slice(0, 1000)
+      : details.body;
+
+    console.error('[API Client] Erro de requisição', {
+      ...details,
+      body: normalizedBody
+    });
+  }
+
   private getAuthToken(): string | null {
     const tokenData = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (!tokenData) return null;
@@ -44,21 +64,43 @@ class ApiClient {
     }
 
     const token = this.getAuthToken();
+    const method = (options.method || 'GET').toUpperCase();
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers
     };
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers
-    });
+    const url = `${this.baseUrl}${path}`;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers
+      });
+    } catch (error) {
+      this.logRequestFailure({
+        url,
+        method,
+        headers,
+        error
+      });
+      throw error;
+    }
 
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
       const text = await response.text();
       if (!response.ok) {
+        this.logRequestFailure({
+          url,
+          method,
+          status: response.status,
+          statusText: response.statusText,
+          contentType,
+          headers,
+          body: text
+        });
         throw new Error(text || response.statusText);
       }
       return text as T;
@@ -66,6 +108,15 @@ class ApiClient {
 
     const payload = await response.json();
     if (!response.ok || payload?.success === false) {
+      this.logRequestFailure({
+        url,
+        method,
+        status: response.status,
+        statusText: response.statusText,
+        contentType,
+        headers,
+        body: payload
+      });
       throw new Error(payload?.message || 'Erro na requisição');
     }
 
