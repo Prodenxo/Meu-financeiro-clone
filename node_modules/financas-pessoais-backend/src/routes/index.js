@@ -1,0 +1,16 @@
+import { Router } from 'express';
+import authRoutes from './auth.routes.js';
+import categoriesRoutes from './categories.routes.js';
+import transactionsRoutes from './transactions.routes.js';
+import usersRoutes from './users.routes.js';
+import googleCalendarRoutes from './googleCalendar.routes.js';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+router.use('/categories', categoriesRoutes);
+router.use('/transactions', transactionsRoutes);
+router.use('/users', usersRoutes);
+router.use('/google-calendar', googleCalendarRoutes);
+
+export default router;

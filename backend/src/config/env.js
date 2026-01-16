@@ -13,7 +13,10 @@ const required = (key) => {
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || '3333',
-  CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
+  CORS_ORIGIN: process.env.CORS_ORIGIN
+    || (process.env.NODE_ENV === 'development'
+      ? 'http://localhost:3000,http://localhost:3002'
+      : '*'),
   SUPABASE_URL: required('SUPABASE_URL'),
   SUPABASE_ANON_KEY: required('SUPABASE_ANON_KEY'),
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',

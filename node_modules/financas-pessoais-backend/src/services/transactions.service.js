@@ -1,0 +1,101 @@
+import { createSupabaseClient } from '../config/supabase.js';
+import { badRequest } from '../utils/errors.js';
+
+const normalizeTipo = (tipo) => {
+  if (!tipo) return tipo;
+  return tipo === 'saída' ? 'saida' : tipo;
+};
+
+const shouldRetryTipo = (errorMessage, tipoValue) => {
+  if (tipoValue !== 'saída') return false;
+  const msg = (errorMessage || '').toLowerCase();
+  return msg.includes('invalid input value for enum') ||
+    msg.includes('check constraint') ||
+    msg.includes('violates check constraint');
+};
+
+export const listTransactions = async (userId) => {
+  const dbClient = createSupabaseClient({ useServiceRole: true });
+  const { data, error } = await dbClient
+    .from('lancamentos_id')
+    .select('*')
+    .eq('user_id', userId)
+    .order('criado_em', { ascending: false });
+
+  if (error) throw badRequest(error.message);
+  return data || [];
+};
+
+export const createTransaction = async (userId, payload) => {
+  const { tipo, valor, classificacao, data, status, obs } = payload || {};
+  const tipoNormalizado = normalizeTipo(tipo);
+
+  if (!tipoNormalizado || !valor || !classificacao || !data || !status) {
+    throw badRequest('Campos obrigatórios: tipo, valor, classificacao, data, status');
+  }
+
+  const dbClient = createSupabaseClient({ useServiceRole: true });
+
+  const tryInsert = async (tipoToUse) => {
+    return await dbClient
+      .from('lancamentos_id')
+      .insert([{
+        tipo: tipoToUse,
+        valor,
+        classificacao,
+        data,
+        status,
+        obs: obs || null,
+        user_id: userId
+      }])
+      .select()
+      .single();
+  };
+
+  let { data: newTransaction, error } = await tryInsert(String(tipoNormalizado));
+  if (error && shouldRetryTipo(error.message, String(tipo))) {
+    const retry = await tryInsert('saida');
+    newTransaction = retry.data;
+    error = retry.error;
+  }
+
+  if (error) throw badRequest(error.message);
+  return newTransaction;
+};
+
+export const updateTransaction = async (userId, payload) => {
+  const { id, ...updates } = payload || {};
+  if (!id) throw badRequest('ID da transação é obrigatório');
+
+  const dbClient = createSupabaseClient({ useServiceRole: true });
+  const { data, error } = await dbClient
+    .from('lancamentos_id')
+    .update({
+      ...updates,
+      ...(updates.tipo ? { tipo: normalizeTipo(updates.tipo) } : {})
+    })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) throw badRequest(error.message);
+  return data;
+};
+
+export const deleteTransaction = async (userId, body, query) => {
+  const idFromQuery = query?.id ?? null;
+  const idFromBody = body?.id ?? null;
+  const id = idFromQuery || idFromBody;
+
+  if (!id) throw badRequest('ID da transação é obrigatório');
+
+  const dbClient = createSupabaseClient({ useServiceRole: true });
+  const { error } = await dbClient
+    .from('lancamentos_id')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) throw badRequest(error.message);
+};
