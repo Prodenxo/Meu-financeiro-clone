@@ -1,0 +1,102 @@
+import * as authService from '../services/auth.service.js';
+import { sendSuccess } from '../utils/response.js';
+
+export const signUp = async (req, res, next) => {
+  try {
+    const result = await authService.signUp(req.body);
+    return sendSuccess(res, result, 'Usuário registrado com sucesso');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const signIn = async (req, res, next) => {
+  try {
+    const result = await authService.signIn(req.body);
+    return sendSuccess(res, result, 'Login realizado com sucesso');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const signOut = async (req, res, next) => {
+  try {
+    await authService.signOut(req.accessToken);
+    return sendSuccess(res, { success: true }, 'Logout realizado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getSession = async (req, res, next) => {
+  try {
+    const session = await authService.getSession(req.accessToken);
+    return sendSuccess(res, { session }, 'Sessão obtida');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const resetPassword = async (req, res, next) => {
+  try {
+    const origin = req.headers.origin || '';
+    await authService.resetPasswordForEmail(req.body.email, origin);
+    return sendSuccess(res, { success: true }, 'Email de recuperação enviado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const processRecoveryHash = async (req, res, next) => {
+  try {
+    const result = await authService.processRecoveryHash(req.body);
+    return sendSuccess(res, result, 'Recovery processado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const exchangeCodeForSession = async (req, res, next) => {
+  try {
+    const result = await authService.exchangeCodeForSession(req.body.code);
+    return sendSuccess(res, result, 'Sessão criada');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const updatePassword = async (req, res, next) => {
+  try {
+    await authService.updatePassword(req.accessToken, req.body.newPassword);
+    return sendSuccess(res, { success: true }, 'Senha atualizada');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const updatePhone = async (req, res, next) => {
+  try {
+    const phone = await authService.updatePhone(req.accessToken, req.body.phone);
+    return sendSuccess(res, { phone }, 'Telefone atualizado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const updateDisplayName = async (req, res, next) => {
+  try {
+    await authService.updateDisplayName(req.accessToken, req.body.displayName);
+    return sendSuccess(res, { success: true }, 'Nome atualizado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const updateRole = async (req, res, next) => {
+  try {
+    const result = await authService.updateRole(req.accessToken, req.body.userId, req.body.role);
+    return sendSuccess(res, result, 'Role atualizada');
+  } catch (error) {
+    return next(error);
+  }
+};

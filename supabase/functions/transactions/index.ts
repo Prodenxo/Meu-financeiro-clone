@@ -1,0 +1,252 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Max-Age': '86400',
+}
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    console.log('OPTIONS preflight request recebido')
+    return new Response(null, { 
+      status: 204,
+      headers: corsHeaders 
+    })
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Variáveis de ambiente não configuradas')
+      return new Response(
+        JSON.stringify({ error: 'Configuração do servidor incompleta' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    // Cliente para autenticar o usuário (usa o token do usuário)
+    const authHeader = req.headers.get('Authorization') ?? ''
+    const supabaseAuthClient = createClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        global: {
+          headers: authHeader ? { Authorization: authHeader } : {},
+        },
+      }
+    )
+
+    // Obter usuário autenticado
+    const {
+      data: { user },
+    } = await supabaseAuthClient.auth.getUser()
+
+    if (!user) {
+      return new Response(
+        JSON.stringify({ error: 'Não autenticado' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    function shouldRetryTipo(errorMessage: string, tipoValue: string): boolean {
+      if (tipoValue !== 'saída') return false
+      const msg = (errorMessage || '').toLowerCase()
+      return msg.includes('invalid input value for enum') ||
+        msg.includes('check constraint') ||
+        msg.includes('violates check constraint')
+    }
+
+    // Cliente para operações no banco.
+    // Preferir Service Role para evitar bloqueios por RLS, mantendo a autorização pelo user.id.
+    const supabaseDbClient = createClient(
+      supabaseUrl,
+      supabaseServiceKey || supabaseAnonKey,
+      {
+        global: {
+          headers: supabaseServiceKey ? { Authorization: `Bearer ${supabaseServiceKey}` } : (authHeader ? { Authorization: authHeader } : {}),
+        },
+      }
+    )
+
+    const method = req.method
+
+    // GET - Listar transações
+    if (method === 'GET') {
+      const { data, error } = await supabaseDbClient
+        .from('lancamentos_id')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('criado_em', { ascending: false })
+
+      if (error) {
+        return new Response(
+          JSON.stringify({ error: error.message, code: error.code }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      return new Response(
+        JSON.stringify(data || []),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // POST - Criar transação
+    if (method === 'POST') {
+      const transaction = await req.json()
+      const { tipo, valor, classificacao, data, status, obs } = transaction
+      const tipoNormalizado = tipo === 'saída' ? 'saida' : tipo
+
+      // Validações simples para erro mais claro no 400
+      if (!tipoNormalizado || !valor || !classificacao || !data || !status) {
+        return new Response(
+          JSON.stringify({ error: 'Campos obrigatórios: tipo, valor, classificacao, data, status' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      async function tryInsert(tipoToUse: string) {
+        return await supabaseDbClient
+          .from('lancamentos_id')
+          .insert([{ 
+            tipo: tipoToUse, 
+            valor, 
+            classificacao, 
+            data, 
+            status, 
+            obs: obs || null,
+            user_id: user.id 
+          }])
+          .select()
+          .single()
+      }
+
+      let { data: newTransaction, error } = await tryInsert(String(tipoNormalizado))
+      if (error && shouldRetryTipo(error.message, String(tipoNormalizado))) {
+        console.warn('Falha ao inserir com tipo "saída"; tentando "saida" como fallback')
+        const retry = await tryInsert('saida')
+        newTransaction = retry.data as any
+        error = retry.error as any
+      }
+
+      if (error) {
+        return new Response(
+          JSON.stringify({ error: error.message, code: error.code, details: error.details, hint: error.hint }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      return new Response(
+        JSON.stringify(newTransaction),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // PUT - Atualizar transação
+    if (method === 'PUT') {
+      const { id, ...updates } = await req.json()
+
+      if (!id) {
+        return new Response(
+          JSON.stringify({ error: 'ID da transação é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const { data: updatedTransaction, error } = await supabaseDbClient
+        .from('lancamentos_id')
+        .update({
+          ...updates,
+          ...(updates.tipo ? { tipo: updates.tipo === 'saída' ? 'saida' : updates.tipo } : {}),
+        })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+
+      if (error) {
+        return new Response(
+          JSON.stringify({ error: error.message, code: error.code }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      return new Response(
+        JSON.stringify(updatedTransaction),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // DELETE - Deletar transação
+    if (method === 'DELETE') {
+      let id: number;
+      
+      // Tentar obter ID do body ou da query string
+      const url = new URL(req.url);
+      const idParam = url.searchParams.get('id');
+      
+      if (idParam) {
+        id = parseInt(idParam, 10);
+      } else {
+        try {
+          const body = await req.json();
+          id = body.id;
+        } catch {
+          return new Response(
+            JSON.stringify({ error: 'ID da transação é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+
+      if (!id) {
+        return new Response(
+          JSON.stringify({ error: 'ID da transação é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const { error } = await supabaseDbClient
+        .from('lancamentos_id')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id)
+
+      if (error) {
+        return new Response(
+          JSON.stringify({ error: error.message, code: error.code }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Método não permitido' }),
+      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  } catch (error: any) {
+    console.error('Erro não tratado na Edge Function transactions:', {
+      message: error.message,
+      stack: error.stack
+    })
+    return new Response(
+      JSON.stringify({ 
+        error: error.message || 'Erro interno do servidor',
+        details: Deno.env.get('DENO_ENV') === 'development' ? error.stack : undefined
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+})

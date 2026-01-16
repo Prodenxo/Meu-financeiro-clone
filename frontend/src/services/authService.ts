@@ -1,0 +1,167 @@
+import { apiClient } from './apiClient';
+
+export interface SignUpInput {
+  email: string;
+  password: string;
+  phone?: string;
+  displayName?: string;
+}
+
+/**
+ * Registra um novo usuário
+ */
+export async function signUp(input: SignUpInput) {
+  const result = await apiClient.post<{
+    user: any;
+    userId: string;
+    phone: string | null;
+    displayName: string | null;
+  }>('/auth/signup', input);
+
+  // Se o backend retornar sessão/token, salvar
+  // Nota: O signup pode não retornar sessão imediatamente dependendo da configuração
+  // do Supabase (confirmação de email pode ser necessária)
+
+  return {
+    user: result.user,
+    userId: result.userId,
+    phone: result.phone,
+    displayName: result.displayName,
+  };
+}
+
+/**
+ * Faz login do usuário
+ */
+export async function signIn(email: string, password: string) {
+  try {
+    console.log('Tentando fazer login...');
+    const result = await apiClient.post<{
+      user: any;
+      userId: string | null;
+      phone: string | null;
+      displayName: string | null;
+      role: 'superadmin' | 'admin' | 'usuario';
+      session: any;
+    }>('/auth/signin', { email, password });
+
+    console.log('Resposta do login:', { 
+      hasUser: !!result.user, 
+      hasSession: !!result.session,
+      hasAccessToken: !!result.session?.access_token 
+    });
+
+    // Salvar token no localStorage
+    if (result.session?.access_token) {
+      apiClient.setAuthToken({
+        access_token: result.session.access_token,
+        refresh_token: result.session.refresh_token,
+        expires_at: result.session.expires_at,
+        user: result.user,
+      });
+      console.log('Token salvo no localStorage');
+    } else {
+      console.warn('Sessão não contém access_token:', result.session);
+    }
+
+    return {
+      user: result.user,
+      userId: result.userId,
+      phone: result.phone,
+      displayName: result.displayName,
+      role: result.role,
+    };
+  } catch (error: any) {
+    console.error('Erro ao fazer login:', error);
+    throw error;
+  }
+}
+
+/**
+ * Faz logout do usuário
+ */
+export async function signOut() {
+  try {
+    await apiClient.post('/auth/signout');
+  } catch (error) {
+    // Continuar mesmo se a chamada falhar
+    console.error('Erro ao fazer logout no backend:', error);
+  }
+  // Sempre remover token local
+  apiClient.clearAuthToken();
+}
+
+/**
+ * Obtém a sessão atual
+ */
+export async function getSession() {
+  try {
+    // Verificar se há token no localStorage primeiro
+    const tokenData = localStorage.getItem('financas-pessoais-auth-token');
+    if (!tokenData) {
+      return null;
+    }
+
+    const parsed = JSON.parse(tokenData);
+    if (!parsed.access_token) {
+      return null;
+    }
+
+    // Tentar verificar se o token ainda é válido
+    const result = await apiClient.get<{ session: any }>('/auth/session');
+    
+    // Se houver sessão, atualizar token no localStorage
+    if (result.session?.user) {
+      // Atualizar dados do usuário, mantendo o token existente
+      apiClient.setAuthToken({
+        access_token: parsed.access_token,
+        refresh_token: parsed.refresh_token,
+        expires_at: parsed.expires_at,
+        user: result.session.user,
+      });
+      
+      return {
+        user: result.session.user,
+        access_token: parsed.access_token,
+        refresh_token: parsed.refresh_token,
+        expires_at: parsed.expires_at,
+        role: result.session.role,
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    // Se não houver sessão válida, limpar token local
+    apiClient.clearAuthToken();
+    return null;
+  }
+}
+
+/**
+ * Solicita reset de senha
+ */
+export async function resetPasswordForEmail(email: string) {
+  await apiClient.post('/auth/reset-password', { email });
+}
+
+/**
+ * Atualiza a senha do usuário
+ */
+export async function updatePassword(newPassword: string) {
+  await apiClient.post('/auth/update-password', { newPassword });
+}
+
+/**
+ * Atualiza o telefone do usuário
+ */
+export async function updatePhone(userId: string, phone: string) {
+  const result = await apiClient.post<{ phone: string }>('/auth/update-phone', { phone });
+  return result.phone;
+}
+
+/**
+ * Atualiza o nome de exibição do usuário
+ */
+export async function updateDisplayName(displayName: string) {
+  await apiClient.post('/auth/update-display-name', { displayName });
+}
