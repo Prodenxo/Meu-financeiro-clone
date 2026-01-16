@@ -1,0 +1,7 @@
+export type UserRole = 'superadmin' | 'admin' | 'usuario';
+
+export function hasRole(role: UserRole | null, allowed: UserRole[]) {
+  if (!role) return false;
+  if (role === 'superadmin') return true;
+  return allowed.includes(role);
+}

@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos para react-big-calendar no modo escuro */
+.dark .rbc-calendar {
+  color: #F9FAFB;
+}
+
+.dark .rbc-header {
+  border-bottom: 1px solid #4B5563;
+  color: #F9FAFB;
+}
+
+.dark .rbc-day-bg {
+  border-color: #4B5563 !important;
+  background-color: #1F2937 !important;
+}
+
+.dark .rbc-today {
+  background-color: #374151 !important;
+}
+
+.dark .rbc-off-range-bg {
+  background-color: #111827 !important;
+}
+
+.dark .rbc-off-range {
+  color: #6B7280 !important;
+}
+
+.dark .rbc-toolbar {
+  color: #F9FAFB !important;
+}
+
+.dark .rbc-toolbar button {
+  background-color: #374151 !important;
+  color: #F9FAFB !important;
+  border-color: #4B5563 !important;
+}
+
+.dark .rbc-toolbar button:hover,
+.dark .rbc-toolbar button:focus {
+  background-color: #4B5563 !important;
+}
+
+.dark .rbc-toolbar button.rbc-active {
+  background-color: #2563EB !important;
+  border-color: #2563EB !important;
+  color: white !important;
+}
+
+.dark .rbc-month-view {
+  border-color: #4B5563;
+}
+
+.dark .rbc-time-view {
+  border-color: #4B5563;
+}
+
+.dark .rbc-time-content {
+  border-top: 1px solid #4B5563;
+}
+
+.dark .rbc-time-header-content {
+  border-left: 1px solid #4B5563;
+}
+
+.dark .rbc-time-slot {
+  border-top: 1px solid #4B5563;
+}
+
+.dark .rbc-day-slot .rbc-time-slot {
+  border-top: 1px solid #4B5563;
+}
+
+.dark .rbc-time-header-gutter {
+  border-right: 1px solid #4B5563;
+}
+
+.dark .rbc-agenda-view table.rbc-agenda-table {
+  border-color: #4B5563;
+}
+
+.dark .rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+  border-color: #4B5563;
+  color: #F9FAFB;
+}
+
+.dark .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  border-color: #4B5563;
+  color: #F9FAFB;
+}
+
+.dark .rbc-agenda-date-cell,
+.dark .rbc-agenda-time-cell {
+  color: #F9FAFB;
+}
+
+.dark .rbc-selected-cell {
+  background-color: #2563EB;
+}
+
+.dark .rbc-show-more {
+  background-color: #374151;
+  color: #F9FAFB;
+  border-color: #4B5563;
+}
+
+.dark .rbc-show-more:hover {
+  background-color: #4B5563;
+}
+
+.dark .rbc-current-time-indicator {
+  background-color: #EF4444;
+}
+
+/* Estilos adicionais para garantir elementos escuros no modo escuro */
+.dark input[type="date"],
+.dark input[type="text"] {
+  background-color: #374151 !important;
+  color: #F9FAFB !important;
+  border-color: #4B5563 !important;
+}
+
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+/* Garantir que inputs de busca sejam escuros */
+.dark input[type="text"]::placeholder {
+  color: #9CA3AF !important;
+}
+
