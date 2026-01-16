@@ -16,7 +16,7 @@ export const env = {
   CORS_ORIGIN: process.env.CORS_ORIGIN
     || (process.env.NODE_ENV === 'development'
       ? 'http://localhost:3000,http://localhost:3002'
-      : '*'),
+      : (process.env.FRONTEND_URL || 'https://meu-financeiro-frontend.vercel.app')),
   SUPABASE_URL: required('SUPABASE_URL'),
   SUPABASE_ANON_KEY: required('SUPABASE_ANON_KEY'),
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',

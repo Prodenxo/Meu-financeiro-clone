@@ -39,6 +39,9 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
 ```
+Observações sobre CORS:
+- `CORS_ORIGIN` aceita múltiplas origens separadas por vírgula (ex.: `https://meu-financeiro-frontend.vercel.app,http://localhost:3000`).
+- Em produção, se `CORS_ORIGIN` não estiver definido, o backend usa `FRONTEND_URL` como fallback.
 
 ### Instalação e execução
 ```
