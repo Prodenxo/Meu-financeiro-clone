@@ -7,13 +7,29 @@ import { errorHandler } from './middlewares/errorHandler.js';
 
 const app = express();
 
+const allowedOrigins = env.CORS_ORIGIN
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const corsOptions = {
-  origin: env.CORS_ORIGIN === '*'
-    ? '*'
-    : env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean),
+  origin: (origin, callback) => {
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // eslint-disable-next-line no-console
+    console.warn('[CORS] Origem bloqueada:', origin);
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
