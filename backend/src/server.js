@@ -7,9 +7,10 @@ import { errorHandler } from './middlewares/errorHandler.js';
 
 const app = express();
 
+const normalizeOrigin = (value) => value.trim().replace(/\/$/, '');
 const allowedOrigins = env.CORS_ORIGIN
   .split(',')
-  .map((origin) => origin.trim())
+  .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 
 const corsOptions = {
@@ -18,12 +19,14 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+    const normalizedOrigin = normalizeOrigin(origin);
+
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
     }
 
     // eslint-disable-next-line no-console
-    console.warn('[CORS] Origem bloqueada:', origin);
+    console.warn('[CORS] Origem bloqueada:', normalizedOrigin);
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
