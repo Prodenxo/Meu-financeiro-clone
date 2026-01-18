@@ -18,16 +18,24 @@ const getRequesterContext = async (accessToken) => {
 
   const { data: linkData } = await userClient
     .from('role_x_user_x_empresa')
-    .select('empresas_id, roles:roles_id(roles)')
+    .select('empresas_id, roles_id')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (linkData?.roles?.roles) {
-    return {
-      userId: user.id,
-      role: linkData.roles.roles,
-      empresaId: linkData.empresas_id || null
-    };
+  if (linkData?.roles_id) {
+    const { data: roleData } = await userClient
+      .from('roles')
+      .select('roles')
+      .eq('id', linkData.roles_id)
+      .maybeSingle();
+
+    if (roleData?.roles) {
+      return {
+        userId: user.id,
+        role: roleData.roles,
+        empresaId: linkData.empresas_id || null
+      };
+    }
   }
 
   const { data: profile } = await userClient
@@ -50,7 +58,7 @@ export const listUsers = async (accessToken) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   let query = adminClient
     .from('role_x_user_x_empresa')
-    .select('user_id, empresas_id, roles:roles_id(roles)');
+    .select('user_id, empresas_id, roles_id');
 
   if (role === 'admin') {
     if (!empresaId) throw forbidden();
@@ -61,6 +69,28 @@ export const listUsers = async (accessToken) => {
   if (error) throw badRequest(error.message);
 
   const userIds = (links || []).map((link) => link.user_id).filter(Boolean);
+  const roleIds = Array.from(
+    new Set((links || []).map((link) => link.roles_id).filter(Boolean))
+  );
+  const empresaIds = Array.from(
+    new Set((links || []).map((link) => link.empresas_id).filter(Boolean))
+  );
+  let roleMap = new Map();
+  if (roleIds.length > 0) {
+    const { data: rolesData } = await adminClient
+      .from('roles')
+      .select('id, roles')
+      .in('id', roleIds);
+    roleMap = new Map((rolesData || []).map((role) => [role.id, role.roles]));
+  }
+  let empresaMap = new Map();
+  if (empresaIds.length > 0) {
+    const { data: empresasData } = await adminClient
+      .from('empresas')
+      .select('*')
+      .in('id', empresaIds);
+    empresaMap = new Map((empresasData || []).map((empresa) => [empresa.id, empresa]));
+  }
   const users = await Promise.all(
     userIds.map(async (userId) => {
       const { data, error: userError } = await adminClient.auth.admin.getUserById(userId);
@@ -83,8 +113,9 @@ export const listUsers = async (accessToken) => {
         if (!user) return null;
         return {
           ...user,
-          role: link.roles?.roles || 'usuario',
-          empresaId: link.empresas_id || null
+          role: roleMap.get(link.roles_id) || 'usuario',
+          empresaId: link.empresas_id || null,
+          empresa: empresaMap.get(link.empresas_id) || null
         };
       })
       .filter(Boolean)
@@ -126,15 +157,23 @@ export const createUser = async (accessToken, input) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
 
   if (finalRole === 'admin') {
-    const { data: existingAdmin } = await adminClient
-      .from('role_x_user_x_empresa')
-      .select('id, roles:roles_id(roles)')
-      .eq('empresas_id', finalEmpresaId)
-      .eq('roles.roles', 'admin')
+    const { data: adminRole } = await adminClient
+      .from('roles')
+      .select('id')
+      .eq('roles', 'admin')
       .maybeSingle();
 
-    if (existingAdmin) {
-      throw badRequest('Essa empresa já possui um Admin');
+    if (adminRole?.id) {
+      const { data: existingAdmin } = await adminClient
+        .from('role_x_user_x_empresa')
+        .select('id')
+        .eq('empresas_id', finalEmpresaId)
+        .eq('roles_id', adminRole.id)
+        .maybeSingle();
+
+      if (existingAdmin) {
+        throw badRequest('Essa empresa já possui um Admin');
+      }
     }
   }
 
