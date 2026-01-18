@@ -3,7 +3,27 @@ import { env } from '../config/env.js';
 import { badRequest, forbidden, unauthorized } from '../utils/errors.js';
 
 const ROLE_DEFAULT = 'usuario';
-const ROLE_ALLOWED = new Set(['superadmin', 'admin', 'usuario']);
+const ROLE_ALLOWED = new Set(['superadmin', 'admin', 'usuario', 'outsider']);
+
+const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
+  if (!accessToken || !userId) return { role: null, empresaId: null };
+
+  const userClient = createSupabaseClient({ accessToken });
+  const { data, error } = await userClient
+    .from('role_x_user_x_empresa')
+    .select('empresas_id, roles:roles_id(roles)')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!error && data?.roles?.roles) {
+    return {
+      role: data.roles.roles,
+      empresaId: data.empresas_id || null
+    };
+  }
+
+  return { role: null, empresaId: null };
+};
 
 const getOrCreateProfileRole = async ({ accessToken, userId }) => {
   if (!accessToken || !userId) return ROLE_DEFAULT;
@@ -27,6 +47,16 @@ const getOrCreateProfileRole = async ({ accessToken, userId }) => {
     .single();
 
   return created?.role || ROLE_DEFAULT;
+};
+
+const getResolvedRoleAndCompany = async ({ accessToken, userId }) => {
+  const linkResult = await getRoleAndCompanyFromLink({ accessToken, userId });
+  if (linkResult.role) {
+    return linkResult;
+  }
+
+  const profileRole = await getOrCreateProfileRole({ accessToken, userId });
+  return { role: profileRole, empresaId: linkResult.empresaId || null };
 };
 
 export const signUp = async ({ email, password, phone, displayName }) => {
@@ -99,7 +129,7 @@ export const signIn = async ({ email, password }) => {
     throw unauthorized(error.message);
   }
 
-  const role = await getOrCreateProfileRole({
+  const { role, empresaId } = await getResolvedRoleAndCompany({
     accessToken: data.session?.access_token ?? null,
     userId: data.user?.id ?? ''
   });
@@ -110,6 +140,7 @@ export const signIn = async ({ email, password }) => {
     phone: data.user?.user_metadata?.phone || null,
     displayName: data.user?.user_metadata?.display_name || null,
     role,
+    empresaId,
     session: data.session
   };
 };
@@ -129,12 +160,13 @@ export const getSession = async (accessToken) => {
 
   if (error || !user) return null;
 
-  const role = await getOrCreateProfileRole({ accessToken, userId: user.id });
+  const { role, empresaId } = await getResolvedRoleAndCompany({ accessToken, userId: user.id });
 
   return {
     user,
     access_token: accessToken,
-    role
+    role,
+    empresaId
   };
 };
 

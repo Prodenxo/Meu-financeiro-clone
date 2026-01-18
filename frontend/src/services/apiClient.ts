@@ -1,5 +1,17 @@
-const API_URL = import.meta.env.VITE_API_URL
-  || (import.meta.env.DEV ? 'https://meu-financeiro-backend.vercel.app' : '');
+const isLocalhostUrl = (value?: string) => {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+};
+
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.DEV
+  ? (configuredApiUrl && isLocalhostUrl(configuredApiUrl) ? configuredApiUrl : 'http://localhost:3333')
+  : (configuredApiUrl || 'https://meu-financeiro-backend.vercel.app');
 const TOKEN_STORAGE_KEY = 'financas-pessoais-auth-token';
 
 if (!API_URL) {

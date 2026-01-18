@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
+import { hasRole } from './lib/roles';
 import { useThemeStore } from './store/themeStore';
 import Login from './pages/Login';
 import LoginOnly from './pages/LoginOnly';
@@ -12,6 +13,7 @@ import Transactions from './pages/Transactions';
 import Categorias from './pages/Categorias';
 import Agenda from './pages/Agenda';
 import Settings from './pages/Settings';
+import ManageUsers from './pages/ManageUsers';
 import Layout from './Layout/Layout';
 import { handleGoogleAuthCallback } from './lib/google-auth-flow';
 import { ToastContainer } from 'react-toastify';
@@ -265,7 +267,7 @@ function GoogleOAuthCallback() {
 }
 
 function AppRoutes() {
-  const { user } = useAuthStore();
+  const { user, role } = useAuthStore();
 
   return (
     <>
@@ -294,6 +296,10 @@ function AppRoutes() {
                   <Route path="/categorias" element={<Categorias />} />
                   <Route path="/agenda" element={<Agenda />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route
+                    path="/settings/users"
+                    element={hasRole(role, ['admin']) ? <ManageUsers /> : <Navigate to="/settings" replace />}
+                  />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>
