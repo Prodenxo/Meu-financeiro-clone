@@ -9,17 +9,25 @@ const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
   if (!accessToken || !userId) return { role: null, empresaId: null };
 
   const userClient = createSupabaseClient({ accessToken });
-  const { data, error } = await userClient
+  const { data: linkData, error } = await userClient
     .from('role_x_user_x_empresa')
-    .select('empresas_id, roles:roles_id(roles)')
+    .select('empresas_id, roles_id')
     .eq('user_id', userId)
     .maybeSingle();
 
-  if (!error && data?.roles?.roles) {
-    return {
-      role: data.roles.roles,
-      empresaId: data.empresas_id || null
-    };
+  if (!error && linkData?.roles_id) {
+    const { data: roleData } = await userClient
+      .from('roles')
+      .select('roles')
+      .eq('id', linkData.roles_id)
+      .maybeSingle();
+
+    if (roleData?.roles) {
+      return {
+        role: roleData.roles,
+        empresaId: linkData.empresas_id || null
+      };
+    }
   }
 
   return { role: null, empresaId: null };
