@@ -13,6 +13,7 @@ const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
     .from('role_x_user_x_empresa')
     .select('empresas_id, roles_id')
     .eq('user_id', userId)
+    .eq('status', true)
     .maybeSingle();
 
   if (!error && linkData?.roles_id) {

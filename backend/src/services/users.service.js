@@ -20,6 +20,7 @@ const getRequesterContext = async (accessToken) => {
     .from('role_x_user_x_empresa')
     .select('empresas_id, roles_id')
     .eq('user_id', user.id)
+    .eq('status', true)
     .maybeSingle();
 
   if (linkData?.roles_id) {
