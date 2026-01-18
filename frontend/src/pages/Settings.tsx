@@ -9,7 +9,7 @@ import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 
 export default function Settings() {
-  const { user, userId, phone, displayName, updatePhone, updateDisplayName, signOut } = useAuthStore();
+  const { user, userId, phone, displayName, updatePhone, updateDisplayName, signOut, role } = useAuthStore();
   const { isDarkMode, toggleTheme } = useThemeStore();
   const navigate = useNavigate();
   const [isGoogleAuthenticated, setIsGoogleAuthenticated] = useState(false);
@@ -265,6 +265,21 @@ export default function Settings() {
             </button>
           </div>
         </div>
+
+        {role && (role === 'superadmin' || role === 'admin') && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Administração</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Gerencie usuários e permissões da sua empresa.
+            </p>
+            <button
+              onClick={() => navigate('/settings/users')}
+              className="px-4 py-2 text-white rounded-lg font-semibold bg-blue-600 hover:bg-blue-700"
+            >
+              Gerenciar usuários
+            </button>
+          </div>
+        )}
 
         {/* Integração Google Calendar */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">

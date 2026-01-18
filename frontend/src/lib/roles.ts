@@ -1,4 +1,4 @@
-export type UserRole = 'superadmin' | 'admin' | 'usuario';
+export type UserRole = 'superadmin' | 'admin' | 'usuario' | 'outsider';
 
 export function hasRole(role: UserRole | null, allowed: UserRole[]) {
   if (!role) return false;

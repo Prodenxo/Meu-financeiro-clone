@@ -18,6 +18,7 @@ interface AuthState {
   phone: string | null;
   displayName: string | null;
   role: UserRole | null;
+  empresaId: string | null;
   sessionRestored: boolean;
   setUser: (user: any) => void;
   setPhone: (phone: string) => void;
@@ -37,12 +38,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   phone: null,
   displayName: null,
   role: null,
+  empresaId: null,
   sessionRestored: false,
 
   setUser: (user) => set({ 
     user, 
     userId: user?.id || null,
     role: user?.user_metadata?.role || null,
+    empresaId: user?.user_metadata?.empresa_id || null,
   }),
   setPhone: (phone) => set({ phone }),
 
@@ -53,6 +56,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       userId: result.userId,
       phone: result.phone,
       displayName: result.displayName,
+      empresaId: result.empresaId || null,
     });
   },
 
@@ -66,6 +70,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       phone: result.phone,
       displayName: result.displayName,
       role: result.role,
+      empresaId: result.empresaId || null,
     });
     // Fetch transactions immediately after successful login
     await useTransactionStore.getState().fetchTransactions();
@@ -75,7 +80,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('Realizando logout...');
     await signOutService();
     console.log('Logout concluído');
-    set({ user: null, userId: null, phone: null, displayName: null, role: null });
+    set({ user: null, userId: null, phone: null, displayName: null, role: null, empresaId: null });
   },
 
   initAuth: async () => {
@@ -87,11 +92,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const phone = session.user.user_metadata?.phone || null;
       const displayName = session.user.user_metadata?.display_name || null;
       const role = session.user.user_metadata?.role || session.role || null;
+      const empresaId = session.empresaId || session.user.user_metadata?.empresa_id || null;
       console.log('Usuário encontrado:', session.user.email);
-      set({ user: session.user, userId, phone, displayName, role, sessionRestored: true });
+      set({ user: session.user, userId, phone, displayName, role, empresaId, sessionRestored: true });
     } else {
       console.log('Nenhuma sessão encontrada');
-      set({ user: null, userId: null, phone: null, displayName: null, role: null, sessionRestored: true });
+      set({ user: null, userId: null, phone: null, displayName: null, role: null, empresaId: null, sessionRestored: true });
     }
   },
 
@@ -131,18 +137,20 @@ getSession().then((session) => {
     const phone = session.user.user_metadata?.phone || null;
     const displayName = session.user.user_metadata?.display_name || null;
     const role = session.user.user_metadata?.role || session.role || null;
+    const empresaId = session.empresaId || session.user.user_metadata?.empresa_id || null;
     useAuthStore.setState({ 
       user: session.user,
       userId,
       phone,
       displayName,
       role,
+      empresaId,
       sessionRestored: true,
     });
     // Fetch transactions if there's an active session
     useTransactionStore.getState().fetchTransactions();
   } else {
-    useAuthStore.setState({ role: null, sessionRestored: true });
+    useAuthStore.setState({ role: null, empresaId: null, sessionRestored: true });
   }
 }).catch(() => {
   useAuthStore.setState({ sessionRestored: true });

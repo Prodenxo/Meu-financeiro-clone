@@ -1,0 +1,213 @@
+import { useEffect, useState } from 'react';
+import Layout from '../Layout/Layout';
+import { useAuthStore } from '../store/authStore';
+import { hasRole } from '../lib/roles';
+import { createUser, listUsers, type ManagedUser } from '../services/usersService';
+
+export default function ManageUsers() {
+  const { role, empresaId } = useAuthStore();
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'admin' | 'usuario' | 'outsider'>('usuario');
+  const [targetEmpresaId, setTargetEmpresaId] = useState('');
+
+  const canManage = hasRole(role, ['admin']);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await listUsers();
+      setUsers(data);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao listar usuários');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (canManage) {
+      fetchUsers();
+    }
+  }, [canManage]);
+
+  const handleCreateUser = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const payload = {
+        email,
+        password: password || undefined,
+        displayName: displayName || undefined,
+        phone: phone || undefined,
+        role: role === 'superadmin' ? selectedRole : 'usuario',
+        empresaId: role === 'superadmin' ? targetEmpresaId || undefined : undefined
+      };
+
+      const result = await createUser(payload);
+      setSuccess(
+        result.generatedPassword
+          ? `Usuário criado. Senha gerada: ${result.generatedPassword}`
+          : 'Usuário criado com sucesso.'
+      );
+      setEmail('');
+      setPassword('');
+      setDisplayName('');
+      setPhone('');
+      if (role === 'superadmin') {
+        setTargetEmpresaId('');
+        setSelectedRole('usuario');
+      }
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar usuário');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!canManage) {
+    return (
+      <Layout>
+        <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
+          <h1 className="text-xl md:text-3xl font-bold dark:text-white">Gerenciar usuários</h1>
+          <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
+            Você não tem permissão para acessar esta página.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout>
+      <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
+        <h1 className="text-xl md:text-3xl font-bold dark:text-white mb-4 md:mb-6">Gerenciar usuários</h1>
+        <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 mb-4 md:mb-6">
+          Administre usuários por empresa e permissões.
+        </p>
+
+        {error && (
+          <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-100 dark:bg-green-900 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 px-4 py-3 rounded">
+            {success}
+          </div>
+        )}
+
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+          <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Criar usuário</h2>
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                placeholder="Email"
+              />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                placeholder="Senha (opcional)"
+              />
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                placeholder="Nome de exibição"
+              />
+              <input
+                type="text"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                placeholder="Telefone"
+              />
+            </div>
+
+            {role === 'superadmin' ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value as 'admin' | 'usuario' | 'outsider')}
+                  className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="usuario">User</option>
+                  <option value="outsider">Outsider</option>
+                </select>
+                <input
+                  type="text"
+                  value={targetEmpresaId}
+                  onChange={(e) => setTargetEmpresaId(e.target.value)}
+                  className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                  placeholder="Empresa ID (uuid)"
+                />
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Usuário será criado na empresa atual: {empresaId || 'não definida'}
+              </p>
+            )}
+
+            <button
+              onClick={handleCreateUser}
+              disabled={loading || !email}
+              className="px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
+            >
+              {loading ? 'Salvando...' : 'Criar usuário'}
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+          <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Usuários</h2>
+          {loading ? (
+            <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
+          ) : users.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400">Nenhum usuário encontrado.</p>
+          ) : (
+            <div className="space-y-3">
+              {users.map((user) => (
+                <div
+                  key={user.id}
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2"
+                >
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">{user.displayName || user.email}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
+                    {user.phone && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Telefone: {user.phone}</p>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-300">
+                    <p>Role: {user.role}</p>
+                    <p>Empresa: {user.empresaId || '-'}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  );
+}
