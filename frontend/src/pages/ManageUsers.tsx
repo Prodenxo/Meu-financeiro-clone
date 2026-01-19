@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'react-toastify';
 import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
@@ -83,6 +84,11 @@ export default function ManageUsers() {
           ? `Usuário criado. Senha gerada: ${result.generatedPassword}`
           : 'Usuário criado com sucesso.'
       );
+      toast.success(
+        result.generatedPassword
+          ? `Usuário criado. Senha gerada: ${result.generatedPassword}`
+          : 'Usuário criado com sucesso.'
+      );
       setEmail('');
       setPassword('');
       setDisplayName('');
@@ -94,6 +100,7 @@ export default function ManageUsers() {
       await fetchUsers();
     } catch (err: any) {
       setError(err.message || 'Erro ao criar usuário');
+      toast.error(err.message || 'Erro ao criar usuário');
     } finally {
       setLoading(false);
     }
@@ -134,10 +141,12 @@ export default function ManageUsers() {
             };
       await updateUser(user.id, payload);
       setSuccess('Usuário atualizado com sucesso.');
+      toast.success('Usuário atualizado com sucesso.');
       setEditingUserId(null);
       await fetchUsers();
     } catch (err: any) {
       setError(err.message || 'Erro ao atualizar usuário');
+      toast.error(err.message || 'Erro ao atualizar usuário');
     } finally {
       setLoading(false);
     }
