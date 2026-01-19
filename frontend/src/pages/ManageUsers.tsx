@@ -316,12 +316,27 @@ export default function ManageUsers() {
                 className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
                 placeholder="Nome de exibição"
               />
-              <input
-                type="text"
+              <PhoneInput
+                country={'br'}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
-                placeholder="Telefone"
+                onChange={(value) => setPhone(value)}
+                inputStyle={{
+                  width: '100%',
+                  paddingTop: '10px',
+                  paddingBottom: '10px',
+                  paddingLeft: '48px',
+                  paddingRight: '12px',
+                  borderRadius: '0.5rem',
+                  border: '1px solid #4B5563',
+                  fontSize: '0.875rem',
+                  backgroundColor: '#374151',
+                  color: '#F9FAFB',
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }}
+                buttonStyle={{ border: 'none', background: 'none', paddingLeft: 8 }}
+                placeholder="(11) 99999-9999"
+                enableSearch
               />
             </div>
 
