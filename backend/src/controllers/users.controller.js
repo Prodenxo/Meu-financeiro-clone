@@ -36,3 +36,12 @@ export const listEmpresas = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const updateUser = async (req, res, next) => {
+  try {
+    const result = await usersService.updateUser(req.accessToken, req.params.userId, req.body);
+    return sendSuccess(res, result, 'Usuário atualizado');
+  } catch (error) {
+    return next(error);
+  }
+};
