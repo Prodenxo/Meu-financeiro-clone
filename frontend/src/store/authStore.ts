@@ -94,6 +94,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const phone = session.user.user_metadata?.phone || null;
       const displayName = session.user.user_metadata?.display_name || null;
       const role = normalizeRole(session.role || null);
+      console.log('[AuthStore] initAuth session.role:', session.role, 'normalized:', role);
       const empresaId = session.empresaId || session.user.user_metadata?.empresa_id || null;
       console.log('Usuário encontrado:', session.user.email);
       set({ user: session.user, userId, phone, displayName, role, empresaId, sessionRestored: true });
@@ -139,6 +140,7 @@ getSession().then((session) => {
     const phone = session.user.user_metadata?.phone || null;
     const displayName = session.user.user_metadata?.display_name || null;
     const role = normalizeRole(session.role || null);
+    console.log('[AuthStore] bootstrap session.role:', session.role, 'normalized:', role);
     const empresaId = session.empresaId || session.user.user_metadata?.empresa_id || null;
     useAuthStore.setState({ 
       user: session.user,

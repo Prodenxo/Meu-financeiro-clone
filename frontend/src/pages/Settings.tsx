@@ -32,6 +32,10 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
+    console.log('[Settings] role atual:', role, 'userId:', userId, 'email:', user?.email);
+  }, [role, userId, user?.email]);
+
+  useEffect(() => {
     // Aplicar cores com important nos botões
     if (saveNameButtonRef.current) {
       saveNameButtonRef.current.style.setProperty('background-color', '#2563eb', 'important');
