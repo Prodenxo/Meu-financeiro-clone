@@ -69,8 +69,10 @@ export default function Dashboard() {
     .filter((t) => t.tipo === 'entrada')
     .reduce((sum, t) => sum + t.valor, 0);
 
+  const isSaida = (tipo: string) => tipo === 'saída' || tipo === 'saida';
+
   const totalExpenses = transactions
-    .filter((t) => t.tipo === 'saída')
+    .filter((t) => isSaida(t.tipo))
     .reduce((sum, t) => sum + t.valor, 0);
 
   const balance = totalIncome - totalExpenses;
@@ -92,7 +94,7 @@ export default function Dashboard() {
   });
 
   // Gráfico de pizza por categoria
-  const expensesByCategory = transactions.filter(t => t.tipo === 'saída').reduce((acc, curr) => {
+  const expensesByCategory = transactions.filter(t => isSaida(t.tipo)).reduce((acc, curr) => {
     acc[curr.classificacao] = (acc[curr.classificacao] || 0) + curr.valor;
     return acc;
   }, {} as Record<string, number>);
@@ -257,9 +259,9 @@ export default function Dashboard() {
   const saidasAPagar = (periodoAtual.start && periodoAtual.end)
     ? transactions.filter(t => {
         const d = getTransactionDate(t);
-        return t.tipo === 'saída' && t.status === 'a_pagar' && d >= periodoAtual.start! && d <= periodoAtual.end!;
+        return isSaida(t.tipo) && t.status === 'a_pagar' && d >= periodoAtual.start! && d <= periodoAtual.end!;
       }).reduce((sum, t) => sum + t.valor, 0)
-    : transactions.filter(t => t.tipo === 'saída' && t.status === 'a_pagar').reduce((sum, t) => sum + t.valor, 0);
+    : transactions.filter(t => isSaida(t.tipo) && t.status === 'a_pagar').reduce((sum, t) => sum + t.valor, 0);
 
   // Filtrar transações do período atual para o gráfico
   const transacoesPeriodo = (periodoAtual.start && periodoAtual.end)
@@ -281,9 +283,9 @@ export default function Dashboard() {
   const despesasPeriodo = (periodoAtual.start && periodoAtual.end)
     ? transactions.filter(t => {
         const d = getTransactionDate(t);
-        return t.tipo === 'saída' && d >= periodoAtual.start! && d <= periodoAtual.end!;
+        return isSaida(t.tipo) && d >= periodoAtual.start! && d <= periodoAtual.end!;
       })
-    : transactions.filter(t => t.tipo === 'saída');
+    : transactions.filter(t => isSaida(t.tipo));
 
   // Filtrar por status (Pagos ou A Pagar)
   const despesasFiltradas = despesasPeriodo.filter(t => {
