@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { useTransactionStore } from './transactionStore';
 import type { UserRole } from '../lib/roles';
+import { normalizeRole } from '../lib/roles';
 import {
   signUp as signUpService,
   signIn as signInService,
@@ -44,7 +45,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user) => set({ 
     user, 
     userId: user?.id || null,
-    role: user?.user_metadata?.role || null,
+    role: normalizeRole(user?.user_metadata?.role),
     empresaId: user?.user_metadata?.empresa_id || null,
   }),
   setPhone: (phone) => set({ phone }),
@@ -69,7 +70,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       userId: result.userId,
       phone: result.phone,
       displayName: result.displayName,
-      role: result.role,
+      role: normalizeRole(result.role),
       empresaId: result.empresaId || null,
     });
     // Fetch transactions immediately after successful login
@@ -91,7 +92,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const userId = session.user.id;
       const phone = session.user.user_metadata?.phone || null;
       const displayName = session.user.user_metadata?.display_name || null;
-      const role = session.user.user_metadata?.role || session.role || null;
+      const role = normalizeRole(session.user.user_metadata?.role || session.role || null);
       const empresaId = session.empresaId || session.user.user_metadata?.empresa_id || null;
       console.log('Usuário encontrado:', session.user.email);
       set({ user: session.user, userId, phone, displayName, role, empresaId, sessionRestored: true });

@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { normalizeRole } from '../lib/roles';
 
 export interface ManagedUser {
   id: string;
@@ -11,7 +12,10 @@ export interface ManagedUser {
 
 export async function listUsers() {
   const result = await apiClient.get<{ users: ManagedUser[] }>('/users');
-  return result.users || [];
+  return (result.users || []).map((user) => ({
+    ...user,
+    role: normalizeRole(user.role) || user.role,
+  }));
 }
 
 export async function createUser(input: {
