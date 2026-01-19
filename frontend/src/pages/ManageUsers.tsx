@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
-import { createUser, listUsers, type ManagedUser } from '../services/usersService';
+import { createUser, listEmpresas, listUsers, type EmpresaOption, type ManagedUser } from '../services/usersService';
 
 export default function ManageUsers() {
   const { role, empresaId } = useAuthStore();
@@ -17,6 +17,8 @@ export default function ManageUsers() {
   const [phone, setPhone] = useState('');
   const [selectedRole, setSelectedRole] = useState<'admin' | 'usuario' | 'outsider'>('usuario');
   const [targetEmpresaId, setTargetEmpresaId] = useState('');
+  const [empresaQuery, setEmpresaQuery] = useState('');
+  const [empresas, setEmpresas] = useState<EmpresaOption[]>([]);
 
   const canManage = hasRole(role, ['admin']);
 
@@ -38,6 +40,15 @@ export default function ManageUsers() {
       fetchUsers();
     }
   }, [canManage]);
+
+  useEffect(() => {
+    if (!canManage || role !== 'superadmin') return;
+    listEmpresas()
+      .then(setEmpresas)
+      .catch((err: any) => {
+        setError(err.message || 'Erro ao listar empresas');
+      });
+  }, [canManage, role]);
 
   const handleCreateUser = async () => {
     setLoading(true);
@@ -154,13 +165,33 @@ export default function ManageUsers() {
                   <option value="usuario">User</option>
                   <option value="outsider">Outsider</option>
                 </select>
-                <input
-                  type="text"
-                  value={targetEmpresaId}
-                  onChange={(e) => setTargetEmpresaId(e.target.value)}
-                  className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
-                  placeholder="Empresa ID (uuid)"
-                />
+                <div>
+                  <input
+                    type="text"
+                    value={empresaQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setEmpresaQuery(value);
+                      const match = empresas.find(
+                        (empresa) => empresa.empresa.toLowerCase() === value.toLowerCase()
+                      );
+                      setTargetEmpresaId(match?.id || '');
+                    }}
+                    className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                    placeholder="Empresa"
+                    list="empresas-list"
+                  />
+                  <datalist id="empresas-list">
+                    {empresas.map((empresa) => (
+                      <option key={empresa.id} value={empresa.empresa} />
+                    ))}
+                  </datalist>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    {targetEmpresaId
+                      ? `Empresa selecionada: ${empresaQuery}`
+                      : 'Digite para filtrar e selecione uma empresa'}
+                  </p>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -200,7 +231,7 @@ export default function ManageUsers() {
                   </div>
                   <div className="text-sm text-gray-600 dark:text-gray-300">
                     <p>Role: {user.role}</p>
-                    <p>Empresa: {user.empresa?.empresa || user.empresaId || '-'}</p>
+                    <p>Empresa: {user.empresaName || user.empresaId || '-'}</p>
                   </div>
                 </div>
               ))}
