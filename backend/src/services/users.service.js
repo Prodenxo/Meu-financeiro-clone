@@ -19,6 +19,48 @@ const roleToDbValue = (role) => {
   return role;
 };
 
+const getRoleCandidates = (role) => {
+  const normalized = normalizeRoleValue(role);
+  if (!normalized) return [];
+  if (normalized === 'usuario') return ['user', 'usuario'];
+  return [normalized];
+};
+
+const ensureRoleId = async (adminClient, role) => {
+  const candidates = getRoleCandidates(role);
+  if (candidates.length === 0) return null;
+
+  const { data: existing, error: existingError } = await adminClient
+    .from('roles')
+    .select('id, roles')
+    .in('roles', candidates)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingError) throw badRequest(existingError.message);
+  if (existing?.id) return existing.id;
+
+  const preferred = roleToDbValue(normalizeRoleValue(role));
+  if (!preferred) return null;
+
+  const { error: insertError } = await adminClient
+    .from('roles')
+    .insert({ roles: preferred });
+
+  if (insertError && !String(insertError.message || '').toLowerCase().includes('duplicate')) {
+    throw badRequest(insertError.message);
+  }
+
+  const { data: created, error: createdError } = await adminClient
+    .from('roles')
+    .select('id')
+    .eq('roles', preferred)
+    .maybeSingle();
+
+  if (createdError) throw badRequest(createdError.message);
+  return created?.id || null;
+};
+
 const cleanPhone = (phone) => (phone?.startsWith('+') ? phone.substring(1) : phone);
 
 const generatePassword = () => crypto.randomBytes(9).toString('base64').slice(0, 12);
@@ -207,35 +249,8 @@ export const createUser = async (accessToken, input) => {
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
 
-  if (finalRole === 'admin') {
-    const { data: adminRole } = await adminClient
-      .from('roles')
-      .select('id')
-      .ilike('roles', 'admin')
-      .maybeSingle();
-
-    if (adminRole?.id) {
-      const { data: existingAdmin } = await adminClient
-        .from('role_x_user_x_empresa')
-        .select('id')
-        .eq('empresas_id', finalEmpresaId)
-        .eq('roles_id', adminRole.id)
-        .maybeSingle();
-
-      if (existingAdmin) {
-        throw badRequest('Essa empresa já possui um Admin');
-      }
-    }
-  }
-
-  const roleLookup = roleToDbValue(finalRole);
-  const { data: roleData } = await adminClient
-    .from('roles')
-    .select('id, roles')
-    .ilike('roles', roleLookup)
-    .maybeSingle();
-
-  if (!roleData?.id) throw badRequest('Role não encontrada');
+  const roleId = await ensureRoleId(adminClient, finalRole);
+  if (!roleId) throw badRequest('Role não encontrada');
 
   const finalPassword = password || generatePassword();
   const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
@@ -256,7 +271,7 @@ export const createUser = async (accessToken, input) => {
     .from('role_x_user_x_empresa')
     .insert({
       user_id: createdUser.user.id,
-      roles_id: roleData.id,
+      roles_id: roleId,
       empresas_id: finalEmpresaId,
       status: true
     });
@@ -318,20 +333,14 @@ export const updateUser = async (accessToken, userId, input) => {
       throw badRequest('Role inválida');
     }
 
-    const roleLookup = roleToDbValue(roleForLink);
-    const { data: roleData } = await adminClient
-      .from('roles')
-      .select('id')
-      .ilike('roles', roleLookup)
-      .maybeSingle();
-
-    if (!roleData?.id) throw badRequest('Role não encontrada');
+    const roleId = await ensureRoleId(adminClient, roleForLink);
+    if (!roleId) throw badRequest('Role não encontrada');
 
     const { data: createdLink, error: createLinkError } = await adminClient
       .from('role_x_user_x_empresa')
       .insert({
         user_id: userId,
-        roles_id: roleData.id,
+        roles_id: roleId,
         empresas_id: requestedEmpresaId,
         status: true
       })
@@ -384,41 +393,13 @@ export const updateUser = async (accessToken, userId, input) => {
     requestedPhone
   });
 
-  if (finalRole === 'admin') {
-    const { data: adminRole } = await adminClient
-      .from('roles')
-      .select('id')
-      .ilike('roles', 'admin')
-      .maybeSingle();
-
-    if (adminRole?.id) {
-      const { data: existingAdmin } = await adminClient
-        .from('role_x_user_x_empresa')
-        .select('id')
-        .eq('empresas_id', finalEmpresaId)
-        .eq('roles_id', adminRole.id)
-        .neq('user_id', userId)
-        .maybeSingle();
-
-      if (existingAdmin) {
-        throw badRequest('Essa empresa já possui um Admin');
-      }
-    }
-  }
-
-  const roleIdLookup = roleToDbValue(finalRole);
-  const { data: roleIdData } = await adminClient
-    .from('roles')
-    .select('id')
-    .ilike('roles', roleIdLookup)
-    .maybeSingle();
-
-  if (!roleIdData?.id) throw badRequest('Role não encontrada');
+  const roleId = await ensureRoleId(adminClient, finalRole);
+  if (!roleId) throw badRequest('Role não encontrada');
 
   const { error: updateError } = await adminClient
     .from('role_x_user_x_empresa')
     .update({
-      roles_id: roleIdData.id,
+      roles_id: roleId,
       empresas_id: finalEmpresaId
     })
     .eq('id', linkRecord.id);
