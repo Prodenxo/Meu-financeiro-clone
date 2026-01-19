@@ -86,7 +86,7 @@ export const listUsers = async (accessToken) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   let query = adminClient
     .from('role_x_user_x_empresa')
-    .select('user_id, empresas_id, roles_id');
+    .select('user_id, empresas_id, roles_id, status');
 
   if (role === 'admin') {
     if (!empresaId) throw forbidden();
@@ -143,7 +143,8 @@ export const listUsers = async (accessToken) => {
           ...user,
           role: normalizeRoleValue(roleMap.get(link.roles_id) || 'usuario'),
           empresaId: link.empresas_id || null,
-          empresaName: empresaMap.get(link.empresas_id)?.empresa || null
+          empresaName: empresaMap.get(link.empresas_id)?.empresa || null,
+          status: link.status ?? true
         };
       })
       .filter(Boolean)

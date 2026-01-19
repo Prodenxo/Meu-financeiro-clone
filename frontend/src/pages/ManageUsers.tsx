@@ -382,6 +382,7 @@ export default function ManageUsers() {
                   role === 'superadmin'
                     ? user.role !== 'superadmin'
                     : role === 'admin' && user.role === 'usuario';
+                const isBlocked = user.status === false;
                 const isEditing = editingUserId === user.id;
 
                 return (
@@ -490,7 +491,7 @@ export default function ManageUsers() {
                           >
                             Salvar
                           </button>
-                          {canEdit && (
+                          {canEdit && !isBlocked && (
                             <button
                               onClick={() => handleBanUser(user)}
                               disabled={loading}
@@ -499,7 +500,7 @@ export default function ManageUsers() {
                               Bloquear
                             </button>
                           )}
-                          {canEdit && (
+                          {canEdit && isBlocked && (
                             <button
                               onClick={() => handleUnbanUser(user)}
                               disabled={loading}
