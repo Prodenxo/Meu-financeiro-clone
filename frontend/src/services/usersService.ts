@@ -29,6 +29,10 @@ export async function listEmpresas() {
   return result.empresas || [];
 }
 
+export async function updateUser(userId: string, input: { role?: string; empresaId?: string }) {
+  return apiClient.put<{ userId: string; role: string; empresaId: string }>(`/users/${userId}`, input);
+}
+
 export async function createUser(input: {
   email: string;
   password?: string;

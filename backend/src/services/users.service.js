@@ -4,6 +4,7 @@ import { badRequest, forbidden, unauthorized } from '../utils/errors.js';
 
 const ROLE_CREATE_ALLOWED = new Set(['superadmin', 'admin']);
 const ROLE_TARGET_ALLOWED = new Set(['admin', 'usuario', 'outsider']);
+const ROLE_UPDATE_ALLOWED_SUPERADMIN = new Set(['admin', 'usuario', 'outsider']);
 
 const normalizeRoleValue = (role) => {
   if (!role) return null;
@@ -132,7 +133,7 @@ export const listUsers = async (accessToken) => {
         if (!user) return null;
         return {
           ...user,
-          role: roleMap.get(link.roles_id) || 'usuario',
+          role: normalizeRoleValue(roleMap.get(link.roles_id) || 'usuario'),
           empresaId: link.empresas_id || null,
           empresaName: empresaMap.get(link.empresas_id)?.empresa || null
         };
@@ -267,6 +268,105 @@ export const createUser = async (accessToken, input) => {
     role: finalRole,
     empresaId: finalEmpresaId,
     generatedPassword: password ? null : finalPassword
+  };
+};
+
+export const updateUser = async (accessToken, userId, input) => {
+  if (!userId) throw badRequest('userId é obrigatório');
+
+  const requester = await getRequesterContext(accessToken);
+  if (!ROLE_CREATE_ALLOWED.has(requester.role)) throw forbidden();
+
+  const requestedRole = normalizeRoleValue(input?.role);
+  const requestedEmpresaId = input?.empresaId || null;
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const { data: linkData, error: linkError } = await adminClient
+    .from('role_x_user_x_empresa')
+    .select('id, empresas_id, roles_id')
+    .eq('user_id', userId)
+    .eq('status', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (linkError) throw badRequest(linkError.message);
+  if (!linkData?.roles_id) throw badRequest('Vínculo de role não encontrado');
+
+  const { data: roleData, error: roleError } = await adminClient
+    .from('roles')
+    .select('roles')
+    .eq('id', linkData.roles_id)
+    .maybeSingle();
+
+  if (roleError) throw badRequest(roleError.message);
+  const targetRole = normalizeRoleValue(roleData?.roles) || 'usuario';
+
+  if (requester.role === 'admin') {
+    if (targetRole !== 'usuario') throw forbidden();
+    if (!requester.empresaId || requester.empresaId !== linkData.empresas_id) throw forbidden();
+    if (requestedRole && requestedRole !== 'usuario') throw forbidden();
+  }
+
+  if (requester.role === 'superadmin') {
+    if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
+    if (requestedRole && !ROLE_UPDATE_ALLOWED_SUPERADMIN.has(requestedRole)) {
+      throw badRequest('Role inválida');
+    }
+  }
+
+  let finalRole = requestedRole || targetRole;
+  let finalEmpresaId = linkData.empresas_id;
+
+  if (requester.role === 'superadmin') {
+    if (!requestedEmpresaId) throw badRequest('Empresa é obrigatória');
+    finalEmpresaId = requestedEmpresaId;
+  }
+
+  if (finalRole === 'admin') {
+    const { data: adminRole } = await adminClient
+      .from('roles')
+      .select('id')
+      .ilike('roles', 'admin')
+      .maybeSingle();
+
+    if (adminRole?.id) {
+      const { data: existingAdmin } = await adminClient
+        .from('role_x_user_x_empresa')
+        .select('id')
+        .eq('empresas_id', finalEmpresaId)
+        .eq('roles_id', adminRole.id)
+        .neq('user_id', userId)
+        .maybeSingle();
+
+      if (existingAdmin) {
+        throw badRequest('Essa empresa já possui um Admin');
+      }
+    }
+  }
+
+  const { data: roleIdData } = await adminClient
+    .from('roles')
+    .select('id')
+    .ilike('roles', finalRole)
+    .maybeSingle();
+
+  if (!roleIdData?.id) throw badRequest('Role não encontrada');
+
+  const { error: updateError } = await adminClient
+    .from('role_x_user_x_empresa')
+    .update({
+      roles_id: roleIdData.id,
+      empresas_id: finalEmpresaId
+    })
+    .eq('id', linkData.id);
+
+  if (updateError) throw badRequest(updateError.message);
+
+  return {
+    userId,
+    role: finalRole,
+    empresaId: finalEmpresaId
   };
 };
 
