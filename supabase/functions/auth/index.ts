@@ -1,6 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const ROLE_DEFAULT = 'usuario'
+
+const roleToDbValue = (role: string | null) => {
+  if (!role) return null
+  if (role === 'usuario') return 'user'
+  return role
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -111,6 +119,54 @@ serve(async (req) => {
 
       const userId = data.user?.id
       const userPhone = cleanedPhone || data.user?.user_metadata?.phone
+
+      if (userId && supabaseServiceKey) {
+        const adminClient = createClient(
+          supabaseUrl,
+          supabaseServiceKey,
+          {
+            global: {
+              headers: { Authorization: `Bearer ${supabaseServiceKey}` },
+            },
+          }
+        )
+
+        await adminClient
+          .from('profiles')
+          .insert({ id: userId, role: ROLE_DEFAULT })
+          .select('role')
+          .single()
+
+        const roleLookup = roleToDbValue(ROLE_DEFAULT)
+        const { data: roleData, error: roleError } = await adminClient
+          .from('roles')
+          .select('id')
+          .ilike('roles', roleLookup ?? '')
+          .maybeSingle()
+
+        if (roleError || !roleData?.id) {
+          return new Response(
+            JSON.stringify({ error: roleError?.message || 'Role não encontrada' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        const { error: linkError } = await adminClient
+          .from('role_x_user_x_empresa')
+          .insert({
+            user_id: userId,
+            roles_id: roleData.id,
+            empresas_id: null,
+            status: true
+          })
+
+        if (linkError) {
+          return new Response(
+            JSON.stringify({ error: linkError.message }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
 
       // Sincronizar telefone com n8n_link se fornecido
       if (userId && userPhone) {
