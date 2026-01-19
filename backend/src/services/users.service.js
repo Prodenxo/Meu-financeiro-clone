@@ -13,6 +13,12 @@ const normalizeRoleValue = (role) => {
   return normalized;
 };
 
+const roleToDbValue = (role) => {
+  if (!role) return null;
+  if (role === 'usuario') return 'user';
+  return role;
+};
+
 const cleanPhone = (phone) => (phone?.startsWith('+') ? phone.substring(1) : phone);
 
 const generatePassword = () => crypto.randomBytes(9).toString('base64').slice(0, 12);
@@ -202,7 +208,7 @@ export const createUser = async (accessToken, input) => {
     const { data: adminRole } = await adminClient
       .from('roles')
       .select('id')
-      .eq('roles', 'admin')
+      .ilike('roles', 'admin')
       .maybeSingle();
 
     if (adminRole?.id) {
@@ -219,10 +225,11 @@ export const createUser = async (accessToken, input) => {
     }
   }
 
-    const { data: roleData } = await adminClient
+  const roleLookup = roleToDbValue(finalRole);
+  const { data: roleData } = await adminClient
     .from('roles')
     .select('id, roles')
-      .ilike('roles', finalRole)
+    .ilike('roles', roleLookup)
     .maybeSingle();
 
   if (!roleData?.id) throw badRequest('Role não encontrada');
@@ -358,10 +365,11 @@ export const updateUser = async (accessToken, userId, input) => {
     }
   }
 
+  const roleIdLookup = roleToDbValue(finalRole);
   const { data: roleIdData } = await adminClient
     .from('roles')
     .select('id')
-    .ilike('roles', finalRole)
+    .ilike('roles', roleIdLookup)
     .maybeSingle();
 
   if (!roleIdData?.id) throw badRequest('Role não encontrada');
