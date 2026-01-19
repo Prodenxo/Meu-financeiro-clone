@@ -528,7 +528,7 @@ export const deleteUser = async (accessToken, userId) => {
   return { userId };
 };
 
-export const resetUserPassword = async (accessToken, userId) => {
+export const resetUserPassword = async (accessToken, userId, input) => {
   if (!userId) throw badRequest('userId é obrigatório');
 
   const requester = await getRequesterContext(accessToken);
@@ -564,7 +564,7 @@ export const resetUserPassword = async (accessToken, userId) => {
     if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
   }
 
-  const newPassword = generatePassword();
+  const newPassword = input?.password?.trim() || generatePassword();
   const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
     password: newPassword
   });

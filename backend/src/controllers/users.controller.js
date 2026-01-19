@@ -76,7 +76,7 @@ export const deleteUser = async (req, res, next) => {
 
 export const resetUserPassword = async (req, res, next) => {
   try {
-    const result = await usersService.resetUserPassword(req.accessToken, req.params.userId);
+    const result = await usersService.resetUserPassword(req.accessToken, req.params.userId, req.body);
     return sendSuccess(res, result, 'Senha redefinida');
   } catch (error) {
     return next(error);
