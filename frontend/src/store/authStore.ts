@@ -42,12 +42,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   empresaId: null,
   sessionRestored: false,
 
-  setUser: (user) => set({ 
-    user, 
+  setUser: (user) => set((state) => ({
+    user,
     userId: user?.id || null,
-    role: normalizeRole(user?.user_metadata?.role),
+    // Role vem apenas do backend/session; não confiar em user_metadata.
+    role: state.role,
     empresaId: user?.user_metadata?.empresa_id || null,
-  }),
+  })),
   setPhone: (phone) => set({ phone }),
 
   signUp: async (email, password, phone?, displayName?) => {
@@ -92,7 +93,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const userId = session.user.id;
       const phone = session.user.user_metadata?.phone || null;
       const displayName = session.user.user_metadata?.display_name || null;
-      const role = normalizeRole(session.user.user_metadata?.role || session.role || null);
+      const role = normalizeRole(session.role || null);
       const empresaId = session.empresaId || session.user.user_metadata?.empresa_id || null;
       console.log('Usuário encontrado:', session.user.email);
       set({ user: session.user, userId, phone, displayName, role, empresaId, sessionRestored: true });
@@ -137,7 +138,7 @@ getSession().then((session) => {
     const userId = session.user.id;
     const phone = session.user.user_metadata?.phone || null;
     const displayName = session.user.user_metadata?.display_name || null;
-    const role = session.user.user_metadata?.role || session.role || null;
+    const role = normalizeRole(session.role || null);
     const empresaId = session.empresaId || session.user.user_metadata?.empresa_id || null;
     useAuthStore.setState({ 
       user: session.user,
