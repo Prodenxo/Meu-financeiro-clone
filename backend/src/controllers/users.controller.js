@@ -27,3 +27,12 @@ export const syncPhone = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const listEmpresas = async (req, res, next) => {
+  try {
+    const result = await usersService.listEmpresas(req.accessToken);
+    return sendSuccess(res, result, 'Empresas listadas');
+  } catch (error) {
+    return next(error);
+  }
+};

@@ -8,10 +8,12 @@ export interface ManagedUser {
   phone: string | null;
   role: 'superadmin' | 'admin' | 'usuario' | 'outsider';
   empresaId: string | null;
-  empresa?: {
-    id: string;
-    empresa: string;
-  } | null;
+  empresaName?: string | null;
+}
+
+export interface EmpresaOption {
+  id: string;
+  empresa: string;
 }
 
 export async function listUsers() {
@@ -20,6 +22,11 @@ export async function listUsers() {
     ...user,
     role: normalizeRole(user.role) || user.role,
   }));
+}
+
+export async function listEmpresas() {
+  const result = await apiClient.get<{ empresas: EmpresaOption[] }>('/users/empresas');
+  return result.empresas || [];
 }
 
 export async function createUser(input: {

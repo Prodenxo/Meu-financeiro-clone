@@ -5,6 +5,7 @@ import * as controller from '../controllers/users.controller.js';
 const router = Router();
 
 router.get('/', requireAuth, controller.listUsers);
+router.get('/empresas', requireAuth, controller.listEmpresas);
 router.post('/', requireAuth, controller.createUser);
 router.post('/sync-phone', requireAuth, controller.syncPhone);
 

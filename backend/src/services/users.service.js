@@ -16,19 +16,30 @@ const getRequesterContext = async (accessToken) => {
   const { data: { user } = {}, error: userError } = await userClient.auth.getUser();
   if (userError || !user) throw unauthorized();
 
-  const { data: linkData } = await userClient
+  const linkClient = createSupabaseClient({ useServiceRole: true });
+  const { data: linkData, error: linkError } = await linkClient
     .from('role_x_user_x_empresa')
     .select('empresas_id, roles_id')
     .eq('user_id', user.id)
     .eq('status', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
+  if (linkError) {
+    console.warn('[Users] role_x_user_x_empresa lookup error:', linkError.message);
+  }
+
   if (linkData?.roles_id) {
-    const { data: roleData } = await userClient
+    const { data: roleData, error: roleError } = await linkClient
       .from('roles')
       .select('roles')
       .eq('id', linkData.roles_id)
       .maybeSingle();
+
+    if (roleError) {
+      console.warn('[Users] roles lookup error:', roleError.message);
+    }
 
     if (roleData?.roles) {
       return {
@@ -88,7 +99,7 @@ export const listUsers = async (accessToken) => {
   if (empresaIds.length > 0) {
     const { data: empresasData } = await adminClient
       .from('empresas')
-      .select('*')
+      .select('id, empresa')
       .in('id', empresaIds);
     empresaMap = new Map((empresasData || []).map((empresa) => [empresa.id, empresa]));
   }
@@ -116,11 +127,32 @@ export const listUsers = async (accessToken) => {
           ...user,
           role: roleMap.get(link.roles_id) || 'usuario',
           empresaId: link.empresas_id || null,
-          empresa: empresaMap.get(link.empresas_id) || null
+          empresaName: empresaMap.get(link.empresas_id)?.empresa || null
         };
       })
       .filter(Boolean)
   };
+};
+
+export const listEmpresas = async (accessToken) => {
+  const { role, empresaId } = await getRequesterContext(accessToken);
+  if (!ROLE_CREATE_ALLOWED.has(role)) throw forbidden();
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  let query = adminClient
+    .from('empresas')
+    .select('id, empresa')
+    .order('empresa', { ascending: true });
+
+  if (role === 'admin') {
+    if (!empresaId) throw forbidden();
+    query = query.eq('id', empresaId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw badRequest(error.message);
+
+  return { empresas: data || [] };
 };
 
 export const createUser = async (accessToken, input) => {
