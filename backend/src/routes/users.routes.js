@@ -9,6 +9,7 @@ router.get('/empresas', requireAuth, controller.listEmpresas);
 router.post('/:userId/ban', requireAuth, controller.banUser);
 router.post('/:userId/unban', requireAuth, controller.unbanUser);
 router.put('/:userId', requireAuth, controller.updateUser);
+router.post('/:userId/reset-password', requireAuth, controller.resetUserPassword);
 router.delete('/:userId', requireAuth, controller.deleteUser);
 router.post('/', requireAuth, controller.createUser);
 router.post('/sync-phone', requireAuth, controller.syncPhone);

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import PhoneInput from 'react-phone-input-2';
+import 'react-phone-input-2/lib/style.css';
 import { toast } from 'react-toastify';
 import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
-import { banUser, createUser, deleteUser, listEmpresas, listUsers, unbanUser, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
+import { banUser, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
 
 export default function ManageUsers() {
   const { role, empresaId } = useAuthStore();
@@ -214,6 +216,25 @@ export default function ManageUsers() {
     }
   };
 
+  const handleResetPassword = async (user: ManagedUser) => {
+    const confirmed = window.confirm('Deseja redefinir a senha deste usuário agora?');
+    if (!confirmed) return;
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      const result = await resetUserPassword(user.id);
+      const message = `Senha redefinida. Nova senha: ${result.password}`;
+      setSuccess(message);
+      toast.success(message);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao redefinir senha');
+      toast.error(err.message || 'Erro ao redefinir senha');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!canManage) {
     return (
       <Layout>
@@ -407,12 +428,27 @@ export default function ManageUsers() {
                           className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
                           placeholder="Nome de exibição"
                         />
-                        <input
-                          type="text"
+                        <PhoneInput
+                          country={'br'}
                           value={editPhone}
-                          onChange={(e) => setEditPhone(e.target.value)}
-                          className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
-                          placeholder="Telefone"
+                          onChange={(value) => setEditPhone(value)}
+                          inputStyle={{
+                            width: '100%',
+                            paddingTop: '10px',
+                            paddingBottom: '10px',
+                            paddingLeft: '48px',
+                            paddingRight: '12px',
+                            borderRadius: '0.5rem',
+                            border: '1px solid #4B5563',
+                            fontSize: '0.875rem',
+                            backgroundColor: '#374151',
+                            color: '#F9FAFB',
+                            boxSizing: 'border-box',
+                            outline: 'none'
+                          }}
+                          buttonStyle={{ border: 'none', background: 'none', paddingLeft: 8 }}
+                          placeholder="(11) 999999999"
+                          enableSearch
                         />
                         <select
                           value={editRole}
@@ -507,6 +543,15 @@ export default function ManageUsers() {
                               className="px-3 py-2 text-white rounded-lg font-semibold bg-green-600 hover:bg-green-700"
                             >
                               Desbloquear
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button
+                              onClick={() => handleResetPassword(user)}
+                              disabled={loading}
+                              className="px-3 py-2 text-white rounded-lg font-semibold bg-indigo-600 hover:bg-indigo-700"
+                            >
+                              Redefinir senha
                             </button>
                           )}
                           {canEdit && (
