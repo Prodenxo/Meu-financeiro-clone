@@ -386,7 +386,11 @@ export const updateUser = async (accessToken, userId, input) => {
 
   if (requestedDisplayName || requestedPhone) {
     const metadata = {};
-    if (requestedDisplayName) metadata.display_name = requestedDisplayName;
+    if (requestedDisplayName) {
+      metadata.display_name = requestedDisplayName;
+      metadata.name = requestedDisplayName;
+      metadata.full_name = requestedDisplayName;
+    }
     if (requestedPhone) metadata.phone = requestedPhone;
     const { error: updateUserError } = await adminClient.auth.admin.updateUserById(userId, {
       user_metadata: metadata
@@ -403,6 +407,15 @@ export const updateUser = async (accessToken, userId, input) => {
       .upsert(
         { user_id: userId, user_number: requestedPhone },
         { onConflict: 'user_id' }
+      );
+  }
+
+  if (requestedDisplayName) {
+    await adminClient
+      .from('profiles')
+      .upsert(
+        { id: userId, display_name: requestedDisplayName },
+        { onConflict: 'id' }
       );
   }
 
