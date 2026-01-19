@@ -9,6 +9,7 @@ export interface ManagedUser {
   role: 'superadmin' | 'admin' | 'usuario' | 'outsider';
   empresaId: string | null;
   empresaName?: string | null;
+  status?: boolean | null;
 }
 
 export interface EmpresaOption {
