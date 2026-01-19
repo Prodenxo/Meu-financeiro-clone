@@ -303,12 +303,50 @@ export const updateUser = async (accessToken, userId, input) => {
     .maybeSingle();
 
   if (linkError) throw badRequest(linkError.message);
-  if (!linkData?.roles_id) throw badRequest('Vínculo de role não encontrado');
+  let linkRecord = linkData;
+  if (!linkRecord?.roles_id) {
+    if (requester.role !== 'superadmin') {
+      throw badRequest('Vínculo de role não encontrado');
+    }
+
+    if (!requestedEmpresaId) {
+      throw badRequest('Empresa é obrigatória');
+    }
+
+    const roleForLink = requestedRole || 'usuario';
+    if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(roleForLink)) {
+      throw badRequest('Role inválida');
+    }
+
+    const roleLookup = roleToDbValue(roleForLink);
+    const { data: roleData } = await adminClient
+      .from('roles')
+      .select('id')
+      .ilike('roles', roleLookup)
+      .maybeSingle();
+
+    if (!roleData?.id) throw badRequest('Role não encontrada');
+
+    const { data: createdLink, error: createLinkError } = await adminClient
+      .from('role_x_user_x_empresa')
+      .insert({
+        user_id: userId,
+        roles_id: roleData.id,
+        empresas_id: requestedEmpresaId,
+        status: true
+      })
+      .select('id, empresas_id, roles_id')
+      .maybeSingle();
+
+    if (createLinkError) throw badRequest(createLinkError.message);
+
+    linkRecord = createdLink;
+  }
 
   const { data: roleData, error: roleError } = await adminClient
     .from('roles')
     .select('roles')
-    .eq('id', linkData.roles_id)
+    .eq('id', linkRecord.roles_id)
     .maybeSingle();
 
   if (roleError) throw badRequest(roleError.message);
@@ -316,7 +354,7 @@ export const updateUser = async (accessToken, userId, input) => {
 
   if (requester.role === 'admin') {
     if (targetRole !== 'usuario') throw forbidden();
-    if (!requester.empresaId || requester.empresaId !== linkData.empresas_id) throw forbidden();
+    if (!requester.empresaId || requester.empresaId !== linkRecord.empresas_id) throw forbidden();
     if (requestedRole && requestedRole !== 'usuario') throw forbidden();
   }
 
@@ -328,7 +366,7 @@ export const updateUser = async (accessToken, userId, input) => {
   }
 
   let finalRole = requestedRole || targetRole;
-  let finalEmpresaId = linkData.empresas_id;
+  let finalEmpresaId = linkRecord.empresas_id;
 
   if (requester.role === 'superadmin') {
     if (!requestedEmpresaId) throw badRequest('Empresa é obrigatória');
@@ -383,7 +421,7 @@ export const updateUser = async (accessToken, userId, input) => {
       roles_id: roleIdData.id,
       empresas_id: finalEmpresaId
     })
-    .eq('id', linkData.id);
+    .eq('id', linkRecord.id);
 
   if (updateError) throw badRequest(updateError.message);
 
