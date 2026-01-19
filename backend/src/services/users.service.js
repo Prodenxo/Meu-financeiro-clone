@@ -279,6 +279,8 @@ export const updateUser = async (accessToken, userId, input) => {
 
   const requestedRole = normalizeRoleValue(input?.role);
   const requestedEmpresaId = input?.empresaId || null;
+  const requestedDisplayName = input?.displayName?.trim();
+  const requestedPhone = cleanPhone(input?.phone?.trim());
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await adminClient
@@ -362,6 +364,25 @@ export const updateUser = async (accessToken, userId, input) => {
     .eq('id', linkData.id);
 
   if (updateError) throw badRequest(updateError.message);
+
+  if (requestedDisplayName || requestedPhone) {
+    const metadata = {};
+    if (requestedDisplayName) metadata.display_name = requestedDisplayName;
+    if (requestedPhone) metadata.phone = requestedPhone;
+    const { error: updateUserError } = await adminClient.auth.admin.updateUserById(userId, {
+      user_metadata: metadata
+    });
+    if (updateUserError) throw badRequest(updateUserError.message);
+  }
+
+  if (requestedPhone) {
+    await adminClient
+      .from('n8n_link')
+      .upsert(
+        { user_id: userId, user_number: requestedPhone },
+        { onConflict: 'user_id' }
+      );
+  }
 
   return {
     userId,

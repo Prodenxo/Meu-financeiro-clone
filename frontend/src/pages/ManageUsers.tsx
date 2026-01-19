@@ -25,6 +25,8 @@ export default function ManageUsers() {
   const [editEmpresaId, setEditEmpresaId] = useState('');
   const [editEmpresaQuery, setEditEmpresaQuery] = useState('');
   const [editEmpresaOpen, setEditEmpresaOpen] = useState(false);
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
 
   const canManage = hasRole(role, ['admin']);
 
@@ -107,6 +109,8 @@ export default function ManageUsers() {
     setEditEmpresaId(user.empresaId || '');
     setEditEmpresaQuery(user.empresaName || '');
     setEditEmpresaOpen(false);
+    setEditDisplayName(user.displayName || '');
+    setEditPhone(user.phone || '');
   };
 
   const handleUpdateUser = async (user: ManagedUser) => {
@@ -117,8 +121,17 @@ export default function ManageUsers() {
     try {
       const payload =
         role === 'superadmin'
-          ? { role: editRole, empresaId: editEmpresaId || undefined }
-          : { role: 'usuario' };
+          ? {
+              role: editRole,
+              empresaId: editEmpresaId || undefined,
+              displayName: editDisplayName || undefined,
+              phone: editPhone || undefined
+            }
+          : {
+              role: 'usuario',
+              displayName: editDisplayName || undefined,
+              phone: editPhone || undefined
+            };
       await updateUser(user.id, payload);
       setSuccess('Usuário atualizado com sucesso.');
       setEditingUserId(null);
@@ -315,6 +328,20 @@ export default function ManageUsers() {
                   <div className="text-sm text-gray-600 dark:text-gray-300 min-w-[200px]">
                     {isEditing ? (
                       <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={editDisplayName}
+                          onChange={(e) => setEditDisplayName(e.target.value)}
+                          className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                          placeholder="Nome de exibição"
+                        />
+                        <input
+                          type="text"
+                          value={editPhone}
+                          onChange={(e) => setEditPhone(e.target.value)}
+                          className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                          placeholder="Telefone"
+                        />
                         <select
                           value={editRole}
                           onChange={(e) => setEditRole(e.target.value as 'admin' | 'usuario' | 'outsider')}
