@@ -49,6 +49,10 @@ export async function deleteUser(userId: string) {
   return apiClient.delete<{ userId: string }>(`/users/${userId}`);
 }
 
+export async function resetUserPassword(userId: string) {
+  return apiClient.post<{ userId: string; password: string }>(`/users/${userId}/reset-password`);
+}
+
 export async function createUser(input: {
   email: string;
   password?: string;

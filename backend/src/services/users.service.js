@@ -528,6 +528,51 @@ export const deleteUser = async (accessToken, userId) => {
   return { userId };
 };
 
+export const resetUserPassword = async (accessToken, userId) => {
+  if (!userId) throw badRequest('userId é obrigatório');
+
+  const requester = await getRequesterContext(accessToken);
+  if (!ROLE_CREATE_ALLOWED.has(requester.role)) throw forbidden();
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const { data: linkData, error: linkError } = await adminClient
+    .from('role_x_user_x_empresa')
+    .select('empresas_id, roles_id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (linkError) throw badRequest(linkError.message);
+  if (!linkData?.roles_id) throw badRequest('Vínculo de role não encontrado');
+
+  const { data: roleData, error: roleError } = await adminClient
+    .from('roles')
+    .select('roles')
+    .eq('id', linkData.roles_id)
+    .maybeSingle();
+
+  if (roleError) throw badRequest(roleError.message);
+  const targetRole = normalizeRoleValue(roleData?.roles) || 'usuario';
+
+  if (requester.role === 'admin') {
+    if (targetRole !== 'usuario') throw forbidden();
+    if (!requester.empresaId || requester.empresaId !== linkData.empresas_id) throw forbidden();
+  }
+
+  if (requester.role === 'superadmin') {
+    if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
+  }
+
+  const newPassword = generatePassword();
+  const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
+    password: newPassword
+  });
+
+  if (updateError) throw badRequest(updateError.message);
+  return { userId, password: newPassword };
+};
+
 export const syncPhone = async (userId, phone) => {
   if (!phone) throw badRequest('Telefone é obrigatório');
   const cleanedPhone = cleanPhone(phone);
