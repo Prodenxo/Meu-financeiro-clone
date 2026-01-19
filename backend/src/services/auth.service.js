@@ -5,6 +5,13 @@ import { badRequest, forbidden, unauthorized } from '../utils/errors.js';
 const ROLE_DEFAULT = 'usuario';
 const ROLE_ALLOWED = new Set(['superadmin', 'admin', 'usuario', 'outsider']);
 
+const normalizeRoleValue = (role) => {
+  if (!role) return null;
+  const normalized = String(role).trim().toLowerCase();
+  if (normalized === 'user') return 'usuario';
+  return normalized;
+};
+
 const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
   if (!accessToken || !userId) return { role: null, empresaId: null };
 
@@ -37,7 +44,7 @@ const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
 
     if (roleData?.roles) {
       return {
-        role: roleData.roles,
+        role: normalizeRoleValue(roleData.roles),
         empresaId: linkData.empresas_id || null
       };
     }
