@@ -45,3 +45,21 @@ export const updateUser = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const banUser = async (req, res, next) => {
+  try {
+    const result = await usersService.banUser(req.accessToken, req.params.userId);
+    return sendSuccess(res, result, 'Usuário bloqueado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const deleteUser = async (req, res, next) => {
+  try {
+    const result = await usersService.deleteUser(req.accessToken, req.params.userId);
+    return sendSuccess(res, result, 'Usuário excluído');
+  } catch (error) {
+    return next(error);
+  }
+};
