@@ -200,7 +200,7 @@ export default function ManageUsers() {
                   </div>
                   <div className="text-sm text-gray-600 dark:text-gray-300">
                     <p>Role: {user.role}</p>
-                    <p>Empresa: {user.empresaId || '-'}</p>
+                    <p>Empresa: {user.empresa?.empresa || user.empresaId || '-'}</p>
                   </div>
                 </div>
               ))}

@@ -8,6 +8,10 @@ export interface ManagedUser {
   phone: string | null;
   role: 'superadmin' | 'admin' | 'usuario' | 'outsider';
   empresaId: string | null;
+  empresa?: {
+    id: string;
+    empresa: string;
+  } | null;
 }
 
 export async function listUsers() {
