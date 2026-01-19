@@ -19,6 +19,7 @@ export default function ManageUsers() {
   const [targetEmpresaId, setTargetEmpresaId] = useState('');
   const [empresaQuery, setEmpresaQuery] = useState('');
   const [empresas, setEmpresas] = useState<EmpresaOption[]>([]);
+  const [empresaOpen, setEmpresaOpen] = useState(false);
 
   const canManage = hasRole(role, ['admin']);
 
@@ -165,27 +166,60 @@ export default function ManageUsers() {
                   <option value="usuario">User</option>
                   <option value="outsider">Outsider</option>
                 </select>
-                <div>
-                  <input
-                    type="text"
-                    value={empresaQuery}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setEmpresaQuery(value);
-                      const match = empresas.find(
-                        (empresa) => empresa.empresa.toLowerCase() === value.toLowerCase()
-                      );
-                      setTargetEmpresaId(match?.id || '');
-                    }}
-                    className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
-                    placeholder="Empresa"
-                    list="empresas-list"
-                  />
-                  <datalist id="empresas-list">
-                    {empresas.map((empresa) => (
-                      <option key={empresa.id} value={empresa.empresa} />
-                    ))}
-                  </datalist>
+                <div className="relative">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={empresaQuery}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setEmpresaQuery(value);
+                        setEmpresaOpen(true);
+                        const match = empresas.find(
+                          (empresa) => empresa.empresa.toLowerCase() === value.toLowerCase()
+                        );
+                        setTargetEmpresaId(match?.id || '');
+                      }}
+                      onFocus={() => setEmpresaOpen(true)}
+                      className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                      placeholder="Empresa"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEmpresaOpen((open) => !open)}
+                      className="px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                      aria-label="Listar empresas"
+                    >
+                      ▾
+                    </button>
+                  </div>
+                  {empresaOpen && (
+                    <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow">
+                      {(empresas || [])
+                        .filter((empresa) =>
+                          empresa.empresa.toLowerCase().includes(empresaQuery.toLowerCase())
+                        )
+                        .map((empresa) => (
+                          <button
+                            key={empresa.id}
+                            type="button"
+                            onClick={() => {
+                              setEmpresaQuery(empresa.empresa);
+                              setTargetEmpresaId(empresa.id);
+                              setEmpresaOpen(false);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          >
+                            {empresa.empresa}
+                          </button>
+                        ))}
+                      {empresas.length === 0 && (
+                        <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                          Nenhuma empresa encontrada.
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     {targetEmpresaId
                       ? `Empresa selecionada: ${empresaQuery}`
