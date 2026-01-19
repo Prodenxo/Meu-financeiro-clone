@@ -38,12 +38,20 @@ function normalizeTipo(tipo: CreateTransactionInput['tipo'] | UpdateTransactionI
   return tipo
 }
 
+function normalizeTipoFromApi(tipo: Transaction['tipo']): Transaction['tipo'] {
+  if (tipo === 'saida') return 'saída'
+  return tipo
+}
+
 /**
  * Busca todas as transações do usuário
  */
 export async function fetchTransactions(userId: string): Promise<Transaction[]> {
   const data = await apiClient.get<Transaction[]>('/transactions');
-  return data || [];
+  return (data || []).map((transaction) => ({
+    ...transaction,
+    tipo: normalizeTipoFromApi(transaction.tipo),
+  }));
 }
 
 /**
