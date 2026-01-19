@@ -48,8 +48,18 @@ export const updateUser = async (req, res, next) => {
 
 export const banUser = async (req, res, next) => {
   try {
-    const result = await usersService.banUser(req.accessToken, req.params.userId);
+    const status = req.body?.status === true;
+    const result = await usersService.banUser(req.accessToken, req.params.userId, status === true ? true : false);
     return sendSuccess(res, result, 'Usuário bloqueado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const unbanUser = async (req, res, next) => {
+  try {
+    const result = await usersService.banUser(req.accessToken, req.params.userId, true);
+    return sendSuccess(res, result, 'Usuário desbloqueado');
   } catch (error) {
     return next(error);
   }

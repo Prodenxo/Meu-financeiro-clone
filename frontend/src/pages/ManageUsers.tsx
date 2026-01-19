@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
-import { banUser, createUser, deleteUser, listEmpresas, listUsers, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
+import { banUser, createUser, deleteUser, listEmpresas, listUsers, unbanUser, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
 
 export default function ManageUsers() {
   const { role, empresaId } = useAuthStore();
@@ -167,6 +167,26 @@ export default function ManageUsers() {
     } catch (err: any) {
       setError(err.message || 'Erro ao bloquear usuário');
       toast.error(err.message || 'Erro ao bloquear usuário');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnbanUser = async (user: ManagedUser) => {
+    const confirmed = window.confirm('Tem certeza que deseja desbloquear este usuário?');
+    if (!confirmed) return;
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await unbanUser(user.id);
+      setSuccess('Usuário desbloqueado com sucesso.');
+      toast.success('Usuário desbloqueado com sucesso.');
+      setEditingUserId(null);
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao desbloquear usuário');
+      toast.error(err.message || 'Erro ao desbloquear usuário');
     } finally {
       setLoading(false);
     }
@@ -477,6 +497,15 @@ export default function ManageUsers() {
                               className="px-3 py-2 text-white rounded-lg font-semibold bg-yellow-600 hover:bg-yellow-700"
                             >
                               Bloquear
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button
+                              onClick={() => handleUnbanUser(user)}
+                              disabled={loading}
+                              className="px-3 py-2 text-white rounded-lg font-semibold bg-green-600 hover:bg-green-700"
+                            >
+                              Desbloquear
                             </button>
                           )}
                           {canEdit && (

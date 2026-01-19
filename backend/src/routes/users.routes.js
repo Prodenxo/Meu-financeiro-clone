@@ -7,6 +7,7 @@ const router = Router();
 router.get('/', requireAuth, controller.listUsers);
 router.get('/empresas', requireAuth, controller.listEmpresas);
 router.post('/:userId/ban', requireAuth, controller.banUser);
+router.post('/:userId/unban', requireAuth, controller.unbanUser);
 router.put('/:userId', requireAuth, controller.updateUser);
 router.delete('/:userId', requireAuth, controller.deleteUser);
 router.post('/', requireAuth, controller.createUser);
