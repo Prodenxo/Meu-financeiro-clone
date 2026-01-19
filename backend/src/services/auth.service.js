@@ -8,20 +8,32 @@ const ROLE_ALLOWED = new Set(['superadmin', 'admin', 'usuario', 'outsider']);
 const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
   if (!accessToken || !userId) return { role: null, empresaId: null };
 
-  const userClient = createSupabaseClient({ accessToken });
-  const { data: linkData, error } = await userClient
+  const linkClient = env.SUPABASE_SERVICE_ROLE_KEY
+    ? createSupabaseClient({ useServiceRole: true })
+    : createSupabaseClient({ accessToken });
+  const { data: linkData, error } = await linkClient
     .from('role_x_user_x_empresa')
     .select('empresas_id, roles_id')
     .eq('user_id', userId)
     .eq('status', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
+  if (error) {
+    console.warn('[Auth] role_x_user_x_empresa lookup error:', error.message);
+  }
+
   if (!error && linkData?.roles_id) {
-    const { data: roleData } = await userClient
+    const { data: roleData, error: roleError } = await linkClient
       .from('roles')
       .select('roles')
       .eq('id', linkData.roles_id)
       .maybeSingle();
+
+    if (roleError) {
+      console.warn('[Auth] roles lookup error:', roleError.message);
+    }
 
     if (roleData?.roles) {
       return {
