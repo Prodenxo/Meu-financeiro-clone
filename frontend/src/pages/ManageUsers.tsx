@@ -397,11 +397,7 @@ export default function ManageUsers() {
                   )}
                 </div>
               </div>
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Usuário será criado na empresa atual: {empresaId || 'não definida'}
-              </p>
-            )}
+            ) : null}
 
             <button
               onClick={handleCreateUser}
@@ -421,7 +417,10 @@ export default function ManageUsers() {
             <p className="text-gray-500 dark:text-gray-400">Nenhum usuário encontrado.</p>
           ) : (
             <div className="space-y-3">
-              {users.map((user) => {
+              {(role === 'admin'
+                ? users.filter((user) => user.role !== 'superadmin' && user.role !== 'outsider')
+                : users
+              ).map((user) => {
                 const canEdit =
                   role === 'superadmin'
                     ? user.role !== 'superadmin'
