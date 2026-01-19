@@ -4,6 +4,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const ROLE_DEFAULT = 'usuario'
 const ROLE_ALLOWED = new Set(['superadmin', 'admin', 'usuario', 'outsider'])
 
+const roleToDbValue = (role: string | null) => {
+  if (!role) return null
+  if (role === 'usuario') return 'user'
+  return role
+}
+
 async function getOrCreateProfileRole(params: {
   supabaseUrl: string
   supabaseAnonKey: string
@@ -173,6 +179,36 @@ serve(async (req) => {
           .insert({ id: userId, role: ROLE_DEFAULT })
           .select('role')
           .single()
+
+        const roleLookup = roleToDbValue(ROLE_DEFAULT)
+        const { data: roleData, error: roleError } = await adminClient
+          .from('roles')
+          .select('id')
+          .ilike('roles', roleLookup ?? '')
+          .maybeSingle()
+
+        if (roleError || !roleData?.id) {
+          return new Response(
+            JSON.stringify({ error: roleError?.message || 'Role não encontrada' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        const { error: linkError } = await adminClient
+          .from('role_x_user_x_empresa')
+          .insert({
+            user_id: userId,
+            roles_id: roleData.id,
+            empresas_id: null,
+            status: true
+          })
+
+        if (linkError) {
+          return new Response(
+            JSON.stringify({ error: linkError.message }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
       }
 
       // Sincronizar telefone com n8n_link se fornecido
