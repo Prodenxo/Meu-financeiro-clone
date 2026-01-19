@@ -152,6 +152,7 @@ export const listEmpresas = async (accessToken) => {
   const { data, error } = await query;
   if (error) throw badRequest(error.message);
 
+  console.log('[Users] listEmpresas role:', role, 'empresaId:', empresaId, 'count:', data?.length || 0);
   return { empresas: data || [] };
 };
 
