@@ -325,6 +325,17 @@ export const updateUser = async (accessToken, userId, input) => {
     finalEmpresaId = requestedEmpresaId;
   }
 
+  console.log('[Users] updateUser', {
+    requesterRole: requester.role,
+    targetRole,
+    requestedRole,
+    requestedEmpresaId,
+    finalRole,
+    finalEmpresaId,
+    requestedDisplayName,
+    requestedPhone
+  });
+
   if (finalRole === 'admin') {
     const { data: adminRole } = await adminClient
       .from('roles')
@@ -372,7 +383,10 @@ export const updateUser = async (accessToken, userId, input) => {
     const { error: updateUserError } = await adminClient.auth.admin.updateUserById(userId, {
       user_metadata: metadata
     });
-    if (updateUserError) throw badRequest(updateUserError.message);
+    if (updateUserError) {
+      console.warn('[Users] updateUser metadata error:', updateUserError.message);
+      throw badRequest(updateUserError.message);
+    }
   }
 
   if (requestedPhone) {
