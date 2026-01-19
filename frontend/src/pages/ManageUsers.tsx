@@ -31,6 +31,7 @@ export default function ManageUsers() {
   const [editEmpresaOpen, setEditEmpresaOpen] = useState(false);
   const [editDisplayName, setEditDisplayName] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [lastPasswords, setLastPasswords] = useState<Record<string, string>>({});
 
   const canManage = hasRole(role, ['admin']);
 
@@ -225,6 +226,7 @@ export default function ManageUsers() {
     setSuccess('');
     try {
       const result = await resetUserPassword(user.id, newPassword);
+      setLastPasswords((prev) => ({ ...prev, [user.id]: newPassword }));
       const message = `Senha redefinida com sucesso.`;
       setSuccess(message);
       toast.success(message);
@@ -442,6 +444,32 @@ export default function ManageUsers() {
                   <div className="text-sm text-gray-600 dark:text-gray-300 min-w-[200px]">
                     {isEditing ? (
                       <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={lastPasswords[user.id] || ''}
+                            readOnly
+                            className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                            placeholder="Sem senha em cache"
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const value = lastPasswords[user.id];
+                              if (!value) return;
+                              try {
+                                await navigator.clipboard.writeText(value);
+                                toast.success('Senha copiada.');
+                              } catch (copyError) {
+                                toast.error('Erro ao copiar senha.');
+                              }
+                            }}
+                            disabled={!lastPasswords[user.id]}
+                            className="px-3 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-gray-600 hover:bg-gray-700"
+                          >
+                            Copiar
+                          </button>
+                        </div>
                         <input
                           type="text"
                           value={editDisplayName}
