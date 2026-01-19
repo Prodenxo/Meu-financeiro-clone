@@ -5,6 +5,13 @@ import { badRequest, forbidden, unauthorized } from '../utils/errors.js';
 const ROLE_CREATE_ALLOWED = new Set(['superadmin', 'admin']);
 const ROLE_TARGET_ALLOWED = new Set(['admin', 'usuario', 'outsider']);
 
+const normalizeRoleValue = (role) => {
+  if (!role) return null;
+  const normalized = String(role).trim().toLowerCase();
+  if (normalized === 'user') return 'usuario';
+  return normalized;
+};
+
 const cleanPhone = (phone) => (phone?.startsWith('+') ? phone.substring(1) : phone);
 
 const generatePassword = () => crypto.randomBytes(9).toString('base64').slice(0, 12);
@@ -44,7 +51,7 @@ const getRequesterContext = async (accessToken) => {
     if (roleData?.roles) {
       return {
         userId: user.id,
-        role: roleData.roles,
+        role: normalizeRoleValue(roleData.roles),
         empresaId: linkData.empresas_id || null
       };
     }
@@ -58,7 +65,7 @@ const getRequesterContext = async (accessToken) => {
 
   return {
     userId: user.id,
-    role: profile?.role || 'usuario',
+    role: normalizeRoleValue(profile?.role) || 'usuario',
     empresaId: null
   };
 };
@@ -211,10 +218,10 @@ export const createUser = async (accessToken, input) => {
     }
   }
 
-  const { data: roleData } = await adminClient
+    const { data: roleData } = await adminClient
     .from('roles')
     .select('id, roles')
-    .eq('roles', finalRole)
+      .ilike('roles', finalRole)
     .maybeSingle();
 
   if (!roleData?.id) throw badRequest('Role não encontrada');
