@@ -33,9 +33,8 @@ const getRequesterContext = async (accessToken) => {
   const linkClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await linkClient
     .from('role_x_user_x_empresa')
-    .select('empresas_id, roles_id')
+    .select('empresas_id, roles_id, status')
     .eq('user_id', user.id)
-    .eq('status', true)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -45,6 +44,9 @@ const getRequesterContext = async (accessToken) => {
   }
 
   if (linkData?.roles_id) {
+    if (linkData?.status === false) {
+      throw forbidden('Seu perfil está bloqueado');
+    }
     const { data: roleData, error: roleError } = await linkClient
       .from('roles')
       .select('roles')
@@ -426,7 +428,7 @@ export const updateUser = async (accessToken, userId, input) => {
   };
 };
 
-export const banUser = async (accessToken, userId) => {
+export const banUser = async (accessToken, userId, status = false) => {
   if (!userId) throw badRequest('userId é obrigatório');
 
   const requester = await getRequesterContext(accessToken);
@@ -435,9 +437,8 @@ export const banUser = async (accessToken, userId) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await adminClient
     .from('role_x_user_x_empresa')
-    .select('empresas_id, roles_id')
+    .select('id, empresas_id, roles_id')
     .eq('user_id', userId)
-    .eq('status', true)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -463,13 +464,13 @@ export const banUser = async (accessToken, userId) => {
     if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
   }
 
-  const bannedUntil = '3000-01-01T00:00:00Z';
-  const { error: banError } = await adminClient.auth.admin.updateUserById(userId, {
-    banned_until: bannedUntil
-  });
+  const { error: banError } = await adminClient
+    .from('role_x_user_x_empresa')
+    .update({ status })
+    .eq('id', linkData.id);
   if (banError) throw badRequest(banError.message);
 
-  return { userId, bannedUntil };
+  return { userId, status };
 };
 
 export const deleteUser = async (accessToken, userId) => {
@@ -483,7 +484,6 @@ export const deleteUser = async (accessToken, userId) => {
     .from('role_x_user_x_empresa')
     .select('empresas_id, roles_id')
     .eq('user_id', userId)
-    .eq('status', true)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();

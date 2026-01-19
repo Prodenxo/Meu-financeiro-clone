@@ -40,6 +40,10 @@ export async function banUser(userId: string) {
   return apiClient.post<{ userId: string; bannedUntil: string }>(`/users/${userId}/ban`);
 }
 
+export async function unbanUser(userId: string) {
+  return apiClient.post<{ userId: string; status: boolean }>(`/users/${userId}/unban`);
+}
+
 export async function deleteUser(userId: string) {
   return apiClient.delete<{ userId: string }>(`/users/${userId}`);
 }

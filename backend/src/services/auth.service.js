@@ -53,6 +53,22 @@ const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
   return { role: null, empresaId: null };
 };
 
+const ensureUserNotBlocked = async ({ accessToken, userId }) => {
+  if (!accessToken || !userId || !env.SUPABASE_SERVICE_ROLE_KEY) return;
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const { data: linkData } = await adminClient
+    .from('role_x_user_x_empresa')
+    .select('status')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (linkData?.status === false) {
+    throw forbidden('Seu perfil está bloqueado');
+  }
+};
+
 const getOrCreateProfileRole = async ({ accessToken, userId }) => {
   if (!accessToken || !userId) return ROLE_DEFAULT;
 
@@ -154,11 +170,13 @@ export const signIn = async ({ email, password }) => {
   });
 
   if (error) {
-    if ((error.message || '').toLowerCase().includes('banned')) {
-      throw forbidden('Seu perfil está bloqueado');
-    }
     throw unauthorized(error.message);
   }
+
+  await ensureUserNotBlocked({
+    accessToken: data.session?.access_token ?? null,
+    userId: data.user?.id ?? ''
+  });
 
   const { role, empresaId } = await getResolvedRoleAndCompany({
     accessToken: data.session?.access_token ?? null,
@@ -190,6 +208,8 @@ export const getSession = async (accessToken) => {
   const { data: { user } = {}, error } = await supabase.auth.getUser();
 
   if (error || !user) return null;
+
+  await ensureUserNotBlocked({ accessToken, userId: user.id });
 
   const { role, empresaId } = await getResolvedRoleAndCompany({ accessToken, userId: user.id });
 
