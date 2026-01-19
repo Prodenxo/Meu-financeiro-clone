@@ -36,6 +36,14 @@ export async function updateUser(
   return apiClient.put<{ userId: string; role: string; empresaId: string }>(`/users/${userId}`, input);
 }
 
+export async function banUser(userId: string) {
+  return apiClient.post<{ userId: string; bannedUntil: string }>(`/users/${userId}/ban`);
+}
+
+export async function deleteUser(userId: string) {
+  return apiClient.delete<{ userId: string }>(`/users/${userId}`);
+}
+
 export async function createUser(input: {
   email: string;
   password?: string;

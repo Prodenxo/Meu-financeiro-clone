@@ -154,6 +154,9 @@ export const signIn = async ({ email, password }) => {
   });
 
   if (error) {
+    if ((error.message || '').toLowerCase().includes('banned')) {
+      throw forbidden('Seu perfil está bloqueado');
+    }
     throw unauthorized(error.message);
   }
 
