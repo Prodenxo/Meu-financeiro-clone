@@ -45,8 +45,12 @@ export default function ManageUsers() {
   useEffect(() => {
     if (!canManage || role !== 'superadmin') return;
     listEmpresas()
-      .then(setEmpresas)
+      .then((data) => {
+        console.log('[ManageUsers] empresas recebidas:', data);
+        setEmpresas(data);
+      })
       .catch((err: any) => {
+        console.log('[ManageUsers] erro ao listar empresas:', err);
         setError(err.message || 'Erro ao listar empresas');
       });
   }, [canManage, role]);
@@ -220,11 +224,11 @@ export default function ManageUsers() {
                       )}
                     </div>
                   )}
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    {targetEmpresaId
-                      ? `Empresa selecionada: ${empresaQuery}`
-                      : 'Digite para filtrar e selecione uma empresa'}
-                  </p>
+                  {targetEmpresaId && (
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Empresa selecionada: {empresaQuery}
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
