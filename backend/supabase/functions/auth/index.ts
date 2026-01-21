@@ -4,10 +4,40 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const ROLE_DEFAULT = 'usuario'
 const ROLE_ALLOWED = new Set(['superadmin', 'admin', 'usuario', 'outsider'])
 
-const roleToDbValue = (role: string | null) => {
+const normalizeRoleValue = (role: string | null) => {
   if (!role) return null
-  if (role === 'usuario') return 'user'
-  return role
+  const normalized = role.trim().toLowerCase()
+  if (normalized === 'user') return 'usuario'
+  return normalized
+}
+
+const getRoleCandidates = (role: string | null) => {
+  const normalized = normalizeRoleValue(role)
+  if (!normalized) return []
+  if (normalized === 'usuario') return ['user', 'usuario']
+  return [normalized]
+}
+
+const resolveRoleId = async (
+  adminClient: ReturnType<typeof createClient>,
+  role: string | null
+) => {
+  const candidates = getRoleCandidates(role)
+  if (candidates.length === 0) return { roleId: null, role: null, error: null }
+
+  const { data, error } = await adminClient
+    .from('roles')
+    .select('id, roles')
+    .in('roles', candidates)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) return { roleId: null, role: null, error }
+  return {
+    roleId: data?.id ?? null,
+    role: normalizeRoleValue(data?.roles ?? null),
+    error: null
+  }
 }
 
 async function getOrCreateProfileRole(params: {
@@ -180,16 +210,10 @@ serve(async (req) => {
           .select('role')
           .single()
 
-        const roleLookup = roleToDbValue(ROLE_DEFAULT)
-        const { data: roleData, error: roleError } = await adminClient
-          .from('roles')
-          .select('id')
-          .ilike('roles', roleLookup ?? '')
-          .maybeSingle()
-
-        if (roleError || !roleData?.id) {
+        const roleResult = await resolveRoleId(adminClient, ROLE_DEFAULT)
+        if (roleResult.error || !roleResult.roleId) {
           return new Response(
-            JSON.stringify({ error: roleError?.message || 'Role não encontrada' }),
+            JSON.stringify({ error: roleResult.error?.message || 'Role não encontrada' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
@@ -198,7 +222,7 @@ serve(async (req) => {
           .from('role_x_user_x_empresa')
           .insert({
             user_id: userId,
-            roles_id: roleData.id,
+            roles_id: roleResult.roleId,
             empresas_id: null,
             status: true
           })

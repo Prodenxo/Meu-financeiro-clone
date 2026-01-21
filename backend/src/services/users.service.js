@@ -5,18 +5,13 @@ import { badRequest, forbidden, unauthorized } from '../utils/errors.js';
 const ROLE_CREATE_ALLOWED = new Set(['superadmin', 'admin']);
 const ROLE_TARGET_ALLOWED = new Set(['admin', 'usuario', 'outsider']);
 const ROLE_UPDATE_ALLOWED_SUPERADMIN = new Set(['admin', 'usuario', 'outsider']);
+const ROLE_DEFAULT = 'usuario';
 
 const normalizeRoleValue = (role) => {
   if (!role) return null;
   const normalized = String(role).trim().toLowerCase();
   if (normalized === 'user') return 'usuario';
   return normalized;
-};
-
-const roleToDbValue = (role) => {
-  if (!role) return null;
-  if (role === 'usuario') return 'user';
-  return role;
 };
 
 const getRoleCandidates = (role) => {
@@ -26,39 +21,31 @@ const getRoleCandidates = (role) => {
   return [normalized];
 };
 
-const ensureRoleId = async (adminClient, role) => {
-  const candidates = getRoleCandidates(role);
+const findRoleByCandidates = async (adminClient, candidates) => {
   if (candidates.length === 0) return null;
 
-  const { data: existing, error: existingError } = await adminClient
+  const { data, error } = await adminClient
     .from('roles')
     .select('id, roles')
     .in('roles', candidates)
     .limit(1)
     .maybeSingle();
 
-  if (existingError) throw badRequest(existingError.message);
-  if (existing?.id) return existing.id;
+  if (error) throw badRequest(error.message);
+  if (!data?.id) return null;
 
-  const preferred = roleToDbValue(normalizeRoleValue(role));
-  if (!preferred) return null;
+  return { roleId: data.id, role: normalizeRoleValue(data.roles) };
+};
 
-  const { error: insertError } = await adminClient
-    .from('roles')
-    .insert({ roles: preferred });
+const ensureRoleId = async (adminClient, role) => {
+  const resolved = await findRoleByCandidates(adminClient, getRoleCandidates(role));
+  if (resolved?.roleId) return resolved;
 
-  if (insertError && !String(insertError.message || '').toLowerCase().includes('duplicate')) {
-    throw badRequest(insertError.message);
+  const fallback = await findRoleByCandidates(adminClient, getRoleCandidates(ROLE_DEFAULT));
+  if (fallback?.roleId && normalizeRoleValue(role) && normalizeRoleValue(role) !== ROLE_DEFAULT) {
+    console.warn('[Users] role fallback:', { requestedRole: role, resolvedRole: fallback.role });
   }
-
-  const { data: created, error: createdError } = await adminClient
-    .from('roles')
-    .select('id')
-    .eq('roles', preferred)
-    .maybeSingle();
-
-  if (createdError) throw badRequest(createdError.message);
-  return created?.id || null;
+  return fallback || { roleId: null, role: null };
 };
 
 const cleanPhone = (phone) => (phone?.startsWith('+') ? phone.substring(1) : phone);
@@ -249,8 +236,11 @@ export const createUser = async (accessToken, input) => {
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
 
-  const roleId = await ensureRoleId(adminClient, finalRole);
+  const { roleId, role: resolvedRole } = await ensureRoleId(adminClient, finalRole);
   if (!roleId) throw badRequest('Role não encontrada');
+  if (resolvedRole && resolvedRole !== finalRole) {
+    finalRole = resolvedRole;
+  }
 
   const finalPassword = password || generatePassword();
   const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
@@ -333,8 +323,14 @@ export const updateUser = async (accessToken, userId, input) => {
       throw badRequest('Role inválida');
     }
 
-    const roleId = await ensureRoleId(adminClient, roleForLink);
+    const { roleId, role: resolvedRole } = await ensureRoleId(adminClient, roleForLink);
     if (!roleId) throw badRequest('Role não encontrada');
+    if (resolvedRole && resolvedRole !== roleForLink) {
+      console.warn('[Users] updateUser role fallback:', {
+        requestedRole: roleForLink,
+        resolvedRole
+      });
+    }
 
     const { data: existingLink, error: existingLinkError } = await adminClient
       .from('role_x_user_x_empresa')
@@ -419,8 +415,11 @@ export const updateUser = async (accessToken, userId, input) => {
     requestedPhone
   });
 
-  const roleId = await ensureRoleId(adminClient, finalRole);
+  const { roleId, role: resolvedRole } = await ensureRoleId(adminClient, finalRole);
   if (!roleId) throw badRequest('Role não encontrada');
+  if (resolvedRole && resolvedRole !== finalRole) {
+    finalRole = resolvedRole;
+  }
 
   const { error: updateError } = await adminClient
     .from('role_x_user_x_empresa')
