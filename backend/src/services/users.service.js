@@ -24,10 +24,14 @@ const getRoleCandidates = (role) => {
 const findRoleByCandidates = async (adminClient, candidates) => {
   if (candidates.length === 0) return null;
 
+  const filters = candidates
+    .map((candidate) => `roles.ilike.${candidate}`)
+    .join(',');
+
   const { data, error } = await adminClient
     .from('roles')
     .select('id, roles')
-    .in('roles', candidates)
+    .or(filters)
     .limit(1)
     .maybeSingle();
 
