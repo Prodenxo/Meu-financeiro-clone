@@ -3,7 +3,7 @@ import { normalizeRole } from '../lib/roles';
 
 const ALLOWED_USER_ROLES = new Set(['admin', 'usuario', 'outsider']);
 
-const sanitizeUserRole = (role?: string) => {
+const sanitizeUserRole = (role?: string | null) => {
   const normalized = normalizeRole(role);
   if (!normalized || !ALLOWED_USER_ROLES.has(normalized)) return undefined;
   return normalized;
