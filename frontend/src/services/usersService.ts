@@ -1,6 +1,14 @@
 import { apiClient } from './apiClient';
 import { normalizeRole } from '../lib/roles';
 
+const ALLOWED_USER_ROLES = new Set(['admin', 'usuario', 'outsider']);
+
+const sanitizeUserRole = (role?: string) => {
+  const normalized = normalizeRole(role);
+  if (!normalized || !ALLOWED_USER_ROLES.has(normalized)) return undefined;
+  return normalized;
+};
+
 export interface ManagedUser {
   id: string;
   email: string | null;
@@ -34,7 +42,12 @@ export async function updateUser(
   userId: string,
   input: { role?: string; empresaId?: string; displayName?: string; phone?: string }
 ) {
-  return apiClient.put<{ userId: string; role: string; empresaId: string }>(`/users/${userId}`, input);
+  const sanitizedRole = sanitizeUserRole(input.role);
+  const payload = {
+    ...input,
+    ...(sanitizedRole ? { role: sanitizedRole } : {})
+  };
+  return apiClient.put<{ userId: string; role: string; empresaId: string }>(`/users/${userId}`, payload);
 }
 
 export async function banUser(userId: string) {
@@ -63,11 +76,16 @@ export async function createUser(input: {
   role?: 'admin' | 'usuario' | 'outsider';
   empresaId?: string;
 }) {
+  const sanitizedRole = sanitizeUserRole(input.role);
+  const payload = {
+    ...input,
+    ...(sanitizedRole ? { role: sanitizedRole } : {})
+  };
   return apiClient.post<{
     userId: string;
     email: string;
     role: string;
     empresaId: string;
     generatedPassword: string | null;
-  }>('/users', input);
+  }>('/users', payload);
 }
