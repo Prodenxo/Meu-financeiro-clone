@@ -32,6 +32,9 @@ export default function ManageUsers() {
   const [editDisplayName, setEditDisplayName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [lastPasswords, setLastPasswords] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const canManage = hasRole(role, ['admin']);
 
@@ -66,6 +69,39 @@ export default function ManageUsers() {
         setError(err.message || 'Erro ao listar empresas');
       });
   }, [canManage, role]);
+
+  const baseUsers =
+    role === 'admin'
+      ? users.filter((user) => user.role !== 'superadmin' && user.role !== 'outsider')
+      : users;
+  const sortedUsers = [...baseUsers].sort((userA, userB) => {
+    const labelA = (userA.displayName || userA.email || '').toLowerCase();
+    const labelB = (userB.displayName || userB.email || '').toLowerCase();
+    return labelA.localeCompare(labelB, 'pt-BR', { sensitivity: 'base' });
+  });
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredUsers = normalizedQuery
+    ? sortedUsers.filter((user) => {
+        const name = user.displayName || '';
+        const emailValue = user.email || '';
+        return (
+          name.toLowerCase().includes(normalizedQuery) ||
+          emailValue.toLowerCase().includes(normalizedQuery)
+        );
+      })
+    : sortedUsers;
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const currentPageSafe = Math.min(currentPage, totalPages);
+  const startIndex = (currentPageSafe - 1) * pageSize;
+  const startDisplay = filteredUsers.length === 0 ? 0 : startIndex + 1;
+  const endDisplay = Math.min(startIndex + pageSize, filteredUsers.length);
+  const pagedUsers = filteredUsers.slice(startIndex, startIndex + pageSize);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const handleCreateUser = async () => {
     setLoading(true);
@@ -428,14 +464,38 @@ export default function ManageUsers() {
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Usuários</h2>
           {loading ? (
             <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
-          ) : users.length === 0 ? (
+          ) : filteredUsers.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">Nenhum usuário encontrado.</p>
           ) : (
             <div className="space-y-3">
-              {(role === 'admin'
-                ? users.filter((user) => user.role !== 'superadmin' && user.role !== 'outsider')
-                : users
-              ).map((user) => {
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full md:max-w-xs px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                  placeholder="Pesquisar por nome ou email"
+                />
+                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                  <span>Por página</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="px-2 py-1 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+              </div>
+              {pagedUsers.map((user) => {
                 const canEdit =
                   role === 'superadmin'
                     ? user.role !== 'superadmin'
@@ -652,6 +712,32 @@ export default function ManageUsers() {
                 </div>
               );
               })}
+              <div className="flex flex-col items-center justify-between gap-3 pt-2 md:flex-row">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={currentPageSafe <= 1}
+                  className="px-3 py-2 text-sm text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-gray-600 hover:bg-gray-700"
+                >
+                  Anterior
+                </button>
+                <div className="text-center text-sm text-gray-600 dark:text-gray-300">
+                  <p>
+                    Página {currentPageSafe} de {totalPages}
+                  </p>
+                  <p>
+                    Mostrando {startDisplay}-{endDisplay} de {filteredUsers.length}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={currentPageSafe >= totalPages}
+                  className="px-3 py-2 text-sm text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-gray-600 hover:bg-gray-700"
+                >
+                  Próximo
+                </button>
+              </div>
             </div>
           )}
         </div>
