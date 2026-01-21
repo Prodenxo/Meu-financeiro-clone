@@ -336,20 +336,46 @@ export const updateUser = async (accessToken, userId, input) => {
     const roleId = await ensureRoleId(adminClient, roleForLink);
     if (!roleId) throw badRequest('Role não encontrada');
 
-    const { data: createdLink, error: createLinkError } = await adminClient
+    const { data: existingLink, error: existingLinkError } = await adminClient
       .from('role_x_user_x_empresa')
-      .insert({
-        user_id: userId,
-        roles_id: roleId,
-        empresas_id: requestedEmpresaId,
-        status: true
-      })
       .select('id, empresas_id, roles_id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
-    if (createLinkError) throw badRequest(createLinkError.message);
+    if (existingLinkError) throw badRequest(existingLinkError.message);
 
-    linkRecord = createdLink;
+    if (existingLink?.id) {
+      const { data: updatedLink, error: updateLinkError } = await adminClient
+        .from('role_x_user_x_empresa')
+        .update({
+          roles_id: roleId,
+          empresas_id: requestedEmpresaId,
+          status: true
+        })
+        .eq('id', existingLink.id)
+        .select('id, empresas_id, roles_id')
+        .maybeSingle();
+
+      if (updateLinkError) throw badRequest(updateLinkError.message);
+      linkRecord = updatedLink;
+    } else {
+      const { data: createdLink, error: createLinkError } = await adminClient
+        .from('role_x_user_x_empresa')
+        .insert({
+          user_id: userId,
+          roles_id: roleId,
+          empresas_id: requestedEmpresaId,
+          status: true
+        })
+        .select('id, empresas_id, roles_id')
+        .maybeSingle();
+
+      if (createLinkError) throw badRequest(createLinkError.message);
+
+      linkRecord = createdLink;
+    }
   }
 
   const { data: roleData, error: roleError } = await adminClient

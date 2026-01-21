@@ -76,39 +76,6 @@ using (
   or (public.current_app_role() = 'admin' and id = public.current_empresa_id())
 );
 
--- Trigger para garantir apenas 1 admin por empresa
-create or replace function public.ensure_one_admin_per_empresa()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  admin_role_id uuid;
-  existing_count integer;
-begin
-  select id into admin_role_id from public.roles where roles = 'admin' limit 1;
-  if admin_role_id is null then
-    return new;
-  end if;
-
-  if new.roles_id = admin_role_id then
-    select count(*) into existing_count
-    from public.role_x_user_x_empresa
-    where empresas_id = new.empresas_id
-      and roles_id = admin_role_id
-      and id <> coalesce(new.id, gen_random_uuid());
-
-    if existing_count > 0 then
-      raise exception 'Essa empresa já possui um Admin';
-    end if;
-  end if;
-
-  return new;
-end;
-$$;
-
+-- Permite múltiplos admins por empresa (sem trigger de bloqueio)
 drop trigger if exists trg_one_admin_per_empresa on public.role_x_user_x_empresa;
-create trigger trg_one_admin_per_empresa
-before insert or update on public.role_x_user_x_empresa
-for each row execute procedure public.ensure_one_admin_per_empresa();
+drop function if exists public.ensure_one_admin_per_empresa();
