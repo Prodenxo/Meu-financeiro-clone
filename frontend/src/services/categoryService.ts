@@ -12,6 +12,17 @@ export interface CreateCategoryInput {
   tipo: 'entrada' | 'saída' | 'saida';
 }
 
+export interface CategoryBudget {
+  categorias_id: number;
+  valor_orcado: number | null;
+}
+
+export interface CategoryBudgetSummary {
+  categorias_id: number;
+  valor_orcado: number | null;
+  valor_gasto: number;
+}
+
 function normalizeTipo (tipo: CreateCategoryInput['tipo']): 'entrada' | 'saida' | 'saída' {
   if (tipo === 'saída') return 'saida'
   return tipo
@@ -67,4 +78,35 @@ export async function deleteCategory(
   id: number
 ): Promise<void> {
   await apiClient.delete('/categories', { id });
+}
+
+/**
+ * Busca os orçamentos do usuário por categoria
+ */
+export async function fetchCategoryBudgets(userId: string): Promise<CategoryBudget[]> {
+  const data = await apiClient.get<CategoryBudget[]>('/categories/budgets');
+  return data || [];
+}
+
+/**
+ * Cria ou atualiza o orçamento de uma categoria
+ */
+export async function saveCategoryBudget(
+  userId: string,
+  categoriasId: number,
+  valorOrcado: number | null
+): Promise<CategoryBudget> {
+  const data = await apiClient.post<CategoryBudget>('/categories/budgets', {
+    categorias_id: categoriasId,
+    valor_orcado: valorOrcado
+  });
+  return data;
+}
+
+/**
+ * Busca o resumo de orçamento vs gasto do mês atual
+ */
+export async function fetchCategoryBudgetsSummary(userId: string): Promise<CategoryBudgetSummary[]> {
+  const data = await apiClient.get<CategoryBudgetSummary[]>('/categories/budgets/summary');
+  return data || [];
 }

@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
+import { toast } from 'react-toastify';
 import {
   fetchCategories,
   createCategory,
   updateCategory,
   deleteCategory,
+  fetchCategoryBudgetsSummary,
+  saveCategoryBudget,
   type Category,
 } from '../services/categoryService';
 
@@ -75,6 +78,10 @@ function CategoriaModal({ open, onClose, onSave, categoria }: { open: boolean, o
 export default function Categorias() {
   const [categorias, setCategorias] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [budgetsByCategory, setBudgetsByCategory] = useState<Record<number, string>>({});
+  const [savedBudgetsByCategory, setSavedBudgetsByCategory] = useState<Record<number, string>>({});
+  const [spentByCategory, setSpentByCategory] = useState<Record<number, number>>({});
+  const [savingBudgetByCategory, setSavingBudgetByCategory] = useState<Record<number, boolean>>({});
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategoria, setEditingCategoria] = useState<Category | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -98,8 +105,99 @@ export default function Categorias() {
     }
   }
 
+  async function loadBudgetSummary() {
+    if (!userId) {
+      setBudgetsByCategory({});
+      setSavedBudgetsByCategory({});
+      setSpentByCategory({});
+      return;
+    }
+
+    try {
+      const data = await fetchCategoryBudgetsSummary(userId);
+      const mapped: Record<number, string> = {};
+      const spentMapped: Record<number, number> = {};
+      data.forEach((budget) => {
+        mapped[budget.categorias_id] = budget.valor_orcado === null || budget.valor_orcado === undefined
+          ? ''
+          : String(Math.round(Number(budget.valor_orcado) * 100));
+        spentMapped[budget.categorias_id] = Number(budget.valor_gasto || 0);
+      });
+      setBudgetsByCategory(mapped);
+      setSavedBudgetsByCategory(mapped);
+      setSpentByCategory(spentMapped);
+    } catch (error: any) {
+      console.error('Erro ao carregar orçamentos:', error);
+    }
+  }
+
+  const formatCurrency = (value: string): string => {
+    if (!value) return '';
+    const amount = parseFloat(value) / 100;
+    return amount.toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const parseCurrencyToNumber = (value: string): number | null => {
+    const numbers = value.replace(/\D/g, '');
+    if (!numbers) return null;
+    const parsed = parseFloat(numbers) / 100;
+    if (Number.isNaN(parsed)) return null;
+    return parsed;
+  };
+
+  const parseBudgetValue = (value: string): number | null => {
+    return parseCurrencyToNumber(value);
+  };
+
+  const parseBudgetDigits = (value: string): string => value.replace(/\D/g, '');
+
+  async function handleBudgetBlur(categoriaId: number) {
+    if (!userId) return;
+    const currentValue = budgetsByCategory[categoriaId] ?? '';
+    const savedValue = savedBudgetsByCategory[categoriaId] ?? '';
+
+    if (currentValue === savedValue) return;
+
+    if (savingBudgetByCategory[categoriaId]) return;
+
+    const parsed = parseBudgetValue(currentValue);
+    if (currentValue.trim() !== '' && parsed === null) {
+      alert('Valor de orçamento inválido.');
+      setBudgetsByCategory((prev) => ({ ...prev, [categoriaId]: savedValue }));
+      return;
+    }
+
+    try {
+      setSavingBudgetByCategory((prev) => ({ ...prev, [categoriaId]: true }));
+      const toastId = toast.loading('Salvando orçamento...');
+      const data = await saveCategoryBudget(userId, categoriaId, parsed);
+      const nextValue = data.valor_orcado === null || data.valor_orcado === undefined
+        ? ''
+        : String(Math.round(Number(data.valor_orcado) * 100));
+      setBudgetsByCategory((prev) => ({ ...prev, [categoriaId]: nextValue }));
+      setSavedBudgetsByCategory((prev) => ({ ...prev, [categoriaId]: nextValue }));
+      await loadBudgetSummary();
+      toast.update(toastId, { render: 'Orçamento salvo com sucesso!', type: 'success', isLoading: false, autoClose: 2000 });
+    } catch (error: any) {
+      console.error('Erro ao salvar orçamento:', error);
+      setBudgetsByCategory((prev) => ({ ...prev, [categoriaId]: savedValue }));
+      toast.error('Erro ao salvar orçamento. Tente novamente.');
+    } finally {
+      setSavingBudgetByCategory((prev) => ({ ...prev, [categoriaId]: false }));
+    }
+  }
+
   useEffect(() => {
     loadCategorias();
+  }, [userId]);
+
+  useEffect(() => {
+    loadBudgetSummary();
   }, [userId]);
 
   async function handleSaveCategoria({ nome, tipo }: { nome: string, tipo: string }) {
@@ -243,6 +341,39 @@ export default function Categorias() {
                 <span className={`px-3 md:px-4 py-1 rounded-full font-semibold text-white text-xs md:text-sm ${cat.tipo === 'entrada' ? 'bg-green-500' : 'bg-red-500'}`}>
                   {cat.tipo === 'entrada' ? 'Entrada' : 'Saída'}
                 </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Orçamento</span>
+                  <input
+                    className="w-24 md:w-28 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-sm text-right"
+                    placeholder="R$ 0,00"
+                    inputMode="numeric"
+                    value={formatCurrency(budgetsByCategory[cat.id] ?? '')}
+                    onChange={(e) => {
+                      const digits = parseBudgetDigits(e.target.value);
+                      setBudgetsByCategory((prev) => ({ ...prev, [cat.id]: digits }));
+                    }}
+                    onBlur={() => handleBudgetBlur(cat.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    disabled={!!savingBudgetByCategory[cat.id]}
+                    aria-label={`Orçamento da categoria ${cat.nome}`}
+                  />
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {(() => {
+                    const spentValue = spentByCategory[cat.id] ?? 0;
+                    const parsedBudget = parseBudgetValue(budgetsByCategory[cat.id] ?? '');
+                    const spentLabel = spentValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    if (parsedBudget === null) {
+                      return `Gasto R$ ${spentLabel}`;
+                    }
+                    const budgetLabel = parsedBudget.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    return `Gasto R$ ${spentLabel} / Orçado R$ ${budgetLabel}`;
+                  })()}
+                </div>
                 {cat.user_id !== null && (
                   <>
                     <button
