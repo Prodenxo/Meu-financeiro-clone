@@ -36,3 +36,30 @@ export const deleteCategory = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const listCategoryBudgets = async (req, res, next) => {
+  try {
+    const data = await categoriesService.listCategoryBudgets(req.user.id);
+    return sendSuccess(res, data, 'Orçamentos listados');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const upsertCategoryBudget = async (req, res, next) => {
+  try {
+    const data = await categoriesService.upsertCategoryBudget(req.user.id, req.body);
+    return sendSuccess(res, data, 'Orçamento atualizado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listCategoryBudgetsSummary = async (req, res, next) => {
+  try {
+    const data = await categoriesService.listCategoryBudgetsSummary(req.user.id);
+    return sendSuccess(res, data, 'Resumo de orçamento listado');
+  } catch (error) {
+    return next(error);
+  }
+};

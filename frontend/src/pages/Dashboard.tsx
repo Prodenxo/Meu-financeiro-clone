@@ -15,7 +15,7 @@ import {
 } from 'chart.js';
 import { Link } from 'react-router-dom';
 import Layout from '../Layout/Layout';
-import { fetchCategories } from '../services/categoryService';
+import { fetchCategories, fetchCategoryBudgetsSummary } from '../services/categoryService';
 
 ChartJS.register(
   CategoryScale,
@@ -37,12 +37,31 @@ export default function Dashboard() {
     classificacao: '',
     valor: '',
     tipo: 'saída' as 'saída' | 'entrada',
+    status: 'pago' as string,
   });
   const [period, setPeriod] = useState('Mês');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [aplicarFiltroDatas, setAplicarFiltroDatas] = useState(false);
   const [categoriasMap, setCategoriasMap] = useState<Record<string, string>>({});
+  const [categoriasTipoMap, setCategoriasTipoMap] = useState<Record<string, 'entrada' | 'saida'>>({});
   const [despesaTab, setDespesaTab] = useState<'pagos' | 'a_pagar'>('pagos');
+  const [budgetSummary, setBudgetSummary] = useState<Array<{
+    categorias_id: number;
+    valor_orcado: number | null;
+    valor_gasto: number;
+    valor_recebido?: number;
+  }>>([]);
+  const [budgetTab, setBudgetTab] = useState<'entrada' | 'saida'>('saida');
+
+  const refreshBudgetSummary = async () => {
+    if (!userId) return;
+    try {
+      const data = await fetchCategoryBudgetsSummary(userId);
+      setBudgetSummary(data || []);
+    } catch (error) {
+      console.error('Erro ao buscar resumo de orçamento:', error);
+    }
+  };
 
   useEffect(() => {
     if (userId) {
@@ -57,12 +76,20 @@ export default function Dashboard() {
     fetchCategories(userId)
       .then((data) => {
         const map: Record<string, string> = {};
+        const tipoMap: Record<string, 'entrada' | 'saida'> = {};
         data.forEach((cat) => {
           map[cat.id] = cat.nome;
+          const normalizedTipo = cat.tipo === 'saída' ? 'saida' : cat.tipo;
+          tipoMap[cat.id] = normalizedTipo === 'entrada' ? 'entrada' : 'saida';
         });
         setCategoriasMap(map);
+        setCategoriasTipoMap(tipoMap);
       })
       .catch((error) => console.error('Erro ao buscar categorias:', error));
+  }, [userId]);
+
+  useEffect(() => {
+    refreshBudgetSummary();
   }, [userId]);
 
   const totalIncome = transactions
@@ -106,15 +133,23 @@ export default function Dashboard() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const statusPadrao = formData.tipo === 'entrada' ? 'recebido' : 'pago';
     const transaction = {
       ...formData,
+      status: formData.status || statusPadrao,
       valor: parseFloat(formData.valor),
     };
 
     if (editingTransaction) {
-      await updateTransaction(editingTransaction.id, transaction);
+      const result = await updateTransaction(editingTransaction.id, transaction);
+      if (!result?.error) {
+        await refreshBudgetSummary();
+      }
     } else {
-      await addTransaction(transaction);
+      const result = await addTransaction(transaction);
+      if (!result?.error) {
+        await refreshBudgetSummary();
+      }
     }
 
     setIsModalOpen(false);
@@ -123,6 +158,7 @@ export default function Dashboard() {
       classificacao: '',
       valor: '',
       tipo: 'saída',
+      status: 'pago',
     });
   };
 
@@ -132,22 +168,13 @@ export default function Dashboard() {
       classificacao: transaction.classificacao,
       valor: transaction.valor.toString(),
       tipo: transaction.tipo,
+      status: transaction.status || (transaction.tipo === 'entrada' ? 'recebido' : 'pago'),
     });
     setIsModalOpen(true);
   };
 
   // Filtros de período (apenas visual, não filtra dados reais)
   const handlePeriod = (p: string) => setPeriod(p);
-
-  // Função para obter o saldo do período
-  function getBalanceInPeriod(start: Date, end: Date) {
-    return transactions
-      .filter(t => {
-        const d = getTransactionDate(t);
-        return d >= start && d <= end;
-      })
-      .reduce((sum, t) => sum + (t.tipo === 'entrada' ? t.valor : -t.valor), 0);
-  }
 
   // Função para obter o total de entradas/saídas no período
   function getTotalInPeriod(start: Date, end: Date, tipo: 'entrada' | 'saída') {
@@ -159,9 +186,8 @@ export default function Dashboard() {
       .reduce((sum, t) => sum + t.valor, 0);
   }
 
-  // Determinar período atual e anterior
+  // Determinar período atual
   let periodoAtual = { start: null as Date | null, end: null as Date | null };
-  let periodoAnterior = { start: null as Date | null, end: null as Date | null };
   const hoje = new Date();
   hoje.setHours(0,0,0,0);
 
@@ -170,12 +196,6 @@ export default function Dashboard() {
     const start = new Date(`${dateRange.start}T00:00:00-03:00`);
     const end = new Date(`${dateRange.end}T23:59:59-03:00`);
     periodoAtual = { start, end };
-    const diff = end.getTime() - start.getTime();
-    const prevEnd = new Date(start.getTime() - 1);
-    const prevStart = new Date(prevEnd.getTime() - diff);
-    prevStart.setHours(0,0,0,0);
-    prevEnd.setHours(23,59,59,999);
-    periodoAnterior = { start: prevStart, end: prevEnd };
   } else if (period === 'Semana') {
     // Semana atual
     const now = new Date();
@@ -187,13 +207,6 @@ export default function Dashboard() {
     end.setDate(start.getDate() + 6);
     end.setHours(23,59,59,999);
     periodoAtual = { start, end };
-    // Semana anterior
-    const prevEnd = new Date(start.getTime() - 1);
-    const prevStart = new Date(prevEnd);
-    prevStart.setDate(prevEnd.getDate() - 6);
-    prevStart.setHours(0,0,0,0);
-    prevEnd.setHours(23,59,59,999);
-    periodoAnterior = { start: prevStart, end: prevEnd };
   } else if (period === 'Mês') {
     // Mês atual
     const now = new Date();
@@ -201,12 +214,6 @@ export default function Dashboard() {
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     end.setHours(23,59,59,999);
     periodoAtual = { start, end };
-    // Mês anterior
-    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-    prevStart.setHours(0,0,0,0);
-    prevEnd.setHours(23,59,59,999);
-    periodoAnterior = { start: prevStart, end: prevEnd };
   } else if (period === 'Hoje') {
     // Hoje
     const start = new Date();
@@ -214,33 +221,6 @@ export default function Dashboard() {
     const end = new Date();
     end.setHours(23,59,59,999);
     periodoAtual = { start, end };
-    // Ontem
-    const prevStart = new Date(start);
-    prevStart.setDate(start.getDate() - 1);
-    prevStart.setHours(0,0,0,0);
-    const prevEnd = new Date(start);
-    prevEnd.setDate(start.getDate() - 1);
-    prevEnd.setHours(23,59,59,999);
-    periodoAnterior = { start: prevStart, end: prevEnd };
-  }
-
-  // Calcular saldo dos períodos
-  const saldoAtual = (periodoAtual.start && periodoAtual.end) ? getBalanceInPeriod(periodoAtual.start, periodoAtual.end) : balance;
-  const saldoAnterior = (periodoAnterior.start && periodoAnterior.end) ? getBalanceInPeriod(periodoAnterior.start, periodoAnterior.end) : 0;
-
-  // Calcular variação percentual
-  let variacao = 'N/A';
-  let variacaoCor = 'text-gray-500';
-  if (saldoAnterior !== 0) {
-    const perc = ((saldoAtual - saldoAnterior) / Math.abs(saldoAnterior)) * 100;
-    variacao = (perc >= 0 ? '↑ +' : '↓ ') + Math.abs(perc).toFixed(1) + '%';
-    variacaoCor = perc > 0 ? 'text-green-500' : perc < 0 ? 'text-red-500' : 'text-gray-500';
-  } else if (saldoAnterior === 0 && saldoAtual !== 0) {
-    variacao = '↑ +100%';
-    variacaoCor = 'text-green-500';
-  } else if (saldoAnterior === 0 && saldoAtual === 0) {
-    variacao = '0%';
-    variacaoCor = 'text-gray-500';
   }
 
   // Calcular entradas e saídas do período filtrado
@@ -307,6 +287,44 @@ export default function Dashboard() {
   // Calcular total para a aba selecionada
   const totalDespesaTab = despesasFiltradas.reduce((sum, t) => sum + t.valor, 0);
 
+  const formatCurrency = (value: number) =>
+    value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const categorizedBudgets = budgetSummary
+    .filter((item) => item.valor_orcado !== null && Number(item.valor_orcado) > 0)
+    .map((item) => {
+      const orcado = Number(item.valor_orcado || 0);
+      const gasto = Number(item.valor_gasto || 0);
+      const recebido = Number(item.valor_recebido || 0);
+      const tipo = categoriasTipoMap[String(item.categorias_id)] || 'saida';
+      const realizado = tipo === 'entrada' ? recebido : gasto;
+      const percentual = orcado > 0 ? (realizado / orcado) * 100 : 0;
+      return {
+        categorias_id: item.categorias_id,
+        nome: categoriasMap[String(item.categorias_id)] || `Categoria ${item.categorias_id}`,
+        tipo,
+        realizado,
+        orcado,
+        percentual,
+      };
+    });
+
+  const filteredBudgets = categorizedBudgets.filter((item) => item.tipo === budgetTab);
+
+  const bucketedBudgets = budgetTab === 'entrada'
+    ? {
+        verde: filteredBudgets.filter((item) => item.percentual > 75 && item.percentual <= 100),
+        amarelo: filteredBudgets.filter((item) => item.percentual > 50 && item.percentual <= 75),
+        laranja: filteredBudgets.filter((item) => item.percentual > 25 && item.percentual <= 50),
+        vermelho: filteredBudgets.filter((item) => item.percentual <= 25),
+      }
+    : {
+        verde: filteredBudgets.filter((item) => item.percentual <= 25),
+        amarelo: filteredBudgets.filter((item) => item.percentual > 25 && item.percentual <= 50),
+        laranja: filteredBudgets.filter((item) => item.percentual > 50 && item.percentual <= 75),
+        vermelho: filteredBudgets.filter((item) => item.percentual > 75 && item.percentual <= 100),
+      };
+
   return (
     <Layout>
       {/* Conteúdo do dashboard abaixo, sem header/main duplicado */}
@@ -327,12 +345,8 @@ export default function Dashboard() {
       {/* Cards de resumo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 md:p-6 flex flex-col justify-between">
-          <span className="text-gray-500 dark:text-gray-400 text-sm mb-2">Resultado do Período</span>
-          <span className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1">{saldoAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-          <span className="text-xs text-gray-400 dark:text-gray-500">
-            {periodoAtual.start && periodoAtual.end ? `${periodoAtual.start.toLocaleDateString('pt-BR')} - ${periodoAtual.end.toLocaleDateString('pt-BR')}` : ''}
-          </span>
-          <span className={`${variacaoCor} font-semibold flex items-center gap-1 mt-2`}>{variacao}</span>
+          <span className="text-gray-500 dark:text-gray-400 text-sm mb-2">Saldo Geral</span>
+          <span className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1">{balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
           <div className="mt-2"><div className="h-1 w-full bg-gradient-to-r from-purple-400 to-purple-100 rounded-full"></div></div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 md:p-6 flex flex-col justify-between">
@@ -469,6 +483,115 @@ export default function Dashboard() {
                 )}
               </ul>
             </div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 md:mt-6 bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <span className="font-semibold text-gray-800 dark:text-white text-sm md:text-base">
+            Categorias por percentual de orçamento (mês atual)
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setBudgetTab('entrada')}
+              className={`text-xs px-3 py-1 rounded font-semibold ${
+                budgetTab === 'entrada'
+                  ? 'bg-gray-200 dark:bg-gray-700 dark:text-white'
+                  : 'bg-gray-100 dark:bg-gray-600 dark:text-gray-300'
+              }`}
+            >
+              Entrada
+            </button>
+            <button
+              type="button"
+              onClick={() => setBudgetTab('saida')}
+              className={`text-xs px-3 py-1 rounded font-semibold ${
+                budgetTab === 'saida'
+                  ? 'bg-gray-200 dark:bg-gray-700 dark:text-white'
+                  : 'bg-gray-100 dark:bg-gray-600 dark:text-gray-300'
+              }`}
+            >
+              Saída
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-green-600 dark:text-green-400 mb-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+              OK
+            </div>
+            <ul className="space-y-2 text-sm dark:text-gray-200">
+              {bucketedBudgets.verde.map((item) => (
+                <li key={`verde-${item.categorias_id}`} className="flex items-center justify-between">
+                  <span>{item.nome}</span>
+                  <span className="text-right font-semibold">
+                    {formatCurrency(item.realizado)} / {formatCurrency(item.orcado)} ({item.percentual.toFixed(1)}%)
+                  </span>
+                </li>
+              ))}
+              {bucketedBudgets.verde.length === 0 && (
+                <li className="text-gray-500 dark:text-gray-400">Nenhuma categoria</li>
+              )}
+            </ul>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-yellow-600 dark:text-yellow-400 mb-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-yellow-500"></span>
+              Atenção
+            </div>
+            <ul className="space-y-2 text-sm dark:text-gray-200">
+              {bucketedBudgets.amarelo.map((item) => (
+                <li key={`amarelo-${item.categorias_id}`} className="flex items-center justify-between">
+                  <span>{item.nome}</span>
+                  <span className="text-right font-semibold">
+                    {formatCurrency(item.realizado)} / {formatCurrency(item.orcado)} ({item.percentual.toFixed(1)}%)
+                  </span>
+                </li>
+              ))}
+              {bucketedBudgets.amarelo.length === 0 && (
+                <li className="text-gray-500 dark:text-gray-400">Nenhuma categoria</li>
+              )}
+            </ul>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-orange-600 dark:text-orange-400 mb-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-orange-500"></span>
+              Cuidado
+            </div>
+            <ul className="space-y-2 text-sm dark:text-gray-200">
+              {bucketedBudgets.laranja.map((item) => (
+                <li key={`laranja-${item.categorias_id}`} className="flex items-center justify-between">
+                  <span>{item.nome}</span>
+                  <span className="text-right font-semibold">
+                    {formatCurrency(item.realizado)} / {formatCurrency(item.orcado)} ({item.percentual.toFixed(1)}%)
+                  </span>
+                </li>
+              ))}
+              {bucketedBudgets.laranja.length === 0 && (
+                <li className="text-gray-500 dark:text-gray-400">Nenhuma categoria</li>
+              )}
+            </ul>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400 mb-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-red-500"></span>
+              Alerta
+            </div>
+            <ul className="space-y-2 text-sm dark:text-gray-200">
+              {bucketedBudgets.vermelho.map((item) => (
+                <li key={`vermelho-${item.categorias_id}`} className="flex items-center justify-between">
+                  <span>{item.nome}</span>
+                  <span className="text-right font-semibold">
+                    {formatCurrency(item.realizado)} / {formatCurrency(item.orcado)} ({item.percentual.toFixed(1)}%)
+                  </span>
+                </li>
+              ))}
+              {bucketedBudgets.vermelho.length === 0 && (
+                <li className="text-gray-500 dark:text-gray-400">Nenhuma categoria</li>
+              )}
+            </ul>
           </div>
         </div>
       </div>
