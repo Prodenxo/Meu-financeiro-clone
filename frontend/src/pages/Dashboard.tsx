@@ -176,16 +176,6 @@ export default function Dashboard() {
   // Filtros de período (apenas visual, não filtra dados reais)
   const handlePeriod = (p: string) => setPeriod(p);
 
-  // Função para obter o saldo do período
-  function getBalanceInPeriod(start: Date, end: Date) {
-    return transactions
-      .filter(t => {
-        const d = getTransactionDate(t);
-        return d >= start && d <= end;
-      })
-      .reduce((sum, t) => sum + (t.tipo === 'entrada' ? t.valor : -t.valor), 0);
-  }
-
   // Função para obter o total de entradas/saídas no período
   function getTotalInPeriod(start: Date, end: Date, tipo: 'entrada' | 'saída') {
     return transactions
@@ -196,9 +186,8 @@ export default function Dashboard() {
       .reduce((sum, t) => sum + t.valor, 0);
   }
 
-  // Determinar período atual e anterior
+  // Determinar período atual
   let periodoAtual = { start: null as Date | null, end: null as Date | null };
-  let periodoAnterior = { start: null as Date | null, end: null as Date | null };
   const hoje = new Date();
   hoje.setHours(0,0,0,0);
 
@@ -207,12 +196,6 @@ export default function Dashboard() {
     const start = new Date(`${dateRange.start}T00:00:00-03:00`);
     const end = new Date(`${dateRange.end}T23:59:59-03:00`);
     periodoAtual = { start, end };
-    const diff = end.getTime() - start.getTime();
-    const prevEnd = new Date(start.getTime() - 1);
-    const prevStart = new Date(prevEnd.getTime() - diff);
-    prevStart.setHours(0,0,0,0);
-    prevEnd.setHours(23,59,59,999);
-    periodoAnterior = { start: prevStart, end: prevEnd };
   } else if (period === 'Semana') {
     // Semana atual
     const now = new Date();
@@ -224,13 +207,6 @@ export default function Dashboard() {
     end.setDate(start.getDate() + 6);
     end.setHours(23,59,59,999);
     periodoAtual = { start, end };
-    // Semana anterior
-    const prevEnd = new Date(start.getTime() - 1);
-    const prevStart = new Date(prevEnd);
-    prevStart.setDate(prevEnd.getDate() - 6);
-    prevStart.setHours(0,0,0,0);
-    prevEnd.setHours(23,59,59,999);
-    periodoAnterior = { start: prevStart, end: prevEnd };
   } else if (period === 'Mês') {
     // Mês atual
     const now = new Date();
@@ -238,12 +214,6 @@ export default function Dashboard() {
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     end.setHours(23,59,59,999);
     periodoAtual = { start, end };
-    // Mês anterior
-    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-    prevStart.setHours(0,0,0,0);
-    prevEnd.setHours(23,59,59,999);
-    periodoAnterior = { start: prevStart, end: prevEnd };
   } else if (period === 'Hoje') {
     // Hoje
     const start = new Date();
@@ -251,33 +221,6 @@ export default function Dashboard() {
     const end = new Date();
     end.setHours(23,59,59,999);
     periodoAtual = { start, end };
-    // Ontem
-    const prevStart = new Date(start);
-    prevStart.setDate(start.getDate() - 1);
-    prevStart.setHours(0,0,0,0);
-    const prevEnd = new Date(start);
-    prevEnd.setDate(start.getDate() - 1);
-    prevEnd.setHours(23,59,59,999);
-    periodoAnterior = { start: prevStart, end: prevEnd };
-  }
-
-  // Calcular saldo dos períodos
-  const saldoAtual = (periodoAtual.start && periodoAtual.end) ? getBalanceInPeriod(periodoAtual.start, periodoAtual.end) : balance;
-  const saldoAnterior = (periodoAnterior.start && periodoAnterior.end) ? getBalanceInPeriod(periodoAnterior.start, periodoAnterior.end) : 0;
-
-  // Calcular variação percentual
-  let variacao = 'N/A';
-  let variacaoCor = 'text-gray-500';
-  if (saldoAnterior !== 0) {
-    const perc = ((saldoAtual - saldoAnterior) / Math.abs(saldoAnterior)) * 100;
-    variacao = (perc >= 0 ? '↑ +' : '↓ ') + Math.abs(perc).toFixed(1) + '%';
-    variacaoCor = perc > 0 ? 'text-green-500' : perc < 0 ? 'text-red-500' : 'text-gray-500';
-  } else if (saldoAnterior === 0 && saldoAtual !== 0) {
-    variacao = '↑ +100%';
-    variacaoCor = 'text-green-500';
-  } else if (saldoAnterior === 0 && saldoAtual === 0) {
-    variacao = '0%';
-    variacaoCor = 'text-gray-500';
   }
 
   // Calcular entradas e saídas do período filtrado
@@ -402,12 +345,8 @@ export default function Dashboard() {
       {/* Cards de resumo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 md:p-6 flex flex-col justify-between">
-          <span className="text-gray-500 dark:text-gray-400 text-sm mb-2">Resultado do Período</span>
-          <span className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1">{saldoAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-          <span className="text-xs text-gray-400 dark:text-gray-500">
-            {periodoAtual.start && periodoAtual.end ? `${periodoAtual.start.toLocaleDateString('pt-BR')} - ${periodoAtual.end.toLocaleDateString('pt-BR')}` : ''}
-          </span>
-          <span className={`${variacaoCor} font-semibold flex items-center gap-1 mt-2`}>{variacao}</span>
+          <span className="text-gray-500 dark:text-gray-400 text-sm mb-2">Saldo Geral</span>
+          <span className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1">{balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
           <div className="mt-2"><div className="h-1 w-full bg-gradient-to-r from-purple-400 to-purple-100 rounded-full"></div></div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 md:p-6 flex flex-col justify-between">
