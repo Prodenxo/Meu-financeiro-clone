@@ -222,6 +222,25 @@ export const listCategoryBudgetsSummary = async (userId) => {
     spentByCategoryName.set(key, current + Number(transaction.valor || 0));
   });
 
+  const { data: receivedTransactions, error: receivedError } = await dbClient
+    .from('lancamentos_id')
+    .select('classificacao, valor, tipo, data, status')
+    .eq('user_id', userId)
+    .eq('status', 'recebido')
+    .eq('tipo', 'entrada')
+    .gte('data', startOfMonth)
+    .lte('data', endOfMonth);
+
+  if (receivedError) throw badRequest(receivedError.message);
+
+  const receivedByCategoryName = new Map();
+  (receivedTransactions || []).forEach((transaction) => {
+    if (!transaction?.classificacao) return;
+    const key = String(transaction.classificacao).toLowerCase();
+    const current = receivedByCategoryName.get(key) || 0;
+    receivedByCategoryName.set(key, current + Number(transaction.valor || 0));
+  });
+
   const budgetByCategoryId = new Map();
   (budgets || []).forEach((budget) => {
     budgetByCategoryId.set(budget.categorias_id, budget.valor_orçado ?? null);
@@ -230,6 +249,7 @@ export const listCategoryBudgetsSummary = async (userId) => {
   return allCategories.map((categoria) => ({
     categorias_id: categoria.id,
     valor_orcado: budgetByCategoryId.has(categoria.id) ? budgetByCategoryId.get(categoria.id) : null,
-    valor_gasto: spentByCategoryName.get(String(categoria.nome).toLowerCase()) || 0
+    valor_gasto: spentByCategoryName.get(String(categoria.nome).toLowerCase()) || 0,
+    valor_recebido: receivedByCategoryName.get(String(categoria.nome).toLowerCase()) || 0
   }));
 };

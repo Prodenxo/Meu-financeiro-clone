@@ -21,6 +21,7 @@ export interface CategoryBudgetSummary {
   categorias_id: number;
   valor_orcado: number | null;
   valor_gasto: number;
+  valor_recebido?: number;
 }
 
 function normalizeTipo (tipo: CreateCategoryInput['tipo']): 'entrada' | 'saida' | 'saída' {

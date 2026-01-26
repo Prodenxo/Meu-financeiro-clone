@@ -15,7 +15,7 @@ import {
 } from 'chart.js';
 import { Link } from 'react-router-dom';
 import Layout from '../Layout/Layout';
-import { fetchCategories } from '../services/categoryService';
+import { fetchCategories, fetchCategoryBudgetsSummary } from '../services/categoryService';
 
 ChartJS.register(
   CategoryScale,
@@ -37,12 +37,31 @@ export default function Dashboard() {
     classificacao: '',
     valor: '',
     tipo: 'saída' as 'saída' | 'entrada',
+    status: 'pago' as string,
   });
   const [period, setPeriod] = useState('Mês');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [aplicarFiltroDatas, setAplicarFiltroDatas] = useState(false);
   const [categoriasMap, setCategoriasMap] = useState<Record<string, string>>({});
+  const [categoriasTipoMap, setCategoriasTipoMap] = useState<Record<string, 'entrada' | 'saida'>>({});
   const [despesaTab, setDespesaTab] = useState<'pagos' | 'a_pagar'>('pagos');
+  const [budgetSummary, setBudgetSummary] = useState<Array<{
+    categorias_id: number;
+    valor_orcado: number | null;
+    valor_gasto: number;
+    valor_recebido?: number;
+  }>>([]);
+  const [budgetTab, setBudgetTab] = useState<'entrada' | 'saida'>('saida');
+
+  const refreshBudgetSummary = async () => {
+    if (!userId) return;
+    try {
+      const data = await fetchCategoryBudgetsSummary(userId);
+      setBudgetSummary(data || []);
+    } catch (error) {
+      console.error('Erro ao buscar resumo de orçamento:', error);
+    }
+  };
 
   useEffect(() => {
     if (userId) {
@@ -57,12 +76,20 @@ export default function Dashboard() {
     fetchCategories(userId)
       .then((data) => {
         const map: Record<string, string> = {};
+        const tipoMap: Record<string, 'entrada' | 'saida'> = {};
         data.forEach((cat) => {
           map[cat.id] = cat.nome;
+          const normalizedTipo = cat.tipo === 'saída' ? 'saida' : cat.tipo;
+          tipoMap[cat.id] = normalizedTipo === 'entrada' ? 'entrada' : 'saida';
         });
         setCategoriasMap(map);
+        setCategoriasTipoMap(tipoMap);
       })
       .catch((error) => console.error('Erro ao buscar categorias:', error));
+  }, [userId]);
+
+  useEffect(() => {
+    refreshBudgetSummary();
   }, [userId]);
 
   const totalIncome = transactions
@@ -106,15 +133,23 @@ export default function Dashboard() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const statusPadrao = formData.tipo === 'entrada' ? 'recebido' : 'pago';
     const transaction = {
       ...formData,
+      status: formData.status || statusPadrao,
       valor: parseFloat(formData.valor),
     };
 
     if (editingTransaction) {
-      await updateTransaction(editingTransaction.id, transaction);
+      const result = await updateTransaction(editingTransaction.id, transaction);
+      if (!result?.error) {
+        await refreshBudgetSummary();
+      }
     } else {
-      await addTransaction(transaction);
+      const result = await addTransaction(transaction);
+      if (!result?.error) {
+        await refreshBudgetSummary();
+      }
     }
 
     setIsModalOpen(false);
@@ -123,6 +158,7 @@ export default function Dashboard() {
       classificacao: '',
       valor: '',
       tipo: 'saída',
+      status: 'pago',
     });
   };
 
@@ -132,6 +168,7 @@ export default function Dashboard() {
       classificacao: transaction.classificacao,
       valor: transaction.valor.toString(),
       tipo: transaction.tipo,
+      status: transaction.status || (transaction.tipo === 'entrada' ? 'recebido' : 'pago'),
     });
     setIsModalOpen(true);
   };
@@ -307,6 +344,44 @@ export default function Dashboard() {
   // Calcular total para a aba selecionada
   const totalDespesaTab = despesasFiltradas.reduce((sum, t) => sum + t.valor, 0);
 
+  const formatCurrency = (value: number) =>
+    value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const categorizedBudgets = budgetSummary
+    .filter((item) => item.valor_orcado !== null && Number(item.valor_orcado) > 0)
+    .map((item) => {
+      const orcado = Number(item.valor_orcado || 0);
+      const gasto = Number(item.valor_gasto || 0);
+      const recebido = Number(item.valor_recebido || 0);
+      const tipo = categoriasTipoMap[String(item.categorias_id)] || 'saida';
+      const realizado = tipo === 'entrada' ? recebido : gasto;
+      const percentual = orcado > 0 ? (realizado / orcado) * 100 : 0;
+      return {
+        categorias_id: item.categorias_id,
+        nome: categoriasMap[String(item.categorias_id)] || `Categoria ${item.categorias_id}`,
+        tipo,
+        realizado,
+        orcado,
+        percentual,
+      };
+    });
+
+  const filteredBudgets = categorizedBudgets.filter((item) => item.tipo === budgetTab);
+
+  const bucketedBudgets = budgetTab === 'entrada'
+    ? {
+        verde: filteredBudgets.filter((item) => item.percentual > 75 && item.percentual <= 100),
+        amarelo: filteredBudgets.filter((item) => item.percentual > 50 && item.percentual <= 75),
+        laranja: filteredBudgets.filter((item) => item.percentual > 25 && item.percentual <= 50),
+        vermelho: filteredBudgets.filter((item) => item.percentual <= 25),
+      }
+    : {
+        verde: filteredBudgets.filter((item) => item.percentual <= 25),
+        amarelo: filteredBudgets.filter((item) => item.percentual > 25 && item.percentual <= 50),
+        laranja: filteredBudgets.filter((item) => item.percentual > 50 && item.percentual <= 75),
+        vermelho: filteredBudgets.filter((item) => item.percentual > 75 && item.percentual <= 100),
+      };
+
   return (
     <Layout>
       {/* Conteúdo do dashboard abaixo, sem header/main duplicado */}
@@ -469,6 +544,115 @@ export default function Dashboard() {
                 )}
               </ul>
             </div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 md:mt-6 bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <span className="font-semibold text-gray-800 dark:text-white text-sm md:text-base">
+            Categorias por percentual de orçamento (mês atual)
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setBudgetTab('entrada')}
+              className={`text-xs px-3 py-1 rounded font-semibold ${
+                budgetTab === 'entrada'
+                  ? 'bg-gray-200 dark:bg-gray-700 dark:text-white'
+                  : 'bg-gray-100 dark:bg-gray-600 dark:text-gray-300'
+              }`}
+            >
+              Entrada
+            </button>
+            <button
+              type="button"
+              onClick={() => setBudgetTab('saida')}
+              className={`text-xs px-3 py-1 rounded font-semibold ${
+                budgetTab === 'saida'
+                  ? 'bg-gray-200 dark:bg-gray-700 dark:text-white'
+                  : 'bg-gray-100 dark:bg-gray-600 dark:text-gray-300'
+              }`}
+            >
+              Saída
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-green-600 dark:text-green-400 mb-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+              OK
+            </div>
+            <ul className="space-y-2 text-sm dark:text-gray-200">
+              {bucketedBudgets.verde.map((item) => (
+                <li key={`verde-${item.categorias_id}`} className="flex items-center justify-between">
+                  <span>{item.nome}</span>
+                  <span className="text-right font-semibold">
+                    {formatCurrency(item.realizado)} / {formatCurrency(item.orcado)} ({item.percentual.toFixed(1)}%)
+                  </span>
+                </li>
+              ))}
+              {bucketedBudgets.verde.length === 0 && (
+                <li className="text-gray-500 dark:text-gray-400">Nenhuma categoria</li>
+              )}
+            </ul>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-yellow-600 dark:text-yellow-400 mb-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-yellow-500"></span>
+              Atenção
+            </div>
+            <ul className="space-y-2 text-sm dark:text-gray-200">
+              {bucketedBudgets.amarelo.map((item) => (
+                <li key={`amarelo-${item.categorias_id}`} className="flex items-center justify-between">
+                  <span>{item.nome}</span>
+                  <span className="text-right font-semibold">
+                    {formatCurrency(item.realizado)} / {formatCurrency(item.orcado)} ({item.percentual.toFixed(1)}%)
+                  </span>
+                </li>
+              ))}
+              {bucketedBudgets.amarelo.length === 0 && (
+                <li className="text-gray-500 dark:text-gray-400">Nenhuma categoria</li>
+              )}
+            </ul>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-orange-600 dark:text-orange-400 mb-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-orange-500"></span>
+              Cuidado
+            </div>
+            <ul className="space-y-2 text-sm dark:text-gray-200">
+              {bucketedBudgets.laranja.map((item) => (
+                <li key={`laranja-${item.categorias_id}`} className="flex items-center justify-between">
+                  <span>{item.nome}</span>
+                  <span className="text-right font-semibold">
+                    {formatCurrency(item.realizado)} / {formatCurrency(item.orcado)} ({item.percentual.toFixed(1)}%)
+                  </span>
+                </li>
+              ))}
+              {bucketedBudgets.laranja.length === 0 && (
+                <li className="text-gray-500 dark:text-gray-400">Nenhuma categoria</li>
+              )}
+            </ul>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400 mb-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-red-500"></span>
+              Alerta
+            </div>
+            <ul className="space-y-2 text-sm dark:text-gray-200">
+              {bucketedBudgets.vermelho.map((item) => (
+                <li key={`vermelho-${item.categorias_id}`} className="flex items-center justify-between">
+                  <span>{item.nome}</span>
+                  <span className="text-right font-semibold">
+                    {formatCurrency(item.realizado)} / {formatCurrency(item.orcado)} ({item.percentual.toFixed(1)}%)
+                  </span>
+                </li>
+              ))}
+              {bucketedBudgets.vermelho.length === 0 && (
+                <li className="text-gray-500 dark:text-gray-400">Nenhuma categoria</li>
+              )}
+            </ul>
           </div>
         </div>
       </div>
