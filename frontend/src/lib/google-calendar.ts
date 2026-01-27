@@ -15,6 +15,23 @@ export interface GoogleCalendarEvent {
   };
 }
 
+export interface GoogleCalendarListEvent {
+  id: string;
+  summary?: string;
+  description?: string;
+  start?: {
+    dateTime?: string;
+    date?: string;
+    timeZone?: string;
+  };
+  end?: {
+    dateTime?: string;
+    date?: string;
+    timeZone?: string;
+  };
+  status?: string;
+}
+
 /**
  * Verifica se o usuário está autenticado no Google Calendar
  */
@@ -25,6 +42,27 @@ export async function checkGoogleAuth(): Promise<{ authenticated: boolean; error
   } catch (error: any) {
     console.error('Erro ao verificar autenticação Google:', error);
     return { authenticated: false, error: error.message };
+  }
+}
+
+/**
+ * Lista eventos do Google Calendar
+ */
+export async function listCalendarEvents(params?: {
+  timeMin?: string;
+  timeMax?: string;
+}): Promise<{ events: GoogleCalendarListEvent[]; error?: string }> {
+  try {
+    const query = new URLSearchParams();
+    if (params?.timeMin) query.set('timeMin', params.timeMin);
+    if (params?.timeMax) query.set('timeMax', params.timeMax);
+    const queryString = query.toString();
+    const url = queryString ? `/google-calendar/events?${queryString}` : '/google-calendar/events';
+    const data = await apiClient.get<{ events: GoogleCalendarListEvent[] }>(url);
+    return { events: data.events || [] };
+  } catch (error: any) {
+    console.error('Erro ao listar eventos do Google:', error);
+    return { events: [], error: error.message };
   }
 }
 

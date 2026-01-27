@@ -5,6 +5,10 @@ const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || '';
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
 const GOOGLE_REDIRECT_URI = Deno.env.get('GOOGLE_REDIRECT_URI') || '';
 const FRONTEND_URL = Deno.env.get('FRONTEND_URL') || '';
+const SERVICE_ROLE_KEY = Deno.env.get('SERVICE_ROLE_KEY')
+  || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  || Deno.env.get('SUPABASE_ANON_KEY')
+  || '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -271,15 +275,29 @@ serve(async (req) => {
       const error = url.searchParams.get('error');
       const state = url.searchParams.get('state');
       
-      // Se temos state, podemos processar o código diretamente sem autenticação
       let tokensSaved = false;
+      let userId: string | null = null;
+
       if (code && state) {
-        console.log('[EDGE] Processando código e state...');
         try {
-          const userId = atob(state);
+          userId = atob(state);
           console.log('[EDGE] User ID decodificado do state:', userId);
-          
-          // Trocar código por tokens
+        } catch (decodeError) {
+          console.error('[EDGE] Erro ao decodificar state:', decodeError);
+        }
+      } else {
+        console.log('[EDGE] Código ou state não disponível. Code:', code ? 'SIM' : 'NÃO', 'State:', state ? 'SIM' : 'NÃO');
+      }
+
+      if (!userId && req.headers.get('Authorization')) {
+        console.log('[EDGE] State ausente/ inválido, tentando obter user_id via Authorization');
+        userId = extractUserIdFromToken(req.headers.get('Authorization'));
+        console.log('[EDGE] User ID obtido via Authorization:', userId || 'NÃO');
+      }
+
+      if (code && userId) {
+        console.log('[EDGE] Processando callback com user_id:', userId);
+        try {
           console.log('[EDGE] Trocando código por tokens no Google...');
           const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
@@ -305,7 +323,7 @@ serve(async (req) => {
 
             const serviceClient = createClient(
               Deno.env.get('SUPABASE_URL') ?? '',
-              Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+              SERVICE_ROLE_KEY,
             );
 
             console.log('[EDGE] Salvando tokens no banco de dados...');
@@ -339,7 +357,7 @@ serve(async (req) => {
           tokensSaved = false;
         }
       } else {
-        console.log('[EDGE] Código ou state não disponível. Code:', code ? 'SIM' : 'NÃO', 'State:', state ? 'SIM' : 'NÃO');
+        console.log('[EDGE] Callback sem user_id válido. Code:', code ? 'SIM' : 'NÃO', 'User ID:', userId || 'NÃO');
       }
 
       // Se temos FRONTEND_URL configurado, redirecionar diretamente (HTTP 302)
@@ -974,7 +992,7 @@ serve(async (req) => {
         if (useServiceClient) {
           dbClient = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+            SERVICE_ROLE_KEY,
           );
         } else {
           dbClient = createClient(
@@ -1098,7 +1116,7 @@ serve(async (req) => {
       if (!supabaseClient) {
         supabaseClient = createClient(
           Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+          SERVICE_ROLE_KEY,
         );
         console.log('[EDGE] [tryAuthenticate] Usando service role key como fallback');
       }
@@ -1406,6 +1424,114 @@ serve(async (req) => {
         },
       }
     );
+
+    // Rota: /events - Listar eventos do Google Calendar
+    if (path === 'events' && req.method === 'GET') {
+      console.log('[EDGE] ========== PROCESSANDO ROTA /events ==========');
+      console.log('[EDGE] Método:', req.method);
+      console.log('[EDGE] URL completa:', req.url);
+      console.log('[EDGE] Headers recebidos:', JSON.stringify(Object.fromEntries(req.headers.entries())));
+
+      const now = new Date();
+      const defaultStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const defaultEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      const timeMin = url.searchParams.get('timeMin') || defaultStart.toISOString();
+      const timeMax = url.searchParams.get('timeMax') || defaultEnd.toISOString();
+
+      const { data: tokenData, error: tokenError } = await supabaseClient
+        .from('google_tokens_id')
+        .select('access_token, refresh_token, expires_at')
+        .eq('user_id', userId)
+        .single();
+
+      if (tokenError || !tokenData) {
+        return new Response(
+          JSON.stringify({ error: 'Tokens não encontrados. É necessário autorizar o Google Calendar primeiro.' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let accessToken = tokenData.access_token;
+
+      if (tokenData.expires_at && new Date(tokenData.expires_at) <= new Date()) {
+        if (!tokenData.refresh_token) {
+          return new Response(
+            JSON.stringify({ error: 'Token expirado e refresh token não disponível' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            client_id: GOOGLE_CLIENT_ID,
+            client_secret: GOOGLE_CLIENT_SECRET,
+            refresh_token: tokenData.refresh_token,
+            grant_type: 'refresh_token',
+          }),
+        });
+
+        if (!refreshResponse.ok) {
+          return new Response(
+            JSON.stringify({ error: 'Erro ao renovar token' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const refreshedTokens: GoogleTokenResponse = await refreshResponse.json();
+        accessToken = refreshedTokens.access_token;
+        const newExpiresAt = new Date(Date.now() + refreshedTokens.expires_in * 1000).toISOString();
+
+        await supabaseClient
+          .from('google_tokens_id')
+          .update({
+            access_token: accessToken,
+            expires_at: newExpiresAt,
+          })
+          .eq('user_id', userId);
+      }
+
+      const calendarUrl = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
+      calendarUrl.searchParams.set('timeMin', timeMin);
+      calendarUrl.searchParams.set('timeMax', timeMax);
+      calendarUrl.searchParams.set('singleEvents', 'true');
+      calendarUrl.searchParams.set('orderBy', 'startTime');
+
+      const calendarResponse = await fetch(calendarUrl.toString(), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!calendarResponse.ok) {
+        const error = await calendarResponse.text();
+        return new Response(
+          JSON.stringify({ error: 'Erro ao listar eventos: ' + error }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const payload = await calendarResponse.json();
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      const events = items.map((item: any) => ({
+        id: item.id,
+        summary: item.summary,
+        description: item.description,
+        start: item.start,
+        end: item.end,
+        status: item.status,
+      }));
+
+      return new Response(
+        JSON.stringify({ events }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Rota: /create-event - Criar evento no Google Calendar
     if (path === 'create-event' && req.method === 'POST') {

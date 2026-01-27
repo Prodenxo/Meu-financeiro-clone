@@ -57,6 +57,51 @@ serve(async (req) => {
       )
     }
 
+    const getValidAccessToken = async () => {
+      const { data: tokens, error: tokensError } = await supabaseClient
+        .from('google_tokens')
+        .select('access_token, refresh_token, expires_at')
+        .eq('user_id', user.id)
+        .single()
+
+      if (tokensError || !tokens || !tokens.access_token) {
+        return { error: 'Não autenticado no Google Calendar' }
+      }
+
+      let accessToken = tokens.access_token
+
+      if (tokens.expires_at && new Date(tokens.expires_at) < new Date()) {
+        if (tokens.refresh_token) {
+          const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              client_id: GOOGLE_CLIENT_ID || '',
+              client_secret: GOOGLE_CLIENT_SECRET || '',
+              refresh_token: tokens.refresh_token,
+              grant_type: 'refresh_token',
+            }),
+          })
+
+          if (tokenResponse.ok) {
+            const newTokens = await tokenResponse.json()
+            accessToken = newTokens.access_token
+            const expiresAt = new Date(Date.now() + newTokens.expires_in * 1000).toISOString()
+
+            await supabaseClient
+              .from('google_tokens')
+              .update({
+                access_token: newTokens.access_token,
+                expires_at: expiresAt,
+              })
+              .eq('user_id', user.id)
+          }
+        }
+      }
+
+      return { accessToken }
+    }
+
     const url = new URL(req.url)
     const path = url.pathname.replace('/google-calendar', '') || '/'
     const method = req.method
@@ -159,6 +204,62 @@ serve(async (req) => {
       )
     }
 
+    // GET /events - Listar eventos do Google Calendar
+    if (method === 'GET' && path === '/events') {
+      const now = new Date()
+      const defaultStart = new Date(now.getFullYear(), now.getMonth(), 1)
+      const defaultEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+
+      const timeMin = url.searchParams.get('timeMin') || defaultStart.toISOString()
+      const timeMax = url.searchParams.get('timeMax') || defaultEnd.toISOString()
+
+      const tokenResult = await getValidAccessToken()
+      if (tokenResult.error || !tokenResult.accessToken) {
+        return new Response(
+          JSON.stringify({ error: tokenResult.error || 'Não autenticado no Google Calendar' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const calendarUrl = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
+      calendarUrl.searchParams.set('timeMin', timeMin)
+      calendarUrl.searchParams.set('timeMax', timeMax)
+      calendarUrl.searchParams.set('singleEvents', 'true')
+      calendarUrl.searchParams.set('orderBy', 'startTime')
+
+      const calendarResponse = await fetch(calendarUrl.toString(), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${tokenResult.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!calendarResponse.ok) {
+        const error = await calendarResponse.json()
+        return new Response(
+          JSON.stringify({ error: error.error?.message || 'Erro ao listar eventos' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const data = await calendarResponse.json()
+      const items = Array.isArray(data.items) ? data.items : []
+      const events = items.map((item: any) => ({
+        id: item.id,
+        summary: item.summary,
+        description: item.description,
+        start: item.start,
+        end: item.end,
+        status: item.status,
+      }))
+
+      return new Response(
+        JSON.stringify({ events }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // POST /callback - Processar callback OAuth
     if (method === 'POST' && path === '/callback') {
       const { code, state } = await req.json()
@@ -242,57 +343,19 @@ serve(async (req) => {
     if (method === 'POST' && path === '/create-event') {
       const event = await req.json()
 
-      // Buscar tokens do usuário
-      const { data: tokens, error: tokensError } = await supabaseClient
-        .from('google_tokens')
-        .select('access_token, refresh_token, expires_at')
-        .eq('user_id', user.id)
-        .single()
-
-      if (tokensError || !tokens || !tokens.access_token) {
+      const tokenResult = await getValidAccessToken()
+      if (tokenResult.error || !tokenResult.accessToken) {
         return new Response(
-          JSON.stringify({ error: 'Não autenticado no Google Calendar' }),
+          JSON.stringify({ error: tokenResult.error || 'Não autenticado no Google Calendar' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
-      }
-
-      let accessToken = tokens.access_token
-
-      // Verificar se o token expirou e renovar se necessário
-      if (tokens.expires_at && new Date(tokens.expires_at) < new Date()) {
-        if (tokens.refresh_token) {
-          const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-              client_id: GOOGLE_CLIENT_ID || '',
-              client_secret: GOOGLE_CLIENT_SECRET || '',
-              refresh_token: tokens.refresh_token,
-              grant_type: 'refresh_token',
-            }),
-          })
-
-          if (tokenResponse.ok) {
-            const newTokens = await tokenResponse.json()
-            accessToken = newTokens.access_token
-            const expiresAt = new Date(Date.now() + newTokens.expires_in * 1000).toISOString()
-
-            await supabaseClient
-              .from('google_tokens')
-              .update({
-                access_token: newTokens.access_token,
-                expires_at: expiresAt,
-              })
-              .eq('user_id', user.id)
-          }
-        }
       }
 
       // Criar evento no Google Calendar
       const calendarResponse = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': `Bearer ${tokenResult.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(event),
