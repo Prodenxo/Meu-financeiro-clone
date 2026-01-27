@@ -3,7 +3,7 @@ import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale/pt-BR';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { checkGoogleAuth } from '../lib/google-calendar';
+import { checkGoogleAuth, listCalendarEvents } from '../lib/google-calendar';
 import { useTransactionStore } from '../store/transactionStore';
 import Layout from '../Layout/Layout';
 
@@ -37,6 +37,9 @@ const messages = {
 
 export default function Agenda() {
   const [events, setEvents] = useState<any[]>([]);
+  const [googleEvents, setGoogleEvents] = useState<any[]>([]);
+  const [loadingGoogleEvents, setLoadingGoogleEvents] = useState(false);
+  const [googleEventsError, setGoogleEventsError] = useState<string | null>(null);
   const [isGoogleAuthorized, setIsGoogleAuthorized] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -52,7 +55,7 @@ export default function Agenda() {
 
   useEffect(() => {
     // Criar eventos do calendário baseados em todas as transações com data
-    const calendarEvents = transactions
+    const transactionEvents = transactions
       .filter(t => t.data)
       .map(t => {
         const date = new Date(t.data + 'T00:00:00');
@@ -67,16 +70,77 @@ export default function Agenda() {
           allDay: true,
           tipo: t.tipo,
           status: t.status,
+          source: 'transaction',
         };
       });
-    setEvents(calendarEvents);
-  }, [transactions]);
+    setEvents([...transactionEvents, ...googleEvents]);
+  }, [transactions, googleEvents]);
+
+  useEffect(() => {
+    if (!isGoogleAuthorized) {
+      setGoogleEvents([]);
+      setGoogleEventsError(null);
+      return;
+    }
+
+    fetchGoogleEvents();
+  }, [isGoogleAuthorized]);
 
   const checkAuthStatus = async () => {
     setCheckingAuth(true);
     const { authenticated } = await checkGoogleAuth();
     setIsGoogleAuthorized(authenticated);
     setCheckingAuth(false);
+  };
+
+  const fetchGoogleEvents = async () => {
+    setLoadingGoogleEvents(true);
+    setGoogleEventsError(null);
+
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const { events: googleItems, error } = await listCalendarEvents({
+      timeMin: start.toISOString(),
+      timeMax: end.toISOString(),
+    });
+
+    if (error) {
+      setGoogleEvents([]);
+      setGoogleEventsError(error);
+      setLoadingGoogleEvents(false);
+      return;
+    }
+
+    const calendarEvents = googleItems
+      .map(item => {
+        const startRaw = item.start?.dateTime || item.start?.date;
+        if (!startRaw) return null;
+        const endRaw = item.end?.dateTime || item.end?.date || startRaw;
+
+        const startDate = new Date(startRaw.includes('T') ? startRaw : `${startRaw}T00:00:00`);
+        let endDate = new Date(endRaw.includes('T') ? endRaw : `${endRaw}T00:00:00`);
+
+        const allDay = !!item.start?.date && !item.start?.dateTime;
+        if (allDay && item.end?.date) {
+          endDate = new Date(item.end.date + 'T00:00:00');
+          endDate.setDate(endDate.getDate() - 1);
+        }
+
+        return {
+          title: item.summary || 'Evento do Google',
+          start: startDate,
+          end: endDate,
+          allDay,
+          source: 'google',
+          status: item.status,
+        };
+      })
+      .filter(Boolean);
+
+    setGoogleEvents(calendarEvents);
+    setLoadingGoogleEvents(false);
   };
 
   return (
@@ -114,6 +178,25 @@ export default function Agenda() {
           </div>
         )}
 
+        {isGoogleAuthorized && (
+          <>
+            {loadingGoogleEvents && (
+              <div className="bg-white dark:bg-gray-800 p-3 rounded-md mb-4 md:mb-8">
+                <p className="text-sm md:text-base text-gray-600 dark:text-gray-400">
+                  Carregando eventos do Google Calendar...
+                </p>
+              </div>
+            )}
+            {googleEventsError && (
+              <div className="bg-yellow-100 dark:bg-yellow-900 p-3 rounded-md mb-4 md:mb-8">
+                <p className="text-sm md:text-base text-yellow-700 dark:text-yellow-200">
+                  Não foi possível carregar eventos do Google Calendar.
+                </p>
+              </div>
+            )}
+          </>
+        )}
+
         <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-lg shadow-md flex-grow">
           <Calendar
             localizer={localizer}
@@ -126,8 +209,10 @@ export default function Agenda() {
             defaultView='month'
             eventPropGetter={(event) => {
               let backgroundColor: string;
-              
-              if (event.tipo === 'entrada') {
+
+              if (event.source === 'google') {
+                backgroundColor = '#2563EB';
+              } else if (event.tipo === 'entrada') {
                 // Entradas: verde escuro para recebido, verde claro/amarelo para a_receber
                 backgroundColor = event.status === 'recebido' ? '#10B981' : '#84CC16';
               } else {
@@ -153,12 +238,14 @@ export default function Agenda() {
                         {new Date(event.start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} - {event.title}
                       </p>
                     </div>
-                    <div 
+                    <div
                       className="w-3 h-3 rounded-full"
                       style={{ 
-                        backgroundColor: event.tipo === 'entrada' 
-                          ? (event.status === 'recebido' ? '#10B981' : '#84CC16')
-                          : (event.status === 'pago' ? '#DC2626' : '#F97316')
+                        backgroundColor: event.source === 'google'
+                          ? '#2563EB'
+                          : (event.tipo === 'entrada' 
+                            ? (event.status === 'recebido' ? '#10B981' : '#84CC16')
+                            : (event.status === 'pago' ? '#DC2626' : '#F97316'))
                       }}
                     />
                   </div>
