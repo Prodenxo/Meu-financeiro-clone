@@ -136,6 +136,25 @@ serve(async (req) => {
         )
       }
 
+      const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+        .toISOString()
+        .split('T')[0]
+      const { error: budgetError } = await supabaseClient
+        .from('orçamentos')
+        .insert({
+          user_id: user.id,
+          categorias_id: newCategory.id,
+          date: monthStart,
+          'valor_orçado': null
+        })
+
+      if (budgetError) {
+        return new Response(
+          JSON.stringify({ error: budgetError.message }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       return new Response(
         JSON.stringify(newCategory),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

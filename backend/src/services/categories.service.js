@@ -13,6 +13,57 @@ const parseValorOrcado = (valorOrcado) => {
   return parsed;
 };
 
+const getMonthStartDateString = (date = new Date()) => {
+  const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+  return monthStart.toISOString().split('T')[0];
+};
+
+const ensureMonthlyBudgets = async (dbClient, userId) => {
+  const now = new Date();
+  const currentMonthStart = getMonthStartDateString(now);
+  const previousMonthStart = getMonthStartDateString(
+    new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  );
+
+  const { data: currentBudgets, error: currentError } = await dbClient
+    .from('orçamentos')
+    .select('categorias_id')
+    .eq('user_id', userId)
+    .eq('date', currentMonthStart);
+
+  if (currentError) throw badRequest(currentError.message);
+
+  const existingIds = new Set((currentBudgets || []).map((item) => item.categorias_id));
+
+  const { data: lastMonthBudgets, error: lastMonthError } = await dbClient
+    .from('orçamentos')
+    .select('categorias_id')
+    .eq('user_id', userId)
+    .eq('date', previousMonthStart)
+    .not('valor_orçado', 'is', null);
+
+  if (lastMonthError) throw badRequest(lastMonthError.message);
+
+  const toInsert = (lastMonthBudgets || [])
+    .filter((budget) => !existingIds.has(budget.categorias_id))
+    .map((budget) => ({
+      user_id: userId,
+      categorias_id: budget.categorias_id,
+      date: currentMonthStart,
+      'valor_orçado': null
+    }));
+
+  if (toInsert.length > 0) {
+    const { error: insertError } = await dbClient
+      .from('orçamentos')
+      .insert(toInsert);
+
+    if (insertError) throw badRequest(insertError.message);
+  }
+
+  return currentMonthStart;
+};
+
 const ensureUserCategory = async (dbClient, userId, categoriaId) => {
   const { data, error } = await dbClient
     .from('categorias_id')
@@ -70,6 +121,18 @@ export const createCategory = async (userId, payload) => {
     .single();
 
   if (error) throw badRequest(error.message);
+
+  const monthStart = getMonthStartDateString();
+  const { error: budgetError } = await dbClient
+    .from('orçamentos')
+    .insert({
+      user_id: userId,
+      categorias_id: data.id,
+      date: monthStart,
+      'valor_orçado': null
+    });
+
+  if (budgetError) throw badRequest(budgetError.message);
   return data;
 };
 
@@ -112,10 +175,12 @@ export const deleteCategory = async (userId, body, query) => {
 
 export const listCategoryBudgets = async (userId) => {
   const dbClient = createSupabaseClient({ useServiceRole: true });
+  const currentMonthStart = await ensureMonthlyBudgets(dbClient, userId);
   const { data, error } = await dbClient
     .from('orçamentos')
     .select('categorias_id, valor_orçado')
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .eq('date', currentMonthStart);
 
   if (error) throw badRequest(error.message);
   return data || [];
@@ -131,12 +196,14 @@ export const upsertCategoryBudget = async (userId, payload) => {
   await ensureUserCategory(dbClient, userId, categoriaId);
 
   const valorOrcadoNormalizado = parseValorOrcado(valorOrcado);
+  const currentMonthStart = getMonthStartDateString();
 
   const { data: existing, error: existingError } = await dbClient
     .from('orçamentos')
     .select('id')
     .eq('user_id', userId)
     .eq('categorias_id', categoriaId)
+    .eq('date', currentMonthStart)
     .maybeSingle();
 
   if (existingError) throw badRequest(existingError.message);
@@ -158,6 +225,7 @@ export const upsertCategoryBudget = async (userId, payload) => {
     .insert({
       user_id: userId,
       categorias_id: categoriaId,
+      date: currentMonthStart,
       'valor_orçado': valorOrcadoNormalizado
     })
     .select('categorias_id, valor_orçado')
@@ -189,10 +257,12 @@ export const listCategoryBudgetsSummary = async (userId) => {
     ...(globalCategories || [])
   ];
 
+  const currentMonthStart = await ensureMonthlyBudgets(dbClient, userId);
   const { data: budgets, error: budgetsError } = await dbClient
     .from('orçamentos')
     .select('categorias_id, valor_orçado')
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .eq('date', currentMonthStart);
 
   if (budgetsError) throw badRequest(budgetsError.message);
 
