@@ -10,6 +10,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
+import Orcamentos from './pages/Orcamentos';
 import Categorias from './pages/Categorias';
 import Agenda from './pages/Agenda';
 import Settings from './pages/Settings';
@@ -293,6 +294,7 @@ function AppRoutes() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/transacoes" element={<Transactions />} />
+                  <Route path="/orcamentos" element={<Orcamentos />} />
                   <Route path="/categorias" element={<Categorias />} />
                   <Route path="/agenda" element={<Agenda />} />
                   <Route path="/settings" element={<Settings />} />

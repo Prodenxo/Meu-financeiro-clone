@@ -57,8 +57,33 @@ export const upsertCategoryBudget = async (req, res, next) => {
 
 export const listCategoryBudgetsSummary = async (req, res, next) => {
   try {
-    const data = await categoriesService.listCategoryBudgetsSummary(req.user.id);
+    const year = req.query?.year ? Number(req.query.year) : undefined;
+    const month = req.query?.month ? Number(req.query.month) : undefined;
+    const data = await categoriesService.listCategoryBudgetsSummary(req.user.id, { year, month });
     return sendSuccess(res, data, 'Resumo de orçamento listado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listCategoryBudgetsYearly = async (req, res, next) => {
+  try {
+    const year = Number(req.query?.year);
+    const data = await categoriesService.listCategoryBudgetsYearly(req.user.id, year);
+    return sendSuccess(res, data, 'Orçamentos mensais listados');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const duplicateMonthlyBudgets = async (req, res, next) => {
+  try {
+    const { year, month } = req.body || {};
+    const data = await categoriesService.duplicateMonthlyBudgets(req.user.id, {
+      year: Number(year),
+      month: Number(month)
+    });
+    return sendSuccess(res, data, 'Orçamentos duplicados');
   } catch (error) {
     return next(error);
   }

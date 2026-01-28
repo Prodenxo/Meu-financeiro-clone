@@ -24,6 +24,12 @@ export interface CategoryBudgetSummary {
   valor_recebido?: number;
 }
 
+export interface CategoryBudgetYearly {
+  categorias_id: number;
+  valor_orcado: number | null;
+  month: number;
+}
+
 function normalizeTipo (tipo: CreateCategoryInput['tipo']): 'entrada' | 'saida' | 'saída' {
   if (tipo === 'saída') return 'saida'
   return tipo
@@ -95,19 +101,56 @@ export async function fetchCategoryBudgets(userId: string): Promise<CategoryBudg
 export async function saveCategoryBudget(
   userId: string,
   categoriasId: number,
-  valorOrcado: number | null
+  valorOrcado: number | null,
+  date?: string
 ): Promise<CategoryBudget> {
-  const data = await apiClient.post<CategoryBudget>('/categories/budgets', {
+  const payload: { categorias_id: number; valor_orcado: number | null; date?: string } = {
     categorias_id: categoriasId,
     valor_orcado: valorOrcado
-  });
+  };
+  if (date) {
+    payload.date = date;
+  }
+  const data = await apiClient.post<CategoryBudget>('/categories/budgets', payload);
   return data;
 }
 
 /**
  * Busca o resumo de orçamento vs gasto do mês atual
  */
-export async function fetchCategoryBudgetsSummary(userId: string): Promise<CategoryBudgetSummary[]> {
-  const data = await apiClient.get<CategoryBudgetSummary[]>('/categories/budgets/summary');
+export async function fetchCategoryBudgetsSummary(
+  userId: string,
+  filters?: { year?: number; month?: number }
+): Promise<CategoryBudgetSummary[]> {
+  const params = new URLSearchParams();
+  if (filters?.year) params.set('year', String(filters.year));
+  if (filters?.month) params.set('month', String(filters.month));
+  const query = params.toString();
+  const data = await apiClient.get<CategoryBudgetSummary[]>(
+    `/categories/budgets/summary${query ? `?${query}` : ''}`
+  );
+  return data || [];
+}
+
+export async function duplicateMonthlyBudgets(
+  userId: string,
+  year: number,
+  month: number
+): Promise<{ targetMonthStart: string; duplicated: number }> {
+  const data = await apiClient.post<{ targetMonthStart: string; duplicated: number }>(
+    '/categories/budgets/duplicate',
+    { year, month }
+  );
+  return data;
+}
+
+/**
+ * Busca os orçamentos mensais por categoria no ano selecionado
+ */
+export async function fetchCategoryBudgetsYearly(
+  userId: string,
+  year: number
+): Promise<CategoryBudgetYearly[]> {
+  const data = await apiClient.get<CategoryBudgetYearly[]>(`/categories/budgets/yearly?year=${year}`);
   return data || [];
 }

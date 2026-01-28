@@ -148,9 +148,9 @@ export default function ResetPassword() {
 
   if (checkingSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-        <div className="bg-white rounded-2xl shadow-2xl px-10 py-12">
-          <p className="text-gray-600">Verificando link...</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="planner-card px-10 py-12">
+          <p className="text-slate-600 dark:text-slate-300">Verificando link...</p>
         </div>
       </div>
     );
@@ -158,29 +158,29 @@ export default function ResetPassword() {
 
   if (!isValidSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-        <div className="flex flex-col justify-center bg-white rounded-2xl shadow-2xl w-full max-w-md px-10 py-12">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col justify-center planner-card w-full max-w-md px-10 py-12">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 text-center">Link inválido</h2>
-            <p className="text-gray-600 text-center mt-2">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 text-center">Link inválido</h2>
+            <p className="text-slate-600 dark:text-slate-300 text-center mt-2">
               O link de recuperação é inválido ou expirou
             </p>
           </div>
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <div className="bg-red-100 border border-red-400 text-red-700 dark:bg-red-950 dark:border-red-900 dark:text-red-200 px-4 py-3 rounded mb-4">
               {error}
             </div>
           )}
           <button
             onClick={() => navigate('/forgot-password')}
-            className="w-full bg-blue-700 text-white py-3 rounded-lg font-semibold hover:bg-blue-800 transition duration-200"
+            className="w-full planner-button"
           >
             Solicitar novo link
           </button>
           <div className="mt-4 text-center">
             <button
               onClick={() => navigate('/login')}
-              className="text-sm text-blue-600 hover:underline"
+              className="text-sm text-blue-700 dark:text-blue-300 hover:underline"
             >
               Voltar para o login
             </button>
@@ -191,25 +191,25 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
       {/* Formulário */}
-      <div className="flex flex-col justify-center bg-white rounded-2xl shadow-2xl w-full max-w-md px-10 py-12">
+      <div className="flex flex-col justify-center planner-card w-full max-w-md px-10 py-12">
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 text-center">Redefinir senha</h2>
-          <p className="text-gray-600 text-center mt-2">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 text-center">Redefinir senha</h2>
+          <p className="text-slate-600 dark:text-slate-300 text-center mt-2">
             Digite sua nova senha abaixo
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nova Senha</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Nova Senha</label>
             <div className="relative">
               <input
                 type={showNewPassword ? "text" : "password"}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+                className="planner-input pr-10"
                 required
                 minLength={6}
                 placeholder="Mínimo 6 caracteres"
@@ -217,7 +217,7 @@ export default function ResetPassword() {
               <button
                 type="button"
                 onClick={() => setShowNewPassword(!showNewPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none"
                 aria-label={showNewPassword ? "Ocultar senha" : "Mostrar senha"}
               >
                 {showNewPassword ? (
@@ -236,13 +236,13 @@ export default function ResetPassword() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Confirmar Senha</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Confirmar Senha</label>
             <div className="relative">
               <input
                 type={showConfirmPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+                className="planner-input pr-10"
                 required
                 minLength={6}
                 placeholder="Digite a senha novamente"
@@ -250,7 +250,7 @@ export default function ResetPassword() {
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none"
                 aria-label={showConfirmPassword ? "Ocultar senha" : "Mostrar senha"}
               >
                 {showConfirmPassword ? (
@@ -269,7 +269,7 @@ export default function ResetPassword() {
           </div>
 
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+            <div className="bg-red-100 border border-red-400 text-red-700 dark:bg-red-950 dark:border-red-900 dark:text-red-200 px-4 py-3 rounded">
               {error}
             </div>
           )}
@@ -277,7 +277,7 @@ export default function ResetPassword() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-700 text-white py-3 rounded-lg font-semibold hover:bg-blue-800 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full planner-button disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Redefinindo...' : 'Redefinir senha'}
           </button>
@@ -286,7 +286,7 @@ export default function ResetPassword() {
         <div className="mt-6 text-center">
           <button
             onClick={() => navigate('/login')}
-            className="text-sm text-blue-600 hover:underline"
+            className="text-sm text-blue-700 dark:text-blue-300 hover:underline"
           >
             Voltar para o login
           </button>
