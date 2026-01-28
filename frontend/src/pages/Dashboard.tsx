@@ -521,61 +521,93 @@ export default function Dashboard() {
       {/* Filtros de período */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 md:mb-6 gap-3 md:gap-4 mt-2">
         <div className="flex items-center gap-2">
-          <button onClick={() => handlePeriod('Semana')} className={`px-4 py-2 rounded-lg border text-sm md:text-base ${period==='Semana'?'bg-blue-600 text-white border-blue-600 font-bold':'bg-white dark:bg-gray-800 dark:text-white border-gray-200 dark:border-gray-600'}`}>Semana</button>
-          <button onClick={() => handlePeriod('Mês')} className={`px-4 py-2 rounded-lg border text-sm md:text-base ${period==='Mês'?'bg-blue-600 text-white border-blue-600 font-bold':'bg-white dark:bg-gray-800 dark:text-white border-gray-200 dark:border-gray-600'}`}>Mês</button>
-          <button onClick={() => handlePeriod('Hoje')} className={`px-4 py-2 rounded-lg border text-sm md:text-base ${period==='Hoje'?'bg-blue-600 text-white border-blue-600 font-bold':'bg-white dark:bg-gray-800 dark:text-white border-gray-200 dark:border-gray-600'}`}>Hoje</button>
+          <button
+            onClick={() => handlePeriod('Semana')}
+            className={period === 'Semana' ? 'planner-button' : 'planner-button-secondary'}
+          >
+            Semana
+          </button>
+          <button
+            onClick={() => handlePeriod('Mês')}
+            className={period === 'Mês' ? 'planner-button' : 'planner-button-secondary'}
+          >
+            Mês
+          </button>
+          <button
+            onClick={() => handlePeriod('Hoje')}
+            className={period === 'Hoje' ? 'planner-button' : 'planner-button-secondary'}
+          >
+            Hoje
+          </button>
         </div>
         <div className="flex items-center gap-2 md:ml-auto">
           <button
             onClick={() => setBpoOpen((prev) => !prev)}
-            className={`px-4 py-2 rounded-lg border text-sm md:text-base ${bpoOpen ? 'bg-purple-600 text-white border-purple-600 font-bold' : 'bg-blue-600 text-white border-blue-600 font-bold'}`}
+            className={bpoOpen ? 'planner-button' : 'planner-button-secondary'}
           >
             BPO
           </button>
           <div className="hidden md:flex items-center gap-2">
-            <input type="date" className="border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2" value={dateRange.start} onChange={e=>setDateRange({...dateRange, start: e.target.value})} />
-            <span className="text-gray-400 dark:text-gray-400">até</span>
-            <input type="date" className="border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2" value={dateRange.end} onChange={e=>setDateRange({...dateRange, end: e.target.value})} />
-            <button className="ml-2 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-gray-200" onClick={e => { e.preventDefault(); setDateRange({ start: '', end: '' }); setAplicarFiltroDatas(false); }}>Limpar</button>
+            <input
+              type="date"
+              className="planner-input py-2 text-sm"
+              value={dateRange.start}
+              onChange={e=>setDateRange({...dateRange, start: e.target.value})}
+            />
+            <span className="text-slate-400 dark:text-slate-400">até</span>
+            <input
+              type="date"
+              className="planner-input py-2 text-sm"
+              value={dateRange.end}
+              onChange={e=>setDateRange({...dateRange, end: e.target.value})}
+            />
+            <button
+              className="ml-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 text-sm font-semibold"
+              onClick={e => { e.preventDefault(); setDateRange({ start: '', end: '' }); setAplicarFiltroDatas(false); }}
+            >
+              Limpar
+            </button>
           </div>
         </div>
       </div>
       {!bpoOpen && (
         <>
           {/* Cards de resumo */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 md:p-6 flex flex-col justify-between">
-              <span className="text-gray-500 dark:text-gray-400 text-sm mb-2">Saldo Geral</span>
-              <span className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1">{balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-              <div className="mt-2"><div className="h-1 w-full bg-gradient-to-r from-purple-400 to-purple-100 rounded-full"></div></div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 md:p-6 flex flex-col justify-between">
-              <span className="text-gray-500 dark:text-gray-400 text-sm mb-2">Entradas</span>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-green-600 dark:text-green-400 font-bold text-xl md:text-2xl">{entradasPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                <span className="bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 text-xs px-3 py-1 rounded-full font-semibold">Receitas</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5 mb-4 md:mb-6">
+            <div className="planner-card p-5 md:p-6 flex flex-col justify-between md:min-h-[150px]">
+              <span className="text-slate-500 dark:text-slate-400 text-sm mb-2">Saldo Geral</span>
+              <span className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-1">{balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              <div className="mt-2">
+                <div className="h-1 w-full bg-gradient-to-r from-blue-500 to-blue-100 rounded-full"></div>
               </div>
-              <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mt-2">
+            </div>
+            <div className="planner-card p-5 md:p-6 flex flex-col justify-between md:min-h-[150px]">
+              <span className="text-slate-500 dark:text-slate-400 text-sm mb-2">Entradas</span>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xl md:text-2xl">{entradasPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span className="bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs px-3 py-1 rounded-full font-semibold">Receitas</span>
+              </div>
+              <div className="flex justify-between text-xs text-slate-400 dark:text-slate-500 mt-2">
                 <span>Previsto (A Receber)</span>
                 <span>{entradasAReceber.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
             </div>
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 md:p-6 flex flex-col justify-between">
-              <span className="text-gray-500 dark:text-gray-400 text-sm mb-2">Saídas</span>
+            <div className="planner-card p-5 md:p-6 flex flex-col justify-between md:min-h-[150px]">
+              <span className="text-slate-500 dark:text-slate-400 text-sm mb-2">Saídas</span>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-red-500 dark:text-red-400 font-bold text-xl md:text-2xl">{saidasPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                <span className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 text-xs px-3 py-1 rounded-full font-semibold">Despesas</span>
+                <span className="text-rose-500 dark:text-rose-400 font-bold text-xl md:text-2xl">{saidasPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span className="bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300 text-xs px-3 py-1 rounded-full font-semibold">Despesas</span>
               </div>
-              <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mt-2">
+              <div className="flex justify-between text-xs text-slate-400 dark:text-slate-500 mt-2">
                 <span>Previsto (A Pagar)</span>
                 <span>{saidasAPagar.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
             </div>
           </div>
           {/* Gráficos e detalhes */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
-              <span className="font-semibold text-gray-800 dark:text-white text-sm md:text-base">Evolução do Saldo no Período</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            <div className="planner-card p-4 md:p-6 lg:col-span-2">
+              <span className="font-semibold text-slate-800 dark:text-white text-sm md:text-base">Evolução do Saldo no Período</span>
               <div className="mt-4">
                 <Line
                   data={{
@@ -616,16 +648,16 @@ export default function Dashboard() {
                 />
               </div>
             </div>
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6 flex flex-col">
+            <div className="planner-card p-4 md:p-6 flex flex-col lg:col-span-1">
               <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-6 mb-4">
-                <span className="font-semibold text-gray-800 dark:text-gray-200 text-sm md:text-base">Despesas</span>
+                <span className="font-semibold text-slate-800 dark:text-gray-200 text-sm md:text-base">Despesas</span>
                 <div className="flex gap-2">
                   <button 
                     onClick={() => setDespesaTab('pagos')}
                     className={`text-xs px-3 py-1 rounded font-semibold ${
                       despesaTab === 'pagos' 
-                        ? 'bg-gray-200 dark:bg-gray-700 dark:text-white' 
-                        : 'bg-gray-100 dark:bg-gray-600 dark:text-gray-300'
+                        ? 'bg-slate-100 dark:bg-slate-800 dark:text-white' 
+                        : 'bg-slate-100 dark:bg-slate-700 dark:text-gray-300'
                     }`}
                   >
                     Pagos
@@ -634,8 +666,8 @@ export default function Dashboard() {
                     onClick={() => setDespesaTab('a_pagar')}
                     className={`text-xs px-3 py-1 rounded font-semibold ${
                       despesaTab === 'a_pagar' 
-                        ? 'bg-gray-200 dark:bg-gray-700 dark:text-white' 
-                        : 'bg-gray-100 dark:bg-gray-600 dark:text-gray-300'
+                        ? 'bg-slate-100 dark:bg-slate-800 dark:text-white' 
+                        : 'bg-slate-100 dark:bg-slate-700 dark:text-gray-300'
                     }`}
                   >
                     A Pagar
@@ -664,10 +696,10 @@ export default function Dashboard() {
                     }}
                   />
                   <div className="text-center font-bold mt-2 text-base md:text-lg dark:text-white">{totalDespesaTab.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
-                  <div className="text-center text-xs text-gray-400 dark:text-gray-500">Total {despesaTab === 'pagos' ? 'Pago' : 'A Pagar'}</div>
+                  <div className="text-center text-xs text-slate-400 dark:text-slate-500">Total {despesaTab === 'pagos' ? 'Pago' : 'A Pagar'}</div>
                 </div>
                 <div className="flex-1 w-full">
-                  <span className="font-semibold text-gray-700 dark:text-gray-300 text-sm block mb-2">Detalhes por Categoria</span>
+                  <span className="font-semibold text-slate-700 dark:text-gray-300 text-sm block mb-2">Detalhes por Categoria</span>
                   <ul className="space-y-2">
                     {Object.keys(expensesByCategoryPeriodo).map((catId, idx) => (
                       <li key={catId} className="flex items-center justify-between text-sm dark:text-gray-200">
@@ -679,16 +711,16 @@ export default function Dashboard() {
                       </li>
                     ))}
                     {Object.keys(expensesByCategoryPeriodo).length === 0 && (
-                      <li className="text-sm text-gray-500 dark:text-gray-400">Nenhuma despesa {despesaTab === 'pagos' ? 'paga' : 'a pagar'} no período</li>
+                      <li className="text-sm text-slate-500 dark:text-gray-400">Nenhuma despesa {despesaTab === 'pagos' ? 'paga' : 'a pagar'} no período</li>
                     )}
                   </ul>
                 </div>
               </div>
             </div>
           </div>
-          <div className="mt-4 md:mt-6 bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+          <div className="mt-4 md:mt-6 planner-card p-4 md:p-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <span className="font-semibold text-gray-800 dark:text-white text-sm md:text-base">
+              <span className="font-semibold text-slate-800 dark:text-white text-sm md:text-base">
                 Categorias por percentual de orçamento (mês atual)
               </span>
               <div className="flex gap-2">
@@ -697,8 +729,8 @@ export default function Dashboard() {
                   onClick={() => setBudgetTab('entrada')}
                   className={`text-xs px-3 py-1 rounded font-semibold ${
                     budgetTab === 'entrada'
-                      ? 'bg-gray-200 dark:bg-gray-700 dark:text-white'
-                      : 'bg-gray-100 dark:bg-gray-600 dark:text-gray-300'
+                      ? 'bg-slate-100 dark:bg-slate-800 dark:text-white'
+                      : 'bg-slate-100 dark:bg-slate-700 dark:text-gray-300'
                   }`}
                 >
                   Entrada
@@ -708,15 +740,15 @@ export default function Dashboard() {
                   onClick={() => setBudgetTab('saida')}
                   className={`text-xs px-3 py-1 rounded font-semibold ${
                     budgetTab === 'saida'
-                      ? 'bg-gray-200 dark:bg-gray-700 dark:text-white'
-                      : 'bg-gray-100 dark:bg-gray-600 dark:text-gray-300'
+                      ? 'bg-slate-100 dark:bg-slate-800 dark:text-white'
+                      : 'bg-slate-100 dark:bg-slate-700 dark:text-gray-300'
                   }`}
                 >
                   Saída
                 </button>
               </div>
             </div>
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold text-green-600 dark:text-green-400 mb-2">
                   <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
@@ -798,20 +830,20 @@ export default function Dashboard() {
         </>
       )}
       {bpoOpen && (
-        <div className="mt-4 md:mt-6 bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+        <div className="mt-4 md:mt-6 planner-card p-4 md:p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-              <span className="font-semibold text-gray-800 dark:text-white text-sm md:text-base block">
+              <span className="font-semibold text-slate-800 dark:text-white text-sm md:text-base block">
                 BPO - Comparativo mensal por categoria
               </span>
-              <span className="text-xs text-gray-500 dark:text-gray-400">
+              <span className="text-xs text-slate-500 dark:text-gray-400">
                 Ano selecionado: {bpoYear}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400">Ano</span>
+              <span className="text-xs text-slate-500 dark:text-gray-400">Ano</span>
               <select
-                className="border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2 text-sm"
+                className="planner-input py-2 text-sm"
                 value={bpoYear}
                 onChange={(e) => setBpoYear(Number(e.target.value))}
               >
@@ -828,7 +860,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setBpoEntradaOpen((prev) => !prev)}
-                  className="flex items-center gap-2 text-sm md:text-base font-semibold text-gray-700 dark:text-gray-200"
+                  className="flex items-center gap-2 text-sm md:text-base font-semibold text-slate-700 dark:text-gray-200"
                   aria-expanded={bpoEntradaOpen}
                 >
                   <span>Entradas</span>
@@ -836,12 +868,12 @@ export default function Dashboard() {
                     {renderChevron(bpoEntradaOpen)}
                   </span>
                 </button>
-                <span className="text-xs text-gray-400 dark:text-gray-500">
+                <span className="text-xs text-slate-400 dark:text-gray-500">
                   {bpoEntradaCategories.length} categorias
                 </span>
               </div>
               {bpoEntradaCategories.length === 0 ? (
-                <div className="text-sm text-gray-500 dark:text-gray-400">
+                <div className="text-sm text-slate-500 dark:text-gray-400">
                   Nenhuma categoria de entrada cadastrada.
                 </div>
               ) : bpoEntradaOpen ? (
@@ -850,9 +882,9 @@ export default function Dashboard() {
                     const totals = getBpoTotalsForCategory(cat.id);
                     const monthlyBudgets = getMonthlyBudgetsForCategory(cat.id);
                     return (
-                      <div key={`bpo-entrada-${cat.id}`} className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4">
+                      <div key={`bpo-entrada-${cat.id}`} className="planner-card-muted p-4">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-semibold text-gray-800 dark:text-white text-sm">
+                          <span className="font-semibold text-slate-800 dark:text-white text-sm">
                             {cat.nome}
                           </span>
                           <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
@@ -922,7 +954,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setBpoSaidaOpen((prev) => !prev)}
-                  className="flex items-center gap-2 text-sm md:text-base font-semibold text-gray-700 dark:text-gray-200"
+                  className="flex items-center gap-2 text-sm md:text-base font-semibold text-slate-700 dark:text-gray-200"
                   aria-expanded={bpoSaidaOpen}
                 >
                   <span>Saídas</span>
@@ -930,12 +962,12 @@ export default function Dashboard() {
                     {renderChevron(bpoSaidaOpen)}
                   </span>
                 </button>
-                <span className="text-xs text-gray-400 dark:text-gray-500">
+                <span className="text-xs text-slate-400 dark:text-gray-500">
                   {bpoSaidaCategories.length} categorias
                 </span>
               </div>
               {bpoSaidaCategories.length === 0 ? (
-                <div className="text-sm text-gray-500 dark:text-gray-400">
+                <div className="text-sm text-slate-500 dark:text-gray-400">
                   Nenhuma categoria de saída cadastrada.
                 </div>
               ) : bpoSaidaOpen ? (
@@ -944,9 +976,9 @@ export default function Dashboard() {
                     const totals = getBpoTotalsForCategory(cat.id);
                     const monthlyBudgets = getMonthlyBudgetsForCategory(cat.id);
                     return (
-                      <div key={`bpo-saida-${cat.id}`} className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4">
+                      <div key={`bpo-saida-${cat.id}`} className="planner-card-muted p-4">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-semibold text-gray-800 dark:text-white text-sm">
+                          <span className="font-semibold text-slate-800 dark:text-white text-sm">
                             {cat.nome}
                           </span>
                           <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">

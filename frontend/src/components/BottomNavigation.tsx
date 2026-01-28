@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, List, Grid3x3, Calendar, Settings } from 'lucide-react';
+import { Home, List, Grid3x3, Calendar, Settings, Wallet } from 'lucide-react';
 import { useThemeStore } from '../store/themeStore';
 
 export default function BottomNavigation() {
@@ -9,6 +9,7 @@ export default function BottomNavigation() {
   const navItems = [
     { path: '/', label: 'Visão Geral', icon: Home },
     { path: '/transacoes', label: 'Transações', icon: List },
+    { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
     { path: '/categorias', label: 'Categorias', icon: Grid3x3 },
     { path: '/agenda', label: 'Agenda', icon: Calendar },
     { path: '/settings', label: 'Configurações', icon: Settings },
@@ -25,11 +26,11 @@ export default function BottomNavigation() {
     <nav
       className={`fixed bottom-0 left-0 right-0 z-50 border-t ${
         isDarkMode
-          ? 'bg-gray-900 border-gray-700'
-          : 'bg-white border-gray-200'
+          ? 'bg-slate-900 border-slate-800'
+          : 'bg-white border-slate-200'
       } md:hidden`}
     >
-      <div className="flex items-center justify-around h-16">
+      <div className="flex items-center justify-around h-16 px-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
@@ -37,12 +38,12 @@ export default function BottomNavigation() {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
+              className={`flex flex-col items-center justify-center flex-1 h-12 rounded-xl transition-colors ${
                 active
-                  ? 'text-blue-600 dark:text-blue-400'
+                  ? 'text-blue-700 dark:text-blue-300 bg-slate-100 dark:bg-slate-800'
                   : isDarkMode
-                  ? 'text-gray-400'
-                  : 'text-gray-600'
+                  ? 'text-slate-400'
+                  : 'text-slate-500'
               }`}
             >
               <Icon size={20} className="mb-1" />

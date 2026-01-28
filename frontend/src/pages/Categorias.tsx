@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
-import { toast } from 'react-toastify';
 import {
   fetchCategories,
   createCategory,
   updateCategory,
   deleteCategory,
   fetchCategoryBudgetsSummary,
-  saveCategoryBudget,
   type Category,
 } from '../services/categoryService';
 
@@ -37,14 +35,14 @@ function CategoriaModal({ open, onClose, onSave, categoria }: { open: boolean, o
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-gray-800 rounded-2xl p-8 w-full max-w-md relative shadow-xl ring-1 ring-black/5"
+        className="planner-card p-8 w-full max-w-md relative"
         onClick={(e) => e.stopPropagation()}
       >
-        <button className="absolute top-3 right-3 text-gray-400 dark:text-gray-300" onClick={onClose}>×</button>
+        <button className="absolute top-3 right-3 text-slate-400 dark:text-slate-300" onClick={onClose}>×</button>
         <h2 className="text-xl font-bold mb-4 dark:text-white">{categoria ? 'Editar Categoria' : 'Adicionar Categoria'}</h2>
         <label className="block mb-2 font-medium dark:text-gray-200">Nome da Categoria</label>
         <input
-          className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2 mb-4"
+          className="planner-input mb-4"
           value={nome}
           onChange={e => setNome(e.target.value)}
           placeholder="Nome da categoria"
@@ -53,17 +51,25 @@ function CategoriaModal({ open, onClose, onSave, categoria }: { open: boolean, o
         <div className="flex gap-4 mb-6">
           <button
             type="button"
-            className={`px-4 py-2 rounded ${tipo === 'entrada' ? 'bg-green-500 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              tipo === 'entrada'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'bg-slate-100 dark:bg-slate-800 dark:text-gray-200'
+            }`}
             onClick={() => setTipo('entrada')}
           >Entrada</button>
           <button
             type="button"
-            className={`px-4 py-2 rounded ${tipo === 'saída' ? 'bg-red-500 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              tipo === 'saída'
+                ? 'bg-rose-600 text-white shadow-md'
+                : 'bg-slate-100 dark:bg-slate-800 dark:text-gray-200'
+            }`}
             onClick={() => setTipo('saída')}
           >Saída</button>
         </div>
         <button
-          className="w-full bg-green-500 text-white py-2 rounded font-semibold"
+          className="w-full planner-button"
           onClick={() => {
             if (nome.trim()) onSave({ nome, tipo });
           }}
@@ -78,10 +84,7 @@ function CategoriaModal({ open, onClose, onSave, categoria }: { open: boolean, o
 export default function Categorias() {
   const [categorias, setCategorias] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [budgetsByCategory, setBudgetsByCategory] = useState<Record<number, string>>({});
-  const [savedBudgetsByCategory, setSavedBudgetsByCategory] = useState<Record<number, string>>({});
   const [spentByCategory, setSpentByCategory] = useState<Record<number, number>>({});
-  const [savingBudgetByCategory, setSavingBudgetByCategory] = useState<Record<number, boolean>>({});
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategoria, setEditingCategoria] = useState<Category | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -108,90 +111,22 @@ export default function Categorias() {
 
   async function loadBudgetSummary() {
     if (!userId) {
-      setBudgetsByCategory({});
-      setSavedBudgetsByCategory({});
       setSpentByCategory({});
       return;
     }
 
     try {
       const data = await fetchCategoryBudgetsSummary(userId);
-      const mapped: Record<number, string> = {};
       const spentMapped: Record<number, number> = {};
       data.forEach((budget) => {
-        mapped[budget.categorias_id] = budget.valor_orcado === null || budget.valor_orcado === undefined
-          ? ''
-          : String(Math.round(Number(budget.valor_orcado) * 100));
         spentMapped[budget.categorias_id] = Number(budget.valor_gasto || 0);
       });
-      setBudgetsByCategory(mapped);
-      setSavedBudgetsByCategory(mapped);
       setSpentByCategory(spentMapped);
     } catch (error: any) {
       console.error('Erro ao carregar orçamentos:', error);
     }
   }
 
-  const formatCurrency = (value: string): string => {
-    if (!value) return '';
-    const amount = parseFloat(value) / 100;
-    return amount.toLocaleString('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
-
-  const parseCurrencyToNumber = (value: string): number | null => {
-    const numbers = value.replace(/\D/g, '');
-    if (!numbers) return null;
-    const parsed = parseFloat(numbers) / 100;
-    if (Number.isNaN(parsed)) return null;
-    return parsed;
-  };
-
-  const parseBudgetValue = (value: string): number | null => {
-    return parseCurrencyToNumber(value);
-  };
-
-  const parseBudgetDigits = (value: string): string => value.replace(/\D/g, '');
-
-  async function handleBudgetBlur(categoriaId: number) {
-    if (!userId) return;
-    const currentValue = budgetsByCategory[categoriaId] ?? '';
-    const savedValue = savedBudgetsByCategory[categoriaId] ?? '';
-
-    if (currentValue === savedValue) return;
-
-    if (savingBudgetByCategory[categoriaId]) return;
-
-    const parsed = parseBudgetValue(currentValue);
-    if (currentValue.trim() !== '' && parsed === null) {
-      alert('Valor de orçamento inválido.');
-      setBudgetsByCategory((prev) => ({ ...prev, [categoriaId]: savedValue }));
-      return;
-    }
-
-    try {
-      setSavingBudgetByCategory((prev) => ({ ...prev, [categoriaId]: true }));
-      const toastId = toast.loading('Salvando orçamento...');
-      const data = await saveCategoryBudget(userId, categoriaId, parsed);
-      const nextValue = data.valor_orcado === null || data.valor_orcado === undefined
-        ? ''
-        : String(Math.round(Number(data.valor_orcado) * 100));
-      setBudgetsByCategory((prev) => ({ ...prev, [categoriaId]: nextValue }));
-      setSavedBudgetsByCategory((prev) => ({ ...prev, [categoriaId]: nextValue }));
-      await loadBudgetSummary();
-      toast.update(toastId, { render: 'Orçamento salvo com sucesso!', type: 'success', isLoading: false, autoClose: 2000 });
-    } catch (error: any) {
-      console.error('Erro ao salvar orçamento:', error);
-      setBudgetsByCategory((prev) => ({ ...prev, [categoriaId]: savedValue }));
-      toast.error('Erro ao salvar orçamento. Tente novamente.');
-    } finally {
-      setSavingBudgetByCategory((prev) => ({ ...prev, [categoriaId]: false }));
-    }
-  }
 
   useEffect(() => {
     loadCategorias();
@@ -285,27 +220,27 @@ export default function Categorias() {
           }}
         >
           <div
-            className="bg-white dark:bg-gray-800 rounded-2xl p-8 w-full max-w-md relative shadow-xl ring-1 ring-black/5"
+            className="planner-card p-8 w-full max-w-md relative"
             onClick={(e) => e.stopPropagation()}
           >
-            <button className="absolute top-3 right-3 text-gray-400 dark:text-gray-300" onClick={() => {
+            <button className="absolute top-3 right-3 text-slate-400 dark:text-slate-300" onClick={() => {
               setDeleteModalOpen(false);
               setDeletingCategoria(null);
             }}>×</button>
-            <h2 className="text-xl font-bold mb-4 text-red-600 dark:text-red-400">Confirmar Exclusão</h2>
+            <h2 className="text-xl font-bold mb-4 text-rose-600 dark:text-rose-400">Confirmar Exclusão</h2>
             <div className="mb-4 dark:text-gray-200">
               <div><b>Nome:</b> {deletingCategoria.nome}</div>
               <div><b>Tipo:</b> {deletingCategoria.tipo === 'entrada' ? 'Entrada' : 'Saída'}</div>
             </div>
             <div className="flex gap-3">
               <button
-                className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-semibold hover:bg-green-700"
+                className="flex-1 bg-rose-600 text-white py-2.5 rounded-xl font-semibold hover:bg-rose-700 shadow-md"
                 onClick={() => handleDeleteCategoria(deletingCategoria.id)}
               >
                 Sim, excluir
               </button>
               <button
-                className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-semibold hover:bg-red-700"
+                className="flex-1 planner-button-secondary"
                 onClick={() => {
                   setDeleteModalOpen(false);
                   setDeletingCategoria(null);
@@ -319,14 +254,14 @@ export default function Categorias() {
       )}
       
       <h1 className="text-xl md:text-2xl font-bold mb-2 mt-2 dark:text-white">Categorias</h1>
-      <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 mb-4 md:mb-6">
+      <p className="text-sm md:text-base text-slate-500 dark:text-gray-400 mb-4 md:mb-6">
         A IA já identifica categorias automaticamente. Você pode personalizar também.
       </p>
       
       <div className="flex flex-col md:flex-row md:items-center gap-3 mb-6">
         <div className="flex-1">
           <input
-            className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-xl px-4 py-3 md:py-2 text-base md:text-sm"
+            className="planner-input md:py-2 text-base md:text-sm"
             placeholder="Pesquisar categoria"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -335,7 +270,7 @@ export default function Categorias() {
         </div>
         {/* Botão criar categoria - grande em mobile */}
         <button
-          className="w-full md:w-auto px-6 py-4 md:py-2 bg-blue-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-blue-700 transition text-base md:text-sm"
+          className="w-full md:w-auto planner-button text-base md:text-sm"
           onClick={() => {
             setEditingCategoria(null);
             setModalOpen(true);
@@ -348,82 +283,47 @@ export default function Categorias() {
         </button>
       </div>
       
-      <div className="space-y-3 md:space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {loading ? (
           <div className="dark:text-gray-200">Carregando categorias...</div>
         ) : (
           <>
             {categoriasFiltradas.map(cat => (
-              <div key={cat.id} className="bg-gray-100 dark:bg-gray-800 rounded-xl flex flex-col md:flex-row md:items-center md:justify-between p-4 md:px-6 md:py-4 shadow border-l-4 border-gray-200 dark:border-gray-600">
-                <div className="flex items-center gap-3 mb-3 md:mb-0">
-                  <span className="font-semibold text-base md:text-lg dark:text-white">{cat.nome}</span>
-                  {cat.user_id === null && (
-                    <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
-                      Global
+              <div key={cat.id} className="planner-card h-full p-4 md:px-5 md:py-4 border-l-4 border-blue-600/70">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-center">
+                  <div className="flex flex-wrap items-center gap-2 md:col-span-8">
+                    <span className="font-semibold text-base md:text-lg dark:text-white">{cat.nome}</span>
+                    {cat.user_id === null && (
+                      <span className="planner-chip">
+                        Global
+                      </span>
+                    )}
+                    <span className={`px-3 py-1 rounded-full font-semibold text-white text-xs ${cat.tipo === 'entrada' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+                      {cat.tipo === 'entrada' ? 'Entrada' : 'Saída'}
                     </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 justify-between md:justify-end">
-                  <span className={`px-3 md:px-4 py-1 rounded-full font-semibold text-white text-xs md:text-sm ${cat.tipo === 'entrada' ? 'bg-green-500' : 'bg-red-500'}`}>
-                    {cat.tipo === 'entrada' ? 'Entrada' : 'Saída'}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">Orçamento</span>
-                    <input
-                      className="w-24 md:w-28 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-sm text-right"
-                      placeholder="R$ 0,00"
-                      inputMode="numeric"
-                      value={formatCurrency(budgetsByCategory[cat.id] ?? '')}
-                      onChange={(e) => {
-                        const digits = parseBudgetDigits(e.target.value);
-                        setBudgetsByCategory((prev) => ({ ...prev, [cat.id]: digits }));
-                      }}
-                      onBlur={() => handleBudgetBlur(cat.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      disabled={!!savingBudgetByCategory[cat.id]}
-                      aria-label={`Orçamento da categoria ${cat.nome}`}
-                    />
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    {(() => {
-                      const spentValue = spentByCategory[cat.id] ?? 0;
-                      const parsedBudget = parseBudgetValue(budgetsByCategory[cat.id] ?? '');
-                      const spentLabel = spentValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                      if (parsedBudget === null) {
-                        return `Gasto R$ ${spentLabel}`;
-                      }
-                      const budgetLabel = parsedBudget.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                      return `Gasto R$ ${spentLabel} / Orçado R$ ${budgetLabel}`;
-                    })()}
+                  <div className="flex items-center gap-2 md:col-span-4 md:justify-end">
+                    {cat.user_id !== null ? (
+                      <>
+                        <button
+                          className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-gray-200 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm font-semibold"
+                          onClick={() => handleEditCategoria(cat)}
+                          title="Editar"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="px-3 py-2 rounded-xl bg-rose-100 dark:bg-rose-900 text-rose-600 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-800 text-sm font-semibold"
+                          onClick={() => handleDeleteClick(cat)}
+                          title="Excluir"
+                        >
+                          Excluir
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-slate-500 dark:text-gray-400">Categoria global</span>
+                    )}
                   </div>
-                  {cat.user_id !== null && (
-                    <>
-                      <button
-                        className="p-2 md:px-3 md:py-1 rounded bg-gray-200 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
-                        onClick={() => handleEditCategoria(cat)}
-                        title="Editar"
-                      >
-                        <svg className="w-4 h-4 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        <span className="hidden md:inline">Editar</span>
-                      </button>
-                      <button
-                        className="p-2 md:px-3 md:py-1 rounded bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800"
-                        onClick={() => handleDeleteClick(cat)}
-                        title="Excluir"
-                      >
-                        <svg className="w-4 h-4 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        <span className="hidden md:inline">Excluir</span>
-                      </button>
-                    </>
-                  )}
                 </div>
               </div>
             ))}

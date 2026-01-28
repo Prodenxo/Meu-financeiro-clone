@@ -24,19 +24,19 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
       {/* Formulário */}
-      <div className="flex flex-col justify-center bg-white rounded-2xl shadow-2xl w-full max-w-md px-10 py-12">
+      <div className="flex flex-col justify-center planner-card w-full max-w-md px-10 py-12">
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 text-center">Esqueci minha senha</h2>
-          <p className="text-gray-600 text-center mt-2">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 text-center">Esqueci minha senha</h2>
+          <p className="text-slate-600 dark:text-slate-300 text-center mt-2">
             Digite seu e-mail para receber um link de recuperação
           </p>
         </div>
 
         {success ? (
           <div className="space-y-4">
-            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+            <div className="bg-green-100 border border-green-400 text-green-700 dark:bg-green-950 dark:border-green-900 dark:text-green-200 px-4 py-3 rounded">
               <p className="font-semibold">Email enviado com sucesso!</p>
               <p className="text-sm mt-1">
                 Verifique sua caixa de entrada e siga as instruções para redefinir sua senha.
@@ -44,7 +44,7 @@ export default function ForgotPassword() {
             </div>
             <Link
               to="/login"
-              className="block w-full text-center bg-blue-700 text-white py-3 rounded-lg font-semibold hover:bg-blue-800 transition duration-200"
+              className="block w-full text-center planner-button"
             >
               Voltar para o login
             </Link>
@@ -52,17 +52,17 @@ export default function ForgotPassword() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">E-mail</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">E-mail</label>
               <div className="relative">
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+                  className="planner-input pr-10"
                   required
                   placeholder="seu@email.com"
                 />
-                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400">
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-mail">
                     <path d="M4 4h16v16H4z"/>
                     <polyline points="22,6 12,13 2,6"/>
@@ -72,7 +72,7 @@ export default function ForgotPassword() {
             </div>
 
             {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+              <div className="bg-red-100 border border-red-400 text-red-700 dark:bg-red-950 dark:border-red-900 dark:text-red-200 px-4 py-3 rounded">
                 {error}
               </div>
             )}
@@ -80,7 +80,7 @@ export default function ForgotPassword() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-700 text-white py-3 rounded-lg font-semibold hover:bg-blue-800 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full planner-button disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Enviando...' : 'Enviar link de recuperação'}
             </button>
@@ -88,7 +88,7 @@ export default function ForgotPassword() {
         )}
 
         <div className="mt-6 text-center">
-          <Link to="/login" className="text-sm text-blue-600 hover:underline">
+          <Link to="/login" className="text-sm text-blue-700 dark:text-blue-300 hover:underline">
             Voltar para o login
           </Link>
         </div>

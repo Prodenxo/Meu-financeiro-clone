@@ -6,6 +6,15 @@ const normalizeTipo = (tipo) => {
   return tipo === 'saída' ? 'saida' : tipo;
 };
 
+const normalizeCategoryName = (value) => {
+  if (!value) return '';
+  return String(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+};
+
 const parseValorOrcado = (valorOrcado) => {
   if (valorOrcado === null || valorOrcado === undefined || valorOrcado === '') return null;
   const parsed = Number(String(valorOrcado).replace(',', '.'));
@@ -18,11 +27,10 @@ const getMonthStartDateString = (date = new Date()) => {
   return monthStart.toISOString().split('T')[0];
 };
 
-const ensureMonthlyBudgets = async (dbClient, userId) => {
-  const now = new Date();
-  const currentMonthStart = getMonthStartDateString(now);
+const ensureMonthlyBudgets = async (dbClient, userId, targetDate = new Date()) => {
+  const currentMonthStart = getMonthStartDateString(targetDate);
   const previousMonthStart = getMonthStartDateString(
-    new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    new Date(targetDate.getFullYear(), targetDate.getMonth() - 1, 1)
   );
 
   const { data: currentBudgets, error: currentError } = await dbClient
@@ -70,6 +78,20 @@ const getYearMonthRange = (year) => {
   const startDate = start.toISOString().split('T')[0];
   const endDate = end.toISOString().split('T')[0];
   return { startDate, endDate };
+};
+
+const getMonthRangeFromInput = (year, month) => {
+  if (!year || !month || Number.isNaN(Number(year)) || Number.isNaN(Number(month))) {
+    return null;
+  }
+  if (month < 1 || month > 12) {
+    throw badRequest('Mês inválido');
+  }
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0);
+  const startDate = start.toISOString().split('T')[0];
+  const endDate = end.toISOString().split('T')[0];
+  return { startDate, endDate, start };
 };
 
 const ensureUserCategory = async (dbClient, userId, categoriaId) => {
@@ -195,7 +217,7 @@ export const listCategoryBudgets = async (userId) => {
 };
 
 export const upsertCategoryBudget = async (userId, payload) => {
-  const { categorias_id: categoriasId, valor_orcado: valorOrcado } = payload || {};
+  const { categorias_id: categoriasId, valor_orcado: valorOrcado, date } = payload || {};
   const categoriaId = Number(categoriasId);
 
   if (!categoriaId) throw badRequest('ID da categoria é obrigatório');
@@ -204,7 +226,7 @@ export const upsertCategoryBudget = async (userId, payload) => {
   await ensureUserCategory(dbClient, userId, categoriaId);
 
   const valorOrcadoNormalizado = parseValorOrcado(valorOrcado);
-  const currentMonthStart = getMonthStartDateString();
+  const currentMonthStart = getMonthStartDateString(date ? new Date(date) : new Date());
 
   const { data: existing, error: existingError } = await dbClient
     .from('orçamentos')
@@ -243,7 +265,7 @@ export const upsertCategoryBudget = async (userId, payload) => {
   return data;
 };
 
-export const listCategoryBudgetsSummary = async (userId) => {
+export const listCategoryBudgetsSummary = async (userId, { year, month } = {}) => {
   const dbClient = createSupabaseClient({ useServiceRole: true });
 
   const { data: userCategories, error: userError } = await dbClient
@@ -265,22 +287,20 @@ export const listCategoryBudgetsSummary = async (userId) => {
     ...(globalCategories || [])
   ];
 
-  const currentMonthStart = await ensureMonthlyBudgets(dbClient, userId);
+  const range = getMonthRangeFromInput(year, month);
+  const monthStartDate = range ? range.startDate : await ensureMonthlyBudgets(dbClient, userId);
   const { data: budgets, error: budgetsError } = await dbClient
     .from('orçamentos')
     .select('categorias_id, valor_orçado')
     .eq('user_id', userId)
-    .eq('date', currentMonthStart);
+    .eq('date', monthStartDate);
 
   if (budgetsError) throw badRequest(budgetsError.message);
 
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    .toISOString()
-    .split('T')[0];
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    .toISOString()
-    .split('T')[0];
+  const startOfMonth = range?.startDate
+    || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+  const endOfMonth = range?.endDate
+    || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0];
 
   const { data: transactions, error: transactionsError } = await dbClient
     .from('lancamentos_id')
@@ -295,7 +315,7 @@ export const listCategoryBudgetsSummary = async (userId) => {
   const spentByCategoryName = new Map();
   (transactions || []).forEach((transaction) => {
     if (!transaction?.classificacao) return;
-    const key = String(transaction.classificacao).toLowerCase();
+    const key = normalizeCategoryName(transaction.classificacao);
     const current = spentByCategoryName.get(key) || 0;
     spentByCategoryName.set(key, current + Number(transaction.valor || 0));
   });
@@ -314,7 +334,7 @@ export const listCategoryBudgetsSummary = async (userId) => {
   const receivedByCategoryName = new Map();
   (receivedTransactions || []).forEach((transaction) => {
     if (!transaction?.classificacao) return;
-    const key = String(transaction.classificacao).toLowerCase();
+    const key = normalizeCategoryName(transaction.classificacao);
     const current = receivedByCategoryName.get(key) || 0;
     receivedByCategoryName.set(key, current + Number(transaction.valor || 0));
   });
@@ -324,12 +344,76 @@ export const listCategoryBudgetsSummary = async (userId) => {
     budgetByCategoryId.set(budget.categorias_id, budget.valor_orçado ?? null);
   });
 
-  return allCategories.map((categoria) => ({
-    categorias_id: categoria.id,
-    valor_orcado: budgetByCategoryId.has(categoria.id) ? budgetByCategoryId.get(categoria.id) : null,
-    valor_gasto: spentByCategoryName.get(String(categoria.nome).toLowerCase()) || 0,
-    valor_recebido: receivedByCategoryName.get(String(categoria.nome).toLowerCase()) || 0
-  }));
+  return allCategories.map((categoria) => {
+    const key = normalizeCategoryName(categoria.nome);
+    return {
+      categorias_id: categoria.id,
+      valor_orcado: budgetByCategoryId.has(categoria.id) ? budgetByCategoryId.get(categoria.id) : null,
+      valor_gasto: spentByCategoryName.get(key) || 0,
+      valor_recebido: receivedByCategoryName.get(key) || 0
+    };
+  });
+};
+
+export const duplicateMonthlyBudgets = async (userId, { year, month }) => {
+  const range = getMonthRangeFromInput(year, month);
+  if (!range) throw badRequest('Ano e mês são obrigatórios');
+
+  const dbClient = createSupabaseClient({ useServiceRole: true });
+  const targetMonthStart = range.startDate;
+  const previousMonthStart = getMonthStartDateString(
+    new Date(range.start.getFullYear(), range.start.getMonth() - 1, 1)
+  );
+
+  const { data: previousBudgets, error: previousError } = await dbClient
+    .from('orçamentos')
+    .select('categorias_id, valor_orçado')
+    .eq('user_id', userId)
+    .eq('date', previousMonthStart)
+    .not('valor_orçado', 'is', null);
+
+  if (previousError) throw badRequest(previousError.message);
+
+  const { data: existingBudgets, error: existingError } = await dbClient
+    .from('orçamentos')
+    .select('id, categorias_id')
+    .eq('user_id', userId)
+    .eq('date', targetMonthStart);
+
+  if (existingError) throw badRequest(existingError.message);
+
+  const existingMap = new Map((existingBudgets || []).map((item) => [item.categorias_id, item.id]));
+
+  const updates = (previousBudgets || []).filter((budget) => existingMap.has(budget.categorias_id));
+  const inserts = (previousBudgets || []).filter((budget) => !existingMap.has(budget.categorias_id));
+
+  await Promise.all(
+    updates.map((budget) =>
+      dbClient
+        .from('orçamentos')
+        .update({ 'valor_orçado': budget.valor_orçado })
+        .eq('id', existingMap.get(budget.categorias_id))
+    )
+  );
+
+  if (inserts.length > 0) {
+    const rows = inserts.map((budget) => ({
+      user_id: userId,
+      categorias_id: budget.categorias_id,
+      date: targetMonthStart,
+      'valor_orçado': budget.valor_orçado
+    }));
+    const { error: insertError } = await dbClient
+      .from('orçamentos')
+      .insert(rows);
+
+    if (insertError) throw badRequest(insertError.message);
+  }
+
+  return {
+    targetMonthStart,
+    duplicated: (previousBudgets || []).length
+  };
 };
 
 export const listCategoryBudgetsYearly = async (userId, year) => {

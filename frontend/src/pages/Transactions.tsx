@@ -949,7 +949,7 @@ export default function Transactions() {
         <input
           type="text"
           placeholder="Pesquisar receitas ou gastos"
-          className="w-full mb-4 px-4 py-3 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-black dark:focus:ring-blue-500 focus:border-transparent"
+          className="planner-input mb-4"
           value={search}
           onChange={e=>setSearch(e.target.value)}
         />
@@ -998,7 +998,7 @@ export default function Transactions() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-8 relative">
+      <div className="planner-card p-4 md:p-6 relative">
         {/* Ações (desktop) - no fluxo para evitar sobreposição com tabela */}
         <div className="hidden md:flex items-center justify-end gap-2 mb-4">
           <button
@@ -1063,7 +1063,7 @@ export default function Transactions() {
         {/* Cards mobile */}
         <div className="md:hidden space-y-3">
           {filtered.map((t) => (
-            <div key={t.id} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
+            <div key={t.id} className="planner-card-muted p-4">
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1">
                   <h3 className="font-semibold text-base dark:text-white mb-1">{t.classificacao}</h3>
