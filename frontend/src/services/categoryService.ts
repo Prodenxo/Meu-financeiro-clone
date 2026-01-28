@@ -24,6 +24,12 @@ export interface CategoryBudgetSummary {
   valor_recebido?: number;
 }
 
+export interface CategoryBudgetYearly {
+  categorias_id: number;
+  valor_orcado: number | null;
+  month: number;
+}
+
 function normalizeTipo (tipo: CreateCategoryInput['tipo']): 'entrada' | 'saida' | 'saída' {
   if (tipo === 'saída') return 'saida'
   return tipo
@@ -109,5 +115,16 @@ export async function saveCategoryBudget(
  */
 export async function fetchCategoryBudgetsSummary(userId: string): Promise<CategoryBudgetSummary[]> {
   const data = await apiClient.get<CategoryBudgetSummary[]>('/categories/budgets/summary');
+  return data || [];
+}
+
+/**
+ * Busca os orçamentos mensais por categoria no ano selecionado
+ */
+export async function fetchCategoryBudgetsYearly(
+  userId: string,
+  year: number
+): Promise<CategoryBudgetYearly[]> {
+  const data = await apiClient.get<CategoryBudgetYearly[]>(`/categories/budgets/yearly?year=${year}`);
   return data || [];
 }

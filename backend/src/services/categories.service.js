@@ -64,6 +64,14 @@ const ensureMonthlyBudgets = async (dbClient, userId) => {
   return currentMonthStart;
 };
 
+const getYearMonthRange = (year) => {
+  const start = new Date(year, 0, 1);
+  const end = new Date(year, 11, 31);
+  const startDate = start.toISOString().split('T')[0];
+  const endDate = end.toISOString().split('T')[0];
+  return { startDate, endDate };
+};
+
 const ensureUserCategory = async (dbClient, userId, categoriaId) => {
   const { data, error } = await dbClient
     .from('categorias_id')
@@ -321,5 +329,29 @@ export const listCategoryBudgetsSummary = async (userId) => {
     valor_orcado: budgetByCategoryId.has(categoria.id) ? budgetByCategoryId.get(categoria.id) : null,
     valor_gasto: spentByCategoryName.get(String(categoria.nome).toLowerCase()) || 0,
     valor_recebido: receivedByCategoryName.get(String(categoria.nome).toLowerCase()) || 0
+  }));
+};
+
+export const listCategoryBudgetsYearly = async (userId, year) => {
+  if (!year || Number.isNaN(Number(year))) {
+    throw badRequest('Ano inválido');
+  }
+
+  const dbClient = createSupabaseClient({ useServiceRole: true });
+  const { startDate, endDate } = getYearMonthRange(year);
+
+  const { data, error } = await dbClient
+    .from('orçamentos')
+    .select('categorias_id, valor_orçado, date')
+    .eq('user_id', userId)
+    .gte('date', startDate)
+    .lte('date', endDate);
+
+  if (error) throw badRequest(error.message);
+
+  return (data || []).map((budget) => ({
+    categorias_id: budget.categorias_id,
+    valor_orcado: budget.valor_orçado ?? null,
+    month: Number(String(budget.date).split('-')[1]) - 1
   }));
 };

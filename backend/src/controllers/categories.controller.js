@@ -63,3 +63,13 @@ export const listCategoryBudgetsSummary = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const listCategoryBudgetsYearly = async (req, res, next) => {
+  try {
+    const year = Number(req.query?.year);
+    const data = await categoriesService.listCategoryBudgetsYearly(req.user.id, year);
+    return sendSuccess(res, data, 'Orçamentos mensais listados');
+  } catch (error) {
+    return next(error);
+  }
+};
