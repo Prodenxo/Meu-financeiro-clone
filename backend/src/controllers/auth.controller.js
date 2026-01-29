@@ -39,8 +39,7 @@ export const getSession = async (req, res, next) => {
 
 export const resetPassword = async (req, res, next) => {
   try {
-    const origin = req.headers.origin || '';
-    await authService.resetPasswordForEmail(req.body.email, origin);
+    await authService.resetPasswordForEmail(req.body.email);
     return sendSuccess(res, { success: true }, 'Email de recuperação enviado');
   } catch (error) {
     return next(error);
