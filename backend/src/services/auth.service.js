@@ -221,10 +221,11 @@ export const getSession = async (accessToken) => {
   };
 };
 
-export const resetPasswordForEmail = async (email, origin) => {
+export const resetPasswordForEmail = async (email) => {
   if (!email) throw badRequest('Email é obrigatório');
   const supabase = createSupabaseClient();
-  const redirectTo = origin ? `${origin}/reset-password` : undefined;
+  const baseUrl = env.FRONTEND_URL ? env.FRONTEND_URL.replace(/\/$/, '') : '';
+  const redirectTo = baseUrl ? `${baseUrl}/reset-password` : undefined;
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo
   });
