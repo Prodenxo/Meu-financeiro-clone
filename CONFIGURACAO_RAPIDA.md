@@ -9,11 +9,11 @@ Para que a recuperação de senha funcione corretamente, você precisa configura
 **Acesse**: [Painel do Supabase](https://app.supabase.com) > Seu Projeto > Authentication > URL Configuration
 
 **Configure**:
-- **Site URL**: `https://financas-pessoais-app.onrender.com`
+- **Site URL**: `https://meu-financeiro-frontend.vercel.app`
 - **Redirect URLs** (adicione uma por linha):
   ```
-  https://financas-pessoais-app.onrender.com/reset-password
-  https://financas-pessoais-app.onrender.com/**
+  https://meu-financeiro-frontend.vercel.app/reset-password
+  https://meu-financeiro-frontend.vercel.app/**
   http://localhost:5173/reset-password
   http://localhost:5173/**
   ```
@@ -22,7 +22,15 @@ Para que a recuperação de senha funcione corretamente, você precisa configura
 
 📖 **Documentação completa**: Veja `CONFIGURACAO_SUPABASE.md`
 
-### 2. Render.com (OBRIGATÓRIO)
+### 2. Vercel (Frontend - produção)
+
+**No projeto do frontend (Vercel)** configure as variáveis:
+- `VITE_API_URL=https://meu-financeiro-backend.vercel.app`
+- `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` conforme o Supabase
+
+**Por quê?**: o frontend usa `VITE_API_URL` para decidir qual backend chamar em produção.
+
+### 3. Render.com (se ainda estiver em uso)
 
 **Acesse**: [Painel do Render](https://dashboard.render.com) > Seu Serviço > Settings
 
@@ -57,11 +65,11 @@ Antes de testar a recuperação de senha:
 
 ## 🧪 Como Testar
 
-1. Acesse: `https://financas-pessoais-app.onrender.com/forgot-password`
+1. Acesse: `https://meu-financeiro-frontend.vercel.app/forgot-password`
 2. Digite um email cadastrado
 3. Verifique o email recebido
 4. Clique no link do email
-5. **Deve redirecionar para**: `https://financas-pessoais-app.onrender.com/reset-password#access_token=...`
+5. **Deve redirecionar para**: `https://meu-financeiro-frontend.vercel.app/reset-password#access_token=...`
 
 ## ❌ Problemas Comuns
 
@@ -81,7 +89,7 @@ Antes de testar a recuperação de senha:
 
 **Solução**:
 1. Acesse o painel do Supabase
-2. Adicione `https://financas-pessoais-app.onrender.com/reset-password` nas Redirect URLs
+2. Adicione `https://meu-financeiro-frontend.vercel.app/reset-password` nas Redirect URLs
 3. Salve as alterações
 4. Solicite um novo link de recuperação
 

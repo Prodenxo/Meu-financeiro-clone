@@ -488,10 +488,11 @@ serve(async (req) => {
 
     if (method === 'POST' && path === '/reset-password') {
       const { email } = await req.json()
-      const origin = req.headers.get('origin') || 'http://localhost:5173'
+      const frontendUrl = Deno.env.get('FRONTEND_URL') || req.headers.get('origin') || 'http://localhost:5173'
+      const baseUrl = frontendUrl.replace(/\/$/, '')
 
       const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-        redirectTo: `${origin}/reset-password`,
+        redirectTo: `${baseUrl}/reset-password`,
       })
 
       if (error) {
