@@ -274,11 +274,30 @@ export const exchangeCodeForSession = async (code) => {
   };
 };
 
-export const updatePassword = async (accessToken, newPassword) => {
+export const updatePassword = async ({ accessToken, userId, newPassword }) => {
   if (!newPassword) throw badRequest('Senha inválida');
+
+  if (env.SUPABASE_SERVICE_ROLE_KEY && userId) {
+    const adminClient = createSupabaseClient({ useServiceRole: true });
+    const { error } = await adminClient.auth.admin.updateUserById(userId, {
+      password: newPassword
+    });
+    if (error) throw badRequest(error.message);
+    return;
+  }
+
+  if (!accessToken) {
+    throw unauthorized('Token ausente');
+  }
+
   const supabase = createSupabaseClient({ accessToken });
   const { error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) throw badRequest(error.message);
+  if (error) {
+    if (String(error.message || '').toLowerCase().includes('session')) {
+      throw badRequest('Sessão inválida. Solicite um novo link de recuperação.');
+    }
+    throw badRequest(error.message);
+  }
 };
 
 export const updatePhone = async (accessToken, phone) => {
