@@ -66,7 +66,11 @@ export const exchangeCodeForSession = async (req, res, next) => {
 
 export const updatePassword = async (req, res, next) => {
   try {
-    await authService.updatePassword(req.accessToken, req.body.newPassword);
+    await authService.updatePassword({
+      accessToken: req.accessToken,
+      userId: req.user?.id,
+      newPassword: req.body.newPassword
+    });
     return sendSuccess(res, { success: true }, 'Senha atualizada');
   } catch (error) {
     return next(error);
