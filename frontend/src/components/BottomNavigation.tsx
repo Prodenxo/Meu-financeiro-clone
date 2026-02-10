@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, List, Grid3x3, Calendar, Settings, Wallet } from 'lucide-react';
+import { Home, List, Grid3x3, Calendar, Settings, Wallet, FileText } from 'lucide-react';
 import { useThemeStore } from '../store/themeStore';
 
 export default function BottomNavigation() {
@@ -12,6 +12,7 @@ export default function BottomNavigation() {
     { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
     { path: '/categorias', label: 'Categorias', icon: Grid3x3 },
     { path: '/agenda', label: 'Agenda', icon: Calendar },
+    { path: '/guias-mei', label: 'Meu MEI', icon: FileText },
     { path: '/settings', label: 'Configurações', icon: Settings },
   ];
 

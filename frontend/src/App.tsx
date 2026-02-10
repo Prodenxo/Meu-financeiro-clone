@@ -15,6 +15,7 @@ import Categorias from './pages/Categorias';
 import Agenda from './pages/Agenda';
 import Settings from './pages/Settings';
 import ManageUsers from './pages/ManageUsers';
+import GuidesMei from './pages/GuidesMei';
 import Layout from './Layout/Layout';
 import { handleGoogleAuthCallback } from './lib/google-auth-flow';
 import { ToastContainer } from 'react-toastify';
@@ -297,6 +298,7 @@ function AppRoutes() {
                   <Route path="/orcamentos" element={<Orcamentos />} />
                   <Route path="/categorias" element={<Categorias />} />
                   <Route path="/agenda" element={<Agenda />} />
+                  <Route path="/guias-mei" element={<GuidesMei />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route
                     path="/settings/users"

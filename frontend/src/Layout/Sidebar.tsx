@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, List, Grid3x3, Calendar, Settings, Wallet } from 'lucide-react';
+import { Home, List, Grid3x3, Calendar, Settings, Wallet, FileText } from 'lucide-react';
 
 const navItems = [
   { path: '/', label: 'Visão Geral', icon: Home },
@@ -7,6 +7,7 @@ const navItems = [
   { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
   { path: '/categorias', label: 'Categorias', icon: Grid3x3 },
   { path: '/agenda', label: 'Agenda', icon: Calendar },
+  { path: '/guias-mei', label: 'Meu MEI', icon: FileText },
   { path: '/settings', label: 'Configurações', icon: Settings },
 ];
 
