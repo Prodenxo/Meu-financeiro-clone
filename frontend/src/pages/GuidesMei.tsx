@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import Layout from '../Layout/Layout';
 import {
   downloadMeiGuide,
-  fetchMeiCertificateStatus
+  fetchMeiCertificateStatus,
+  removeMeiCertificate,
+  uploadMeiCertificate
 } from '../services/guidesMeiService';
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
@@ -60,32 +62,44 @@ export default function GuidesMei() {
   const [selectedMonth, setSelectedMonth] = useState<string>(defaultPeriod.month);
   const [periodError, setPeriodError] = useState<string | null>(null);
   const [certificateError, setCertificateError] = useState<string | null>(null);
-  const [hasCertificate, setHasCertificate] = useState(false);
+  const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [certificatePassword, setCertificatePassword] = useState('');
+  const [isUploadingCert, setIsUploadingCert] = useState(false);
+  const [isRemovingCert, setIsRemovingCert] = useState(false);
+  const [hasUserCertificate, setHasUserCertificate] = useState(false);
   const [hasServerCertificate, setHasServerCertificate] = useState(false);
+  const hasCertificate = hasUserCertificate;
 
   const normalizedContribuinte = useMemo(() => normalizeDoc(contribuinteDoc), [contribuinteDoc]);
   const contribuinteTipo = useMemo(() => getDocType(normalizedContribuinte), [normalizedContribuinte]);
 
+  const applyDocumento = (documento?: string | null, force = false) => {
+    if (!documento) return;
+    const formatted = formatDocument(documento);
+    setContribuinteDoc((current) => (force || !current ? formatted : current));
+  };
+
+  const loadCertificateStatus = async () => {
+    try {
+      const status = await fetchMeiCertificateStatus();
+      setHasUserCertificate(Boolean(status.hasUserCertificate));
+      setHasServerCertificate(Boolean(status.hasEnvCertificate));
+      applyDocumento(status.documento);
+    } catch {
+      setHasUserCertificate(false);
+      setHasServerCertificate(false);
+    }
+  };
+
   useEffect(() => {
-    const loadStatus = async () => {
-      try {
-        const status = await fetchMeiCertificateStatus();
-        setHasServerCertificate(Boolean(status.hasEnvCertificate));
-        if (status.hasUserCertificate || status.hasEnvCertificate) {
-          setHasCertificate(true);
-        }
-      } catch {
-        setHasServerCertificate(false);
-      }
-    };
-    void loadStatus();
+    void loadCertificateStatus();
   }, []);
 
   const handleDownload = async (periodoApuracao: string, competencia?: string | null) => {
     const { blob, filename } = await downloadMeiGuide(
       normalizedContribuinte,
       periodoApuracao,
-      { numero: normalizedContribuinte, tipo: contribuinteTipo }
+      normalizedContribuinte ? { numero: normalizedContribuinte, tipo: contribuinteTipo } : undefined
     );
     const downloadUrl = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -95,6 +109,43 @@ export default function GuidesMei() {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(downloadUrl);
+  };
+
+  const handleCertificateUpload = async () => {
+    if (!certificateFile) {
+      setCertificateError('Selecione o arquivo do certificado.');
+      return;
+    }
+    if (!certificatePassword) {
+      setCertificateError('Informe a senha do certificado.');
+      return;
+    }
+    setCertificateError(null);
+    setIsUploadingCert(true);
+    try {
+      const status = await uploadMeiCertificate(certificateFile, certificatePassword);
+      applyDocumento(status.documento, true);
+      setCertificateFile(null);
+      setCertificatePassword('');
+      await loadCertificateStatus();
+    } catch (error) {
+      setCertificateError(error instanceof Error ? error.message : 'Erro ao enviar certificado.');
+    } finally {
+      setIsUploadingCert(false);
+    }
+  };
+
+  const handleCertificateRemove = async () => {
+    setCertificateError(null);
+    setIsRemovingCert(true);
+    try {
+      await removeMeiCertificate();
+      await loadCertificateStatus();
+    } catch (error) {
+      setCertificateError(error instanceof Error ? error.message : 'Erro ao remover certificado.');
+    } finally {
+      setIsRemovingCert(false);
+    }
   };
 
 
@@ -108,12 +159,12 @@ export default function GuidesMei() {
   ), []);
 
   const handleDownloadClick = async () => {
-    if (normalizedContribuinte.length !== 14) {
-      setPeriodError('Informe um CNPJ válido do contribuinte.');
-      return;
-    }
     if (!hasCertificate) {
       setPeriodError('Envie o certificado para gerar a guia.');
+      return;
+    }
+    if (!normalizedContribuinte) {
+      setPeriodError('O certificado não informou CNPJ/CPF do contribuinte.');
       return;
     }
     setPeriodError(null);
@@ -126,39 +177,8 @@ export default function GuidesMei() {
     <Layout>
       <h1 className="text-xl md:text-2xl font-bold mb-1 mt-2 dark:text-white">Meu MEI</h1>
       <p className="text-sm md:text-base text-slate-500 dark:text-gray-400 mb-4">
-        Informe o CNPJ e escolha o período para baixar a guia.
+        Envie o certificado do cliente e escolha o período para baixar a guia.
       </p>
-
-      <div className="planner-card p-4 md:p-5">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-sm font-semibold dark:text-gray-200">CNPJ do contribuinte</label>
-            {!hasCertificate && (
-              <span className="text-xs text-amber-600 dark:text-amber-400">
-                Certificado deve estar configurado no servidor.
-              </span>
-            )}
-          </div>
-          <div className="grid gap-2">
-            <input
-              className="planner-input-compact"
-              value={contribuinteDoc}
-              onChange={(event) => setContribuinteDoc(formatDocument(event.target.value))}
-              placeholder="00.000.000/0000-00"
-              inputMode="numeric"
-            />
-          </div>
-          <div>
-            <button
-              className="planner-button-compact md:w-40"
-              onClick={handleDownloadClick}
-              disabled={normalizedContribuinte.length !== 14 || !hasCertificate}
-            >
-              Baixar guia
-            </button>
-          </div>
-        </div>
-      </div>
 
       <div className="mt-4 planner-card p-4 md:p-5">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
@@ -167,17 +187,71 @@ export default function GuidesMei() {
               Certificado digital (obrigatório)
             </div>
             <div className="text-xs text-slate-500 dark:text-gray-400">
-              Configurado e gerenciado no servidor.
+              Envie o certificado digital do cliente para autorizar a guia.
             </div>
           </div>
-          {hasCertificate && (
+          {hasUserCertificate && (
             <span className="planner-chip dark:bg-blue-900/30 dark:text-blue-200">
-              Certificado enviado
+              Certificado do cliente ativo
+            </span>
+          )}
+          {!hasUserCertificate && hasServerCertificate && (
+            <span className="planner-chip dark:bg-blue-900/30 dark:text-blue-200">
+              Certificado do servidor disponível
             </span>
           )}
         </div>
-        <div className="mt-3 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-          Certificado configurado no servidor. Upload não é necessário.
+        {hasUserCertificate && (
+          <div className="mt-3 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+            Certificado do cliente em uso. Ele expira após algumas horas ou ao reiniciar o servidor.
+          </div>
+        )}
+        {!hasUserCertificate && hasServerCertificate && (
+          <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
+            Certificado do servidor não é usado neste fluxo. Envie o certificado do cliente.
+          </div>
+        )}
+        {!hasCertificate && (
+          <div className="mt-3 rounded-xl border border-dashed border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            Envie o certificado do cliente (PFX) para liberar a geração da guia.
+          </div>
+        )}
+        <div className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+          <span className="font-semibold">Contribuinte identificado:</span>{' '}
+          {contribuinteDoc ? contribuinteDoc : 'Não identificado no certificado'}
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-[1fr_220px]">
+          <input
+            className="planner-input-compact"
+            type="file"
+            accept=".pfx,.p12"
+            onChange={(event) => setCertificateFile(event.target.files?.[0] || null)}
+          />
+          <input
+            className="planner-input-compact"
+            type="password"
+            value={certificatePassword}
+            onChange={(event) => setCertificatePassword(event.target.value)}
+            placeholder="Senha do certificado"
+          />
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            className="planner-button-compact"
+            onClick={handleCertificateUpload}
+            disabled={isUploadingCert}
+          >
+            {isUploadingCert ? 'Enviando...' : 'Enviar certificado'}
+          </button>
+          {hasUserCertificate && (
+            <button
+              className="planner-button-compact md:w-auto"
+              onClick={handleCertificateRemove}
+              disabled={isRemovingCert}
+            >
+              {isRemovingCert ? 'Removendo...' : 'Remover certificado'}
+            </button>
+          )}
         </div>
         {certificateError && (
           <div className="mt-2 text-xs text-rose-600 dark:text-rose-400">{certificateError}</div>
@@ -216,6 +290,15 @@ export default function GuidesMei() {
               ))}
             </select>
           </div>
+        </div>
+        <div className="mt-3">
+          <button
+            className="planner-button-compact md:w-40"
+            onClick={handleDownloadClick}
+            disabled={!hasCertificate || !normalizedContribuinte}
+          >
+            Baixar guia
+          </button>
         </div>
         {periodError && (
           <div className="mt-3 text-sm text-rose-600 dark:text-rose-400">{periodError}</div>

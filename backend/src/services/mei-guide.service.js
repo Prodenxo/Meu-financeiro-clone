@@ -4,6 +4,14 @@ import { Agent } from 'undici';
 import { createRequire } from 'module';
 import { consultarServico } from './gestao/consultar.service.js';
 import { emitirServico } from './gestao/emitir.service.js';
+import {
+  encryptPassphrase,
+  decryptPassphrase,
+  saveCertificate,
+  loadCertificate,
+  deleteCertificate,
+  getCertificateDocument
+} from './mei-certificate-store.js';
 
 const require = createRequire(import.meta.url);
 const { SignedXml } = require('xml-crypto');
@@ -12,14 +20,14 @@ const forge = require('node-forge');
 
 const normalizeBaseUrl = (value) => value.replace(/\/$/, '');
 
-const ensureConfigured = (userId) => {
+const ensureConfigured = () => {
   if (!env.SERPRO_API_BASE_URL || !env.SERPRO_OAUTH_TOKEN_URL) {
     throw badRequest('Integração MEI não configurada');
   }
   if (!env.SERPRO_CONSUMER_KEY || !env.SERPRO_CONSUMER_SECRET) {
     throw badRequest('Credenciais Serpro não configuradas');
   }
-  if (!hasCertificateConfigured(userId)) {
+  if (!isNoMtlsEnabled() && !env.SERPRO_CERT_PFX_BASE64) {
     throw badRequest('Certificado Serpro não configurado');
   }
 };
@@ -200,29 +208,6 @@ const extractCertInfo = (cert) => {
   };
 };
 
-const resolveAutorFromCert = (autor, certDoc, context) => {
-  const requestedNumero = normalizeDoc(
-    autor?.numero || env.SERPRO_AUTOR_NUMERO || env.SERPRO_CONTRATANTE_NUMERO
-  );
-  const certNumero = normalizeDoc(certDoc);
-  if (
-    env.NODE_ENV !== 'production'
-    && certNumero
-    && requestedNumero
-    && certNumero !== requestedNumero
-  ) {
-    console.warn('[mei-guide] Autor diverge do certificado', {
-      context,
-      fromRequest: requestedNumero,
-      fromCert: certNumero
-    });
-  }
-  return {
-    numero: certNumero || requestedNumero,
-    tipo: autor?.tipo || env.SERPRO_AUTOR_TIPO || env.SERPRO_CONTRATANTE_TIPO || certNumero || requestedNumero
-  };
-};
-
 const escapeXmlAttr = (value) => {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -261,23 +246,105 @@ const dispatcherCache = new Map();
 const tokenCache = new Map();
 const procuradorTokenCache = new Map();
 const certInfoCache = new Map();
+const userCertCache = new Map();
+const USER_CERT_TTL_MS = 2 * 60 * 60 * 1000;
 
-const hasCertificateConfigured = (userId) => {
-  return Boolean(env.SERPRO_CERT_PFX_BASE64);
+const getUserCacheKey = (userId) => `user:${userId}`;
+
+const getUserCert = (userId) => {
+  if (!userId) return null;
+  const cacheKey = getUserCacheKey(userId);
+  const cached = userCertCache.get(cacheKey);
+  if (!cached) return null;
+  if (cached.expiresAt && cached.expiresAt <= Date.now()) {
+    userCertCache.delete(cacheKey);
+    return null;
+  }
+  return { ...cached, cacheKey };
 };
 
-const getCertificateContext = (userId) => {
+const setUserCert = (userId, cert) => {
+  if (!userId || !cert?.pfx) return null;
+  const cacheKey = getUserCacheKey(userId);
+  userCertCache.set(cacheKey, {
+    ...cert,
+    expiresAt: Date.now() + USER_CERT_TTL_MS
+  });
+  return cacheKey;
+};
+
+const getUserCertDocument = (userId) => {
+  const cert = getUserCert(userId);
+  const doc = cert?.certInfo?.doc || null;
+  return doc ? normalizeDoc(doc) : null;
+};
+
+const clearUserCaches = (userId) => {
+  if (!userId) {
+    dispatcherCache.clear();
+    tokenCache.clear();
+    procuradorTokenCache.clear();
+    certInfoCache.clear();
+    userCertCache.clear();
+    return;
+  }
+  const cacheKey = getUserCacheKey(userId);
+  dispatcherCache.delete(cacheKey);
+  tokenCache.delete(cacheKey);
+  certInfoCache.delete(cacheKey);
+  userCertCache.delete(cacheKey);
+  procuradorTokenCache.clear();
+};
+
+const hasUserCertificate = (userId) => Boolean(getUserCert(userId));
+
+/** Carrega certificado do banco para o cache quando não está em memória. */
+const ensureUserCertLoaded = async (userId) => {
+  if (getUserCert(userId)) return;
+  if (!env.MEI_CERT_ENCRYPTION_KEY) return;
+  let loaded;
+  try {
+    loaded = await loadCertificate(userId);
+  } catch {
+    return;
+  }
+  if (!loaded) return;
+  const pfx = Buffer.from(loaded.pfxBase64, 'base64');
+  let passphrase;
+  try {
+    passphrase = decryptPassphrase(loaded.passphraseEnc, loaded.passphraseIv);
+  } catch {
+    return;
+  }
+  let certInfo;
+  try {
+    certInfo = extractPfxKeyAndCert(pfx, passphrase).certInfo;
+  } catch {
+    return;
+  }
+  setUserCert(userId, { pfx, passphrase, certInfo });
+};
+
+const ensureClientCertificate = async (userId) => {
+  await ensureUserCertLoaded(userId);
+  if (!getUserCert(userId)) {
+    throw badRequest('Certificado do cliente não configurado');
+  }
+};
+
+const getOauthContext = () => {
   if (env.SERPRO_CERT_PFX_BASE64) {
     return { source: 'env', cacheKey: 'env', cert: null };
   }
   return { source: 'none', cacheKey: 'env', cert: null };
 };
 
-const clearUserCaches = () => {
-  dispatcherCache.clear();
-  tokenCache.clear();
-  procuradorTokenCache.clear();
-  certInfoCache.clear();
+const getProcuradorContext = (userId) => {
+  const userCert = getUserCert(userId);
+  if (userCert) {
+    return { source: 'user', cacheKey: userCert.cacheKey, cert: userCert };
+  }
+  return { source: 'none', cacheKey: getUserCacheKey(userId), cert: null };
 };
 
 const loadEnvPfx = () => {
@@ -288,8 +355,8 @@ const loadEnvPfx = () => {
   return { pfx: buffer, passphrase: env.SERPRO_CERT_PFX_PASS || undefined };
 };
 
-const getSerproDispatcher = (userId) => {
-  const context = getCertificateContext(userId);
+const getOauthDispatcher = () => {
+  const context = getOauthContext();
   if (dispatcherCache.has(context.cacheKey)) {
     return dispatcherCache.get(context.cacheKey);
   }
@@ -299,11 +366,9 @@ const getSerproDispatcher = (userId) => {
     return undefined;
   }
 
-  let pfx;
-  let passphrase;
   const loaded = loadEnvPfx();
-  pfx = loaded.pfx;
-  passphrase = loaded.passphrase;
+  const pfx = loaded.pfx;
+  const passphrase = loaded.passphrase;
 
   if (!pfx) {
     dispatcherCache.set(context.cacheKey, undefined);
@@ -320,12 +385,12 @@ const getSerproDispatcher = (userId) => {
   return dispatcher;
 };
 
-const getSerproToken = async (userId) => {
+const getSerproToken = async (_userId) => {
   if (String(env.SERPRO_OAUTH_TOKEN_NO_MTLS).toLowerCase() === 'true') {
     return await getSerproTokenWithoutCert();
   }
-  ensureConfigured(userId);
-  const context = getCertificateContext(userId);
+  ensureConfigured();
+  const context = getOauthContext();
 
   const now = Date.now();
   const cached = tokenCache.get(context.cacheKey);
@@ -335,7 +400,7 @@ const getSerproToken = async (userId) => {
 
   const credentials = Buffer.from(`${env.SERPRO_CONSUMER_KEY}:${env.SERPRO_CONSUMER_SECRET}`).toString('base64');
   const body = new URLSearchParams({ grant_type: 'client_credentials' }).toString();
-  const dispatcher = getSerproDispatcher(userId);
+  const dispatcher = getOauthDispatcher();
 
   const response = await fetch(env.SERPRO_OAUTH_TOKEN_URL, {
     method: 'POST',
@@ -504,22 +569,6 @@ const extractPfxKeyAndCert = (pfxBuffer, passphrase) => {
   };
 };
 
-const getCertInfoFromEnvPfx = () => {
-  const cacheKey = 'env';
-  if (certInfoCache.has(cacheKey)) {
-    return certInfoCache.get(cacheKey);
-  }
-  const { pfx, passphrase } = loadEnvPfx();
-  if (!pfx) {
-    certInfoCache.set(cacheKey, null);
-    return null;
-  }
-  const { certInfo } = extractPfxKeyAndCert(pfx, passphrase);
-  const resolved = certInfo || null;
-  certInfoCache.set(cacheKey, resolved);
-  return resolved;
-};
-
 const signAutorizacaoXml = (xml, pfxBuffer, passphrase) => {
   const { privateKeyPem, certificatePem } = extractPfxKeyAndCert(pfxBuffer, passphrase);
   const sig = new SignedXml();
@@ -547,15 +596,14 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
     throw badRequest('Endpoint Autentica Procurador não configurado');
   }
 
-  const certInfo = getCertInfoFromEnvPfx();
-  const resolvedAutor = resolveAutorFromCert(
-    authContext?.autorPedidoDados,
-    certInfo?.doc,
-    'autentica-procurador'
-  );
+  const context = getProcuradorContext(userId);
+  if (context.source !== 'user' || !context.cert?.pfx) {
+    throw badRequest('Certificado do cliente não configurado para o procurador');
+  }
+  const contrib = authContext?.contribuinte || {};
   const resolvedAuthContext = {
     ...(authContext || {}),
-    autorPedidoDados: resolvedAutor
+    autorPedidoDados: contrib
   };
 
   const cacheKey = getAutenticaProcuradorCacheKey(userId, resolvedAuthContext);
@@ -565,11 +613,8 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
     return cached.token;
   }
 
-  let pfx;
-  let passphrase;
-  const loaded = loadEnvPfx();
-  pfx = loaded.pfx;
-  passphrase = loaded.passphrase;
+  const pfx = context.cert.pfx;
+  const passphrase = context.cert.passphrase;
 
   if (!pfx) {
     throw badRequest('Certificado Serpro não configurado para o procurador');
@@ -580,7 +625,6 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
   const encoded = Buffer.from(signedXml, 'utf-8').toString('base64');
 
   const autor = resolvedAuthContext?.autorPedidoDados || {};
-  const contrib = resolvedAuthContext?.contribuinte || {};
   const autorNumero = normalizeDoc(autor.numero);
   const contribNumero = normalizeDoc(contrib.numero);
 
@@ -640,7 +684,7 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
   }
 
   const headers = await buildHeaders(userId, null);
-  const dispatcher = isNoMtlsEnabled() ? undefined : getSerproDispatcher(userId);
+  const dispatcher = isNoMtlsEnabled() ? undefined : getOauthDispatcher();
   const response = await fetch(url, {
     method: 'POST',
     headers,
@@ -797,7 +841,7 @@ const requestJson = async (url, body, userId, authContext) => {
 
   try {
     const headers = await buildHeaders(userId, authContext);
-    const dispatcher = isNoMtlsEnabled() ? undefined : getSerproDispatcher(userId);
+    const dispatcher = isNoMtlsEnabled() ? undefined : getOauthDispatcher();
     const response = await fetch(url, {
       method: 'POST',
       headers,
@@ -834,7 +878,7 @@ const requestGetJson = async (url, userId, authContext) => {
 
   try {
     const headers = await buildHeaders(userId, authContext);
-    const dispatcher = isNoMtlsEnabled() ? undefined : getSerproDispatcher(userId);
+    const dispatcher = isNoMtlsEnabled() ? undefined : getOauthDispatcher();
     const response = await fetch(url, {
       method: 'GET',
       headers,
@@ -870,7 +914,7 @@ const requestDownload = async (url, userId, authContext) => {
 
   try {
     const headers = await buildHeaders(userId, authContext);
-    const dispatcher = isNoMtlsEnabled() ? undefined : getSerproDispatcher(userId);
+    const dispatcher = isNoMtlsEnabled() ? undefined : getOauthDispatcher();
     const response = await fetch(url, {
       method: 'GET',
       headers,
@@ -986,20 +1030,88 @@ const sortByCompetenciaDesc = (items) => {
   });
 };
 
-export const uploadCertificate = async () => {
-  clearUserCaches();
-  throw badRequest('Upload de certificado desativado. Configure SERPRO_CERT_PFX_BASE64.');
+const resolveContribuinte = (userId, contrib, cnpj) => {
+  const fromRequest = normalizeDoc(contrib?.numero || cnpj);
+  const fromCert = getUserCertDocument(userId);
+  const numero = fromRequest || fromCert;
+  if (!numero) {
+    throw badRequest('Documento do certificado não identificado');
+  }
+  if (!validateDoc(numero)) {
+    throw badRequest('Contribuinte inválido');
+  }
+  const tipo = normalizeDocTypeNumber(contrib?.tipo, numero) || getDocType(numero);
+  return { numero, tipo };
 };
 
-export const removeCertificate = async () => {
-  clearUserCaches();
-  throw badRequest('Remoção de certificado desativada. Configure SERPRO_CERT_PFX_BASE64.');
+export const uploadCertificate = async (userId, payload) => {
+  if (!userId) {
+    throw badRequest('Usuário não identificado');
+  }
+  clearUserCaches(userId);
+  const file = payload?.file;
+  const password = String(payload?.password || '');
+  if (!file?.buffer) {
+    throw badRequest('Arquivo de certificado não informado');
+  }
+  if (!password) {
+    throw badRequest('Senha do certificado é obrigatória');
+  }
+  let certInfo;
+  try {
+    const extracted = extractPfxKeyAndCert(file.buffer, password);
+    certInfo = extracted?.certInfo || null;
+  } catch (error) {
+    throw badRequest('Certificado inválido ou senha incorreta');
+  }
+
+  if (env.MEI_CERT_ENCRYPTION_KEY) {
+    try {
+      const { passphraseEnc, passphraseIv } = encryptPassphrase(password);
+      const certDocument = certInfo?.doc ? normalizeDoc(certInfo.doc) : null;
+      await saveCertificate(userId, {
+        pfxBase64: file.buffer.toString('base64'),
+        passphraseEnc,
+        passphraseIv,
+        certDocument
+      });
+    } catch (err) {
+      throw badRequest(err?.message || 'Falha ao salvar certificado');
+    }
+  }
+
+  setUserCert(userId, {
+    pfx: file.buffer,
+    passphrase: password,
+    certInfo
+  });
+  return getCertificateStatus(userId);
 };
 
-export const getCertificateStatus = async () => {
+export const removeCertificate = async (userId) => {
+  if (!userId) {
+    throw badRequest('Usuário não identificado');
+  }
+  if (env.MEI_CERT_ENCRYPTION_KEY) {
+    try {
+      await deleteCertificate(userId);
+    } catch {
+      // ignora erro de banco ao remover
+    }
+  }
+  clearUserCaches(userId);
+  return getCertificateStatus(userId);
+};
+
+export const getCertificateStatus = async (userId) => {
+  await ensureUserCertLoaded(userId);
+  const hasCert = Boolean(getUserCert(userId));
+  const docFromCache = getUserCertDocument(userId);
+  const docFromDb = env.MEI_CERT_ENCRYPTION_KEY ? await getCertificateDocument(userId) : null;
   return {
-    hasUserCertificate: false,
-    hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64)
+    hasUserCertificate: hasCert,
+    hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
+    documento: docFromCache || docFromDb || null
   };
 };
 
@@ -1016,21 +1128,16 @@ export const getSerproTokenForFrontend = async () => {
 };
 
 export const createGuide = async (userId, payload) => {
-  ensureConfigured(userId);
-  const { cnpj, periodoApuracao, mes, ano, autorPedidoDados, contribuinte } = payload || {};
+  ensureConfigured();
+  await ensureClientCertificate(userId);
+  const { cnpj, periodoApuracao, mes, ano, contribuinte } = payload || {};
 
-  const autor = autorPedidoDados || {
-    numero: env.SERPRO_AUTOR_NUMERO || env.SERPRO_CONTRATANTE_NUMERO,
-    tipo: env.SERPRO_AUTOR_TIPO || env.SERPRO_CONTRATANTE_TIPO
-  };
-  const contrib = contribuinte || { numero: cnpj };
+  const contrib = resolveContribuinte(userId, contribuinte, cnpj);
+  const autor = contrib;
 
   const autorNumero = normalizeDoc(autor?.numero);
   if (!validateDoc(autorNumero)) {
     throw badRequest('Autor do pedido inválido');
-  }
-  if (!validateDoc(contrib?.numero)) {
-    throw badRequest('Contribuinte inválido');
   }
 
   const period = normalizePeriodoApuracao(periodoApuracao, mes, ano);
@@ -1067,20 +1174,16 @@ export const createGuide = async (userId, payload) => {
 };
 
 export const downloadGuide = async (payload) => {
-  ensureConfigured(payload?.userId);
-  const { cnpj, periodoApuracao, autorPedidoDados, contribuinte } = payload || {};
-  const autor = autorPedidoDados || {
-    numero: env.SERPRO_AUTOR_NUMERO || env.SERPRO_CONTRATANTE_NUMERO,
-    tipo: env.SERPRO_AUTOR_TIPO || env.SERPRO_CONTRATANTE_TIPO
-  };
-  const contrib = contribuinte || { numero: cnpj };
-  if (!validateDoc(contrib?.numero)) throw badRequest('Contribuinte inválido');
+  ensureConfigured();
+  await ensureClientCertificate(payload?.userId);
+  const { cnpj, periodoApuracao, contribuinte } = payload || {};
+  const contrib = resolveContribuinte(payload?.userId, contribuinte, cnpj);
+  const autor = contrib;
   if (!periodoApuracao) throw badRequest('Período de apuração é obrigatório');
 
   const guide = await createGuide(payload?.userId, {
     cnpj,
     periodoApuracao,
-    autorPedidoDados: autor,
     contribuinte: contrib
   });
   return await ensureDownloadBuffer(guide, payload?.userId, {
@@ -1090,17 +1193,11 @@ export const downloadGuide = async (payload) => {
 };
 
 export const listPeriods = async (userId, payload) => {
-  ensureConfigured(userId);
-  const { cnpj, autorPedidoDados, contribuinte } = payload || {};
-  const autor = autorPedidoDados || {
-    numero: env.SERPRO_AUTOR_NUMERO || env.SERPRO_CONTRATANTE_NUMERO,
-    tipo: env.SERPRO_AUTOR_TIPO || env.SERPRO_CONTRATANTE_TIPO
-  };
-  const contrib = contribuinte || { numero: cnpj };
-
-  if (!validateDoc(contrib?.numero)) {
-    throw badRequest('Contribuinte inválido');
-  }
+  ensureConfigured();
+  await ensureClientCertificate(userId);
+  const { cnpj, contribuinte } = payload || {};
+  const contrib = resolveContribuinte(userId, contribuinte, cnpj);
+  const autor = contrib;
 
   const url = buildPeriodsUrl(contrib.numero);
   if (!url) {

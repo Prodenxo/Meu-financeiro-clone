@@ -55,5 +55,6 @@ export const env = {
   MEI_API_CREATE_PATH: process.env.MEI_API_CREATE_PATH || '/Consultar',
   MEI_API_DOWNLOAD_PATH: process.env.MEI_API_DOWNLOAD_PATH || '/mei-guide/{id}/download',
   MEI_API_PERIODS_PATH: process.env.MEI_API_PERIODS_PATH || '',
-  MEI_API_TIMEOUT_MS: process.env.MEI_API_TIMEOUT_MS || '15000'
+  MEI_API_TIMEOUT_MS: process.env.MEI_API_TIMEOUT_MS || '15000',
+  MEI_CERT_ENCRYPTION_KEY: process.env.MEI_CERT_ENCRYPTION_KEY || ''
 };
