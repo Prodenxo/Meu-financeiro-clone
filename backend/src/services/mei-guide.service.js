@@ -1,6 +1,6 @@
 import { env } from '../config/env.js';
 import { badRequest, forbidden, notFound, unauthorized } from '../utils/errors.js';
-import { Agent } from 'undici';
+import { requestWithMtls } from '../utils/http-mtls.js';
 import { createRequire } from 'module';
 import { consultarServico } from './gestao/consultar.service.js';
 import { emitirServico } from './gestao/emitir.service.js';
@@ -242,7 +242,6 @@ const normalizePeriodoApuracao = (periodo, mes, ano) => {
   return null;
 };
 
-const dispatcherCache = new Map();
 const tokenCache = new Map();
 const procuradorTokenCache = new Map();
 const certInfoCache = new Map();
@@ -281,7 +280,6 @@ const getUserCertDocument = (userId) => {
 
 const clearUserCaches = (userId) => {
   if (!userId) {
-    dispatcherCache.clear();
     tokenCache.clear();
     procuradorTokenCache.clear();
     certInfoCache.clear();
@@ -289,7 +287,6 @@ const clearUserCaches = (userId) => {
     return;
   }
   const cacheKey = getUserCacheKey(userId);
-  dispatcherCache.delete(cacheKey);
   tokenCache.delete(cacheKey);
   certInfoCache.delete(cacheKey);
   userCertCache.delete(cacheKey);
@@ -355,34 +352,25 @@ const loadEnvPfx = () => {
   return { pfx: buffer, passphrase: env.SERPRO_CERT_PFX_PASS || undefined };
 };
 
-const getOauthDispatcher = () => {
+const getOauthTlsConfig = () => {
   const context = getOauthContext();
-  if (dispatcherCache.has(context.cacheKey)) {
-    return dispatcherCache.get(context.cacheKey);
-  }
-
   if (context.source === 'none') {
-    dispatcherCache.set(context.cacheKey, undefined);
-    return undefined;
+    return null;
   }
 
   const loaded = loadEnvPfx();
-  const pfx = loaded.pfx;
-  const passphrase = loaded.passphrase;
-
-  if (!pfx) {
-    dispatcherCache.set(context.cacheKey, undefined);
-    return undefined;
+  if (!loaded.pfx) {
+    return null;
   }
 
-  const dispatcher = new Agent({
-    connect: {
-      pfx,
-      passphrase
-    }
-  });
-  dispatcherCache.set(context.cacheKey, dispatcher);
-  return dispatcher;
+  return { pfx: loaded.pfx, passphrase: loaded.passphrase };
+};
+
+const requestWithOptionalMtls = async (url, options, tlsConfig) => {
+  if (tlsConfig?.pfx) {
+    return requestWithMtls(url, { ...options, ...tlsConfig });
+  }
+  return fetch(url, options);
 };
 
 const getSerproToken = async (_userId) => {
@@ -400,18 +388,17 @@ const getSerproToken = async (_userId) => {
 
   const credentials = Buffer.from(`${env.SERPRO_CONSUMER_KEY}:${env.SERPRO_CONSUMER_SECRET}`).toString('base64');
   const body = new URLSearchParams({ grant_type: 'client_credentials' }).toString();
-  const dispatcher = getOauthDispatcher();
+  const tlsConfig = getOauthTlsConfig();
 
-  const response = await fetch(env.SERPRO_OAUTH_TOKEN_URL, {
+  const response = await requestWithOptionalMtls(env.SERPRO_OAUTH_TOKEN_URL, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${credentials}`,
       'Content-Type': 'application/x-www-form-urlencoded',
       'Role-Type': env.SERPRO_ROLE_TYPE
     },
-    body,
-    ...(dispatcher ? { dispatcher } : {})
-  });
+    body
+  }, tlsConfig);
 
   if (!response.ok) {
     const message = await parseErrorMessage(response);
@@ -684,13 +671,12 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
   }
 
   const headers = await buildHeaders(userId, null);
-  const dispatcher = isNoMtlsEnabled() ? undefined : getOauthDispatcher();
-  const response = await fetch(url, {
+  const tlsConfig = isNoMtlsEnabled() ? null : getOauthTlsConfig();
+  const response = await requestWithOptionalMtls(url, {
     method: 'POST',
     headers,
-    body: JSON.stringify(requestBody),
-    ...(dispatcher ? { dispatcher } : {})
-  });
+    body: JSON.stringify(requestBody)
+  }, tlsConfig);
 
   if (!response.ok) {
     const message = await parseErrorMessage(response);
@@ -841,14 +827,13 @@ const requestJson = async (url, body, userId, authContext) => {
 
   try {
     const headers = await buildHeaders(userId, authContext);
-    const dispatcher = isNoMtlsEnabled() ? undefined : getOauthDispatcher();
-    const response = await fetch(url, {
+    const tlsConfig = isNoMtlsEnabled() ? null : getOauthTlsConfig();
+    const response = await requestWithOptionalMtls(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      signal: controller.signal,
-      ...(dispatcher ? { dispatcher } : {})
-    });
+      signal: controller.signal
+    }, tlsConfig);
 
     if (!response.ok) {
       const message = await parseErrorMessage(response);
@@ -878,13 +863,12 @@ const requestGetJson = async (url, userId, authContext) => {
 
   try {
     const headers = await buildHeaders(userId, authContext);
-    const dispatcher = isNoMtlsEnabled() ? undefined : getOauthDispatcher();
-    const response = await fetch(url, {
+    const tlsConfig = isNoMtlsEnabled() ? null : getOauthTlsConfig();
+    const response = await requestWithOptionalMtls(url, {
       method: 'GET',
       headers,
-      signal: controller.signal,
-      ...(dispatcher ? { dispatcher } : {})
-    });
+      signal: controller.signal
+    }, tlsConfig);
 
     if (!response.ok) {
       const message = await parseErrorMessage(response);
@@ -914,13 +898,12 @@ const requestDownload = async (url, userId, authContext) => {
 
   try {
     const headers = await buildHeaders(userId, authContext);
-    const dispatcher = isNoMtlsEnabled() ? undefined : getOauthDispatcher();
-    const response = await fetch(url, {
+    const tlsConfig = isNoMtlsEnabled() ? null : getOauthTlsConfig();
+    const response = await requestWithOptionalMtls(url, {
       method: 'GET',
       headers,
-      signal: controller.signal,
-      ...(dispatcher ? { dispatcher } : {})
-    });
+      signal: controller.signal
+    }, tlsConfig);
 
     if (!response.ok) {
       const message = await parseErrorMessage(response);
