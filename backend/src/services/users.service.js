@@ -56,7 +56,7 @@ const cleanPhone = (phone) => (phone?.startsWith('+') ? phone.substring(1) : pho
 
 const generatePassword = () => crypto.randomBytes(9).toString('base64').slice(0, 12);
 
-const getRequesterContext = async (accessToken) => {
+export const getRequesterContext = async (accessToken) => {
   if (!accessToken) throw unauthorized();
 
   const userClient = createSupabaseClient({ accessToken });
@@ -182,6 +182,36 @@ export const listUsers = async (accessToken) => {
       })
       .filter(Boolean)
   };
+};
+
+export const getViewableUserIds = async (accessToken) => {
+  const { role, empresaId } = await getRequesterContext(accessToken);
+  if (!ROLE_CREATE_ALLOWED.has(role)) throw forbidden();
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  let query = adminClient
+    .from('role_x_user_x_empresa')
+    .select('user_id, empresas_id');
+
+  if (role === 'admin') {
+    if (!empresaId) throw forbidden();
+    query = query.eq('empresas_id', empresaId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw badRequest(error.message);
+
+  const userIds = Array.from(
+    new Set((data || []).map((link) => link.user_id).filter(Boolean))
+  );
+
+  return { role, empresaId, userIds };
+};
+
+export const canViewUser = async (accessToken, targetUserId) => {
+  if (!targetUserId) throw badRequest('UserId ausente');
+  const { userIds } = await getViewableUserIds(accessToken);
+  return userIds.includes(targetUserId);
 };
 
 export const listEmpresas = async (accessToken) => {

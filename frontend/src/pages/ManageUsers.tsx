@@ -32,7 +32,9 @@ export default function ManageUsers() {
   const [editDisplayName, setEditDisplayName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [lastPasswords, setLastPasswords] = useState<Record<string, string>>({});
-  const [searchQuery, setSearchQuery] = useState('');
+  const [userQuery, setUserQuery] = useState('');
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -74,19 +76,23 @@ export default function ManageUsers() {
     role === 'admin'
       ? users.filter((user) => user.role !== 'superadmin' && user.role !== 'outsider')
       : users;
+  const getUserLabel = (user: ManagedUser) =>
+    user.displayName || user.email || 'Usuário sem nome';
   const sortedUsers = [...baseUsers].sort((userA, userB) => {
     const labelA = (userA.displayName || userA.email || '').toLowerCase();
     const labelB = (userB.displayName || userB.email || '').toLowerCase();
     return labelA.localeCompare(labelB, 'pt-BR', { sensitivity: 'base' });
   });
-  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const normalizedQuery = userQuery.trim().toLowerCase();
   const filteredUsers = normalizedQuery
     ? sortedUsers.filter((user) => {
-        const name = user.displayName || '';
-        const emailValue = user.email || '';
+        const name = (user.displayName || '').toLowerCase();
+        const emailValue = (user.email || '').toLowerCase();
+        const empresaValue = (user.empresaName || '').toLowerCase();
         return (
-          name.toLowerCase().includes(normalizedQuery) ||
-          emailValue.toLowerCase().includes(normalizedQuery)
+          name.includes(normalizedQuery) ||
+          emailValue.includes(normalizedQuery) ||
+          empresaValue.includes(normalizedQuery)
         );
       })
     : sortedUsers;
@@ -102,6 +108,12 @@ export default function ManageUsers() {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (highlightedIndex >= filteredUsers.length) {
+      setHighlightedIndex(filteredUsers.length - 1);
+    }
+  }, [filteredUsers.length, highlightedIndex]);
 
   const handleCreateUser = async () => {
     setLoading(true);
@@ -469,16 +481,119 @@ export default function ManageUsers() {
           ) : (
             <div className="space-y-3">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full md:max-w-xs px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
-                  placeholder="Pesquisar por nome ou email"
-                />
+                <div className="relative w-full md:max-w-xs">
+                  <input
+                    type="text"
+                    value={userQuery}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setUserQuery(value);
+                      setUserDropdownOpen(true);
+                      setHighlightedIndex(-1);
+                      setCurrentPage(1);
+                    }}
+                    onFocus={() => setUserDropdownOpen(true)}
+                    onBlur={() => {
+                      window.setTimeout(() => setUserDropdownOpen(false), 150);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        setUserDropdownOpen(true);
+                        setHighlightedIndex((index) => Math.min(index + 1, filteredUsers.length - 1));
+                        return;
+                      }
+                      if (event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        setHighlightedIndex((index) => Math.max(index - 1, 0));
+                        return;
+                      }
+                      if (event.key === 'Enter') {
+                        if (highlightedIndex >= 0 && filteredUsers[highlightedIndex]) {
+                          const user = filteredUsers[highlightedIndex];
+                          setUserQuery(getUserLabel(user));
+                          setUserDropdownOpen(false);
+                          setHighlightedIndex(-1);
+                          setCurrentPage(1);
+                          return;
+                        }
+                        if (filteredUsers.length === 1) {
+                          const user = filteredUsers[0];
+                          setUserQuery(getUserLabel(user));
+                          setUserDropdownOpen(false);
+                          setHighlightedIndex(-1);
+                          setCurrentPage(1);
+                        }
+                      }
+                      if (event.key === 'Escape') {
+                        setUserDropdownOpen(false);
+                        setHighlightedIndex(-1);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                    placeholder="Pesquisar por nome, email ou empresa"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                    {userQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserQuery('');
+                          setUserDropdownOpen(false);
+                          setHighlightedIndex(-1);
+                          setCurrentPage(1);
+                        }}
+                        className="text-gray-400 hover:text-gray-200"
+                        aria-label="Limpar filtro"
+                      >
+                        ✕
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setUserDropdownOpen((open) => !open)}
+                      className="text-gray-400 hover:text-gray-200"
+                      aria-label="Alternar lista de usuários"
+                    >
+                      ▾
+                    </button>
+                  </div>
+                  {userDropdownOpen && (
+                    <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow">
+                      {filteredUsers.length === 0 ? (
+                        <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                          Nenhum usuário encontrado.
+                        </div>
+                      ) : (
+                        filteredUsers.map((user, index) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              setUserQuery(getUserLabel(user));
+                              setUserDropdownOpen(false);
+                              setHighlightedIndex(-1);
+                              setCurrentPage(1);
+                            }}
+                            className={`w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                              highlightedIndex === index ? 'bg-gray-100 dark:bg-gray-700' : ''
+                            }`}
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-semibold">{getUserLabel(user)}</span>
+                              {user.empresaName ? (
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  {user.empresaName}
+                                </span>
+                              ) : null}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                   <span>Por página</span>
                   <select

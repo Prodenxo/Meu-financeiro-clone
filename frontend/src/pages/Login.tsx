@@ -33,14 +33,6 @@ export default function Login() {
             </div>
             <span className="text-blue-700 font-semibold text-sm mt-2">Entrar</span>
           </div>
-          <div className="flex flex-col items-center gap-2 w-full opacity-60">
-            <Link to="/register" className="flex flex-col items-center">
-              <span className="bg-slate-100 text-slate-500 rounded-full p-2">
-                <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-user-plus"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-              </span>
-              <span className="text-slate-500 font-semibold text-sm mt-2">Cadastrar</span>
-            </Link>
-          </div>
         </div>
       </div>
       {/* Painel azul com ilustração */}
@@ -53,10 +45,6 @@ export default function Login() {
       </div>
       {/* Formulário de login */}
       <div className="flex flex-col justify-center planner-card h-[600px] w-full max-w-md px-10 py-12 z-10 rounded-r-2xl">
-        <div className="flex justify-end text-sm mb-6">
-          <span className="text-slate-500 dark:text-slate-300">Não tem uma conta? </span>
-          <Link to="/register" className="text-blue-700 dark:text-blue-300 hover:underline ml-1 font-semibold">Cadastre-se</Link>
-        </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">E-mail</label>

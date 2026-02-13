@@ -29,12 +29,24 @@
     @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-blue-800;
   }
 
+  .planner-input-compact {
+    @apply planner-input rounded-lg px-3 py-2 text-sm;
+  }
+
   .planner-button {
     @apply inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-blue-600;
   }
 
+  .planner-button-compact {
+    @apply planner-button rounded-lg px-3 py-2 text-sm;
+  }
+
   .planner-button-secondary {
     @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-md transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+  }
+
+  .planner-button-secondary-compact {
+    @apply planner-button-secondary rounded-lg px-3 py-2 text-sm;
   }
 
   .planner-chip {

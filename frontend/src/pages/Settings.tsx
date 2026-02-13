@@ -294,12 +294,20 @@ export default function Settings() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
               Gerencie usuários e permissões da sua empresa.
             </p>
-            <button
-              onClick={() => navigate('/settings/users')}
-              className="px-4 py-2 text-white rounded-lg font-semibold bg-blue-600 hover:bg-blue-700"
-            >
-              Gerenciar usuários
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                onClick={() => navigate('/settings/users')}
+                className="px-4 py-2 text-white rounded-lg font-semibold bg-blue-600 hover:bg-blue-700"
+              >
+                Gerenciar usuários
+              </button>
+              <button
+                onClick={() => navigate('/settings/usuarios-dados')}
+                className="px-4 py-2 text-white rounded-lg font-semibold bg-slate-700 hover:bg-slate-800"
+              >
+                Dados dos usuários
+              </button>
+            </div>
           </div>
         )}
 
