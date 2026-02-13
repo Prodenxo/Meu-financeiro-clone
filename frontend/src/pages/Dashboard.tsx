@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTransactionStore } from '../store/transactionStore';
 import { useAuthStore } from '../store/authStore';
+import { hasRole } from '../lib/roles';
 import { Pie, Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -32,7 +33,7 @@ ChartJS.register(
 
 export default function Dashboard() {
   const { transactions, fetchTransactions, addTransaction, updateTransaction, deleteTransaction, loading, error } = useTransactionStore();
-  const { userId, user } = useAuthStore();
+  const { userId, user, role } = useAuthStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [formData, setFormData] = useState({
@@ -518,6 +519,25 @@ export default function Dashboard() {
   return (
     <Layout>
       {/* Conteúdo do dashboard abaixo, sem header/main duplicado */}
+      {hasRole(role, ['admin']) && (
+        <div className="planner-card p-5 md:p-6 mb-4 md:mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <span className="text-slate-500 dark:text-slate-400 text-sm">Administração</span>
+            <h2 className="text-lg md:text-xl font-semibold text-slate-900 dark:text-white">
+              Acesso rápido ao Painel Admin
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Visualize dados financeiros dos usuários da sua empresa.
+            </p>
+          </div>
+          <Link
+            to="/settings/usuarios-dados"
+            className="inline-flex items-center justify-center px-4 py-2 text-white rounded-lg font-semibold bg-slate-800 hover:bg-slate-900"
+          >
+            Painel Admin
+          </Link>
+        </div>
+      )}
       {/* Filtros de período */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 md:mb-6 gap-3 md:gap-4 mt-2">
         <div className="flex items-center gap-2">

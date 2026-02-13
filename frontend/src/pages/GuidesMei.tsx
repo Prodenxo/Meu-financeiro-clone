@@ -159,12 +159,12 @@ export default function GuidesMei() {
   ), []);
 
   const handleDownloadClick = async () => {
-    if (!hasCertificate) {
-      setPeriodError('Envie o certificado para gerar a guia.');
+    if (!normalizedContribuinte) {
+      setPeriodError('Informe o CNPJ do MEI para baixar a guia.');
       return;
     }
-    if (!normalizedContribuinte) {
-      setPeriodError('O certificado não informou CNPJ/CPF do contribuinte.');
+    if (normalizedContribuinte.length !== 14) {
+      setPeriodError('CNPJ do MEI deve ter 14 dígitos.');
       return;
     }
     setPeriodError(null);
@@ -177,7 +177,7 @@ export default function GuidesMei() {
     <Layout>
       <h1 className="text-xl md:text-2xl font-bold mb-1 mt-2 dark:text-white">Meu MEI</h1>
       <p className="text-sm md:text-base text-slate-500 dark:text-gray-400 mb-4">
-        Envie o certificado do cliente e escolha o período para baixar a guia.
+        Envie o certificado do cliente ou informe o CNPJ do MEI e o período para baixar a guia.
       </p>
 
       <div className="mt-4 planner-card p-4 md:p-5">
@@ -216,9 +216,21 @@ export default function GuidesMei() {
             Envie o certificado do cliente (PFX) para liberar a geração da guia.
           </div>
         )}
-        <div className="mt-3 text-xs text-slate-600 dark:text-slate-300">
-          <span className="font-semibold">Contribuinte identificado:</span>{' '}
-          {contribuinteDoc ? contribuinteDoc : 'Não identificado no certificado'}
+        <div className="mt-3">
+          <label className="block text-xs font-semibold text-slate-600 dark:text-gray-400 mb-1">
+            CNPJ do MEI
+          </label>
+          <input
+            className="planner-input-compact w-full md:max-w-xs"
+            type="text"
+            inputMode="numeric"
+            value={contribuinteDoc}
+            onChange={(event) => setContribuinteDoc(formatDocument(event.target.value))}
+            placeholder="00.000.000/0001-00"
+          />
+          <p className="mt-1 text-xs text-slate-500 dark:text-gray-400">
+            {hasUserCertificate ? 'Preenchido pelo certificado. Você pode alterar.' : 'Informe o CNPJ para baixar a guia sem certificado.'}
+          </p>
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-[1fr_220px]">
           <input
@@ -295,7 +307,7 @@ export default function GuidesMei() {
           <button
             className="planner-button-compact md:w-40"
             onClick={handleDownloadClick}
-            disabled={!hasCertificate || !normalizedContribuinte}
+            disabled={!normalizedContribuinte || normalizedContribuinte.length !== 14}
           >
             Baixar guia
           </button>

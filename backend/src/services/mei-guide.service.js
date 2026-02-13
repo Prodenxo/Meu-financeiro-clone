@@ -1127,6 +1127,49 @@ export const getSerproTokenForFrontend = async () => {
   };
 };
 
+/** Gera DAS MEI pelo CNPJ (fluxo contador/procurador), sem certificado do cliente. */
+export const createGuideByCnpj = async (userId, payload) => {
+  ensureConfigured();
+  const { cnpj, periodoApuracao, mes, ano } = payload || {};
+  const cnpjNumerico = normalizeDoc(cnpj);
+  if (!cnpjNumerico || !validateDoc(cnpjNumerico)) {
+    throw badRequest('CNPJ do MEI inválido');
+  }
+  const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO);
+  if (!contratanteNumero) {
+    throw badRequest('Contratante Serpro não configurado');
+  }
+  const period = normalizePeriodoApuracao(periodoApuracao, mes, ano);
+  if (!period) {
+    throw badRequest('Período de apuração inválido');
+  }
+
+  const response = await emitirServico({
+    contratanteNumero,
+    autorPedidoNumero: contratanteNumero,
+    contribuinteNumero: cnpjNumerico,
+    idSistema: 'PGMEI',
+    idServico: 'GERARDASPDF21',
+    dados: { periodoApuracao: period },
+    versaoSistema: '1.0'
+  });
+  const dados = parseSerproDados(response?.dados);
+  const das = Array.isArray(dados) ? dados[0] : dados;
+  const pdfBase64 = das?.pdf;
+
+  if (!pdfBase64) {
+    throw notFound('PDF do DAS não retornado');
+  }
+
+  return {
+    id: period,
+    status: response?.status || 'gerado',
+    pdfBase64,
+    filename: `das-mei-${period}.pdf`,
+    contentType: 'application/pdf'
+  };
+};
+
 export const createGuide = async (userId, payload) => {
   ensureConfigured();
   await ensureClientCertificate(userId);
@@ -1175,21 +1218,36 @@ export const createGuide = async (userId, payload) => {
 
 export const downloadGuide = async (payload) => {
   ensureConfigured();
-  await ensureClientCertificate(payload?.userId);
-  const { cnpj, periodoApuracao, contribuinte } = payload || {};
-  const contrib = resolveContribuinte(payload?.userId, contribuinte, cnpj);
-  const autor = contrib;
+  const { userId, cnpj, periodoApuracao, contribuinte } = payload || {};
   if (!periodoApuracao) throw badRequest('Período de apuração é obrigatório');
 
-  const guide = await createGuide(payload?.userId, {
-    cnpj,
-    periodoApuracao,
-    contribuinte: contrib
-  });
-  return await ensureDownloadBuffer(guide, payload?.userId, {
-    autorPedidoDados: autor,
-    contribuinte: contrib
-  });
+  const cnpjFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
+  const hasCert = userId ? hasUserCertificate(userId) : false;
+
+  let guide;
+  if (hasCert) {
+    await ensureClientCertificate(userId);
+    const contrib = resolveContribuinte(userId, contribuinte, cnpj);
+    guide = await createGuide(userId, {
+      cnpj,
+      periodoApuracao,
+      contribuinte: contrib
+    });
+    return await ensureDownloadBuffer(guide, userId, {
+      autorPedidoDados: contrib,
+      contribuinte: contrib
+    });
+  }
+
+  if (cnpjFromRequest && validateDoc(cnpjFromRequest)) {
+    guide = await createGuideByCnpj(userId, {
+      cnpj: cnpjFromRequest,
+      periodoApuracao
+    });
+    return await ensureDownloadBuffer(guide, userId, null);
+  }
+
+  throw badRequest('Envie o certificado do cliente ou informe o CNPJ do MEI para baixar a guia');
 };
 
 export const listPeriods = async (userId, payload) => {

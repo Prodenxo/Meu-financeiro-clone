@@ -15,6 +15,7 @@ import Categorias from './pages/Categorias';
 import Agenda from './pages/Agenda';
 import Settings from './pages/Settings';
 import ManageUsers from './pages/ManageUsers';
+import AdminUserData from './pages/AdminUserData';
 import GuidesMei from './pages/GuidesMei';
 import Layout from './Layout/Layout';
 import { handleGoogleAuthCallback } from './lib/google-auth-flow';
@@ -303,6 +304,10 @@ function AppRoutes() {
                   <Route
                     path="/settings/users"
                     element={hasRole(role, ['admin']) ? <ManageUsers /> : <Navigate to="/settings" replace />}
+                  />
+                  <Route
+                    path="/settings/usuarios-dados"
+                    element={hasRole(role, ['admin']) ? <AdminUserData /> : <Navigate to="/settings" replace />}
                   />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
