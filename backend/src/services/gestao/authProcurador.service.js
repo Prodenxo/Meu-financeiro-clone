@@ -1,6 +1,6 @@
-import { Agent } from 'undici';
 import { env } from '../../config/env.js';
 import { badRequest } from '../../utils/errors.js';
+import { requestWithMtls } from '../../utils/http-mtls.js';
 
 const procuradorTokenCache = new Map();
 const tokenCache = new Map();
@@ -32,15 +32,17 @@ const loadEnvPfx = () => {
   return { pfx: buffer, passphrase: env.SERPRO_CERT_PFX_PASS || undefined };
 };
 
-const getSerproDispatcher = () => {
+const getSerproTlsConfig = () => {
   const { pfx, passphrase } = loadEnvPfx();
-  if (!pfx) return undefined;
-  return new Agent({
-    connect: {
-      pfx,
-      passphrase
-    }
-  });
+  if (!pfx) return null;
+  return { pfx, passphrase };
+};
+
+const requestWithOptionalMtls = async (url, options, tlsConfig) => {
+  if (tlsConfig?.pfx) {
+    return requestWithMtls(url, { ...options, ...tlsConfig });
+  }
+  return fetch(url, options);
 };
 
 const parseErrorMessage = async (response) => {
@@ -73,18 +75,17 @@ export const getSerproTokens = async () => {
 
   const credentials = Buffer.from(`${env.SERPRO_CONSUMER_KEY}:${env.SERPRO_CONSUMER_SECRET}`).toString('base64');
   const body = new URLSearchParams({ grant_type: 'client_credentials' }).toString();
-  const dispatcher = getSerproDispatcher();
+  const tlsConfig = getSerproTlsConfig();
 
-  const response = await fetch(env.SERPRO_OAUTH_TOKEN_URL, {
+  const response = await requestWithOptionalMtls(env.SERPRO_OAUTH_TOKEN_URL, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${credentials}`,
       'Content-Type': 'application/x-www-form-urlencoded',
       ...(env.SERPRO_ROLE_TYPE ? { 'Role-Type': env.SERPRO_ROLE_TYPE } : {})
     },
-    body,
-    ...(dispatcher ? { dispatcher } : {})
-  });
+    body
+  }, tlsConfig);
 
   if (!response.ok) {
     const message = await parseErrorMessage(response);
@@ -270,16 +271,17 @@ export const autenticarViaCertificado = async (
     console.info('[auth-procurador] mTLS ativo na autenticação');
   }
 
-  const response = await fetch(url, {
+  const useMtls = isAutenticaProcuradorMtlsEnabled();
+  const tlsConfig = useMtls ? getSerproTlsConfig() : null;
+  const response = await requestWithOptionalMtls(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       ...(jwtToken ? { jwt_token: jwtToken } : {}),
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(payload),
-    ...(isAutenticaProcuradorMtlsEnabled() ? { dispatcher: getSerproDispatcher() } : {})
-  });
+    body: JSON.stringify(payload)
+  }, tlsConfig);
 
   if (response.status === 304) {
     const etag = response.headers.get('etag');
