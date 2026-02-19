@@ -79,6 +79,17 @@ export const getSerproToken = async (_req, res, next) => {
   }
 };
 
+export const validateGuide = async (req, res, next) => {
+  try {
+    const data = await meiGuideService.validateGuide(req.user.id, {
+      ...req.body
+    });
+    return sendSuccess(res, data, 'Validação concluída');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const listPeriods = async (req, res, next) => {
   try {
     const autorPedidoDados = req.query?.autorNumero ? {
