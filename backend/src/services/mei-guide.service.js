@@ -1266,3 +1266,36 @@ export const listPeriods = async (userId, payload) => {
   const sorted = sortByCompetenciaDesc(normalized);
   return sorted.slice(0, 12);
 };
+
+export const validateGuide = async (userId, payload) => {
+  ensureConfigured();
+  const { cnpj, periodoApuracao, mes, ano } = payload || {};
+  const cnpjNumerico = normalizeCnpj(cnpj);
+  if (!validateCnpj(cnpjNumerico)) {
+    throw badRequest('CNPJ do MEI inválido');
+  }
+  const period = normalizePeriodoApuracao(periodoApuracao, mes, ano);
+  if (!period) {
+    throw badRequest('Período de apuração inválido');
+  }
+
+  const hasCert = userId ? hasUserCertificate(userId) : false;
+  if (hasCert) {
+    await ensureClientCertificate(userId);
+    await listPeriods(userId, { cnpj: cnpjNumerico });
+    return {
+      valid: true,
+      message: 'CNPJ e certificado validados com sucesso.'
+    };
+  }
+
+  await createGuideByCnpj(userId, {
+    cnpj: cnpjNumerico,
+    periodoApuracao: period
+  });
+
+  return {
+    valid: true,
+    message: 'CNPJ validado com sucesso.'
+  };
+};

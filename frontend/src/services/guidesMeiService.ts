@@ -29,6 +29,11 @@ export interface MeiCertificateStatus {
   documento?: string | null;
 }
 
+export interface MeiValidationResult {
+  valid: boolean;
+  message?: string | null;
+}
+
 export async function createMeiGuide(input: CreateMeiGuideInput): Promise<MeiGuideResponse> {
   return await apiClient.post<MeiGuideResponse>('/mei-guide', input);
 }
@@ -80,4 +85,14 @@ export async function uploadMeiCertificate(
 
 export async function removeMeiCertificate(): Promise<MeiCertificateStatus> {
   return await apiClient.delete<MeiCertificateStatus>('/mei-guide/certificate');
+}
+
+export async function validateMeiGuide(
+  cnpj: string,
+  periodoApuracao: string
+): Promise<MeiValidationResult> {
+  return await apiClient.post<MeiValidationResult>('/mei-guide/validate', {
+    cnpj,
+    periodoApuracao
+  });
 }

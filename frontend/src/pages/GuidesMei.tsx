@@ -4,7 +4,8 @@ import {
   downloadMeiGuide,
   fetchMeiCertificateStatus,
   removeMeiCertificate,
-  uploadMeiCertificate
+  uploadMeiCertificate,
+  validateMeiGuide
 } from '../services/guidesMeiService';
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
@@ -68,6 +69,9 @@ export default function GuidesMei() {
   const [isRemovingCert, setIsRemovingCert] = useState(false);
   const [hasUserCertificate, setHasUserCertificate] = useState(false);
   const [hasServerCertificate, setHasServerCertificate] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationSuccess, setValidationSuccess] = useState<string | null>(null);
   const hasCertificate = hasUserCertificate;
 
   const normalizedContribuinte = useMemo(() => normalizeDoc(contribuinteDoc), [contribuinteDoc]);
@@ -94,6 +98,11 @@ export default function GuidesMei() {
   useEffect(() => {
     void loadCertificateStatus();
   }, []);
+
+  useEffect(() => {
+    setValidationError(null);
+    setValidationSuccess(null);
+  }, [normalizedContribuinte, selectedMonth, selectedYear, hasUserCertificate]);
 
   const handleDownload = async (periodoApuracao: string, competencia?: string | null) => {
     const { blob, filename } = await downloadMeiGuide(
@@ -148,6 +157,34 @@ export default function GuidesMei() {
     }
   };
 
+  const handleValidateBlur = async () => {
+    if (isValidating) return;
+    setValidationError(null);
+    setValidationSuccess(null);
+
+    if (!normalizedContribuinte) {
+      return;
+    }
+    if (normalizedContribuinte.length !== 14) {
+      setValidationError('CNPJ do MEI deve ter 14 dígitos.');
+      return;
+    }
+
+    setIsValidating(true);
+    try {
+      const periodoApuracao = toPeriodoApuracao(selectedMonth, selectedYear);
+      const result = await validateMeiGuide(normalizedContribuinte, periodoApuracao);
+      const fallbackMessage = hasUserCertificate
+        ? 'CNPJ e certificado validados com sucesso.'
+        : 'CNPJ validado com sucesso.';
+      setValidationSuccess(result?.message || fallbackMessage);
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : 'Erro ao validar CNPJ.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
 
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -184,10 +221,10 @@ export default function GuidesMei() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div>
             <div className="text-sm font-semibold dark:text-gray-200">
-              Certificado digital (obrigatório)
+              Certificado digital (opcional)
             </div>
             <div className="text-xs text-slate-500 dark:text-gray-400">
-              Envie o certificado digital do cliente para autorizar a guia.
+              Envie o certificado PFX do cliente para gerar a guia em nome dele, ou use apenas o CNPJ e o período na seção abaixo para baixar sem certificado.
             </div>
           </div>
           {hasUserCertificate && (
@@ -206,14 +243,9 @@ export default function GuidesMei() {
             Certificado do cliente em uso. Ele expira após algumas horas ou ao reiniciar o servidor.
           </div>
         )}
-        {!hasUserCertificate && hasServerCertificate && (
-          <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
-            Certificado do servidor não é usado neste fluxo. Envie o certificado do cliente.
-          </div>
-        )}
         {!hasCertificate && (
           <div className="mt-3 rounded-xl border border-dashed border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-            Envie o certificado do cliente (PFX) para liberar a geração da guia.
+            Opcional: envie o certificado do cliente (PFX) para autenticar via certificado. Para baixar sem certificado, preencha o CNPJ do MEI e escolha o período abaixo.
           </div>
         )}
         <div className="mt-3">
@@ -226,11 +258,15 @@ export default function GuidesMei() {
             inputMode="numeric"
             value={contribuinteDoc}
             onChange={(event) => setContribuinteDoc(formatDocument(event.target.value))}
+            onBlur={handleValidateBlur}
             placeholder="00.000.000/0001-00"
           />
-          <p className="mt-1 text-xs text-slate-500 dark:text-gray-400">
-            {hasUserCertificate ? 'Preenchido pelo certificado. Você pode alterar.' : 'Informe o CNPJ para baixar a guia sem certificado.'}
-          </p>
+          {validationSuccess && (
+            <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">{validationSuccess}</div>
+          )}
+          {validationError && (
+            <div className="mt-2 text-xs text-rose-600 dark:text-rose-400">{validationError}</div>
+          )}
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-[1fr_220px]">
           <input
