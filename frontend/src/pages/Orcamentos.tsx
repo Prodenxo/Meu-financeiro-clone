@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import {
   fetchCategories,
@@ -219,7 +218,7 @@ export default function Orcamentos() {
   };
 
   return (
-    <Layout>
+    <>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl md:text-2xl font-bold dark:text-white">Orçamento Mensal</h1>
@@ -434,6 +433,6 @@ export default function Orcamentos() {
           </div>
         </div>
       )}
-    </Layout>
+    </>
   );
 }

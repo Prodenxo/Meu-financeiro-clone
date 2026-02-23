@@ -4,6 +4,8 @@ import morgan from 'morgan';
 import { env } from './config/env.js';
 import routes from './routes/index.js';
 import { errorHandler } from './middlewares/errorHandler.js';
+import { startMonthlyDasScheduler } from './services/mei-das.service.js';
+import { bootstrapDatabase } from './services/db-bootstrap.service.js';
 
 const app = express();
 
@@ -48,7 +50,20 @@ app.use('/api', routes);
 
 app.use(errorHandler);
 
-app.listen(env.PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`[backend] rodando na porta ${env.PORT}`);
-});
+const startServer = async () => {
+  try {
+    await bootstrapDatabase();
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[backend] falha no bootstrap do banco', error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+
+  app.listen(env.PORT, () => {
+    startMonthlyDasScheduler();
+    // eslint-disable-next-line no-console
+    console.log(`[backend] rodando na porta ${env.PORT}`);
+  });
+};
+
+void startServer();

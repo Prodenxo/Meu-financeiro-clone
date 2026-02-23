@@ -10,6 +10,14 @@ const required = (key) => {
   return value;
 };
 
+const requiredInProduction = (key, fallback = '') => {
+  const value = process.env[key];
+  if (process.env.NODE_ENV === 'production' && !value) {
+    throw new Error(`Variável de ambiente obrigatória em produção: ${key}`);
+  }
+  return value || fallback;
+};
+
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || '3333',
@@ -20,6 +28,10 @@ export const env = {
   SUPABASE_URL: required('SUPABASE_URL'),
   SUPABASE_ANON_KEY: required('SUPABASE_ANON_KEY'),
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  SUPABASE_DB_URL: process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || '',
+  DB_BOOTSTRAP_AUTO_SCHEMA: process.env.DB_BOOTSTRAP_AUTO_SCHEMA || '',
+  DB_BOOTSTRAP_FAIL_FAST: process.env.DB_BOOTSTRAP_FAIL_FAST || '',
+  DB_BOOTSTRAP_SSL: process.env.DB_BOOTSTRAP_SSL || '',
   FRONTEND_URL: process.env.FRONTEND_URL || 'https://meu-financeiro-frontend.vercel.app',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
@@ -56,5 +68,9 @@ export const env = {
   MEI_API_DOWNLOAD_PATH: process.env.MEI_API_DOWNLOAD_PATH || '/mei-guide/{id}/download',
   MEI_API_PERIODS_PATH: process.env.MEI_API_PERIODS_PATH || '',
   MEI_API_TIMEOUT_MS: process.env.MEI_API_TIMEOUT_MS || '15000',
-  MEI_CERT_ENCRYPTION_KEY: process.env.MEI_CERT_ENCRYPTION_KEY || ''
+  MEI_CERT_ENCRYPTION_KEY: process.env.MEI_CERT_ENCRYPTION_KEY || '',
+  PLUGNOTAS_API_BASE_URL: process.env.PLUGNOTAS_API_BASE_URL || '',
+  PLUGNOTAS_API_KEY: process.env.PLUGNOTAS_API_KEY || '',
+  PLUGNOTAS_TIMEOUT_MS: process.env.PLUGNOTAS_TIMEOUT_MS || '15000',
+  PLUGNOTAS_WEBHOOK_TOKEN: requiredInProduction('PLUGNOTAS_WEBHOOK_TOKEN')
 };

@@ -52,6 +52,11 @@ export async function fetchMeiPeriods(
   return await apiClient.get<MeiPeriod[]>(`/mei-guide/periods?${query.toString()}`);
 }
 
+export async function fetchMeiPeriodsByCnpj(cnpj: string): Promise<MeiPeriod[]> {
+  const query = new URLSearchParams({ cnpj });
+  return await apiClient.get<MeiPeriod[]>(`/mei-guide/periods-by-cnpj?${query.toString()}`);
+}
+
 export async function downloadMeiGuide(
   cnpj: string | undefined,
   periodoApuracao: string,

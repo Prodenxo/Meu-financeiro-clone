@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
 import { listUsers, type ManagedUser } from '../services/usersService';
 import {
+  fetchAdminDasStatus,
   fetchAdminUserBalance,
   fetchAdminUserBudgetSummary,
   fetchAdminUserCategories,
   fetchAdminUserTransactions,
-  type AdminBalance
+  type AdminBalance,
+  type AdminDasPendingSummary,
+  type AdminDasStatusFilters
 } from '../services/adminUserDataService';
 import type { Transaction } from '../services/transactionService';
 import type { Category, CategoryBudgetSummary } from '../services/categoryService';
@@ -24,6 +26,29 @@ const formatDate = (value?: string | null) => {
   return date.toLocaleDateString('pt-BR');
 };
 
+const getDasStatusLabel = (status: 'pago' | 'pendente' | 'erro') => {
+  if (status === 'pago') return 'Pago';
+  if (status === 'erro') return 'Erro';
+  return 'Pendente';
+};
+
+const getDasStatusClasses = (status: 'pago' | 'pendente' | 'erro') => {
+  if (status === 'pago') {
+    return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+  }
+  if (status === 'erro') {
+    return 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300';
+  }
+  return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+};
+
+const getDefaultDasCompetencia = () => {
+  const now = new Date();
+  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const month = String(previous.getMonth() + 1).padStart(2, '0');
+  return `${previous.getFullYear()}-${month}`;
+};
+
 export default function AdminUserData() {
   const { role, empresaId } = useAuthStore();
   const canView = hasRole(role, ['admin']);
@@ -33,8 +58,14 @@ export default function AdminUserData() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [loadingBudgets, setLoadingBudgets] = useState(false);
+  const [loadingDasPending, setLoadingDasPending] = useState(false);
   const [error, setError] = useState('');
   const [dataError, setDataError] = useState('');
+  const [dasError, setDasError] = useState('');
+  const [dasCompetencia, setDasCompetencia] = useState(getDefaultDasCompetencia);
+  const [dasStatusFilter, setDasStatusFilter] = useState<'pendente' | 'pago' | 'erro' | 'todos'>('pendente');
+  const [dasSearch, setDasSearch] = useState('');
+  const [debouncedDasSearch, setDebouncedDasSearch] = useState('');
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
   const [userQuery, setUserQuery] = useState('');
@@ -48,6 +79,14 @@ export default function AdminUserData() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgetSummary, setBudgetSummary] = useState<CategoryBudgetSummary[]>([]);
   const [balance, setBalance] = useState<AdminBalance | null>(null);
+  const [dasPendingSummary, setDasPendingSummary] = useState<AdminDasPendingSummary | null>(null);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedDasSearch(dasSearch.trim());
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [dasSearch]);
 
   useEffect(() => {
     if (!canView) return;
@@ -209,6 +248,23 @@ export default function AdminUserData() {
     }
   };
 
+  const loadDasPending = async (filters?: AdminDasStatusFilters) => {
+    setLoadingDasPending(true);
+    setDasError('');
+    try {
+      const data = await fetchAdminDasStatus({
+        competencia: filters?.competencia || dasCompetencia,
+        status: filters?.status || (dasStatusFilter === 'todos' ? undefined : dasStatusFilter),
+        q: filters?.q ?? debouncedDasSearch
+      });
+      setDasPendingSummary(data || null);
+    } catch (err: any) {
+      setDasError(err.message || 'Erro ao carregar pendências de DAS');
+    } finally {
+      setLoadingDasPending(false);
+    }
+  };
+
   useEffect(() => {
     if (!selectedUserId) {
       setTransactions([]);
@@ -240,21 +296,30 @@ export default function AdminUserData() {
       });
   }, [selectedUserId, budgetFilter?.year, budgetFilter?.month]);
 
+  useEffect(() => {
+    if (!canView) return;
+    void loadDasPending({
+      competencia: dasCompetencia,
+      status: dasStatusFilter === 'todos' ? undefined : dasStatusFilter,
+      q: debouncedDasSearch
+    });
+  }, [canView, dasCompetencia, dasStatusFilter, debouncedDasSearch]);
+
   if (!canView) {
     return (
-      <Layout>
+      <>
         <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
           <h1 className="text-xl md:text-3xl font-bold dark:text-white">Dados dos usuários</h1>
           <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
             Você não tem permissão para acessar esta página.
           </p>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-5xl mx-auto space-y-4 md:space-y-6">
         <h1 className="text-xl md:text-3xl font-bold dark:text-white">Dados dos usuários</h1>
         <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
@@ -272,6 +337,122 @@ export default function AdminUserData() {
             {dataError}
           </div>
         )}
+
+        {dasError && (
+          <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded">
+            {dasError}
+          </div>
+        )}
+
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6 space-y-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg md:text-xl font-semibold dark:text-white">Pendências DAS</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Clientes pendentes de pagamento do DAS na competência selecionada.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadDasPending({
+                competencia: dasCompetencia,
+                status: dasStatusFilter === 'todos' ? undefined : dasStatusFilter,
+                q: dasSearch
+              })}
+              disabled={loadingDasPending}
+              className="px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
+            >
+              {loadingDasPending ? 'Atualizando...' : 'Atualizar pendências'}
+            </button>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Competência (YYYY-MM)</label>
+              <input
+                type="month"
+                value={dasCompetencia}
+                onChange={(event) => setDasCompetencia(event.target.value)}
+                className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Status</label>
+              <select
+                value={dasStatusFilter}
+                onChange={(event) => setDasStatusFilter(event.target.value as 'pendente' | 'pago' | 'erro' | 'todos')}
+                className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+              >
+                <option value="pendente">Pendente</option>
+                <option value="pago">Pago</option>
+                <option value="erro">Erro</option>
+                <option value="todos">Todos</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Buscar cliente</label>
+              <input
+                type="text"
+                value={dasSearch}
+                onChange={(event) => setDasSearch(event.target.value)}
+                placeholder="Nome, email ou CNPJ"
+                className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+              />
+            </div>
+            <div className="md:col-span-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Total de clientes</p>
+                <p className="text-xl font-bold dark:text-white">{dasPendingSummary?.totalClientes || 0}</p>
+              </div>
+              <div className="rounded-lg border border-amber-300 dark:border-amber-700 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Pendentes DAS</p>
+                <p className="text-xl font-bold text-amber-600 dark:text-amber-400">
+                  {dasPendingSummary?.pendentes || 0}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {loadingDasPending ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Carregando pendências...</p>
+          ) : (dasPendingSummary?.items?.length || 0) === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma pendência de DAS para esta competência.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                <thead className="text-xs uppercase text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th className="py-2 px-3">Cliente</th>
+                    <th className="py-2 px-3">Empresa</th>
+                    <th className="py-2 px-3">CNPJ</th>
+                    <th className="py-2 px-3">Competência</th>
+                    <th className="py-2 px-3">Status</th>
+                    <th className="py-2 px-3">PDF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(dasPendingSummary?.items || []).map((item) => (
+                    <tr key={`${item.userId}-${item.competencia}`} className="border-t border-gray-200 dark:border-gray-700">
+                      <td className="py-2 px-3">
+                        <div className="font-semibold">{item.displayName}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">{item.email || '-'}</div>
+                      </td>
+                      <td className="py-2 px-3">{item.empresaName || item.empresaId || '-'}</td>
+                      <td className="py-2 px-3">{item.cnpj}</td>
+                      <td className="py-2 px-3">{item.competencia}</td>
+                      <td className="py-2 px-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getDasStatusClasses(item.status)}`}>
+                          {getDasStatusLabel(item.status)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3">{item.hasPdf ? 'Disponível' : 'Não gerado'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6 space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -759,6 +940,6 @@ export default function AdminUserData() {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 }

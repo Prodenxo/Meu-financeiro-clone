@@ -13,9 +13,9 @@ router.post('/', requireAuth, controller.createGuide);
 router.post('/certificate', requireAuth, upload.single('certificate'), controller.uploadCertificate);
 router.delete('/certificate', requireAuth, controller.removeCertificate);
 router.get('/certificate/status', requireAuth, controller.getCertificateStatus);
-router.post('/token', requireAuth, controller.getSerproToken);
 router.post('/validate', requireAuth, controller.validateGuide);
 router.get('/periods', requireAuth, controller.listPeriods);
+router.get('/periods-by-cnpj', requireAuth, controller.listPeriodsByCnpj);
 router.get('/:id/download', requireAuth, controller.downloadGuide);
 
 export default router;

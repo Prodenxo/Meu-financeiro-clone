@@ -2,6 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { getSession } from '../services/authService';
+import { apiClient } from '../services/apiClient';
+
+interface RecoverySession {
+  access_token: string;
+  refresh_token?: string;
+  expires_at?: number;
+  user?: Record<string, unknown>;
+}
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
 
 export default function ResetPassword() {
   const [newPassword, setNewPassword] = useState('');
@@ -18,8 +31,6 @@ export default function ResetPassword() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const { apiClient } = await import('../services/apiClient')
-
         // Suporta 2 formatos comuns de link do Supabase:
         // - Implicit: #access_token=...&refresh_token=...&type=recovery
         // - PKCE: ?code=... (às vezes junto com type=recovery)
@@ -43,7 +54,7 @@ export default function ResetPassword() {
         if (codeFromSearch) {
           console.log('Detectado code de recuperação na URL (PKCE), processando...')
           try {
-            const result = await apiClient.post<{ session: any }>('/auth/exchange-code-for-session', {
+            const result = await apiClient.post<{ session: RecoverySession }>('/auth/exchange-code-for-session', {
               code: codeFromSearch,
             })
 
@@ -61,9 +72,9 @@ export default function ResetPassword() {
               setCheckingSession(false)
               return
             }
-          } catch (codeError: any) {
+          } catch (codeError: unknown) {
             console.error('Erro ao processar code:', codeError)
-            setError('Link inválido ou expirado. Por favor, solicite um novo link de recuperação.')
+            setError(getErrorMessage(codeError, 'Link inválido ou expirado. Por favor, solicite um novo link de recuperação.'))
             setCheckingSession(false)
             return
           }
@@ -72,7 +83,7 @@ export default function ResetPassword() {
         if (access_token && type === 'recovery') {
           console.log('Detectado access_token de recuperação na URL, processando...')
           try {
-            const result = await apiClient.post<{ session: any }>('/auth/process-recovery-hash', {
+            const result = await apiClient.post<{ session: RecoverySession }>('/auth/process-recovery-hash', {
               access_token,
               refresh_token,
               type,
@@ -92,9 +103,9 @@ export default function ResetPassword() {
               setCheckingSession(false)
               return
             }
-          } catch (hashError: any) {
+          } catch (hashError: unknown) {
             console.error('Erro ao processar tokens:', hashError)
-            setError('Link inválido ou expirado. Por favor, solicite um novo link de recuperação.')
+            setError(getErrorMessage(hashError, 'Link inválido ou expirado. Por favor, solicite um novo link de recuperação.'))
             setCheckingSession(false)
             return
           }
@@ -108,9 +119,9 @@ export default function ResetPassword() {
         } else {
           setError('Link inválido ou expirado. Por favor, solicite um novo link de recuperação.');
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Erro ao verificar sessão:', err);
-        setError('Erro ao verificar o link de recuperação.');
+        setError(getErrorMessage(err, 'Erro ao verificar o link de recuperação.'));
       } finally {
         setCheckingSession(false);
       }
@@ -139,8 +150,8 @@ export default function ResetPassword() {
       navigate('/login', { 
         state: { message: 'Senha redefinida com sucesso! Faça login com sua nova senha.' } 
       });
-    } catch (err: any) {
-      setError(err.message || 'Erro ao redefinir senha');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao redefinir senha'));
     } finally {
       setLoading(false);
     }

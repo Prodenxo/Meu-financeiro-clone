@@ -16,7 +16,6 @@ import {
   Legend,
 } from 'chart.js';
 import { Link } from 'react-router-dom';
-import Layout from '../Layout/Layout';
 import { fetchCategories, fetchCategoryBudgetsSummary, fetchCategoryBudgetsYearly, type Category, type CategoryBudgetYearly } from '../services/categoryService';
 
 ChartJS.register(
@@ -517,7 +516,7 @@ export default function Dashboard() {
       };
 
   return (
-    <Layout>
+    <>
       {/* Conteúdo do dashboard abaixo, sem header/main duplicado */}
       {hasRole(role, ['admin']) && (
         <div className="planner-card p-5 md:p-6 mb-4 md:mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -1065,6 +1064,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </Layout>
+    </>
   );
 }

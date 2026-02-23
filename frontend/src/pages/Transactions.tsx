@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTransactionStore } from '../store/transactionStore';
-import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import { fetchCategoriesByType } from '../services/categoryService';
 import * as XLSX from 'xlsx';
@@ -919,7 +918,7 @@ export default function Transactions() {
   };
 
   return (
-    <Layout>
+    <>
       <NovaTransacaoModal 
         open={modalOpen} 
         onClose={() => {
@@ -1123,6 +1122,6 @@ export default function Transactions() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
       </button>
-    </Layout>
+    </>
   );
 }

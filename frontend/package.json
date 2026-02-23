@@ -8,6 +8,8 @@
     "build": "vite build",
     "postbuild": "node scripts/copy-redirects.js && node scripts/create-route-files.js",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --environment jsdom",
     "preview": "vite preview",
     "build:prod": "vite build --mode production",
     "test:build": "npm run build && npm run preview"
@@ -40,10 +42,12 @@
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.11",
     "globals": "^15.9.0",
+    "jsdom": "^28.1.0",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "vitest": "^4.0.18"
   }
 }

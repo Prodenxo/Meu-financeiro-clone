@@ -8,6 +8,35 @@ export interface AdminBalance {
   totalSaidas: number;
 }
 
+export interface AdminDasPendingItem {
+  userId: string;
+  displayName: string;
+  email: string | null;
+  empresaId: string | null;
+  empresaName: string | null;
+  competencia: string;
+  cnpj: string;
+  status: 'pago' | 'pendente' | 'erro';
+  pdfBucket?: string | null;
+  pdfPath: string | null;
+  hasPdf: boolean;
+  generatedAt: string | null;
+  errorMessage?: string | null;
+}
+
+export interface AdminDasPendingSummary {
+  competencia: string;
+  totalClientes: number;
+  pendentes: number;
+  items: AdminDasPendingItem[];
+}
+
+export interface AdminDasStatusFilters {
+  competencia?: string;
+  status?: 'pago' | 'pendente' | 'erro';
+  q?: string;
+}
+
 const normalizeTipoFromApi = (tipo: Transaction['tipo']): Transaction['tipo'] => {
   if (tipo === 'saida') return 'saída';
   return tipo;
@@ -61,4 +90,27 @@ export async function fetchAdminUserBudgetYearly(
 
 export async function fetchAdminUserBalance(userId: string): Promise<AdminBalance> {
   return apiClient.get<AdminBalance>(`/admin/users/${userId}/balance`);
+}
+
+export async function fetchAdminDasPending(competencia?: string): Promise<AdminDasPendingSummary> {
+  const params = new URLSearchParams();
+  if (competencia) params.set('competencia', competencia);
+  return apiClient.get<AdminDasPendingSummary>(`/admin/das/pending${params.toString() ? `?${params.toString()}` : ''}`);
+}
+
+export async function fetchAdminDasStatus(filters?: AdminDasStatusFilters): Promise<AdminDasPendingSummary> {
+  const params = new URLSearchParams();
+  if (filters?.competencia) params.set('competencia', filters.competencia);
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.q) params.set('q', filters.q);
+  return apiClient.get<AdminDasPendingSummary>(`/admin/das/status${params.toString() ? `?${params.toString()}` : ''}`);
+}
+
+export async function reprocessAdminDas(userId: string, competencia: string): Promise<{
+  userId: string;
+  competencia: string;
+  status: 'pago' | 'pendente' | 'erro';
+  pdfPath: string | null;
+}> {
+  return apiClient.post('/admin/das/reprocess', { userId, competencia });
 }

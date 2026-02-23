@@ -11,15 +11,20 @@ import {
 import { useAuthStore } from './authStore';
 import { createEventFromTransaction, checkGoogleAuth } from '../lib/google-calendar';
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 interface TransactionState {
   transactions: Transaction[];
   loading: boolean;
   error: string | null;
   googleAuthRequired: boolean;
   fetchTransactions: () => Promise<void>;
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'criado_em' | 'user_id'>) => Promise<{ data: any | null; error: string | null }>;
-  updateTransaction: (id: number, transaction: Partial<Transaction>) => Promise<{ data: any | null; error: string | null }>;
-  deleteTransaction: (id: number) => Promise<{ data: any | null; error: string | null }>;
+  addTransaction: (transaction: Omit<Transaction, 'id' | 'criado_em' | 'user_id'>) => Promise<{ data: Transaction | null; error: string | null }>;
+  updateTransaction: (id: number, transaction: Partial<Transaction>) => Promise<{ data: Transaction | null; error: string | null }>;
+  deleteTransaction: (id: number) => Promise<{ data: null; error: string | null }>;
   clearGoogleAuthRequired: () => void;
 }
 
@@ -41,8 +46,8 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       const transactions = await fetchTransactionsService(userId);
       const filteredTransactions = transactions.filter((t) => t.user_id === userId);
       set({ transactions: filteredTransactions, loading: false });
-    } catch (error: any) {
-      set({ error: error.message, loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, 'Erro ao carregar transações'), loading: false });
     }
   },
 
@@ -81,7 +86,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
             console.log('[TransactionStore] Criando evento no Google Calendar...');
             await createEventFromTransaction(transaction);
             console.log('[TransactionStore] ✅ Evento criado no Google Calendar');
-          } catch (calendarError: any) {
+          } catch (calendarError: unknown) {
             console.error('[TransactionStore] Erro ao criar evento no Google Calendar:', calendarError);
             // Não falhar a transação se o evento não for criado
           }
@@ -95,12 +100,12 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       await get().fetchTransactions();
       console.log('[TransactionStore] ✅ Lista de transações atualizada');
       return { data, error: null };
-    } catch (error: any) {
-      const errorMsg = error?.message || 'Erro desconhecido ao adicionar transação';
+    } catch (error: unknown) {
+      const errorMsg = getErrorMessage(error, 'Erro desconhecido ao adicionar transação');
       console.error('[TransactionStore] ❌ Erro ao adicionar transação:', {
         error,
-        message: error?.message,
-        stack: error?.stack,
+        message: errorMsg,
+        stack: error instanceof Error ? error.stack : undefined,
         transaction
       });
       set({ error: errorMsg });
@@ -119,9 +124,10 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       const data = await updateTransactionService(userId, id, transaction as UpdateTransactionInput);
       await get().fetchTransactions();
       return { data, error: null };
-    } catch (error: any) {
-      set({ error: error.message });
-      return { data: null, error: error.message };
+    } catch (error: unknown) {
+      const errorMsg = getErrorMessage(error, 'Erro ao atualizar transação');
+      set({ error: errorMsg });
+      return { data: null, error: errorMsg };
     }
   },
 
@@ -136,9 +142,10 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       await deleteTransactionService(userId, id);
       await get().fetchTransactions();
       return { data: null, error: null };
-    } catch (error: any) {
-      set({ error: error.message });
-      return { data: null, error: error.message };
+    } catch (error: unknown) {
+      const errorMsg = getErrorMessage(error, 'Erro ao remover transação');
+      set({ error: errorMsg });
+      return { data: null, error: errorMsg };
     }
   },
 

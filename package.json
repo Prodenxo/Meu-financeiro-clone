@@ -9,7 +9,19 @@
     "dev:backend": "cd backend && npm run dev",
     "build": "cd frontend && npm run build && cd .. && node scripts/copy-dist-to-root.js",
     "preview": "cd frontend && npm run preview",
-    "lint": "cd frontend && npm run lint"
+    "lint": "cd frontend && npm run lint",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "sync:ide": "node .aios-core/infrastructure/scripts/ide-sync/index.js sync",
+    "sync:ide:validate": "node .aios-core/infrastructure/scripts/ide-sync/index.js validate",
+    "sync:ide:check": "node .aios-core/infrastructure/scripts/ide-sync/index.js validate --strict",
+    "sync:ide:cursor": "node .aios-core/infrastructure/scripts/ide-sync/index.js sync --ide cursor",
+    "sync:ide:codex": "node .aios-core/infrastructure/scripts/ide-sync/index.js sync --ide codex",
+    "sync:ide:claude": "node .aios-core/infrastructure/scripts/ide-sync/index.js sync --ide claude-code",
+    "sync:skills:codex": "node .aios-core/infrastructure/scripts/codex-skills-sync/index.js",
+    "sync:skills:codex:global": "node .aios-core/infrastructure/scripts/codex-skills-sync/index.js --global",
+    "validate:structure": "node .aios-core/infrastructure/scripts/validate-paths.js",
+    "validate:agents": "node .aios-core/infrastructure/scripts/validate-agents.js"
   },
   "workspaces": [
     "frontend",

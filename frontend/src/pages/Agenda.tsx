@@ -5,7 +5,6 @@ import { ptBR } from 'date-fns/locale/pt-BR';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { checkGoogleAuth, listCalendarEvents } from '../lib/google-calendar';
 import { useTransactionStore } from '../store/transactionStore';
-import Layout from '../Layout/Layout';
 
 const locales = {
   'pt-BR': ptBR,
@@ -144,7 +143,7 @@ export default function Agenda() {
   };
 
   return (
-    <Layout>
+    <>
       <div className="p-4 md:p-6 h-full flex flex-col">
         <h1 className="text-xl md:text-3xl font-bold mb-4 dark:text-white">Agenda</h1>
         <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 mb-4">
@@ -255,6 +254,6 @@ export default function Agenda() {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 }

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { toast } from 'react-toastify';
-import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
 import { banUser, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
@@ -288,19 +287,19 @@ export default function ManageUsers() {
 
   if (!canManage) {
     return (
-      <Layout>
+      <>
         <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
           <h1 className="text-xl md:text-3xl font-bold dark:text-white">Gerenciar usuários</h1>
           <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
             Você não tem permissão para acessar esta página.
           </p>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
         <h1 className="text-xl md:text-3xl font-bold dark:text-white mb-4 md:mb-6">Gerenciar usuários</h1>
         <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 mb-4 md:mb-6">
@@ -857,6 +856,6 @@ export default function ManageUsers() {
           )}
         </div>
       </div>
-    </Layout>
+    </>
   );
 }

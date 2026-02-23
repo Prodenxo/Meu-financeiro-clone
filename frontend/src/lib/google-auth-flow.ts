@@ -1,6 +1,11 @@
 import { apiClient } from '../services/apiClient';
 import { startGoogleAuth, checkGoogleAuth } from './google-calendar';
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 /**
  * Verifica e aguarda token estar disponível no localStorage
  */
@@ -93,7 +98,7 @@ export async function handleGoogleAuthCallback(): Promise<{ success: boolean; er
     try {
       accessToken = await ensureTokenAvailable(5, 200);
       console.log('[Google OAuth] Token confirmado disponível');
-    } catch (tokenError: any) {
+    } catch (tokenError: unknown) {
       const errorMsg = 'Token de autenticação não encontrado após múltiplas tentativas. Por favor, faça login novamente.';
       console.error('[Google OAuth]', errorMsg, tokenError);
       return { success: false, error: errorMsg };
@@ -156,19 +161,20 @@ export async function handleGoogleAuthCallback(): Promise<{ success: boolean; er
       data = await apiClient.post<{ success: boolean }>('/google-calendar/callback', { code, state });
       console.log('[Google OAuth] ✅ apiClient.post() executado com sucesso!');
       console.log('[Google OAuth] Resposta recebida:', data);
-    } catch (apiClientError: any) {
+    } catch (apiClientError: unknown) {
+      const errorMessage = getErrorMessage(apiClientError, 'Erro desconhecido no callback OAuth');
       console.error('[Google OAuth] ❌ apiClient.post() falhou:', {
         error: apiClientError,
-        message: apiClientError?.message,
-        stack: apiClientError?.stack,
-        name: apiClientError?.name
+        message: errorMessage,
+        stack: apiClientError instanceof Error ? apiClientError.stack : undefined,
+        name: apiClientError instanceof Error ? apiClientError.name : undefined
       });
       // Capturar TODOS os erros, não apenas de autorização
       console.log('[Google OAuth] Tipo de erro do apiClient:', {
-        isAuthError: apiClientError.message?.includes('Missing authorization header') || 
-                     apiClientError.message?.includes('401') ||
-                     apiClientError.message?.includes('Não autenticado'),
-        errorMessage: apiClientError.message,
+        isAuthError: errorMessage.includes('Missing authorization header') || 
+                     errorMessage.includes('401') ||
+                     errorMessage.includes('Não autenticado'),
+        errorMessage,
         errorType: typeof apiClientError
       });
       
@@ -181,27 +187,28 @@ export async function handleGoogleAuthCallback(): Promise<{ success: boolean; er
     window.history.replaceState({}, document.title, window.location.pathname);
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = getErrorMessage(error, 'Erro ao processar callback');
     console.error('[Google OAuth] ===== ERRO CAPTURADO NO TRY-CATCH EXTERNO =====');
     console.error('[Google OAuth] Erro completo:', {
       error,
-      message: error?.message,
-      name: error?.name,
-      stack: error?.stack,
+      message: errorMessage,
+      name: error instanceof Error ? error.name : undefined,
+      stack: error instanceof Error ? error.stack : undefined,
       type: typeof error
     });
     
     // Mensagens de erro mais específicas
-    let errorMessage = error.message || 'Erro ao processar callback';
+    let userMessage = errorMessage;
     
-    if (error.message?.includes('Missing authorization header') || error.message?.includes('401')) {
-      errorMessage = 'Erro de autenticação: Token não encontrado ou inválido. Por favor, faça login novamente.';
-    } else if (error.message?.includes('Não autenticado')) {
-      errorMessage = 'Você precisa estar logado para conectar o Google Calendar. Por favor, faça login novamente.';
+    if (errorMessage.includes('Missing authorization header') || errorMessage.includes('401')) {
+      userMessage = 'Erro de autenticação: Token não encontrado ou inválido. Por favor, faça login novamente.';
+    } else if (errorMessage.includes('Não autenticado')) {
+      userMessage = 'Você precisa estar logado para conectar o Google Calendar. Por favor, faça login novamente.';
     }
     
-    console.error('[Google OAuth] Retornando erro:', errorMessage);
-    return { success: false, error: errorMessage };
+    console.error('[Google OAuth] Retornando erro:', userMessage);
+    return { success: false, error: userMessage };
   }
 }
 

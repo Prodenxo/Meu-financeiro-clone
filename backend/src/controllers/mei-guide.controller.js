@@ -70,15 +70,6 @@ export const getCertificateStatus = async (req, res, next) => {
   }
 };
 
-export const getSerproToken = async (_req, res, next) => {
-  try {
-    const data = await meiGuideService.getSerproTokenForFrontend();
-    return sendSuccess(res, data, 'Token Serpro gerado');
-  } catch (error) {
-    return next(error);
-  }
-};
-
 export const validateGuide = async (req, res, next) => {
   try {
     const data = await meiGuideService.validateGuide(req.user.id, {
@@ -104,6 +95,17 @@ export const listPeriods = async (req, res, next) => {
       cnpj: req.query?.cnpj,
       autorPedidoDados,
       contribuinte
+    });
+    return sendSuccess(res, data, 'Períodos MEI listados');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listPeriodsByCnpj = async (req, res, next) => {
+  try {
+    const data = await meiGuideService.listPeriodsByCnpj(req.user.id, {
+      cnpj: req.query?.cnpj
     });
     return sendSuccess(res, data, 'Períodos MEI listados');
   } catch (error) {

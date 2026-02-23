@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, List, Grid3x3, Calendar, Settings, Wallet, FileText } from 'lucide-react';
+import { Home, List, Grid3x3, Settings, Wallet } from 'lucide-react';
 import { useThemeStore } from '../store/themeStore';
 
 export default function BottomNavigation() {
@@ -7,13 +7,11 @@ export default function BottomNavigation() {
   const { isDarkMode } = useThemeStore();
 
   const navItems = [
-    { path: '/', label: 'Visão Geral', icon: Home },
+    { path: '/', label: 'Inicio', icon: Home },
     { path: '/transacoes', label: 'Transações', icon: List },
     { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
     { path: '/categorias', label: 'Categorias', icon: Grid3x3 },
-    { path: '/agenda', label: 'Agenda', icon: Calendar },
-    { path: '/guias-mei', label: 'Meu MEI', icon: FileText },
-    { path: '/settings', label: 'Configurações', icon: Settings },
+    { path: '/settings', label: 'Mais', icon: Settings },
   ];
 
   const isActive = (path: string) => {
@@ -31,7 +29,7 @@ export default function BottomNavigation() {
           : 'bg-white border-slate-200'
       } md:hidden`}
     >
-      <div className="flex items-center justify-around h-16 px-2">
+      <div className="grid grid-cols-5 items-center h-16 px-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
@@ -39,7 +37,7 @@ export default function BottomNavigation() {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center justify-center flex-1 h-12 rounded-xl transition-colors ${
+              className={`flex flex-col items-center justify-center h-12 rounded-xl transition-colors ${
                 active
                   ? 'text-blue-700 dark:text-blue-300 bg-slate-100 dark:bg-slate-800'
                   : isDarkMode

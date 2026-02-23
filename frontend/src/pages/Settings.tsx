@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { checkGoogleAuth, startGoogleAuth } from '../lib/google-calendar';
@@ -127,7 +126,7 @@ export default function Settings() {
   };
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
         <h1 className="text-xl md:text-3xl font-bold dark:text-white mb-4 md:mb-6">Configurações</h1>
         <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 mb-4 md:mb-6">
@@ -404,7 +403,7 @@ export default function Settings() {
           </div>
         </div>
       </div>
-    </Layout>
+    </>
   );
 }
 

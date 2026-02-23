@@ -1,6 +1,6 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
-import { badRequest, forbidden, unauthorized } from '../utils/errors.js';
+import { badRequest, forbidden, unauthorized, serviceUnavailable } from '../utils/errors.js';
 
 const ROLE_DEFAULT = 'usuario';
 const ROLE_ALLOWED = new Set(['superadmin', 'admin', 'usuario', 'outsider']);
@@ -170,7 +170,47 @@ export const signIn = async ({ email, password }) => {
   });
 
   if (error) {
-    throw unauthorized(error.message);
+    const rawMessage = String(error.message || '');
+    const normalized = rawMessage.toLowerCase();
+
+    if (env.NODE_ENV !== 'production') {
+      console.warn('[Auth] signIn error', {
+        message: rawMessage,
+        status: error.status,
+        name: error.name
+      });
+    }
+
+    if (
+      normalized.includes('invalid login credentials')
+      || normalized.includes('invalid credentials')
+      || normalized.includes('invalid email or password')
+    ) {
+      throw unauthorized('Email ou senha inválidos');
+    }
+
+    if (normalized.includes('email not confirmed') || normalized.includes('email not verified')) {
+      throw forbidden('Email não confirmado. Verifique sua caixa de entrada.');
+    }
+
+    if (normalized.includes('user not found')) {
+      throw unauthorized('Usuário não encontrado');
+    }
+
+    if (
+      normalized.includes('fetch failed')
+      || normalized.includes('network')
+      || normalized.includes('enotfound')
+      || normalized.includes('timeout')
+    ) {
+      throw serviceUnavailable('Falha de comunicação com o Supabase Auth. Tente novamente mais tarde.');
+    }
+
+    if (error.status === 429) {
+      throw badRequest('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
+    }
+
+    throw unauthorized(rawMessage || 'Falha ao autenticar');
   }
 
   await ensureUserNotBlocked({
