@@ -21,7 +21,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div
       className={`min-h-screen flex flex-col ${
-        isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
+        isDarkMode
+          ? 'bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-slate-100'
+          : 'bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 text-slate-900'
       }`}
     >
       <Header
@@ -31,7 +33,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       />
       <Sidebar expanded={sidebarExpanded} />
       <main
-        className={`flex-1 w-full overflow-y-auto px-2 md:px-4 pt-20 pb-24 md:pb-6 transition-[padding] duration-200 ${
+        className={`flex-1 w-full overflow-y-auto px-3 md:px-6 pt-24 pb-24 md:pb-6 transition-[padding] duration-200 ${
           sidebarExpanded ? 'md:pl-60' : 'md:pl-24'
         }`}
       >
@@ -39,13 +41,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </main>
       <div className="fixed bottom-20 left-4 z-40 md:hidden">
         {quickLinksOpen && (
-          <div
-            className={`mb-2 rounded-xl border shadow-lg p-2 flex flex-col gap-2 ${
-              isDarkMode
-                ? 'bg-slate-900 border-slate-700'
-                : 'bg-white border-slate-200'
-            }`}
-          >
+          <div className="mb-2 planner-card p-2 flex flex-col gap-2">
             <span className="px-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
               Atalhos rápidos
             </span>
@@ -60,7 +56,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <button
           type="button"
           onClick={() => setQuickLinksOpen((prev) => !prev)}
-          className="h-11 px-4 rounded-full bg-blue-700 text-white shadow-lg flex items-center gap-2 font-semibold text-sm"
+          className="planner-button-compact shadow-soft"
           aria-label={quickLinksOpen ? 'Fechar atalhos rápidos' : 'Abrir atalhos rápidos'}
           title={quickLinksOpen ? 'Fechar atalhos rápidos' : 'Abrir atalhos rápidos'}
         >

@@ -159,7 +159,7 @@ export default function ResetPassword() {
 
   if (checkingSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
         <div className="planner-card px-10 py-12">
           <p className="text-slate-600 dark:text-slate-300">Verificando link...</p>
         </div>
@@ -169,7 +169,7 @@ export default function ResetPassword() {
 
   if (!isValidSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
         <div className="flex flex-col justify-center planner-card w-full max-w-md px-10 py-12">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 text-center">Link inválido</h2>
@@ -202,7 +202,7 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
       {/* Formulário */}
       <div className="flex flex-col justify-center planner-card w-full max-w-md px-10 py-12">
         <div className="mb-6">

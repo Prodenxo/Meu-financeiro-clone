@@ -23,10 +23,10 @@ export default function BottomNavigation() {
 
   return (
     <nav
-      className={`fixed bottom-0 left-0 right-0 z-50 border-t ${
+      className={`fixed bottom-0 left-0 right-0 z-50 border-t backdrop-blur shadow-soft ${
         isDarkMode
-          ? 'bg-slate-900 border-slate-800'
-          : 'bg-white border-slate-200'
+          ? 'bg-slate-950/80 border-slate-800/70'
+          : 'bg-white/80 border-slate-200/70'
       } md:hidden`}
     >
       <div className="grid grid-cols-5 items-center h-16 px-1">
@@ -37,9 +37,9 @@ export default function BottomNavigation() {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center justify-center h-12 rounded-xl transition-colors ${
+              className={`flex flex-col items-center justify-center h-12 rounded-2xl transition-colors ${
                 active
-                  ? 'text-blue-700 dark:text-blue-300 bg-slate-100 dark:bg-slate-800'
+                  ? 'text-blue-700 dark:text-blue-200 bg-blue-600/10 dark:bg-blue-500/15'
                   : isDarkMode
                   ? 'text-slate-400'
                   : 'text-slate-500'

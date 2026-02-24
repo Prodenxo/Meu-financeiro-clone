@@ -24,7 +24,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
       {/* Formulário */}
       <div className="flex flex-col justify-center planner-card w-full max-w-md px-10 py-12">
         <div className="mb-6">

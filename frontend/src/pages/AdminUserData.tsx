@@ -344,7 +344,7 @@ export default function AdminUserData() {
           </div>
         )}
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6 space-y-4">
+        <div className="planner-card p-4 md:p-6 space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg md:text-xl font-semibold dark:text-white">Pendências DAS</h2>
@@ -373,7 +373,7 @@ export default function AdminUserData() {
                 type="month"
                 value={dasCompetencia}
                 onChange={(event) => setDasCompetencia(event.target.value)}
-                className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                className="planner-input-compact"
               />
             </div>
             <div>
@@ -381,7 +381,7 @@ export default function AdminUserData() {
               <select
                 value={dasStatusFilter}
                 onChange={(event) => setDasStatusFilter(event.target.value as 'pendente' | 'pago' | 'erro' | 'todos')}
-                className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                className="planner-input-compact"
               >
                 <option value="pendente">Pendente</option>
                 <option value="pago">Pago</option>
@@ -396,7 +396,7 @@ export default function AdminUserData() {
                 value={dasSearch}
                 onChange={(event) => setDasSearch(event.target.value)}
                 placeholder="Nome, email ou CNPJ"
-                className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                className="planner-input-compact"
               />
             </div>
             <div className="md:col-span-4 grid gap-3 md:grid-cols-2">
@@ -454,7 +454,7 @@ export default function AdminUserData() {
           )}
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6 space-y-4">
+        <div className="planner-card p-4 md:p-6 space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg md:text-xl font-semibold dark:text-white">Selecionar usuário</h2>
@@ -526,7 +526,7 @@ export default function AdminUserData() {
                   setHighlightedIndex(-1);
                 }
               }}
-              className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+              className="planner-input-compact"
               placeholder={loadingUsers ? 'Carregando usuários...' : 'Digite para filtrar'}
               disabled={loadingUsers}
             />
@@ -556,7 +556,7 @@ export default function AdminUserData() {
               </button>
             </div>
             {userDropdownOpen && (
-              <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow">
+              <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/80 shadow-soft backdrop-blur">
                 {loadingUsers ? (
                   <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
                     Carregando usuários...
@@ -602,7 +602,7 @@ export default function AdminUserData() {
                 type="date"
                 value={dateStart}
                 onChange={(event) => setDateStart(event.target.value)}
-                className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                className="planner-input-compact"
               />
             </div>
             <div>
@@ -611,7 +611,7 @@ export default function AdminUserData() {
                 type="date"
                 value={dateEnd}
                 onChange={(event) => setDateEnd(event.target.value)}
-                className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                className="planner-input-compact"
               />
             </div>
             <div className="flex items-end">
@@ -621,7 +621,7 @@ export default function AdminUserData() {
                   setDateStart('');
                   setDateEnd('');
                 }}
-                className="w-full px-4 py-2 text-gray-700 dark:text-gray-200 rounded-lg border dark:border-gray-600"
+                className="planner-button-secondary-compact w-full justify-between"
               >
                 Limpar filtros
               </button>
@@ -637,14 +637,14 @@ export default function AdminUserData() {
         </div>
 
         {!selectedUserId ? (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+          <div className="planner-card p-4 md:p-6">
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Selecione um usuário para visualizar os dados.
             </p>
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow">
+            <div className="planner-card">
               <button
                 type="button"
                 onClick={() => setOpenAccordion('balance')}
@@ -710,7 +710,7 @@ export default function AdminUserData() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow">
+            <div className="planner-card">
               <button
                 type="button"
                 onClick={() => setOpenAccordion('transactions')}
@@ -793,7 +793,7 @@ export default function AdminUserData() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow">
+            <div className="planner-card">
               <button
                 type="button"
                 onClick={() => setOpenAccordion('budgets')}
@@ -878,7 +878,7 @@ export default function AdminUserData() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow">
+            <div className="planner-card">
               <button
                 type="button"
                 onClick={() => setOpenAccordion('categories')}

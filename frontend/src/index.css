@@ -8,7 +8,7 @@
   }
 
   body {
-    @apply bg-slate-50 text-slate-900;
+    @apply bg-slate-100 text-slate-900;
   }
 
   .dark body {
@@ -17,16 +17,20 @@
 }
 
 @layer components {
+  .planner-surface {
+    @apply bg-white/80 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800/70 backdrop-blur;
+  }
+
   .planner-card {
-    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-lg;
+    @apply planner-surface rounded-2xl shadow-soft;
   }
 
   .planner-card-muted {
-    @apply bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl;
+    @apply bg-slate-50/80 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/50 rounded-2xl;
   }
 
   .planner-input {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-600 focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-blue-800;
+    @apply w-full rounded-xl border border-slate-200/70 bg-white/80 px-4 py-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-200/40 dark:border-slate-800/80 dark:bg-slate-950/40 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-500/20;
   }
 
   .planner-input-compact {
@@ -34,23 +38,31 @@
   }
 
   .planner-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-blue-600;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-blue-500 active:bg-blue-600/90;
   }
 
   .planner-button-compact {
-    @apply planner-button rounded-lg px-3 py-2 text-sm;
+    @apply planner-button rounded-full px-3 py-2 text-sm;
   }
 
   .planner-button-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-md transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-800/70 dark:bg-slate-900/60 dark:text-slate-100 dark:hover:bg-slate-800/70;
   }
 
   .planner-button-secondary-compact {
-    @apply planner-button-secondary rounded-lg px-3 py-2 text-sm;
+    @apply planner-button-secondary rounded-full px-3 py-2 text-sm;
   }
 
   .planner-chip {
-    @apply inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700;
+    @apply inline-flex items-center rounded-full bg-slate-100/80 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800/60 dark:text-slate-200;
+  }
+
+  .planner-tab {
+    @apply inline-flex items-center gap-2 rounded-full bg-slate-100/80 px-3 py-1.5 text-xs font-semibold text-slate-600 transition dark:bg-slate-900/60 dark:text-slate-300;
+  }
+
+  .planner-tab-active {
+    @apply bg-blue-600 text-white shadow-soft dark:text-white;
   }
 }
 

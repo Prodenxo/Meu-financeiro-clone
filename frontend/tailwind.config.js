@@ -26,8 +26,8 @@ export default {
         }
       },
       boxShadow: {
-        card: '0 10px 30px rgba(15, 23, 42, 0.08)',
-        soft: '0 6px 18px rgba(15, 23, 42, 0.08)'
+        card: '0 16px 32px rgba(15, 23, 42, 0.12)',
+        soft: '0 10px 24px rgba(15, 23, 42, 0.1)'
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif']

@@ -27,20 +27,20 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
       {/* Barra lateral */}
-      <div className="hidden md:flex flex-col items-center py-10 px-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-l-2xl shadow-2xl h-[700px] w-20 mr-[-2rem] z-10">
+      <div className="hidden md:flex flex-col items-center py-10 px-4 planner-card rounded-l-2xl rounded-r-none h-[700px] w-20 mr-[-2rem] z-10">
         <div className="flex flex-col items-center gap-8 w-full">
           <div className="flex flex-col items-center gap-2 w-full opacity-60">
             <Link to="/login" className="flex flex-col items-center">
-              <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 rounded-full p-2">
+            <span className="bg-slate-100/80 dark:bg-slate-800/60 text-slate-500 dark:text-slate-300 rounded-full p-2 shadow-soft">
                 <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-log-in"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
               </span>
               <span className="text-slate-500 dark:text-slate-300 font-semibold text-sm mt-2">Entrar</span>
             </Link>
           </div>
           <div className="flex flex-col items-center gap-2 w-full">
-            <span className="bg-blue-600 text-white rounded-full p-2">
+            <span className="bg-blue-600 text-white rounded-full p-2 shadow-soft">
               <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-user-plus"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
             </span>
             <span className="text-blue-700 dark:text-blue-300 font-semibold text-sm mt-2">Cadastrar</span>
@@ -48,7 +48,7 @@ export default function Register() {
         </div>
       </div>
       {/* Painel azul com imagem */}
-      <div className="hidden md:flex flex-col justify-center items-center bg-blue-600 dark:bg-slate-800 rounded-l-2xl h-[700px] w-[500px] shadow-2xl z-0 p-0 overflow-hidden">
+      <div className="hidden md:flex flex-col justify-center items-center bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 rounded-l-2xl h-[700px] w-[500px] shadow-2xl z-0 p-0 overflow-hidden">
         <img
           src="https://ik.imagekit.io/qdohqf5kl/Capa%20-%20financas%20pessoais.png?updatedAt=1749862004209"
           alt="Ilustração Finanças Pessoais"

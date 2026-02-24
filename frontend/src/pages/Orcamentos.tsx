@@ -305,7 +305,7 @@ export default function Orcamentos() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-slate-400 border-b border-slate-800/60">
+                <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200/70 dark:border-slate-800/60">
                   <th className="pb-3">Categoria</th>
                   <th className="pb-3">Planejado</th>
                   <th className="pb-3">Realizado</th>
@@ -316,7 +316,7 @@ export default function Orcamentos() {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-800/40 hover:bg-slate-900/40 transition">
+                  <tr key={row.id} className="border-b border-slate-200/70 dark:border-slate-800/40 hover:bg-slate-100/60 dark:hover:bg-slate-900/40 transition">
                     <td className="py-3 font-semibold dark:text-white">{row.nome}</td>
                     <td className="py-3">
                       <input
@@ -342,7 +342,7 @@ export default function Orcamentos() {
                     <td className="py-3">{row.orcado ? formatCurrency(row.diff) : '-'}</td>
                     <td className="py-3">
                       <div className="flex items-center gap-2">
-                      <div className="h-2 w-28 rounded-full bg-slate-800/60">
+                      <div className="h-2 w-28 rounded-full bg-slate-200/70 dark:bg-slate-800/60">
                           <div
                             className={`h-2 rounded-full ${row.status === 'Acima do orçamento' ? 'bg-rose-500' : 'bg-emerald-500'}`}
                           style={{ width: `${Math.min(row.progress, 100)}%` }}
@@ -356,10 +356,10 @@ export default function Orcamentos() {
                     <td className="py-3">
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                         row.status === 'Sem orçamento'
-                          ? 'bg-slate-700 text-slate-200'
+                          ? 'bg-slate-200/70 text-slate-700 dark:bg-slate-700/70 dark:text-slate-200'
                           : row.status === 'Acima do orçamento'
-                          ? 'bg-rose-900/60 text-rose-200'
-                          : 'bg-emerald-900/60 text-emerald-200'
+                          ? 'bg-rose-100/70 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'
+                          : 'bg-emerald-100/70 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
                       }`}>
                         {row.status}
                       </span>

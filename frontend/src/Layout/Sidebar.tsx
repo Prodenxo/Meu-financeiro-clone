@@ -27,7 +27,7 @@ export default function Sidebar({ expanded }: SidebarProps) {
 
   return (
     <aside
-      className={`hidden md:flex fixed top-16 left-0 h-[calc(100vh-64px)] flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 py-6 shadow-lg transition-all ${
+      className={`hidden md:flex fixed top-16 left-0 h-[calc(100vh-64px)] flex-col bg-white/80 dark:bg-slate-950/80 border-r border-slate-200/60 dark:border-slate-800/70 py-6 shadow-soft backdrop-blur transition-all ${
         expanded ? 'w-56 px-3 items-start' : 'w-20 items-center'
       }`}
       aria-label="Menu lateral"
@@ -41,8 +41,8 @@ export default function Sidebar({ expanded }: SidebarProps) {
             to={item.path}
             className={`flex h-12 items-center rounded-xl text-slate-600 dark:text-slate-300 transition ${
               active
-                ? 'bg-blue-700 text-white shadow-md'
-                : 'hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-blue-600 text-white shadow-soft ring-1 ring-blue-500/40'
+                : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
             } ${expanded ? 'w-full px-3 gap-3 justify-start' : 'w-12 justify-center'}`}
             aria-label={item.label}
             title={item.label}

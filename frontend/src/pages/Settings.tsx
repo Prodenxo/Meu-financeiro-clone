@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
-import { checkGoogleAuth, startGoogleAuth } from '../lib/google-calendar';
+import { checkGoogleAuth } from '../lib/google-calendar';
 import { initiateGoogleAuthFlow } from '../lib/google-auth-flow';
 import { MessageCircle } from 'lucide-react';
 import PhoneInput from 'react-phone-input-2';
@@ -21,12 +21,6 @@ export default function Settings() {
   const [editPhone, setEditPhone] = useState(phone || '');
   const [editDisplayName, setEditDisplayName] = useState(displayName || '');
 
-  const saveNameButtonRef = useRef<HTMLButtonElement>(null);
-  const savePhoneButtonRef = useRef<HTMLButtonElement>(null);
-  const connectGoogleButtonRef = useRef<HTMLButtonElement>(null);
-  const disconnectGoogleButtonRef = useRef<HTMLButtonElement>(null);
-  const signOutButtonRef = useRef<HTMLButtonElement>(null);
-
   useEffect(() => {
     checkGoogleAuthStatus();
   }, []);
@@ -34,25 +28,6 @@ export default function Settings() {
   useEffect(() => {
     console.log('[Settings] role atual:', role, 'userId:', userId, 'email:', user?.email);
   }, [role, userId, user?.email]);
-
-  useEffect(() => {
-    // Aplicar cores com important nos botões
-    if (saveNameButtonRef.current) {
-      saveNameButtonRef.current.style.setProperty('background-color', '#2563eb', 'important');
-    }
-    if (savePhoneButtonRef.current) {
-      savePhoneButtonRef.current.style.setProperty('background-color', '#2563eb', 'important');
-    }
-    if (connectGoogleButtonRef.current) {
-      connectGoogleButtonRef.current.style.setProperty('background-color', '#2563eb', 'important');
-    }
-    if (disconnectGoogleButtonRef.current) {
-      disconnectGoogleButtonRef.current.style.setProperty('background-color', '#dc2626', 'important');
-    }
-    if (signOutButtonRef.current) {
-      signOutButtonRef.current.style.setProperty('background-color', '#dc2626', 'important');
-    }
-  }, [isDarkMode]);
 
   const checkGoogleAuthStatus = async () => {
     setCheckingAuth(true);
@@ -146,7 +121,7 @@ export default function Settings() {
         )}
 
         {/* Informações do Usuário */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+        <div className="planner-card p-4 md:p-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Informações do Usuário</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
             Adicione e atualize suas informações pessoais
@@ -167,22 +142,13 @@ export default function Settings() {
                   type="text"
                   value={editDisplayName}
                   onChange={(e) => setEditDisplayName(e.target.value)}
-                  className="flex-1 px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                  className="planner-input-compact flex-1"
                   placeholder="Seu nome"
                 />
                 <button
-                  ref={saveNameButtonRef}
                   onClick={handleUpdateDisplayName}
                   disabled={loading || editDisplayName === displayName}
-                  className="px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                  onMouseEnter={(e) => {
-                    if (!loading && editDisplayName !== displayName) {
-                      e.currentTarget.style.setProperty('background-color', '#1d4ed8', 'important');
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.setProperty('background-color', '#2563eb', 'important');
-                  }}
+                  className="planner-button whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Salvando...' : 'Salvar'}
                 </button>
@@ -224,18 +190,9 @@ export default function Settings() {
                   enableSearch
                 />
                 <button
-                  ref={savePhoneButtonRef}
                   onClick={handleUpdatePhone}
                   disabled={loading || editPhone === phone}
-                  className="px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                  onMouseEnter={(e) => {
-                    if (!loading && editPhone !== phone) {
-                      e.currentTarget.style.setProperty('background-color', '#1d4ed8', 'important');
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.setProperty('background-color', '#2563eb', 'important');
-                  }}
+                  className="planner-button whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Salvando...' : 'Salvar'}
                 </button>
@@ -245,7 +202,7 @@ export default function Settings() {
         </div>
 
         {/* Suporte via WhatsApp */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+        <div className="planner-card p-4 md:p-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Meu Financeiro, seu consultor pessoal!</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
             Fale diretamente com seu consultor pessoal no WhatsApp.
@@ -254,7 +211,7 @@ export default function Settings() {
             href="https://wa.me/5521977263499"
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full md:w-auto inline-flex items-center justify-center px-4 py-2 text-white rounded-lg font-semibold bg-green-600 hover:bg-green-700"
+            className="w-full md:w-auto planner-button bg-emerald-600 hover:bg-emerald-500"
           >
             <MessageCircle className="w-4 h-4 mr-2" />
             Fale com nosso agente
@@ -262,7 +219,7 @@ export default function Settings() {
         </div>
 
         {/* Aparência */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+        <div className="planner-card p-4 md:p-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Aparência</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
             Escolha entre modo claro ou escuro
@@ -288,7 +245,7 @@ export default function Settings() {
         </div>
 
         {role && (role === 'superadmin' || role === 'admin') && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+          <div className="planner-card p-4 md:p-6">
             <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Administração</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
               Gerencie usuários e permissões da sua empresa.
@@ -296,13 +253,13 @@ export default function Settings() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 onClick={() => navigate('/settings/users')}
-                className="px-4 py-2 text-white rounded-lg font-semibold bg-blue-600 hover:bg-blue-700"
+                className="planner-button"
               >
                 Gerenciar usuários
               </button>
               <button
                 onClick={() => navigate('/settings/usuarios-dados')}
-                className="px-4 py-2 text-white rounded-lg font-semibold bg-slate-700 hover:bg-slate-800"
+                className="planner-button-secondary"
               >
                 Dados dos usuários
               </button>
@@ -311,7 +268,7 @@ export default function Settings() {
         )}
 
         {/* Integração Google Calendar */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+        <div className="planner-card p-4 md:p-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Integração com Google Agenda</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
             Para visualizar seus pagamentos futuros como eventos, autorize o acesso à sua agenda do Google.
@@ -328,15 +285,8 @@ export default function Settings() {
                 <p className="font-semibold">Google Calendar conectado</p>
               </div>
               <button
-                ref={disconnectGoogleButtonRef}
                 onClick={handleDisconnectGoogle}
-                className="w-full md:w-auto px-4 py-2 text-white rounded-lg font-semibold flex items-center justify-center gap-2"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.setProperty('background-color', '#b91c1c', 'important');
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.setProperty('background-color', '#dc2626', 'important');
-                }}
+                className="w-full md:w-auto planner-button bg-rose-600 hover:bg-rose-500 flex items-center justify-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -347,18 +297,9 @@ export default function Settings() {
           ) : (
             <div className="space-y-4">
               <button
-                ref={connectGoogleButtonRef}
                 onClick={handleGoogleAuth}
                 disabled={loading}
-                className="w-full md:w-auto px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                onMouseEnter={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.setProperty('background-color', '#1d4ed8', 'important');
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.setProperty('background-color', '#2563eb', 'important');
-                }}
+                className="w-full md:w-auto planner-button disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>Carregando...</>
@@ -379,7 +320,7 @@ export default function Settings() {
         </div>
 
         {/* Conta */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+        <div className="planner-card p-4 md:p-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Conta</h2>
           <div className="space-y-4">
             <div>
@@ -387,15 +328,8 @@ export default function Settings() {
                 Deseja sair da sua conta? Você precisará fazer login novamente para acessar o sistema.
               </p>
               <button
-                ref={signOutButtonRef}
                 onClick={handleSignOut}
-                className="w-full md:w-auto px-4 py-2 text-white rounded-lg font-semibold transition-colors duration-200"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.setProperty('background-color', '#b91c1c', 'important');
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.setProperty('background-color', '#dc2626', 'important');
-                }}
+                className="w-full md:w-auto planner-button bg-rose-600 hover:bg-rose-500"
               >
                 Sair da Conta
               </button>

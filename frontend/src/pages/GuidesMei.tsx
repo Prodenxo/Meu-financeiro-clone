@@ -9,6 +9,8 @@ import {
   validateMeiGuide,
   type MeiPeriod
 } from '../services/guidesMeiService';
+// NFSe (comentado)
+/*
 import {
   baixarNfsePdf,
   baixarNfseXml,
@@ -18,6 +20,7 @@ import {
   type EmitirNfseInput,
   type NfseRecord
 } from '../services/meiNotasService';
+*/
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
   if (!competencia) return 'guia-mei.pdf';
@@ -69,6 +72,7 @@ const triggerFileDownload = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(downloadUrl);
 };
 
+/* NFSe (comentado)
 const formatNfseStatus = (status?: string | null) => {
   const text = String(status || '').toLowerCase();
   if (!text) return 'Processando';
@@ -86,6 +90,7 @@ const formatDateTime = (value?: string | null) => {
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString('pt-BR');
 };
+*/
 
 const formatDasCompetenciaLabel = (value?: string | null) => {
   if (!value) return '---';
@@ -116,6 +121,7 @@ const getDefaultPeriod = () => {
   };
 };
 
+/* NFSe (comentado)
 const hasRequiredText = (value: unknown) => String(value || '').trim().length > 0;
 
 const getNfseValidationMessage = (input: EmitirNfseInput) => {
@@ -146,6 +152,7 @@ const getNfseValidationMessage = (input: EmitirNfseInput) => {
 
   return null;
 };
+*/
 
 export default function GuidesMei() {
   const [contribuinteDoc, setContribuinteDoc] = useState('');
@@ -168,6 +175,7 @@ export default function GuidesMei() {
   const [meiPeriodsLoading, setMeiPeriodsLoading] = useState(false);
   const [meiPeriodsError, setMeiPeriodsError] = useState<string | null>(null);
   const hasCertificate = hasUserCertificate;
+  /* NFSe (comentado)
   const [nfseForm, setNfseForm] = useState<EmitirNfseInput>({
     prestadorCpfCnpj: '',
     prestadorInscricaoMunicipal: '',
@@ -200,6 +208,7 @@ export default function GuidesMei() {
   const [nfseError, setNfseError] = useState<string | null>(null);
   const [nfseSuccess, setNfseSuccess] = useState<string | null>(null);
   const nfseValidationMessage = useMemo(() => getNfseValidationMessage(nfseForm), [nfseForm]);
+  */
 
   const normalizedContribuinte = useMemo(() => normalizeDoc(contribuinteDoc), [contribuinteDoc]);
   const contribuinteTipo = useMemo(() => getDocType(normalizedContribuinte), [normalizedContribuinte]);
@@ -246,6 +255,7 @@ export default function GuidesMei() {
     }
   }, [canLoadPeriods, contribuinteTipo, hasUserCertificate, normalizedContribuinte]);
 
+  /* NFSe (comentado)
   const loadNfseList = useCallback(async () => {
     setNfseLoading(true);
     setNfseError(null);
@@ -282,6 +292,7 @@ export default function GuidesMei() {
       }
     }));
   };
+  */
 
   useEffect(() => {
     void loadCertificateStatus();
@@ -296,6 +307,7 @@ export default function GuidesMei() {
     void loadMeiPeriods();
   }, [canLoadPeriods, hasUserCertificate, loadMeiPeriods]);
 
+  /* NFSe (comentado)
   useEffect(() => {
     void loadNfseList();
   }, [loadNfseList]);
@@ -308,6 +320,7 @@ export default function GuidesMei() {
         : { ...current, prestadorCpfCnpj: formatDocument(normalizedContribuinte) }
     ));
   }, [normalizedContribuinte]);
+  */
 
   useEffect(() => {
     setValidationError(null);
@@ -388,6 +401,7 @@ export default function GuidesMei() {
     }
   };
 
+  /* NFSe (comentado)
   const handleEmitNfse = async () => {
     if (nfseSubmitting) return;
     setNfseError(null);
@@ -517,6 +531,7 @@ export default function GuidesMei() {
       setNfseActionKey((current) => (current === actionKey ? null : current));
     }
   };
+  */
 
 
   const availableYears = useMemo(() => {
@@ -746,6 +761,7 @@ export default function GuidesMei() {
         )}
       </div>
 
+      {/* NFSe (comentado)
       <div className="mt-5 planner-card p-4 md:p-5">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
           <h2 className="text-base md:text-lg font-semibold dark:text-white">Emitir NFSe</h2>
@@ -1050,6 +1066,7 @@ export default function GuidesMei() {
           </div>
         ))}
       </div>
+      */}
     </>
   );
 }
