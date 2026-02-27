@@ -9,13 +9,17 @@ const isLocalhostUrl = (value?: string) => {
 };
 
 const configuredApiUrl = import.meta.env.VITE_API_URL;
-const API_URL = import.meta.env.DEV
-  ? (configuredApiUrl && isLocalhostUrl(configuredApiUrl) ? configuredApiUrl : 'http://localhost:3333')
-  : (configuredApiUrl || 'https://meu-financeiro-backend.vercel.app');
+const DEFAULT_DEV_API_URL = 'http://localhost:3333';
+const DEFAULT_PROD_API_URL = 'https://meu-financeiro-backend.vercel.app';
+const API_URL = configuredApiUrl || (import.meta.env.DEV ? DEFAULT_DEV_API_URL : DEFAULT_PROD_API_URL);
 const TOKEN_STORAGE_KEY = 'financas-pessoais-auth-token';
 
 if (!API_URL) {
   console.warn('[API Client] VITE_API_URL não está configurada');
+}
+
+if (import.meta.env.DEV && configuredApiUrl && !isLocalhostUrl(configuredApiUrl)) {
+  console.warn('[API Client] VITE_API_URL aponta para ambiente remoto em DEV');
 }
 
 class ApiClient {
@@ -24,6 +28,19 @@ class ApiClient {
   constructor() {
     const trimmed = (API_URL || '').replace(/\/$/, '');
     this.baseUrl = `${trimmed}/api`;
+  }
+
+  private sanitizeHeaders(headers?: HeadersInit): Record<string, string> | undefined {
+    if (!headers) return undefined;
+    const sensitiveKeys = new Set(['authorization', 'x-api-key', 'cookie', 'set-cookie']);
+    const parsed = new Headers(headers);
+    const sanitized: Record<string, string> = {};
+
+    parsed.forEach((value, key) => {
+      sanitized[key] = sensitiveKeys.has(key.toLowerCase()) ? '[redacted]' : value;
+    });
+
+    return sanitized;
   }
 
   private logRequestFailure(details: {
@@ -39,9 +56,11 @@ class ApiClient {
     const normalizedBody = typeof details.body === 'string'
       ? details.body.slice(0, 1000)
       : details.body;
+    const headers = this.sanitizeHeaders(details.headers);
 
     console.error('[API Client] Erro de requisição', {
       ...details,
+      headers,
       body: normalizedBody
     });
   }
@@ -62,7 +81,7 @@ class ApiClient {
     access_token: string;
     refresh_token?: string;
     expires_at?: number;
-    user?: any;
+    user?: Record<string, unknown>;
   }): void {
     localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokenData));
   }
@@ -271,14 +290,14 @@ class ApiClient {
     return this.request<T>(path, { method: 'GET' });
   }
 
-  post<T>(path: string, body?: any): Promise<T> {
+  post<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>(path, {
       method: 'POST',
       body: JSON.stringify(body || {})
     });
   }
 
-  put<T>(path: string, body?: any): Promise<T> {
+  put<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>(path, {
       method: 'PUT',
       body: JSON.stringify(body || {})
@@ -292,7 +311,7 @@ class ApiClient {
     });
   }
 
-  delete<T>(path: string, body?: any): Promise<T> {
+  delete<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>(path, {
       method: 'DELETE',
       body: JSON.stringify(body || {})

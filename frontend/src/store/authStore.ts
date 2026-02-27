@@ -13,15 +13,25 @@ import {
   updateDisplayName as updateDisplayNameService,
 } from '../services/authService';
 
+interface AuthUser {
+  id: string;
+  email?: string | null;
+  user_metadata?: {
+    phone?: string | null;
+    display_name?: string | null;
+    empresa_id?: string | null;
+  } | null;
+}
+
 interface AuthState {
-  user: any | null;
+  user: AuthUser | null;
   userId: string | null;
   phone: string | null;
   displayName: string | null;
   role: UserRole | null;
   empresaId: string | null;
   sessionRestored: boolean;
-  setUser: (user: any) => void;
+  setUser: (user: AuthUser | null) => void;
   setPhone: (phone: string) => void;
   signUp: (email: string, password: string, phone?: string, displayName?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;

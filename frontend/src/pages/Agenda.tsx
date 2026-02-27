@@ -5,7 +5,6 @@ import { ptBR } from 'date-fns/locale/pt-BR';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { checkGoogleAuth, listCalendarEvents } from '../lib/google-calendar';
 import { useTransactionStore } from '../store/transactionStore';
-import Layout from '../Layout/Layout';
 
 const locales = {
   'pt-BR': ptBR,
@@ -144,7 +143,7 @@ export default function Agenda() {
   };
 
   return (
-    <Layout>
+    <>
       <div className="p-4 md:p-6 h-full flex flex-col">
         <h1 className="text-xl md:text-3xl font-bold mb-4 dark:text-white">Agenda</h1>
         <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 mb-4">
@@ -152,26 +151,26 @@ export default function Agenda() {
         </p>
         
         {checkingAuth ? (
-          <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-lg shadow-md mb-4 md:mb-8">
-            <p className="text-gray-600 dark:text-gray-400">Verificando autenticação...</p>
+          <div className="planner-card p-4 md:p-6 mb-4 md:mb-8">
+            <p className="text-slate-600 dark:text-slate-400">Verificando autenticação...</p>
           </div>
         ) : !isGoogleAuthorized ? (
-          <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-lg shadow-md mb-4 md:mb-8">
+          <div className="planner-card p-4 md:p-6 mb-4 md:mb-8">
             <h2 className="text-lg md:text-xl font-semibold mb-4 dark:text-white">Integração com Google Agenda</h2>
-            <p className="text-sm md:text-base text-gray-600 dark:text-gray-400 mb-4">
+            <p className="text-sm md:text-base text-slate-600 dark:text-slate-400 mb-4">
               Para visualizar seus pagamentos futuros como eventos, autorize o acesso à sua agenda do Google.
             </p>
-            <p className="text-xs md:text-sm text-gray-500 dark:text-gray-500 mb-4">
+            <p className="text-xs md:text-sm text-slate-500 dark:text-slate-500 mb-4">
               Você pode fazer isso nas <a href="/settings" className="text-blue-600 dark:text-blue-400 underline">Configurações</a>.
             </p>
           </div>
         ) : (
-          <div className="bg-green-100 dark:bg-green-900 p-3 rounded-md mb-4 md:mb-8 flex items-center justify-between">
+          <div className="bg-emerald-100/70 dark:bg-emerald-900/40 p-3 rounded-xl mb-4 md:mb-8 flex items-center justify-between border border-emerald-200/60 dark:border-emerald-800/60">
             <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-green-600 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              <p className="text-sm md:text-base text-green-600 dark:text-green-300">
+              <p className="text-sm md:text-base text-emerald-600 dark:text-emerald-300">
                 Google Calendar conectado
               </p>
             </div>
@@ -181,15 +180,15 @@ export default function Agenda() {
         {isGoogleAuthorized && (
           <>
             {loadingGoogleEvents && (
-              <div className="bg-white dark:bg-gray-800 p-3 rounded-md mb-4 md:mb-8">
-                <p className="text-sm md:text-base text-gray-600 dark:text-gray-400">
+              <div className="planner-card p-3 mb-4 md:mb-8">
+                <p className="text-sm md:text-base text-slate-600 dark:text-slate-400">
                   Carregando eventos do Google Calendar...
                 </p>
               </div>
             )}
             {googleEventsError && (
-              <div className="bg-yellow-100 dark:bg-yellow-900 p-3 rounded-md mb-4 md:mb-8">
-                <p className="text-sm md:text-base text-yellow-700 dark:text-yellow-200">
+              <div className="bg-amber-100/70 dark:bg-amber-900/40 p-3 rounded-xl mb-4 md:mb-8 border border-amber-200/60 dark:border-amber-800/60">
+                <p className="text-sm md:text-base text-amber-700 dark:text-amber-200">
                   Não foi possível carregar eventos do Google Calendar.
                 </p>
               </div>
@@ -197,7 +196,7 @@ export default function Agenda() {
           </>
         )}
 
-        <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-lg shadow-md flex-grow">
+        <div className="planner-card p-4 md:p-6 flex-grow">
           <Calendar
             localizer={localizer}
             events={events}
@@ -231,7 +230,7 @@ export default function Agenda() {
             <h2 className="text-lg font-semibold mb-3 dark:text-white">Eventos do Mês</h2>
             <div className="space-y-2">
               {events.slice(0, 5).map((event, idx) => (
-                <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow">
+                <div key={idx} className="planner-card-muted p-3">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <p className="text-sm font-medium dark:text-white">
@@ -255,6 +254,6 @@ export default function Agenda() {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 }

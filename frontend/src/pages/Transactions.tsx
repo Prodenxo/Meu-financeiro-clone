@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTransactionStore } from '../store/transactionStore';
-import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import { fetchCategoriesByType } from '../services/categoryService';
 import * as XLSX from 'xlsx';
@@ -155,7 +154,7 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
       onClick={handleClose}
     >
       <div
-        className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md relative shadow-xl ring-1 ring-black/5 max-h-[90vh] overflow-hidden"
+        className="planner-card w-full max-w-md relative max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -168,7 +167,7 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
         </button>
         <div className="p-8 pb-4">
           <div className="flex items-center gap-3 mb-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-300">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300">
             <PlusCircle size={20} />
           </div>
           <div>
@@ -236,15 +235,15 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
           <div className="space-y-4">
             <div>
             <label className="block mb-2 font-medium dark:text-gray-200">Tipo</label>
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               <button
                 type="button"
-                className={`px-4 py-2 rounded-lg ${tipo === 'entrada' ? 'bg-green-500 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+                className={`planner-tab ${tipo === 'entrada' ? 'planner-tab-active bg-emerald-600' : ''}`}
                 onClick={() => setTipo('entrada')}
               >Entrada</button>
               <button
                 type="button"
-                className={`px-4 py-2 rounded-lg ${tipo === 'saída' ? 'bg-red-500 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+                className={`planner-tab ${tipo === 'saída' ? 'planner-tab-active bg-rose-600' : ''}`}
                 onClick={() => setTipo('saída')}
               >Saída</button>
             </div>
@@ -252,10 +251,10 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
           <div>
             <label className="block mb-2 font-medium dark:text-gray-200">Valor</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400">R$</span>
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 dark:text-slate-400">R$</span>
               <input
                 type="text"
-                className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2 pl-10"
+                className="planner-input-compact pl-10"
                 value={valor ? formatCurrency(valor) : ''}
                 onChange={e => {
                   const rawValue = e.target.value.replace(/[^\d]/g, '');
@@ -269,7 +268,7 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
           <div>
             <label className="block mb-2 font-medium dark:text-gray-200">Categoria</label>
             <select
-              className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2"
+              className="planner-input-compact"
               value={classificacao}
               onChange={handleCategoriaChange}
               required
@@ -284,7 +283,7 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
             <label className="block mb-2 font-medium dark:text-gray-200">Data</label>
             <input
               type="date"
-              className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2"
+              className="planner-input-compact"
               value={data}
               onChange={e => setData(e.target.value)}
               required
@@ -293,7 +292,7 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
           <div>
             <label className="block mb-2 font-medium dark:text-gray-200">Status</label>
             <select
-              className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2"
+              className="planner-input-compact"
               value={status}
               onChange={e => setStatus(e.target.value)}
               required
@@ -305,7 +304,7 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
           <div>
             <label className="block mb-2 font-medium dark:text-gray-200">Observações (opcional)</label>
             <textarea
-              className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2"
+              className="planner-input-compact min-h-[96px]"
               value={obs}
               onChange={e => {
                 const value = e.target.value;
@@ -323,7 +322,7 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
           <button
             type="submit"
             disabled={saving}
-            className={`w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`planner-button w-full ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {saving ? 'Salvando...' : 'Nova Transação'}
           </button>
@@ -433,7 +432,7 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-gray-800 rounded-2xl p-8 w-full max-w-md relative shadow-xl ring-1 ring-black/5"
+        className="planner-card p-8 w-full max-w-md relative"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -459,15 +458,15 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
         }}>
           <div className="mb-4">
             <label className="block mb-2 font-medium dark:text-gray-200">Tipo</label>
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               <button
                 type="button"
-                className={`px-4 py-2 rounded ${tipo === 'entrada' ? 'bg-green-500 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+                className={`planner-tab ${tipo === 'entrada' ? 'planner-tab-active bg-emerald-600' : ''}`}
                 onClick={() => setTipo('entrada')}
               >Entrada</button>
               <button
                 type="button"
-                className={`px-4 py-2 rounded ${tipo === 'saída' ? 'bg-red-500 text-white' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200'}`}
+                className={`planner-tab ${tipo === 'saída' ? 'planner-tab-active bg-rose-600' : ''}`}
                 onClick={() => setTipo('saída')}
               >Saída</button>
             </div>
@@ -475,10 +474,10 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
           <div className="mb-4">
             <label className="block mb-2 font-medium dark:text-gray-200">Valor</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400">R$</span>
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 dark:text-slate-400">R$</span>
               <input
                 type="text"
-                className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2 pl-10"
+                className="planner-input-compact pl-10"
                 value={valor ? formatCurrency(valor) : ''}
                 onChange={e => {
                   const rawValue = e.target.value.replace(/[^\d]/g, '');
@@ -492,7 +491,7 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
           <div className="mb-4">
             <label className="block mb-2 font-medium dark:text-gray-200">Categoria</label>
             <select
-              className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2"
+              className="planner-input-compact"
               value={classificacao}
               onChange={handleCategoriaChange}
               required
@@ -507,7 +506,7 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
             <label className="block mb-2 font-medium dark:text-gray-200">Data</label>
             <input
               type="date"
-              className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2"
+              className="planner-input-compact"
               value={data}
               onChange={e => setData(e.target.value)}
               required
@@ -516,7 +515,7 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
           <div className="mb-4">
             <label className="block mb-2 font-medium dark:text-gray-200">Status</label>
             <select
-              className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2"
+              className="planner-input-compact"
               value={status}
               onChange={e => setStatus(e.target.value)}
               required
@@ -528,7 +527,7 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
           <div className="mb-4">
             <label className="block mb-2 font-medium dark:text-gray-200">Observações (opcional)</label>
             <textarea
-              className="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-3 py-2"
+              className="planner-input-compact min-h-[96px]"
               value={obs}
               onChange={e => {
                 const value = e.target.value;
@@ -544,7 +543,7 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
           </div>
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-2 rounded font-semibold"
+            className="planner-button w-full"
           >
             Salvar Alterações
           </button>
@@ -570,7 +569,7 @@ function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, load
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-gray-800 rounded-2xl p-8 w-full max-w-md relative shadow-xl ring-1 ring-black/5"
+        className="planner-card p-8 w-full max-w-md relative"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -594,7 +593,7 @@ function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, load
             {error}
           </div>
         ) : null}
-        <div className="mb-4 rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+        <div className="mb-4 rounded-xl border border-slate-200/70 bg-slate-100/70 p-4 text-sm text-slate-700 dark:border-slate-800/70 dark:bg-slate-900/50 dark:text-slate-200">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
             <dt className="font-medium text-gray-500 dark:text-gray-400">Tipo</dt>
             <dd className="text-right font-semibold text-gray-900 dark:text-gray-100">{tipoLabel}</dd>
@@ -618,7 +617,7 @@ function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, load
         </div>
         <div className="flex gap-3">
           <button
-            className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 planner-button bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={!!loading}
             onClick={() => onDelete(transacao.id)}
           >
@@ -626,7 +625,7 @@ function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, load
           </button>
           <button
             type="button"
-            className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 planner-button-secondary disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={!!loading}
             onClick={onClose}
           >
@@ -919,7 +918,7 @@ export default function Transactions() {
   };
 
   return (
-    <Layout>
+    <>
       <NovaTransacaoModal 
         open={modalOpen} 
         onClose={() => {
@@ -958,24 +957,24 @@ export default function Transactions() {
       {/* Filtros - Desktop */}
       <div className="hidden md:flex items-center gap-4 mb-6 relative">
         <button
-          className="text-2xl font-bold flex items-center gap-2 bg-white dark:bg-gray-800 dark:text-white rounded-xl px-6 py-2 shadow"
+          className="planner-button-secondary flex items-center gap-2 text-base md:text-lg"
           onClick={() => setShowMonthPicker(true)}
         >
           <span>←</span>
           {meses[selectedMonth]} {selectedYear}
         </button>
         {showMonthPicker && (
-          <div className="absolute left-0 top-16 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 z-50 w-72">
+          <div className="absolute left-0 top-16 planner-card p-4 z-50 w-72">
             <div className="flex items-center justify-between mb-4">
-              <button onClick={() => setSelectedYear(y => y - 1)} className="px-2 py-1 text-lg dark:text-white">◀</button>
+              <button onClick={() => setSelectedYear(y => y - 1)} className="planner-tab">◀</button>
               <span className="font-bold text-lg dark:text-white">{selectedYear}</span>
-              <button onClick={() => setSelectedYear(y => y + 1)} className="px-2 py-1 text-lg dark:text-white">▶</button>
+              <button onClick={() => setSelectedYear(y => y + 1)} className="planner-tab">▶</button>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {meses.map((mes, idx) => (
                 <button
                   key={mes}
-                  className={`py-2 rounded ${idx === selectedMonth && selectedYear === now.getFullYear() ? 'bg-blue-600 text-white font-bold' : 'bg-gray-100 dark:bg-gray-700 dark:text-gray-200 hover:bg-blue-100 dark:hover:bg-gray-600'}`}
+                  className={`${idx === selectedMonth && selectedYear === now.getFullYear() ? 'planner-tab planner-tab-active' : 'planner-tab'} justify-center`}
                   onClick={() => {
                     setSelectedMonth(idx);
                     setShowMonthPicker(false);
@@ -988,13 +987,13 @@ export default function Transactions() {
           </div>
         )}
         <div className="flex gap-2 ml-auto">
-          <button onClick={() => { setPeriod('Essa semana'); setAplicarFiltroDatas(false); setDateRange({ start: '', end: '' }); }} className={`px-4 py-2 rounded-lg border ${period==='Essa semana'?'bg-black dark:bg-blue-600 text-white border-black dark:border-blue-600 font-bold':'bg-white dark:bg-gray-800 dark:text-white border-gray-200 dark:border-gray-600'}`}>Essa semana</button>
-          <button onClick={() => { setPeriod('Esse mês'); setAplicarFiltroDatas(false); setDateRange({ start: '', end: '' }); }} className={`px-4 py-2 rounded-lg border ${period==='Esse mês'?'bg-black dark:bg-blue-600 text-white border-black dark:border-blue-600 font-bold':'bg-white dark:bg-gray-800 dark:text-white border-gray-200 dark:border-gray-600'}`}>Esse mês</button>
-          <button onClick={() => { setPeriod('Hoje'); setAplicarFiltroDatas(false); setDateRange({ start: '', end: '' }); }} className={`px-4 py-2 rounded-lg border ${period==='Hoje'?'bg-black dark:bg-blue-600 text-white border-black dark:border-blue-600 font-bold':'bg-white dark:bg-gray-800 dark:text-white border-gray-200 dark:border-gray-600'}`}>Hoje</button>
-          <input type="date" className="border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2" value={dateRange.start} onChange={e=>setDateRange({...dateRange, start: e.target.value})} />
-          <span className="text-gray-400 dark:text-gray-400">até</span>
-          <input type="date" className="border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2" value={dateRange.end} onChange={e=>setDateRange({...dateRange, end: e.target.value})} />
-          <button className="ml-2 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-gray-200" onClick={e => { e.preventDefault(); setDateRange({ start: '', end: '' }); setAplicarFiltroDatas(false); }}>Limpar</button>
+          <button onClick={() => { setPeriod('Essa semana'); setAplicarFiltroDatas(false); setDateRange({ start: '', end: '' }); }} className={period==='Essa semana' ? 'planner-tab planner-tab-active' : 'planner-tab'}>Essa semana</button>
+          <button onClick={() => { setPeriod('Esse mês'); setAplicarFiltroDatas(false); setDateRange({ start: '', end: '' }); }} className={period==='Esse mês' ? 'planner-tab planner-tab-active' : 'planner-tab'}>Esse mês</button>
+          <button onClick={() => { setPeriod('Hoje'); setAplicarFiltroDatas(false); setDateRange({ start: '', end: '' }); }} className={period==='Hoje' ? 'planner-tab planner-tab-active' : 'planner-tab'}>Hoje</button>
+          <input type="date" className="planner-input-compact" value={dateRange.start} onChange={e=>setDateRange({...dateRange, start: e.target.value})} />
+          <span className="text-slate-400 dark:text-slate-400">até</span>
+          <input type="date" className="planner-input-compact" value={dateRange.end} onChange={e=>setDateRange({...dateRange, end: e.target.value})} />
+          <button className="planner-button-secondary-compact" onClick={e => { e.preventDefault(); setDateRange({ start: '', end: '' }); setAplicarFiltroDatas(false); }}>Limpar</button>
         </div>
       </div>
 
@@ -1002,14 +1001,14 @@ export default function Transactions() {
         {/* Ações (desktop) - no fluxo para evitar sobreposição com tabela */}
         <div className="hidden md:flex items-center justify-end gap-2 mb-4">
           <button
-            className="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700 transition flex items-center gap-2"
+            className="planner-button-secondary flex items-center gap-2"
             onClick={exportToExcel}
           >
             <Download size={18} />
             Exportar Excel
           </button>
           <button
-            className="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700 transition"
+            className="planner-button"
             onClick={() => { setSaveError(null); setModalOpen(true); }}
           >
             + Nova Transação
@@ -1115,7 +1114,7 @@ export default function Transactions() {
 
       {/* Botão flutuante mobile */}
       <button
-        className="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center z-40 hover:bg-blue-700 transition"
+        className="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-blue-600 text-white rounded-full shadow-soft flex items-center justify-center z-40 hover:bg-blue-500 transition"
         onClick={() => { setSaveError(null); setModalOpen(true); }}
         title="Nova Transação"
       >
@@ -1123,6 +1122,6 @@ export default function Transactions() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
       </button>
-    </Layout>
+    </>
   );
 }

@@ -1,0 +1,17 @@
+project:
+  type: brownfield # projeto existente
+  version: "1.0.0"
+
+ide: Cursor # sua IDE
+
+prd:
+  version: "1.0"
+  sharded: true # quebrar docs em partes
+  location: docs/prd
+
+architecture:
+  sharded: true
+  location: docs/architecture
+  
+squads:
+  active: team-fullstack

@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { toast } from 'react-toastify';
-import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
 import { banUser, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
 
 export default function ManageUsers() {
-  const { role, empresaId } = useAuthStore();
+  const { role } = useAuthStore();
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -273,7 +272,7 @@ export default function ManageUsers() {
     setError('');
     setSuccess('');
     try {
-      const result = await resetUserPassword(user.id, newPassword);
+      await resetUserPassword(user.id, newPassword);
       setLastPasswords((prev) => ({ ...prev, [user.id]: newPassword }));
       const message = `Senha redefinida com sucesso.`;
       setSuccess(message);
@@ -288,19 +287,19 @@ export default function ManageUsers() {
 
   if (!canManage) {
     return (
-      <Layout>
+      <>
         <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
           <h1 className="text-xl md:text-3xl font-bold dark:text-white">Gerenciar usuários</h1>
           <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
             Você não tem permissão para acessar esta página.
           </p>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
         <h1 className="text-xl md:text-3xl font-bold dark:text-white mb-4 md:mb-6">Gerenciar usuários</h1>
         <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 mb-4 md:mb-6">
@@ -319,7 +318,7 @@ export default function ManageUsers() {
           </div>
         )}
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+        <div className="planner-card p-4 md:p-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Criar usuário</h2>
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
@@ -327,7 +326,7 @@ export default function ManageUsers() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                className="planner-input-compact"
                 placeholder="Email"
               />
               <div className="relative">
@@ -335,13 +334,13 @@ export default function ManageUsers() {
                   type={showCreatePassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg pr-10"
+                  className="planner-input-compact pr-10"
                   placeholder="Senha (opcional)"
                 />
                 <button
                   type="button"
                   onClick={() => setShowCreatePassword((value) => !value)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
                   aria-label={showCreatePassword ? 'Ocultar senha' : 'Mostrar senha'}
                 >
                   {showCreatePassword ? (
@@ -361,7 +360,7 @@ export default function ManageUsers() {
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                className="planner-input-compact"
                 placeholder="Nome de exibição"
               />
               <PhoneInput
@@ -393,7 +392,7 @@ export default function ManageUsers() {
                 <select
                   value={selectedRole}
                   onChange={(e) => setSelectedRole(e.target.value as 'admin' | 'usuario' | 'outsider')}
-                  className="px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                  className="planner-input-compact"
                 >
                   <option value="admin">Admin</option>
                   <option value="usuario">User</option>
@@ -414,20 +413,20 @@ export default function ManageUsers() {
                         setTargetEmpresaId(match?.id || '');
                       }}
                       onFocus={() => setEmpresaOpen(true)}
-                      className="w-full px-4 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                      className="planner-input-compact"
                       placeholder="Empresa"
                     />
                     <button
                       type="button"
                       onClick={() => setEmpresaOpen((open) => !open)}
-                      className="px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                      className="planner-button-secondary-compact"
                       aria-label="Listar empresas"
                     >
                       ▾
                     </button>
                   </div>
                   {empresaOpen && (
-                    <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow">
+                    <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/80 shadow-soft backdrop-blur">
                       {(empresas || [])
                         .filter((empresa) =>
                           empresa.empresa.toLowerCase().includes(empresaQuery.toLowerCase())
@@ -441,20 +440,20 @@ export default function ManageUsers() {
                               setTargetEmpresaId(empresa.id);
                               setEmpresaOpen(false);
                             }}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60"
                           >
                             {empresa.empresa}
                           </button>
                         ))}
                       {empresas.length === 0 && (
-                        <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                        <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
                           Nenhuma empresa encontrada.
                         </div>
                       )}
                     </div>
                   )}
                   {targetEmpresaId && (
-                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                       Empresa selecionada: {empresaQuery}
                     </p>
                   )}
@@ -465,14 +464,14 @@ export default function ManageUsers() {
             <button
               onClick={handleCreateUser}
               disabled={loading || !email}
-              className="px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
+              className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Salvando...' : 'Criar usuário'}
             </button>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 md:p-6">
+        <div className="planner-card p-4 md:p-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Usuários</h2>
           {loading ? (
             <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
@@ -530,7 +529,7 @@ export default function ManageUsers() {
                         setHighlightedIndex(-1);
                       }
                     }}
-                    className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                    className="planner-input-compact"
                     placeholder="Pesquisar por nome, email ou empresa"
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -543,7 +542,7 @@ export default function ManageUsers() {
                           setHighlightedIndex(-1);
                           setCurrentPage(1);
                         }}
-                        className="text-gray-400 hover:text-gray-200"
+                        className="text-slate-400 hover:text-slate-200"
                         aria-label="Limpar filtro"
                       >
                         ✕
@@ -552,16 +551,16 @@ export default function ManageUsers() {
                     <button
                       type="button"
                       onClick={() => setUserDropdownOpen((open) => !open)}
-                      className="text-gray-400 hover:text-gray-200"
+                      className="text-slate-400 hover:text-slate-200"
                       aria-label="Alternar lista de usuários"
                     >
                       ▾
                     </button>
                   </div>
                   {userDropdownOpen && (
-                    <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow">
+                    <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/80 shadow-soft backdrop-blur">
                       {filteredUsers.length === 0 ? (
-                        <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                        <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
                           Nenhum usuário encontrado.
                         </div>
                       ) : (
@@ -576,14 +575,14 @@ export default function ManageUsers() {
                               setHighlightedIndex(-1);
                               setCurrentPage(1);
                             }}
-                            className={`w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                              highlightedIndex === index ? 'bg-gray-100 dark:bg-gray-700' : ''
+                            className={`w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 ${
+                              highlightedIndex === index ? 'bg-slate-100/80 dark:bg-slate-800/60' : ''
                             }`}
                           >
                             <div className="flex flex-col">
                               <span className="font-semibold">{getUserLabel(user)}</span>
                               {user.empresaName ? (
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
                                   {user.empresaName}
                                 </span>
                               ) : null}
@@ -602,7 +601,7 @@ export default function ManageUsers() {
                       setPageSize(Number(e.target.value));
                       setCurrentPage(1);
                     }}
-                    className="px-2 py-1 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                    className="planner-input-compact py-1 px-2 text-xs"
                   >
                     <option value={10}>10</option>
                     <option value={25}>25</option>
@@ -621,16 +620,16 @@ export default function ManageUsers() {
                 return (
                 <div
                   key={user.id}
-                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2"
+                  className="border border-slate-200/70 dark:border-slate-800/70 rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/70 dark:bg-slate-900/50"
                 >
                   <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">{user.displayName || user.email}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{user.displayName || user.email}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{user.email}</p>
                     {user.phone && (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Telefone: {user.phone}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Telefone: {user.phone}</p>
                     )}
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-300 min-w-[200px]">
+                  <div className="text-sm text-slate-600 dark:text-slate-300 min-w-[200px]">
                     {isEditing ? (
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
@@ -638,7 +637,7 @@ export default function ManageUsers() {
                             type="text"
                             value={lastPasswords[user.id] || ''}
                             readOnly
-                            className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                            className="planner-input-compact"
                             placeholder="Sem senha em cache"
                           />
                           <button
@@ -649,12 +648,12 @@ export default function ManageUsers() {
                               try {
                                 await navigator.clipboard.writeText(value);
                                 toast.success('Senha copiada.');
-                              } catch (copyError) {
+                              } catch {
                                 toast.error('Erro ao copiar senha.');
                               }
                             }}
                             disabled={!lastPasswords[user.id]}
-                            className="px-3 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-gray-600 hover:bg-gray-700"
+                            className="planner-button-secondary-compact disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             Copiar
                           </button>
@@ -663,7 +662,7 @@ export default function ManageUsers() {
                           type="text"
                           value={editDisplayName}
                           onChange={(e) => setEditDisplayName(e.target.value)}
-                          className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                          className="planner-input-compact"
                           placeholder="Nome de exibição"
                         />
                         <PhoneInput
@@ -692,7 +691,7 @@ export default function ManageUsers() {
                           value={editRole}
                           onChange={(e) => setEditRole(e.target.value as 'admin' | 'usuario' | 'outsider')}
                           disabled={role !== 'superadmin'}
-                          className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                          className="planner-input-compact"
                         >
                           {role === 'superadmin' && <option value="admin">Admin</option>}
                           <option value="usuario">User</option>
@@ -714,20 +713,20 @@ export default function ManageUsers() {
                                   setEditEmpresaId(match?.id || '');
                                 }}
                                 onFocus={() => setEditEmpresaOpen(true)}
-                                className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                                className="planner-input-compact"
                                 placeholder="Empresa"
                               />
                               <button
                                 type="button"
                                 onClick={() => setEditEmpresaOpen((open) => !open)}
-                                className="px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg"
+                                className="planner-button-secondary-compact"
                                 aria-label="Listar empresas"
                               >
                                 ▾
                               </button>
                             </div>
                             {editEmpresaOpen && (
-                              <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow">
+                              <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/80 shadow-soft backdrop-blur">
                                 {(empresas || [])
                                   .filter((empresa) =>
                                     empresa.empresa.toLowerCase().includes(editEmpresaQuery.toLowerCase())
@@ -741,13 +740,13 @@ export default function ManageUsers() {
                                         setEditEmpresaId(empresa.id);
                                         setEditEmpresaOpen(false);
                                       }}
-                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60"
                                     >
                                       {empresa.empresa}
                                     </button>
                                   ))}
                                 {empresas.length === 0 && (
-                                  <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                  <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
                                     Nenhuma empresa encontrada.
                                   </div>
                                 )}
@@ -761,7 +760,7 @@ export default function ManageUsers() {
                           <button
                             onClick={() => handleUpdateUser(user)}
                             disabled={loading || (role === 'superadmin' && !editEmpresaId)}
-                            className="px-3 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
+                            className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             Salvar
                           </button>
@@ -769,7 +768,7 @@ export default function ManageUsers() {
                             <button
                               onClick={() => handleBanUser(user)}
                               disabled={loading}
-                              className="px-3 py-2 text-white rounded-lg font-semibold bg-yellow-600 hover:bg-yellow-700"
+                              className="planner-button bg-amber-500 hover:bg-amber-400"
                             >
                               Bloquear
                             </button>
@@ -778,7 +777,7 @@ export default function ManageUsers() {
                             <button
                               onClick={() => handleUnbanUser(user)}
                               disabled={loading}
-                              className="px-3 py-2 text-white rounded-lg font-semibold bg-green-600 hover:bg-green-700"
+                              className="planner-button bg-emerald-600 hover:bg-emerald-500"
                             >
                               Desbloquear
                             </button>
@@ -787,7 +786,7 @@ export default function ManageUsers() {
                             <button
                               onClick={() => handleResetPassword(user)}
                               disabled={loading}
-                              className="px-3 py-2 text-white rounded-lg font-semibold bg-indigo-600 hover:bg-indigo-700"
+                              className="planner-button bg-indigo-600 hover:bg-indigo-500"
                             >
                               Redefinir senha
                             </button>
@@ -796,14 +795,14 @@ export default function ManageUsers() {
                             <button
                               onClick={() => handleDeleteUser(user)}
                               disabled={loading}
-                              className="px-3 py-2 text-white rounded-lg font-semibold bg-red-600 hover:bg-red-700"
+                              className="planner-button bg-rose-600 hover:bg-rose-500"
                             >
                               Excluir
                             </button>
                           )}
                           <button
                             onClick={() => setEditingUserId(null)}
-                            className="px-3 py-2 text-gray-700 dark:text-gray-200 rounded-lg border dark:border-gray-600"
+                            className="planner-button-secondary-compact"
                           >
                             Cancelar
                           </button>
@@ -816,7 +815,7 @@ export default function ManageUsers() {
                         {canEdit && (
                           <button
                             onClick={() => startEditUser(user)}
-                            className="mt-2 px-3 py-2 text-white rounded-lg font-semibold bg-blue-600 hover:bg-blue-700"
+                            className="mt-2 planner-button"
                           >
                             Editar
                           </button>
@@ -832,11 +831,11 @@ export default function ManageUsers() {
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                   disabled={currentPageSafe <= 1}
-                  className="px-3 py-2 text-sm text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-gray-600 hover:bg-gray-700"
+                  className="planner-button-secondary-compact disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Anterior
                 </button>
-                <div className="text-center text-sm text-gray-600 dark:text-gray-300">
+                <div className="text-center text-sm text-slate-600 dark:text-slate-300">
                   <p>
                     Página {currentPageSafe} de {totalPages}
                   </p>
@@ -848,7 +847,7 @@ export default function ManageUsers() {
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                   disabled={currentPageSafe >= totalPages}
-                  className="px-3 py-2 text-sm text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-gray-600 hover:bg-gray-700"
+                  className="planner-button-secondary-compact disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Próximo
                 </button>
@@ -857,6 +856,6 @@ export default function ManageUsers() {
           )}
         </div>
       </div>
-    </Layout>
+    </>
   );
 }

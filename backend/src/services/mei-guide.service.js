@@ -8,6 +8,7 @@ import {
   encryptPassphrase,
   decryptPassphrase,
   saveCertificate,
+  saveCertificateDocument,
   loadCertificate,
   deleteCertificate,
   getCertificateDocument
@@ -795,12 +796,6 @@ const buildDownloadUrl = (id) => {
   return `${getBaseUrl()}${path}`;
 };
 
-const buildPeriodsUrl = (cnpj) => {
-  if (!env.MEI_API_PERIODS_PATH) return null;
-  const query = `cnpj=${encodeURIComponent(normalizeCnpj(cnpj))}`;
-  return `${getBaseUrl()}${env.MEI_API_PERIODS_PATH}?${query}`;
-};
-
 const parseErrorMessage = async (response) => {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
@@ -968,51 +963,6 @@ const parseSerproDados = (value) => {
   }
 };
 
-const normalizeStatus = (value) => {
-  if (typeof value === 'boolean') {
-    return value ? 'pago' : 'a_pagar';
-  }
-  const text = String(value || '').toLowerCase();
-  if (text.includes('pago')) return 'pago';
-  if (text.includes('paga')) return 'pago';
-  if (text.includes('quitado')) return 'pago';
-  return 'a_pagar';
-};
-
-const parseCompetencia = (value, fallbackMes, fallbackAno) => {
-  if (fallbackMes && fallbackAno) {
-    return `${Number(fallbackAno)}-${String(Number(fallbackMes)).padStart(2, '0')}`;
-  }
-
-  if (!value) return null;
-  const text = String(value);
-
-  const ymd = text.match(/^(\d{4})[-/](\d{1,2})$/);
-  if (ymd) {
-    return `${ymd[1]}-${String(ymd[2]).padStart(2, '0')}`;
-  }
-
-  const mdy = text.match(/^(\d{1,2})[/-](\d{4})$/);
-  if (mdy) {
-    return `${mdy[2]}-${String(mdy[1]).padStart(2, '0')}`;
-  }
-
-  return text;
-};
-
-const sortByCompetenciaDesc = (items) => {
-  return items.slice().sort((a, b) => {
-    const aKey = a.competencia || '';
-    const bKey = b.competencia || '';
-    const aDate = new Date(`${aKey}-01T00:00:00`);
-    const bDate = new Date(`${bKey}-01T00:00:00`);
-    if (Number.isNaN(aDate.getTime()) || Number.isNaN(bDate.getTime())) {
-      return 0;
-    }
-    return bDate.getTime() - aDate.getTime();
-  });
-};
-
 const resolveContribuinte = (userId, contrib, cnpj) => {
   const fromRequest = normalizeDoc(contrib?.numero || cnpj);
   const fromCert = getUserCertDocument(userId);
@@ -1090,7 +1040,12 @@ export const getCertificateStatus = async (userId) => {
   await ensureUserCertLoaded(userId);
   const hasCert = Boolean(getUserCert(userId));
   const docFromCache = getUserCertDocument(userId);
-  const docFromDb = env.MEI_CERT_ENCRYPTION_KEY ? await getCertificateDocument(userId) : null;
+  let docFromDb = null;
+  try {
+    docFromDb = await getCertificateDocument(userId);
+  } catch {
+    docFromDb = null;
+  }
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
@@ -1117,6 +1072,9 @@ export const createGuideByCnpj = async (userId, payload) => {
   const cnpjNumerico = normalizeDoc(cnpj);
   if (!cnpjNumerico || !validateDoc(cnpjNumerico)) {
     throw badRequest('CNPJ do MEI inválido');
+  }
+  if (userId) {
+    await saveCertificateDocument(userId, cnpjNumerico);
   }
   const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO);
   if (!contratanteNumero) {
@@ -1233,38 +1191,87 @@ export const downloadGuide = async (payload) => {
   throw badRequest('Envie o certificado do cliente ou informe o CNPJ do MEI para baixar a guia');
 };
 
+const buildRecentCompetencias = (count = 12, includeCurrent = false) => {
+  const now = new Date();
+  const base = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (!includeCurrent) {
+    base.setMonth(base.getMonth() - 1);
+  }
+  const competencias = [];
+  for (let i = 0; i < count; i += 1) {
+    const date = new Date(base.getFullYear(), base.getMonth() - i, 1);
+    const competencia = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    competencias.push(competencia);
+  }
+  return competencias;
+};
+
+const buildPeriodsFromPdf = async (userId, options = {}) => {
+  const { cnpj, contribuinte, useCertificate = false } = options;
+  const competencias = buildRecentCompetencias(12, false);
+  const items = [];
+
+  for (const competencia of competencias) {
+    const period = normalizePeriodoApuracao(competencia);
+    if (!period) continue;
+
+    try {
+      if (useCertificate) {
+        await createGuide(userId, {
+          cnpj,
+          periodoApuracao: period,
+          contribuinte
+        });
+      } else {
+        await createGuideByCnpj(userId, {
+          cnpj,
+          periodoApuracao: period
+        });
+      }
+      items.push({
+        competencia,
+        status: 'a_pagar',
+        guideId: period
+      });
+    } catch {
+      items.push({
+        competencia,
+        status: 'pago',
+        guideId: period
+      });
+    }
+  }
+
+  return items;
+};
+
 export const listPeriods = async (userId, payload) => {
   ensureConfigured();
   await ensureClientCertificate(userId);
   const { cnpj, contribuinte } = payload || {};
   const contrib = resolveContribuinte(userId, contribuinte, cnpj);
   const autor = contrib;
+  const cnpjNumerico = normalizeDoc(contrib.numero);
 
-  const url = buildPeriodsUrl(contrib.numero);
-  if (!url) {
-    throw badRequest('Endpoint de períodos não configurado');
-  }
-
-  const response = await requestGetJson(url, userId, {
-    autorPedidoDados: autor,
-    contribuinte: contrib
+  return await buildPeriodsFromPdf(userId, {
+    cnpj: cnpjNumerico,
+    contribuinte: autor,
+    useCertificate: true
   });
-  const rawItems = response?.periods || response?.items || response?.data || response || [];
-  const normalized = Array.isArray(rawItems) ? rawItems.map((item) => {
-    const competencia = parseCompetencia(
-      item?.competencia || item?.periodo || item?.period || item?.reference,
-      item?.mes,
-      item?.ano
-    );
-    return {
-      competencia,
-      status: normalizeStatus(item?.status || item?.situacao || item?.pago),
-      guideId: item?.guideId || item?.guiaId || item?.downloadId || item?.id || item?.codigo || null
-    };
-  }) : [];
+};
 
-  const sorted = sortByCompetenciaDesc(normalized);
-  return sorted.slice(0, 12);
+export const listPeriodsByCnpj = async (userId, payload) => {
+  if (!isNoMtlsEnabled()) {
+    throw badRequest('Consulta por CNPJ requer SERPRO_OAUTH_TOKEN_NO_MTLS=true');
+  }
+  const cnpjNumerico = normalizeCnpj(payload?.cnpj);
+  if (!validateCnpj(cnpjNumerico)) {
+    throw badRequest('CNPJ do MEI inválido');
+  }
+  return await buildPeriodsFromPdf(userId, {
+    cnpj: cnpjNumerico,
+    useCertificate: false
+  });
 };
 
 export const validateGuide = async (userId, payload) => {
@@ -1282,7 +1289,10 @@ export const validateGuide = async (userId, payload) => {
   const hasCert = userId ? hasUserCertificate(userId) : false;
   if (hasCert) {
     await ensureClientCertificate(userId);
-    await listPeriods(userId, { cnpj: cnpjNumerico });
+    await createGuide(userId, {
+      cnpj: cnpjNumerico,
+      periodoApuracao: period
+    });
     return {
       valid: true,
       message: 'CNPJ e certificado validados com sucesso.'

@@ -38,6 +38,10 @@ FRONTEND_URL=http://localhost:3000
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
+PLUGNOTAS_API_BASE_URL=
+PLUGNOTAS_API_KEY=
+PLUGNOTAS_TIMEOUT_MS=15000
+PLUGNOTAS_WEBHOOK_TOKEN=
 ```
 Observações sobre CORS:
 - `CORS_ORIGIN` aceita múltiplas origens separadas por vírgula (ex.: `https://meu-financeiro-frontend.vercel.app,http://localhost:3000`).

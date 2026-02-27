@@ -1,10 +1,41 @@
 import { proxyRequest } from '../services/googleCalendar.service.js';
+import { badRequest } from '../utils/errors.js';
+
+const ALLOWED_ROUTES = new Map([
+  ['check-auth', new Set(['GET'])],
+  ['auth', new Set(['GET'])],
+  ['callback', new Set(['POST'])],
+  ['events', new Set(['GET'])],
+  ['create-event', new Set(['POST'])]
+]);
+
+export const isAllowedProxyRoute = (path, method) => {
+  const cleanPath = String(path || '').trim();
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  const allowedMethods = ALLOWED_ROUTES.get(cleanPath);
+
+  return Boolean(allowedMethods && allowedMethods.has(normalizedMethod));
+};
+
+const ensureAllowedProxyRoute = (path, method) => {
+  if (!isAllowedProxyRoute(path, method)) {
+    const cleanPath = String(path || '').trim();
+    if (!ALLOWED_ROUTES.has(cleanPath)) {
+      throw badRequest('Rota de integração inválida');
+    }
+    throw badRequest('Método não permitido para a rota de integração');
+  }
+};
 
 export const proxyGoogleCalendar = async (req, res, next) => {
   try {
+    const proxyPath = req.params.path || '';
+    const proxyMethod = req.method;
+    ensureAllowedProxyRoute(proxyPath, proxyMethod);
+
     const result = await proxyRequest({
-      path: req.params.path || '',
-      method: req.method,
+      path: proxyPath,
+      method: proxyMethod,
       headers: { authorization: req.headers.authorization || '' },
       query: req.query,
       body: req.body

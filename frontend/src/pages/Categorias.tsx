@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import Layout from '../Layout/Layout';
 import { useAuthStore } from '../store/authStore';
 import {
   fetchCategories,
@@ -200,7 +199,7 @@ export default function Categorias() {
     : categorias;
 
   return (
-    <Layout>
+    <>
       <CategoriaModal 
         open={modalOpen} 
         onClose={() => {
@@ -333,6 +332,6 @@ export default function Categorias() {
           </>
         )}
       </div>
-    </Layout>
+    </>
   );
 } 

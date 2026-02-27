@@ -16,7 +16,6 @@ import {
   Legend,
 } from 'chart.js';
 import { Link } from 'react-router-dom';
-import Layout from '../Layout/Layout';
 import { fetchCategories, fetchCategoryBudgetsSummary, fetchCategoryBudgetsYearly, type Category, type CategoryBudgetYearly } from '../services/categoryService';
 
 ChartJS.register(
@@ -517,7 +516,7 @@ export default function Dashboard() {
       };
 
   return (
-    <Layout>
+    <>
       {/* Conteúdo do dashboard abaixo, sem header/main duplicado */}
       {hasRole(role, ['admin']) && (
         <div className="planner-card p-5 md:p-6 mb-4 md:mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -532,7 +531,7 @@ export default function Dashboard() {
           </div>
           <Link
             to="/settings/usuarios-dados"
-            className="inline-flex items-center justify-center px-4 py-2 text-white rounded-lg font-semibold bg-slate-800 hover:bg-slate-900"
+            className="planner-button"
           >
             Painel Admin
           </Link>
@@ -543,19 +542,19 @@ export default function Dashboard() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => handlePeriod('Semana')}
-            className={period === 'Semana' ? 'planner-button' : 'planner-button-secondary'}
+            className={period === 'Semana' ? 'planner-tab planner-tab-active' : 'planner-tab'}
           >
             Semana
           </button>
           <button
             onClick={() => handlePeriod('Mês')}
-            className={period === 'Mês' ? 'planner-button' : 'planner-button-secondary'}
+            className={period === 'Mês' ? 'planner-tab planner-tab-active' : 'planner-tab'}
           >
             Mês
           </button>
           <button
             onClick={() => handlePeriod('Hoje')}
-            className={period === 'Hoje' ? 'planner-button' : 'planner-button-secondary'}
+            className={period === 'Hoje' ? 'planner-tab planner-tab-active' : 'planner-tab'}
           >
             Hoje
           </button>
@@ -563,7 +562,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-2 md:ml-auto">
           <button
             onClick={() => setBpoOpen((prev) => !prev)}
-            className={bpoOpen ? 'planner-button' : 'planner-button-secondary'}
+            className={bpoOpen ? 'planner-tab planner-tab-active' : 'planner-tab'}
           >
             BPO
           </button>
@@ -674,21 +673,13 @@ export default function Dashboard() {
                 <div className="flex gap-2">
                   <button 
                     onClick={() => setDespesaTab('pagos')}
-                    className={`text-xs px-3 py-1 rounded font-semibold ${
-                      despesaTab === 'pagos' 
-                        ? 'bg-slate-100 dark:bg-slate-800 dark:text-white' 
-                        : 'bg-slate-100 dark:bg-slate-700 dark:text-gray-300'
-                    }`}
+                    className={despesaTab === 'pagos' ? 'planner-tab planner-tab-active' : 'planner-tab'}
                   >
                     Pagos
                   </button>
                   <button 
                     onClick={() => setDespesaTab('a_pagar')}
-                    className={`text-xs px-3 py-1 rounded font-semibold ${
-                      despesaTab === 'a_pagar' 
-                        ? 'bg-slate-100 dark:bg-slate-800 dark:text-white' 
-                        : 'bg-slate-100 dark:bg-slate-700 dark:text-gray-300'
-                    }`}
+                    className={despesaTab === 'a_pagar' ? 'planner-tab planner-tab-active' : 'planner-tab'}
                   >
                     A Pagar
                   </button>
@@ -747,22 +738,14 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setBudgetTab('entrada')}
-                  className={`text-xs px-3 py-1 rounded font-semibold ${
-                    budgetTab === 'entrada'
-                      ? 'bg-slate-100 dark:bg-slate-800 dark:text-white'
-                      : 'bg-slate-100 dark:bg-slate-700 dark:text-gray-300'
-                  }`}
+                  className={budgetTab === 'entrada' ? 'planner-tab planner-tab-active' : 'planner-tab'}
                 >
                   Entrada
                 </button>
                 <button
                   type="button"
                   onClick={() => setBudgetTab('saida')}
-                  className={`text-xs px-3 py-1 rounded font-semibold ${
-                    budgetTab === 'saida'
-                      ? 'bg-slate-100 dark:bg-slate-800 dark:text-white'
-                      : 'bg-slate-100 dark:bg-slate-700 dark:text-gray-300'
-                  }`}
+                  className={budgetTab === 'saida' ? 'planner-tab planner-tab-active' : 'planner-tab'}
                 >
                   Saída
                 </button>
@@ -1065,6 +1048,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </Layout>
+    </>
   );
 }

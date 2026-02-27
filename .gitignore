@@ -1,3 +1,35 @@
 node_modules/
 frontend/node_modules/
 backend/node_modules/
+
+# Environment & Secrets (AIOS)
+.env
+.env.*
+.env.local
+.env.*.local
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+*.key
+*.pem
+
+# Dependencies (AIOS)
+node_modules
+
+# Build & Logs (AIOS)
+dist/
+build/
+*.log
+logs/
+
+# IDE & OS (AIOS)
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# AIOS Local (AIOS)
+.aios-core/local/
+.claude/settings.local.json
+.aios/install-log.txt

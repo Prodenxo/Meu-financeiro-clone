@@ -1,0 +1,25 @@
+status:
+  branch: Leo-Main
+  modifiedFiles:
+    - .aios/
+  modifiedFilesTotalCount: 1
+  recentCommits:
+    - >-
+      Update .gitignore, package.json, and backend services for improved
+      environment management and new features. Add environment variable handling
+      for PlugNotas API, enhance backend with new endpoints for DAS management,
+      and integrate type checking and testing scripts. Update frontend build
+      configurations for better asset management and performance.
+    - >-
+      Add guide validation functionality in MEI service and frontend. Implement
+      validateGuide endpoint in the backend to check CNPJ and period validity,
+      enhancing user experience. Update GuidesMei component to include
+      validation logic and feedback for CNPJ input, ensuring better error
+      handling and user guidance.
+  currentEpic: null
+  currentStory: null
+  lastUpdate: '2026-02-23T20:24:26.053Z'
+  isGitRepo: true
+timestamp: 1771878266066
+ttl: 60
+gitFingerprint: 1768584320253.7612:1771877093180.1445
