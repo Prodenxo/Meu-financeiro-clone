@@ -1,17 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
 import { listUsers, type ManagedUser } from '../services/usersService';
 import {
+  downloadAdminMeiGuide,
   fetchAdminDasStatus,
+  fetchAdminMeiCertificateStatus,
+  fetchAdminMeiPeriods,
+  fetchAdminMeiPeriodsByCnpj,
   fetchAdminUserBalance,
   fetchAdminUserBudgetSummary,
   fetchAdminUserCategories,
   fetchAdminUserTransactions,
+  sendAdminMeiGuideWhatsapp,
   type AdminBalance,
   type AdminDasPendingSummary,
-  type AdminDasStatusFilters
+  type AdminDasStatusFilters,
+  type AdminMeiCertificateStatus,
+  type AdminMeiPeriod
 } from '../services/adminUserDataService';
 import type { Transaction } from '../services/transactionService';
 import type { Category, CategoryBudgetSummary } from '../services/categoryService';
@@ -26,6 +33,58 @@ const formatDate = (value?: string | null) => {
   return date.toLocaleDateString('pt-BR');
 };
 
+const normalizeDoc = (value: string) => value.replace(/\D/g, '');
+
+const formatDocument = (value: string) => {
+  const digits = normalizeDoc(value).slice(0, 14);
+  let formatted = '';
+  for (let i = 0; i < digits.length; i += 1) {
+    formatted += digits[i];
+    if (digits.length <= 11) {
+      if (i === 2 || i === 5) formatted += '.';
+      if (i === 8) formatted += '-';
+    } else {
+      if (i === 1 || i === 4) formatted += '.';
+      if (i === 7) formatted += '/';
+      if (i === 11) formatted += '-';
+    }
+  }
+  return formatted;
+};
+
+const formatDasCompetenciaLabel = (value?: string | null) => {
+  if (!value) return '---';
+  const match = String(value).match(/^(\d{4})-(\d{2})$/);
+  if (match) {
+    return `${match[2]}/${match[1]}`;
+  }
+  return String(value);
+};
+
+const getDefaultMeiPeriod = () => {
+  const now = new Date();
+  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return {
+    year: previous.getFullYear(),
+    month: String(previous.getMonth() + 1).padStart(2, '0')
+  };
+};
+
+const toPeriodoApuracao = (month: string, year: number) => {
+  return `${year}${month}`;
+};
+
+const triggerFileDownload = (blob: Blob, filename: string) => {
+  const downloadUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = downloadUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(downloadUrl);
+};
+
 const getDasStatusLabel = (status: 'pago' | 'pendente' | 'erro') => {
   if (status === 'pago') return 'Pago';
   if (status === 'erro') return 'Erro';
@@ -38,6 +97,17 @@ const getDasStatusClasses = (status: 'pago' | 'pendente' | 'erro') => {
   }
   if (status === 'erro') {
     return 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300';
+  }
+  return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+};
+
+const getMeiStatusLabel = (status?: AdminMeiPeriod['status'] | null) => {
+  return status === 'pago' ? 'Pago' : 'Pendente';
+};
+
+const getMeiStatusClasses = (status?: AdminMeiPeriod['status'] | null) => {
+  if (status === 'pago') {
+    return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
   }
   return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
 };
@@ -80,6 +150,19 @@ export default function AdminUserData() {
   const [budgetSummary, setBudgetSummary] = useState<CategoryBudgetSummary[]>([]);
   const [balance, setBalance] = useState<AdminBalance | null>(null);
   const [dasPendingSummary, setDasPendingSummary] = useState<AdminDasPendingSummary | null>(null);
+  const defaultMeiPeriod = useMemo(() => getDefaultMeiPeriod(), []);
+  const [meiCertificateStatus, setMeiCertificateStatus] = useState<AdminMeiCertificateStatus | null>(null);
+  const [meiCnpj, setMeiCnpj] = useState('');
+  const [meiSelectedYear, setMeiSelectedYear] = useState<number>(defaultMeiPeriod.year);
+  const [meiSelectedMonth, setMeiSelectedMonth] = useState<string>(defaultMeiPeriod.month);
+  const [meiPeriods, setMeiPeriods] = useState<AdminMeiPeriod[]>([]);
+  const [meiPeriodsLoading, setMeiPeriodsLoading] = useState(false);
+  const [meiPeriodsError, setMeiPeriodsError] = useState<string | null>(null);
+  const [meiActionError, setMeiActionError] = useState<string | null>(null);
+  const [meiActionSuccess, setMeiActionSuccess] = useState<string | null>(null);
+  const [meiDownloading, setMeiDownloading] = useState(false);
+  const [meiSending, setMeiSending] = useState(false);
+  const [meiStatusLoading, setMeiStatusLoading] = useState(false);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -99,8 +182,9 @@ export default function AdminUserData() {
           : data;
         setUsers(scopedUsers || []);
       })
-      .catch((err: any) => {
-        setError(err.message || 'Erro ao carregar usuários');
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Erro ao carregar usuários';
+        setError(message);
       })
       .finally(() => {
         setLoadingUsers(false);
@@ -110,6 +194,11 @@ export default function AdminUserData() {
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) || null,
     [users, selectedUserId]
+  );
+  const normalizedMeiCnpj = useMemo(() => normalizeDoc(meiCnpj), [meiCnpj]);
+  const canLoadMeiPeriods = useMemo(
+    () => Boolean(meiCertificateStatus?.hasUserCertificate) || normalizedMeiCnpj.length === 14,
+    [meiCertificateStatus?.hasUserCertificate, normalizedMeiCnpj.length]
   );
 
   const getUserLabel = (user: ManagedUser) =>
@@ -221,6 +310,15 @@ export default function AdminUserData() {
     return `${startLabel} até ${endLabel}`;
   }, [dateFilter, dateStart, dateEnd]);
 
+  const availableMeiYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return Array.from({ length: 10 }, (_, index) => currentYear - index);
+  }, []);
+
+  const availableMeiMonths = useMemo(() => (
+    Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'))
+  ), []);
+
   const isCrossMonthRange = useMemo(() => {
     if (!dateStart || !dateEnd) return false;
     const start = new Date(`${dateStart}T00:00:00-03:00`);
@@ -241,8 +339,9 @@ export default function AdminUserData() {
       setTransactions(transactionsData || []);
       setCategories(categoriesData || []);
       setBalance(balanceData || null);
-    } catch (err: any) {
-      setDataError(err.message || 'Erro ao carregar dados do usuário');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao carregar dados do usuário';
+      setDataError(message);
     } finally {
       setLoadingData(false);
     }
@@ -258,10 +357,120 @@ export default function AdminUserData() {
         q: filters?.q ?? debouncedDasSearch
       });
       setDasPendingSummary(data || null);
-    } catch (err: any) {
-      setDasError(err.message || 'Erro ao carregar pendências de DAS');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao carregar pendências de DAS';
+      setDasError(message);
     } finally {
       setLoadingDasPending(false);
+    }
+  };
+
+  const resetMeiState = useCallback(() => {
+    setMeiCertificateStatus(null);
+    setMeiCnpj('');
+    setMeiPeriods([]);
+    setMeiPeriodsError(null);
+    setMeiActionError(null);
+    setMeiActionSuccess(null);
+  }, []);
+
+  const loadMeiCertificateStatus = useCallback(async (userId: string) => {
+    setMeiStatusLoading(true);
+    setMeiActionError(null);
+    try {
+      const data = await fetchAdminMeiCertificateStatus(userId);
+      setMeiCertificateStatus(data || null);
+      if (data?.documento) {
+        setMeiCnpj(formatDocument(data.documento));
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao carregar certificado MEI';
+      setMeiCertificateStatus(null);
+      setMeiActionError(message);
+    } finally {
+      setMeiStatusLoading(false);
+    }
+  }, []);
+
+  const loadMeiPeriods = useCallback(async (userId: string) => {
+    if (!canLoadMeiPeriods) {
+      setMeiPeriods([]);
+      setMeiPeriodsError(null);
+      return;
+    }
+    setMeiPeriodsLoading(true);
+    setMeiPeriodsError(null);
+    const cnpjParam = normalizedMeiCnpj.length === 14 ? normalizedMeiCnpj : undefined;
+    try {
+      const data = meiCertificateStatus?.hasUserCertificate
+        ? await fetchAdminMeiPeriods(userId, cnpjParam)
+        : await fetchAdminMeiPeriodsByCnpj(userId, cnpjParam || '');
+      setMeiPeriods(data || []);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao listar períodos do DAS.';
+      setMeiPeriodsError(message);
+    } finally {
+      setMeiPeriodsLoading(false);
+    }
+  }, [canLoadMeiPeriods, meiCertificateStatus?.hasUserCertificate, normalizedMeiCnpj]);
+
+  const handleMeiDownload = async () => {
+    if (!selectedUserId) return;
+    setMeiActionError(null);
+    setMeiActionSuccess(null);
+    const hasCertificate = Boolean(meiCertificateStatus?.hasUserCertificate);
+    if (!hasCertificate && normalizedMeiCnpj.length !== 14) {
+      setMeiActionError('Informe o CNPJ do MEI para baixar a guia.');
+      return;
+    }
+    const periodoApuracao = toPeriodoApuracao(meiSelectedMonth, meiSelectedYear);
+    const cnpjParam = normalizedMeiCnpj.length === 14 ? normalizedMeiCnpj : undefined;
+    setMeiDownloading(true);
+    try {
+      const { blob, filename } = await downloadAdminMeiGuide(
+        selectedUserId,
+        periodoApuracao,
+        cnpjParam
+      );
+      triggerFileDownload(blob, filename || `guia-mei-${periodoApuracao}.pdf`);
+      setMeiActionSuccess('Download da guia iniciado.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao baixar guia.';
+      setMeiActionError(message);
+    } finally {
+      setMeiDownloading(false);
+    }
+  };
+
+  const handleMeiSendWhatsapp = async () => {
+    if (!selectedUserId) return;
+    setMeiActionError(null);
+    setMeiActionSuccess(null);
+    const hasCertificate = Boolean(meiCertificateStatus?.hasUserCertificate);
+    if (!selectedUser?.phone) {
+      setMeiActionError('Telefone do usuário não informado.');
+      return;
+    }
+    if (!hasCertificate && normalizedMeiCnpj.length !== 14) {
+      setMeiActionError('Informe o CNPJ do MEI para enviar a guia.');
+      return;
+    }
+    const periodoApuracao = toPeriodoApuracao(meiSelectedMonth, meiSelectedYear);
+    const competencia = `${meiSelectedYear}-${meiSelectedMonth}`;
+    const cnpjParam = normalizedMeiCnpj.length === 14 ? normalizedMeiCnpj : undefined;
+    setMeiSending(true);
+    try {
+      await sendAdminMeiGuideWhatsapp(selectedUserId, {
+        periodoApuracao,
+        competencia,
+        ...(cnpjParam ? { cnpj: cnpjParam } : {})
+      });
+      setMeiActionSuccess('Envio para WhatsApp solicitado.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao enviar guia pelo WhatsApp.';
+      setMeiActionError(message);
+    } finally {
+      setMeiSending(false);
     }
   };
 
@@ -278,6 +487,27 @@ export default function AdminUserData() {
   }, [selectedUserId]);
 
   useEffect(() => {
+    if (!selectedUserId) {
+      resetMeiState();
+      return;
+    }
+    resetMeiState();
+    setMeiSelectedYear(defaultMeiPeriod.year);
+    setMeiSelectedMonth(defaultMeiPeriod.month);
+    void loadMeiCertificateStatus(selectedUserId);
+  }, [selectedUserId, defaultMeiPeriod.year, defaultMeiPeriod.month, loadMeiCertificateStatus, resetMeiState]);
+
+  useEffect(() => {
+    if (!selectedUserId) return;
+    if (!canLoadMeiPeriods) {
+      setMeiPeriods([]);
+      setMeiPeriodsError(null);
+      return;
+    }
+    void loadMeiPeriods(selectedUserId);
+  }, [selectedUserId, canLoadMeiPeriods, loadMeiPeriods]);
+
+  useEffect(() => {
     if (!selectedUserId) return;
     setLoadingBudgets(true);
     setDataError('');
@@ -288,8 +518,9 @@ export default function AdminUserData() {
       .then((data) => {
         setBudgetSummary(data || []);
       })
-      .catch((err: any) => {
-        setDataError(err.message || 'Erro ao carregar orçamentos do usuário');
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Erro ao carregar orçamentos do usuário';
+        setDataError(message);
       })
       .finally(() => {
         setLoadingBudgets(false);
@@ -639,11 +870,173 @@ export default function AdminUserData() {
         {!selectedUserId ? (
           <div className="planner-card p-4 md:p-6">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Selecione um usuário para visualizar os dados.
+              Selecione um usuário para visualizar os dados e o Meu MEI.
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <>
+            <div className="planner-card p-4 md:p-6 space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-lg md:text-xl font-semibold dark:text-white">Meu MEI (cliente)</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Gere, baixe e envie a guia DAS do cliente selecionado.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => selectedUserId && loadMeiPeriods(selectedUserId)}
+                  disabled={!canLoadMeiPeriods || meiPeriodsLoading}
+                  className="px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
+                >
+                  {meiPeriodsLoading ? 'Atualizando...' : 'Atualizar histórico'}
+                </button>
+              </div>
+
+              {meiActionError && (
+                <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded">
+                  {meiActionError}
+                </div>
+              )}
+
+              {meiActionSuccess && (
+                <div className="bg-green-100 dark:bg-green-900 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 px-4 py-3 rounded">
+                  {meiActionSuccess}
+                </div>
+              )}
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="md:col-span-1">
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">CNPJ do MEI</label>
+                  <input
+                    type="text"
+                    value={meiCnpj}
+                    onChange={(event) => setMeiCnpj(formatDocument(event.target.value))}
+                    placeholder="00.000.000/0001-00"
+                    className="planner-input-compact"
+                  />
+                  {meiStatusLoading ? (
+                    <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Carregando certificado...
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {meiCertificateStatus?.hasUserCertificate && (
+                        <span className="planner-chip dark:bg-blue-900/30 dark:text-blue-200">
+                          Certificado do cliente ativo
+                        </span>
+                      )}
+                      {!meiCertificateStatus?.hasUserCertificate && meiCertificateStatus?.hasEnvCertificate && (
+                        <span className="planner-chip dark:bg-blue-900/30 dark:text-blue-200">
+                          Certificado do servidor disponível
+                        </span>
+                      )}
+                      {!meiCertificateStatus?.hasUserCertificate && !meiCertificateStatus?.hasEnvCertificate && (
+                        <span className="planner-chip dark:bg-amber-900/30 dark:text-amber-200">
+                          Sem certificado disponível
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Mês</label>
+                  <select
+                    className="planner-input-compact"
+                    value={meiSelectedMonth}
+                    onChange={(event) => setMeiSelectedMonth(event.target.value)}
+                  >
+                    {availableMeiMonths.map((month) => (
+                      <option key={month} value={month}>{month}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Ano</label>
+                  <select
+                    className="planner-input-compact"
+                    value={meiSelectedYear}
+                    onChange={(event) => setMeiSelectedYear(Number(event.target.value))}
+                  >
+                    {availableMeiYears.map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleMeiDownload}
+                  disabled={meiDownloading}
+                  className="planner-button-compact"
+                >
+                  {meiDownloading ? 'Baixando...' : 'Baixar guia'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleMeiSendWhatsapp}
+                  disabled={meiSending || !selectedUser?.phone}
+                  className="planner-button-compact"
+                >
+                  {meiSending ? 'Enviando...' : 'Enviar por zap'}
+                </button>
+              </div>
+
+              {!selectedUser?.phone && (
+                <p className="text-xs text-amber-600 dark:text-amber-300">
+                  Telefone do cliente nao cadastrado. Atualize antes de enviar.
+                </p>
+              )}
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold dark:text-white">Histórico do DAS</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Últimos períodos consultados e situação do pagamento.
+                    </p>
+                  </div>
+                </div>
+
+                {!canLoadMeiPeriods ? (
+                  <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                    Informe o CNPJ do MEI para consultar meses pagos.
+                  </div>
+                ) : meiPeriodsLoading ? (
+                  <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    Carregando histórico...
+                  </div>
+                ) : meiPeriodsError ? (
+                  <div className="mt-2 text-sm text-rose-600 dark:text-rose-400">
+                    {meiPeriodsError}
+                  </div>
+                ) : meiPeriods.length === 0 ? (
+                  <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    Nenhum período encontrado.
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {meiPeriods.map((period) => (
+                      <div
+                        key={`${period.competencia}-${period.guideId || period.status}`}
+                        className="flex items-center justify-between rounded-lg border border-slate-200/70 dark:border-slate-700 px-3 py-2"
+                      >
+                        <div className="text-sm text-slate-700 dark:text-gray-200">
+                          {formatDasCompetenciaLabel(period.competencia)}
+                        </div>
+                        <span className={`planner-chip ${getMeiStatusClasses(period.status)}`}>
+                          {getMeiStatusLabel(period.status)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
             <div className="planner-card">
               <button
                 type="button"
@@ -938,6 +1331,7 @@ export default function AdminUserData() {
               </div>
             </div>
           </div>
+          </>
         )}
       </div>
     </>

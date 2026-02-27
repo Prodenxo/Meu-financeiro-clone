@@ -18,13 +18,16 @@ const requiredInProduction = (key, fallback = '') => {
   return value || fallback;
 };
 
+const DEFAULT_DEV_CORS_ORIGINS = ['http://localhost:3000', 'http://localhost:3002'];
+const DEFAULT_PROD_CORS_ORIGIN = process.env.FRONTEND_URL || 'https://meu-financeiro-frontend.vercel.app';
+const DEFAULT_CORS_ORIGINS = process.env.NODE_ENV === 'development'
+  ? DEFAULT_DEV_CORS_ORIGINS
+  : [DEFAULT_PROD_CORS_ORIGIN, ...DEFAULT_DEV_CORS_ORIGINS];
+
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || '3333',
-  CORS_ORIGIN: process.env.CORS_ORIGIN
-    || (process.env.NODE_ENV === 'development'
-      ? 'http://localhost:3000,http://localhost:3002'
-      : (process.env.FRONTEND_URL || 'https://meu-financeiro-frontend.vercel.app')),
+  CORS_ORIGIN: process.env.CORS_ORIGIN || DEFAULT_CORS_ORIGINS.join(','),
   SUPABASE_URL: required('SUPABASE_URL'),
   SUPABASE_ANON_KEY: required('SUPABASE_ANON_KEY'),
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
@@ -72,5 +75,7 @@ export const env = {
   PLUGNOTAS_API_BASE_URL: process.env.PLUGNOTAS_API_BASE_URL || '',
   PLUGNOTAS_API_KEY: process.env.PLUGNOTAS_API_KEY || '',
   PLUGNOTAS_TIMEOUT_MS: process.env.PLUGNOTAS_TIMEOUT_MS || '15000',
-  PLUGNOTAS_WEBHOOK_TOKEN: requiredInProduction('PLUGNOTAS_WEBHOOK_TOKEN')
+  PLUGNOTAS_WEBHOOK_TOKEN: requiredInProduction('PLUGNOTAS_WEBHOOK_TOKEN'),
+  N8N_WHATSAPP_WEBHOOK_URL: process.env.N8N_WHATSAPP_WEBHOOK_URL || '',
+  N8N_WHATSAPP_WEBHOOK_SECRET: process.env.N8N_WHATSAPP_WEBHOOK_SECRET || ''
 };

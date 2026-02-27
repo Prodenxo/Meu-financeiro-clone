@@ -90,6 +90,43 @@ export const saveCertificate = async (userId, { pfxBase64, passphraseEnc, passph
 };
 
 /**
+ * Salva/atualiza apenas o documento (CPF/CNPJ) do usuário.
+ */
+export const saveCertificateDocument = async (userId, certDocument) => {
+  if (!userId) throw badRequest('Usuário não identificado');
+  const normalized = String(certDocument || '').replace(/\D/g, '');
+  if (!normalized) return;
+  const supabase = getSupabase();
+  const { data, error: selectError } = await supabase
+    .from(TABLE)
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (selectError) {
+    throw badRequest(selectError.message || 'Falha ao consultar certificado');
+  }
+  const payload = {
+    user_id: userId,
+    cert_document: normalized,
+    updated_at: new Date().toISOString()
+  };
+  if (data?.id) {
+    const { error } = await supabase
+      .from(TABLE)
+      .update(payload)
+      .eq('user_id', userId);
+    if (error) {
+      throw badRequest(error.message || 'Falha ao atualizar documento MEI');
+    }
+    return;
+  }
+  const { error } = await supabase.from(TABLE).insert(payload);
+  if (error) {
+    throw badRequest(error.message || 'Falha ao salvar documento MEI');
+  }
+};
+
+/**
  * Carrega o certificado do usuário (pfx_base64 e senha criptografada).
  * @returns {{ pfxBase64: string, passphraseEnc: string, passphraseIv: string, certDocument: string | null } | null}
  */

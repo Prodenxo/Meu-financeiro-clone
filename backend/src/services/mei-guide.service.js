@@ -8,6 +8,7 @@ import {
   encryptPassphrase,
   decryptPassphrase,
   saveCertificate,
+  saveCertificateDocument,
   loadCertificate,
   deleteCertificate,
   getCertificateDocument
@@ -1039,7 +1040,12 @@ export const getCertificateStatus = async (userId) => {
   await ensureUserCertLoaded(userId);
   const hasCert = Boolean(getUserCert(userId));
   const docFromCache = getUserCertDocument(userId);
-  const docFromDb = env.MEI_CERT_ENCRYPTION_KEY ? await getCertificateDocument(userId) : null;
+  let docFromDb = null;
+  try {
+    docFromDb = await getCertificateDocument(userId);
+  } catch {
+    docFromDb = null;
+  }
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
@@ -1066,6 +1072,9 @@ export const createGuideByCnpj = async (userId, payload) => {
   const cnpjNumerico = normalizeDoc(cnpj);
   if (!cnpjNumerico || !validateDoc(cnpjNumerico)) {
     throw badRequest('CNPJ do MEI inválido');
+  }
+  if (userId) {
+    await saveCertificateDocument(userId, cnpjNumerico);
   }
   const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO);
   if (!contratanteNumero) {

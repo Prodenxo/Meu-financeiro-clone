@@ -1,4 +1,5 @@
 import * as meiGuideService from '../services/mei-guide.service.js';
+import * as meiGuideDasBase64Service from '../services/mei-guide-das-base64.service.js';
 import { sendSuccess } from '../utils/response.js';
 
 export const createGuide = async (req, res, next) => {
@@ -31,6 +32,11 @@ export const downloadGuide = async (req, res, next) => {
       periodoApuracao: id,
       autorPedidoDados,
       contribuinte
+    });
+    await meiGuideDasBase64Service.upsertDasBase64({
+      userId: req.user.id,
+      periodoApuracao: id,
+      pdfBase64: file.buffer.toString('base64')
     });
     res.setHeader('Content-Type', file.contentType || 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);

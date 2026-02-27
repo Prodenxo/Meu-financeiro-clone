@@ -9,13 +9,17 @@ const isLocalhostUrl = (value?: string) => {
 };
 
 const configuredApiUrl = import.meta.env.VITE_API_URL;
-const API_URL = import.meta.env.DEV
-  ? (configuredApiUrl && isLocalhostUrl(configuredApiUrl) ? configuredApiUrl : 'http://localhost:3333')
-  : (configuredApiUrl || 'https://meu-financeiro-backend.vercel.app');
+const DEFAULT_DEV_API_URL = 'http://localhost:3333';
+const DEFAULT_PROD_API_URL = 'https://meu-financeiro-backend.vercel.app';
+const API_URL = configuredApiUrl || (import.meta.env.DEV ? DEFAULT_DEV_API_URL : DEFAULT_PROD_API_URL);
 const TOKEN_STORAGE_KEY = 'financas-pessoais-auth-token';
 
 if (!API_URL) {
   console.warn('[API Client] VITE_API_URL não está configurada');
+}
+
+if (import.meta.env.DEV && configuredApiUrl && !isLocalhostUrl(configuredApiUrl)) {
+  console.warn('[API Client] VITE_API_URL aponta para ambiente remoto em DEV');
 }
 
 class ApiClient {

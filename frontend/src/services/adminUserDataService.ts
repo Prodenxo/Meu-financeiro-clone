@@ -37,6 +37,23 @@ export interface AdminDasStatusFilters {
   q?: string;
 }
 
+export interface AdminMeiCertificateStatus {
+  hasUserCertificate: boolean;
+  hasEnvCertificate: boolean;
+  documento?: string | null;
+}
+
+export interface AdminMeiPeriod {
+  competencia: string;
+  status: 'pago' | 'a_pagar';
+  guideId?: string | null;
+}
+
+export interface AdminMeiWhatsappResult {
+  sent: boolean;
+  webhook?: { status?: number; body?: unknown };
+}
+
 const normalizeTipoFromApi = (tipo: Transaction['tipo']): Transaction['tipo'] => {
   if (tipo === 'saida') return 'saída';
   return tipo;
@@ -113,4 +130,45 @@ export async function reprocessAdminDas(userId: string, competencia: string): Pr
   pdfPath: string | null;
 }> {
   return apiClient.post('/admin/das/reprocess', { userId, competencia });
+}
+
+export async function fetchAdminMeiCertificateStatus(userId: string): Promise<AdminMeiCertificateStatus> {
+  return apiClient.get<AdminMeiCertificateStatus>(`/admin/mei-guide/${userId}/certificate/status`);
+}
+
+export async function fetchAdminMeiPeriods(userId: string, cnpj?: string): Promise<AdminMeiPeriod[]> {
+  const params = new URLSearchParams();
+  if (cnpj) params.set('cnpj', cnpj);
+  const query = params.toString();
+  return apiClient.get<AdminMeiPeriod[]>(
+    `/admin/mei-guide/${userId}/periods${query ? `?${query}` : ''}`
+  );
+}
+
+export async function fetchAdminMeiPeriodsByCnpj(userId: string, cnpj: string): Promise<AdminMeiPeriod[]> {
+  const params = new URLSearchParams({ cnpj });
+  return apiClient.get<AdminMeiPeriod[]>(
+    `/admin/mei-guide/${userId}/periods-by-cnpj?${params.toString()}`
+  );
+}
+
+export async function downloadAdminMeiGuide(
+  userId: string,
+  periodoApuracao: string,
+  cnpj?: string
+): Promise<{ blob: Blob; filename: string | null }> {
+  const params = new URLSearchParams();
+  if (cnpj) params.set('cnpj', cnpj);
+  const query = params.toString();
+  return apiClient.requestBlob(
+    `/admin/mei-guide/${userId}/download/${encodeURIComponent(periodoApuracao)}${query ? `?${query}` : ''}`,
+    { method: 'GET' }
+  );
+}
+
+export async function sendAdminMeiGuideWhatsapp(
+  userId: string,
+  payload: { periodoApuracao: string; competencia?: string; cnpj?: string }
+): Promise<AdminMeiWhatsappResult> {
+  return apiClient.post<AdminMeiWhatsappResult>(`/admin/mei-guide/${userId}/send-whatsapp`, payload);
 }
