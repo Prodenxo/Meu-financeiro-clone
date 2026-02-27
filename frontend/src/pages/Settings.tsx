@@ -252,7 +252,7 @@ export default function Settings() {
             Fale diretamente com seu consultor pessoal no WhatsApp.
           </p>
           <a
-            href="https://wa.me/5521977263499"
+            href="https://wa.me/5521974526796"
             target="_blank"
             rel="noopener noreferrer"
             className="w-full md:w-auto inline-flex items-center justify-center px-4 py-2 text-white rounded-lg font-semibold bg-green-600 hover:bg-green-700"
