@@ -58,3 +58,7 @@ Enviar o PDF da guia DAS MEI (base64) via Z-API a partir do webhook do backend.
 - `phone` deve ser enviado sem máscara, formato `55DDDNumeros`.
 - O campo `document` **deve** ter o prefixo `data:application/pdf;base64,`.
 - Se não quiser enviar mensagem de texto, remova o passo 2.
+
+## Webhook esperado
+- Endpoint configurado no backend (`N8N_WHATSAPP_WEBHOOK_URL`): `https://auto-n8n-omega.k6fcpj.easypanel.host/webhook/DAS`.
+- O workflow do n8n precisa estar ativo; se estiver inativo, o n8n retorna erro de webhook não registrado.

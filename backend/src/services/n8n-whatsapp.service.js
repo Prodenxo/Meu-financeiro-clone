@@ -17,6 +17,23 @@ const parseWebhookResponse = async (response) => {
   return await response.text();
 };
 
+const normalizeWebhookErrorMessage = (body, response) => {
+  const rawMessage = typeof body === 'string' ? body : body?.message;
+  if (typeof rawMessage === 'string') {
+    const normalized = rawMessage.toLowerCase();
+    if (normalized.includes('webhook') && normalized.includes('not registered')) {
+      return 'Webhook do WhatsApp não está ativo/registrado. Verifique o endpoint no n8n.';
+    }
+    if (normalized.includes('webhook') && normalized.includes('not found')) {
+      return 'Webhook do WhatsApp não está ativo/registrado. Verifique o endpoint no n8n.';
+    }
+  }
+  if (response?.status === 404) {
+    return 'Webhook do WhatsApp não está ativo/registrado. Verifique o endpoint no n8n.';
+  }
+  return rawMessage;
+};
+
 export const sendWhatsappMessage = async (payload) => {
   const webhookUrl = env.N8N_WHATSAPP_WEBHOOK_URL;
   if (!webhookUrl) {
@@ -29,7 +46,7 @@ export const sendWhatsappMessage = async (payload) => {
   });
   const body = await parseWebhookResponse(response);
   if (!response.ok) {
-    const message = typeof body === 'string' ? body : body?.message;
+    const message = normalizeWebhookErrorMessage(body, response);
     throw serviceUnavailable(message || 'Falha ao acionar webhook do WhatsApp');
   }
   return {

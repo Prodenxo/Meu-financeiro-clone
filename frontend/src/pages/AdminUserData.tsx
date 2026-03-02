@@ -61,6 +61,17 @@ const formatDasCompetenciaLabel = (value?: string | null) => {
   return String(value);
 };
 
+const normalizeWhatsappErrorMessage = (message: string) => {
+  const normalized = message.toLowerCase();
+  if (normalized.includes('webhook') && normalized.includes('not registered')) {
+    return 'Webhook do WhatsApp não está ativo/registrado. Verifique o endpoint no n8n.';
+  }
+  if (normalized.includes('webhook') && normalized.includes('not found')) {
+    return 'Webhook do WhatsApp não está ativo/registrado. Verifique o endpoint no n8n.';
+  }
+  return message || 'Erro ao enviar guia pelo WhatsApp.';
+};
+
 const getDefaultMeiPeriod = () => {
   const now = new Date();
   const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -468,7 +479,7 @@ export default function AdminUserData() {
       setMeiActionSuccess('Envio para WhatsApp solicitado.');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao enviar guia pelo WhatsApp.';
-      setMeiActionError(message);
+      setMeiActionError(normalizeWhatsappErrorMessage(message));
     } finally {
       setMeiSending(false);
     }
