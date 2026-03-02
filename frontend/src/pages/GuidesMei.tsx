@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   downloadMeiGuide,
   fetchMeiCertificateStatus,
@@ -59,6 +59,12 @@ const formatCompetencia = (month: string, year: number) => {
 
 const toPeriodoApuracao = (month: string, year: number) => {
   return `${year}${month}`;
+};
+
+const toPeriodoApuracaoFromCompetencia = (competencia?: string | null) => {
+  const match = String(competencia || '').match(/^(\d{4})-(\d{2})$/);
+  if (!match) return null;
+  return `${match[1]}${match[2]}`;
 };
 
 const triggerFileDownload = (blob: Blob, filename: string) => {
@@ -171,6 +177,8 @@ export default function GuidesMei() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [validationSuccess, setValidationSuccess] = useState<string | null>(null);
   const [isDownloadingGuide, setIsDownloadingGuide] = useState(false);
+  const autoDownloadKeysRef = useRef<Set<string>>(new Set());
+  const autoDownloadingRef = useRef(false);
   const [meiPeriods, setMeiPeriods] = useState<MeiPeriod[]>([]);
   const [meiPeriodsLoading, setMeiPeriodsLoading] = useState(false);
   const [meiPeriodsError, setMeiPeriodsError] = useState<string | null>(null);
@@ -214,6 +222,38 @@ export default function GuidesMei() {
   const contribuinteTipo = useMemo(() => getDocType(normalizedContribuinte), [normalizedContribuinte]);
   const canLoadPeriods = normalizedContribuinte.length === 14;
 
+  const triggerAutoDownload = useCallback(async (periods: MeiPeriod[]) => {
+    if (autoDownloadingRef.current) return;
+    if (!periods?.length) return;
+    const pendingPeriods = periods.filter((period) => period.status !== 'pago');
+    if (pendingPeriods.length === 0) return;
+    autoDownloadingRef.current = true;
+    try {
+      const contribuinte = normalizedContribuinte && contribuinteTipo
+        ? { numero: normalizedContribuinte, tipo: contribuinteTipo }
+        : undefined;
+      for (const period of pendingPeriods) {
+        const periodoApuracao = period.guideId || toPeriodoApuracaoFromCompetencia(period.competencia);
+        if (!periodoApuracao) continue;
+        const key = `${normalizedContribuinte || 'no-cnpj'}:${periodoApuracao}`;
+        if (autoDownloadKeysRef.current.has(key)) continue;
+        autoDownloadKeysRef.current.add(key);
+        try {
+          const { blob, filename } = await downloadMeiGuide(
+            normalizedContribuinte || undefined,
+            periodoApuracao,
+            contribuinte
+          );
+          triggerFileDownload(blob, filename || buildFilenameFromCompetencia(period.competencia || null));
+        } catch (error) {
+          setPeriodError(error instanceof Error ? error.message : 'Erro ao baixar guia.');
+        }
+      }
+    } finally {
+      autoDownloadingRef.current = false;
+    }
+  }, [contribuinteTipo, normalizedContribuinte]);
+
   const applyDocumento = useCallback((documento?: string | null, force = false) => {
     if (!documento) return;
     const formatted = formatDocument(documento);
@@ -248,6 +288,7 @@ export default function GuidesMei() {
         ? await fetchMeiPeriods(normalizedContribuinte, contribuinte)
         : await fetchMeiPeriodsByCnpj(normalizedContribuinte);
       setMeiPeriods(periods || []);
+      await triggerAutoDownload(periods || []);
     } catch (error) {
       setMeiPeriodsError(error instanceof Error ? error.message : 'Erro ao listar períodos do DAS.');
     } finally {

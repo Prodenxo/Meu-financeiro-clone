@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
@@ -83,6 +83,12 @@ const getDefaultMeiPeriod = () => {
 
 const toPeriodoApuracao = (month: string, year: number) => {
   return `${year}${month}`;
+};
+
+const toPeriodoApuracaoFromCompetencia = (competencia?: string | null) => {
+  const match = String(competencia || '').match(/^(\d{4})-(\d{2})$/);
+  if (!match) return null;
+  return `${match[1]}${match[2]}`;
 };
 
 const triggerFileDownload = (blob: Blob, filename: string) => {
@@ -174,6 +180,8 @@ export default function AdminUserData() {
   const [meiDownloading, setMeiDownloading] = useState(false);
   const [meiSending, setMeiSending] = useState(false);
   const [meiStatusLoading, setMeiStatusLoading] = useState(false);
+  const autoDownloadKeysRef = useRef<Set<string>>(new Set());
+  const autoDownloadingRef = useRef(false);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -385,6 +393,33 @@ export default function AdminUserData() {
     setMeiActionSuccess(null);
   }, []);
 
+  const triggerAutoDownload = useCallback(async (userId: string, periods: AdminMeiPeriod[]) => {
+    if (autoDownloadingRef.current) return;
+    if (!periods?.length) return;
+    const pendingPeriods = periods.filter((period) => period.status !== 'pago');
+    if (pendingPeriods.length === 0) return;
+    autoDownloadingRef.current = true;
+    try {
+      const cnpjParam = normalizedMeiCnpj.length === 14 ? normalizedMeiCnpj : undefined;
+      for (const period of pendingPeriods) {
+        const periodoApuracao = period.guideId || toPeriodoApuracaoFromCompetencia(period.competencia);
+        if (!periodoApuracao) continue;
+        const key = `${userId}:${cnpjParam || 'no-cnpj'}:${periodoApuracao}`;
+        if (autoDownloadKeysRef.current.has(key)) continue;
+        autoDownloadKeysRef.current.add(key);
+        try {
+          const { blob, filename } = await downloadAdminMeiGuide(userId, periodoApuracao, cnpjParam);
+          triggerFileDownload(blob, filename || `guia-mei-${periodoApuracao}.pdf`);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'Erro ao baixar guia.';
+          setMeiActionError(message);
+        }
+      }
+    } finally {
+      autoDownloadingRef.current = false;
+    }
+  }, [normalizedMeiCnpj]);
+
   const loadMeiCertificateStatus = useCallback(async (userId: string) => {
     setMeiStatusLoading(true);
     setMeiActionError(null);
@@ -417,13 +452,14 @@ export default function AdminUserData() {
         ? await fetchAdminMeiPeriods(userId, cnpjParam)
         : await fetchAdminMeiPeriodsByCnpj(userId, cnpjParam || '');
       setMeiPeriods(data || []);
+      await triggerAutoDownload(userId, data || []);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao listar períodos do DAS.';
       setMeiPeriodsError(message);
     } finally {
       setMeiPeriodsLoading(false);
     }
-  }, [canLoadMeiPeriods, meiCertificateStatus?.hasUserCertificate, normalizedMeiCnpj]);
+  }, [canLoadMeiPeriods, meiCertificateStatus?.hasUserCertificate, normalizedMeiCnpj, triggerAutoDownload]);
 
   const handleMeiDownload = async () => {
     if (!selectedUserId) return;
