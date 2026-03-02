@@ -26,6 +26,24 @@ const parseErrorMessage = async (response) => {
   return text || response.statusText;
 };
 
+const isAuthTokenError = (status, message) => {
+  if (status === 401 || status === 403) return true;
+  const normalized = String(message || '').toLowerCase();
+  if (!normalized) return false;
+  if (normalized.includes('authorization')) {
+    return normalized.includes('inválid')
+      || normalized.includes('invalido')
+      || normalized.includes('não')
+      || normalized.includes('nao');
+  }
+  if (normalized.includes('token')) {
+    return normalized.includes('inválid')
+      || normalized.includes('invalido')
+      || normalized.includes('expir');
+  }
+  return false;
+};
+
 const parseDados = (payload) => {
   if (!payload?.dados) return null;
   if (typeof payload.dados === 'object') return payload.dados;
@@ -37,6 +55,40 @@ const parseDados = (payload) => {
 };
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const buildSerproHeaders = async ({
+  forceRefresh = false,
+  contratanteLimpo,
+  autorLimpo,
+  contribuinteLimpo
+}) => {
+  const { accessToken, jwtToken } = await getSerproTokens({ forceRefresh });
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    ...(jwtToken ? { jwt_token: jwtToken } : {}),
+    'Content-Type': 'application/json'
+  };
+
+  if (contribuinteLimpo !== autorLimpo) {
+    let procuradorToken = obterTokenProcurador(autorLimpo);
+    if (!procuradorToken) {
+      const nomeAssinante = env.SERPRO_ASSINADO_POR_NOME || '';
+      procuradorToken = await autenticarViaCertificado(
+        contribuinteLimpo,
+        autorLimpo,
+        nomeAssinante,
+        contratanteLimpo
+      );
+      armazenarTokenNoCache(`procurador_token_${autorLimpo}`, procuradorToken);
+    }
+    headers.autenticar_procurador_token = procuradorToken;
+    if (env.NODE_ENV !== 'production') {
+      console.info('[emitir] autenticar_procurador_token aplicado');
+    }
+  }
+
+  return headers;
+};
 
 export const emitirServico = async ({
   contratanteNumero,
@@ -62,31 +114,6 @@ export const emitirServico = async ({
     throw badRequest('Dados inválidos para emissão');
   }
 
-  const { accessToken, jwtToken } = await getSerproTokens();
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    ...(jwtToken ? { jwt_token: jwtToken } : {}),
-    'Content-Type': 'application/json'
-  };
-
-  if (contribuinteLimpo !== autorLimpo) {
-    let procuradorToken = obterTokenProcurador(autorLimpo);
-    if (!procuradorToken) {
-      const nomeAssinante = env.SERPRO_ASSINADO_POR_NOME || '';
-      procuradorToken = await autenticarViaCertificado(
-        contribuinteLimpo,
-        autorLimpo,
-        nomeAssinante,
-        contratanteLimpo
-      );
-      armazenarTokenNoCache(`procurador_token_${autorLimpo}`, procuradorToken);
-    }
-    headers.autenticar_procurador_token = procuradorToken;
-    if (env.NODE_ENV !== 'production') {
-      console.info('[emitir] autenticar_procurador_token aplicado');
-    }
-  }
-
   const requestBody = {
     contratante: { numero: contratanteLimpo, tipo: getDocTypeNumber(contratanteLimpo) || 2 },
     autorPedidoDados: { numero: autorLimpo, tipo: getDocTypeNumber(autorLimpo) || 2 },
@@ -103,21 +130,39 @@ export const emitirServico = async ({
   };
 
   const baseUrl = String(env.SERPRO_API_BASE_URL).replace(/\/$/, '');
-  const response = await fetch(`${baseUrl}/Emitir`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(requestBody)
-  });
+  const requestEmitir = async (forceRefresh = false) => {
+    const headers = await buildSerproHeaders({
+      forceRefresh,
+      contratanteLimpo,
+      autorLimpo,
+      contribuinteLimpo
+    });
+    const response = await fetch(`${baseUrl}/Emitir`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    });
 
-  if (!response.ok) {
+    if (response.ok) {
+      return { response, message: null };
+    }
     const message = await parseErrorMessage(response);
-    throw badRequest(message || 'Falha ao emitir serviço');
+    return { response, message };
+  };
+
+  let result = await requestEmitir(false);
+  if (!result.response.ok && isAuthTokenError(result.response.status, result.message)) {
+    result = await requestEmitir(true);
   }
 
-  const payload = await response.json();
+  if (!result.response.ok) {
+    throw badRequest(result.message || 'Falha ao emitir serviço');
+  }
+
+  const payload = await result.response.json();
   return {
-    status: response.status,
-    headers: Object.fromEntries(response.headers.entries()),
+    status: result.response.status,
+    headers: Object.fromEntries(result.response.headers.entries()),
     dados: parseDados(payload),
     raw: payload
   };
@@ -144,31 +189,6 @@ export const emitirRelatorio = async (
     throw badRequest('Dados inválidos para emissão');
   }
 
-  const { accessToken, jwtToken } = await getSerproTokens();
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    ...(jwtToken ? { jwt_token: jwtToken } : {}),
-    'Content-Type': 'application/json'
-  };
-
-  if (contribuinteLimpo !== autorLimpo) {
-    let procuradorToken = obterTokenProcurador(autorLimpo);
-    if (!procuradorToken) {
-      const nomeAssinante = env.SERPRO_ASSINADO_POR_NOME || '';
-      procuradorToken = await autenticarViaCertificado(
-        contribuinteLimpo,
-        autorLimpo,
-        nomeAssinante,
-        contratanteLimpo
-      );
-      armazenarTokenNoCache(`procurador_token_${autorLimpo}`, procuradorToken);
-    }
-    headers.autenticar_procurador_token = procuradorToken;
-    if (env.NODE_ENV !== 'production') {
-      console.info('[emitir] autenticar_procurador_token aplicado');
-    }
-  }
-
   const requestBody = {
     contratante: { numero: contratanteLimpo, tipo: getDocTypeNumber(contratanteLimpo) || 2 },
     autorPedidoDados: { numero: autorLimpo, tipo: getDocTypeNumber(autorLimpo) || 2 },
@@ -190,18 +210,35 @@ export const emitirRelatorio = async (
   let tempoEspera = 4000;
 
   while (tentativas < maxTentativas) {
-    const response = await fetch(`${baseUrl}/Emitir`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
+    const requestRelatorio = async (forceRefresh = false) => {
+      const headers = await buildSerproHeaders({
+        forceRefresh,
+        contratanteLimpo,
+        autorLimpo,
+        contribuinteLimpo
+      });
+      const response = await fetch(`${baseUrl}/Emitir`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody)
+      });
+      if (response.ok) {
+        return { response, message: null };
+      }
       const message = await parseErrorMessage(response);
-      throw badRequest(message || 'Falha ao emitir relatório');
+      return { response, message };
+    };
+
+    let result = await requestRelatorio(false);
+    if (!result.response.ok && isAuthTokenError(result.response.status, result.message)) {
+      result = await requestRelatorio(true);
     }
 
-    const payload = await response.json();
+    if (!result.response.ok) {
+      throw badRequest(result.message || 'Falha ao emitir relatório');
+    }
+
+    const payload = await result.response.json();
     if (payload?.dados) {
       let parsed = payload.dados;
       if (typeof parsed === 'string') {

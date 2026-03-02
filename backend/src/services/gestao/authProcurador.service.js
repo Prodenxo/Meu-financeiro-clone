@@ -64,18 +64,31 @@ const ensureTokenConfigured = () => {
   }
 };
 
-export const getSerproTokens = async () => {
+export const getSerproTokens = async ({ forceRefresh = false } = {}) => {
   ensureTokenConfigured();
   const cacheKey = 'env';
   const now = Date.now();
-  const cached = tokenCache.get(cacheKey);
-  if (cached?.accessToken && cached?.expiresAt > now + 60000) {
-    return { accessToken: cached.accessToken, jwtToken: cached.jwtToken };
+  if (!forceRefresh) {
+    const cached = tokenCache.get(cacheKey);
+    if (cached?.accessToken && cached?.expiresAt > now + 60000) {
+      return { accessToken: cached.accessToken, jwtToken: cached.jwtToken };
+    }
+  } else {
+    tokenCache.delete(cacheKey);
   }
 
-  const credentials = Buffer.from(`${env.SERPRO_CONSUMER_KEY}:${env.SERPRO_CONSUMER_SECRET}`).toString('base64');
+  const rawConsumerKey = String(env.SERPRO_CONSUMER_KEY || '');
+  const rawConsumerSecret = String(env.SERPRO_CONSUMER_SECRET || '');
+  const consumerKey = rawConsumerKey.trim();
+  const consumerSecret = rawConsumerSecret.trim();
+
+  if (!consumerKey || !consumerSecret) {
+    throw badRequest('Credenciais Serpro não configuradas');
+  }
+
+  const credentials = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
   const body = new URLSearchParams({ grant_type: 'client_credentials' }).toString();
-  const tlsConfig = getSerproTlsConfig();
+  const tlsConfig = isNoMtlsEnabled() ? null : getSerproTlsConfig();
 
   const response = await requestWithOptionalMtls(env.SERPRO_OAUTH_TOKEN_URL, {
     method: 'POST',
@@ -88,6 +101,24 @@ export const getSerproTokens = async () => {
   }, tlsConfig);
 
   if (!response.ok) {
+    let host = '';
+    try {
+      host = new URL(env.SERPRO_OAUTH_TOKEN_URL).host;
+    } catch {
+      host = '';
+    }
+    const contentType = response.headers.get('content-type') || '';
+    console.warn('[auth-procurador] falha OAuth Serpro', {
+      status: response.status,
+      contentType,
+      host,
+      roleTypeSet: Boolean(env.SERPRO_ROLE_TYPE),
+      noMtls: isNoMtlsEnabled(),
+      consumerKeyLength: consumerKey.length,
+      consumerKeyTrimmed: rawConsumerKey.length !== consumerKey.length,
+      consumerSecretLength: consumerSecret.length,
+      consumerSecretTrimmed: rawConsumerSecret.length !== consumerSecret.length
+    });
     const message = await parseErrorMessage(response);
     throw badRequest(message || 'Erro ao autenticar com a Serpro');
   }

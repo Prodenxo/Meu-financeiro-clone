@@ -16,14 +16,22 @@ const getDocTypeNumber = (numero) => {
   return null;
 };
 
-const parseErrorMessage = async (response) => {
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    const payload = await response.json();
-    return payload?.message || payload?.error || response.statusText;
+const isAuthTokenError = (status, message) => {
+  if (status === 401 || status === 403) return true;
+  const normalized = String(message || '').toLowerCase();
+  if (!normalized) return false;
+  if (normalized.includes('authorization')) {
+    return normalized.includes('inválid')
+      || normalized.includes('invalido')
+      || normalized.includes('não')
+      || normalized.includes('nao');
   }
-  const text = await response.text();
-  return text || response.statusText;
+  if (normalized.includes('token')) {
+    return normalized.includes('inválid')
+      || normalized.includes('invalido')
+      || normalized.includes('expir');
+  }
+  return false;
 };
 
 const parseDados = (payload) => {
@@ -37,6 +45,40 @@ const parseDados = (payload) => {
 };
 
 const SERVICOS_SEM_DADOS = new Set(['PEDIDOSPARC163', 'PEDIDOSPARC203']);
+
+const buildSerproHeaders = async ({
+  forceRefresh = false,
+  contratanteLimpo,
+  autorLimpo,
+  contribuinteLimpo
+}) => {
+  const { accessToken, jwtToken } = await getSerproTokens({ forceRefresh });
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    ...(jwtToken ? { jwt_token: jwtToken } : {}),
+    'Content-Type': 'application/json'
+  };
+
+  if (contribuinteLimpo !== autorLimpo) {
+    let procuradorToken = obterTokenProcurador(autorLimpo);
+    if (!procuradorToken) {
+      const nomeAssinante = env.SERPRO_ASSINADO_POR_NOME || '';
+      procuradorToken = await autenticarViaCertificado(
+        contribuinteLimpo,
+        autorLimpo,
+        nomeAssinante,
+        contratanteLimpo
+      );
+      armazenarTokenNoCache(`procurador_token_${autorLimpo}`, procuradorToken);
+    }
+    headers.autenticar_procurador_token = procuradorToken;
+    if (env.NODE_ENV !== 'production') {
+      console.info('[consultar] autenticar_procurador_token aplicado');
+    }
+  }
+
+  return headers;
+};
 
 export const consultarServico = async ({
   contratanteNumero,
@@ -67,31 +109,6 @@ export const consultarServico = async ({
     throw badRequest('Contribuinte inválido');
   }
 
-  const { accessToken, jwtToken } = await getSerproTokens();
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    ...(jwtToken ? { jwt_token: jwtToken } : {}),
-    'Content-Type': 'application/json'
-  };
-
-  if (contribuinteLimpo !== autorLimpo) {
-    let procuradorToken = obterTokenProcurador(autorLimpo);
-    if (!procuradorToken) {
-      const nomeAssinante = env.SERPRO_ASSINADO_POR_NOME || '';
-      procuradorToken = await autenticarViaCertificado(
-        contribuinteLimpo,
-        autorLimpo,
-        nomeAssinante,
-        contratanteLimpo
-      );
-      armazenarTokenNoCache(`procurador_token_${autorLimpo}`, procuradorToken);
-    }
-    headers.autenticar_procurador_token = procuradorToken;
-    if (env.NODE_ENV !== 'production') {
-      console.info('[consultar] autenticar_procurador_token aplicado');
-    }
-  }
-
   const dadosRequisicao = SERVICOS_SEM_DADOS.has(idServico)
     ? ''
     : JSON.stringify(dados);
@@ -112,22 +129,43 @@ export const consultarServico = async ({
   };
 
   const baseUrl = String(env.SERPRO_API_BASE_URL).replace(/\/$/, '');
-  const response = await fetch(`${baseUrl}/Consultar`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(requestBody)
-  });
-
-  if (!response.ok) {
+  const requestConsultar = async (forceRefresh = false) => {
+    const headers = await buildSerproHeaders({
+      forceRefresh,
+      contratanteLimpo,
+      autorLimpo,
+      contribuinteLimpo
+    });
+    const response = await fetch(`${baseUrl}/Consultar`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    });
+    if (response.ok) {
+      return { response, message: null, rawBody: null };
+    }
     const contentType = response.headers.get('content-type') || '';
     const rawBody = contentType.includes('application/json')
       ? await response.json()
       : await response.text();
+    const message = typeof rawBody === 'string'
+      ? rawBody
+      : (rawBody?.message || rawBody?.error || response.statusText);
+    return { response, message, rawBody };
+  };
+
+  let result = await requestConsultar(false);
+  if (!result.response.ok && isAuthTokenError(result.response.status, result.message)) {
+    result = await requestConsultar(true);
+  }
+
+  if (!result.response.ok) {
     if (env.NODE_ENV !== 'production') {
+      const rawBody = result.rawBody;
       const responseId = typeof rawBody === 'object' ? rawBody?.responseId : null;
       const mensagens = typeof rawBody === 'object' ? rawBody?.mensagens : null;
       console.warn('[consultar] erro Serpro', {
-        status: response.status,
+        status: result.response.status,
         url: `${baseUrl}/Consultar`,
         request: {
           contratante: contratanteLimpo,
@@ -136,23 +174,20 @@ export const consultarServico = async ({
           idSistema,
           idServico
         },
-        headers: Object.fromEntries(response.headers.entries()),
+        headers: Object.fromEntries(result.response.headers.entries()),
         responseId,
         mensagens,
         bodyRaw: rawBody,
         bodyJson: typeof rawBody === 'object' ? JSON.stringify(rawBody) : null
       });
     }
-    const message = typeof rawBody === 'string'
-      ? rawBody
-      : (rawBody?.message || rawBody?.error || response.statusText);
-    throw badRequest(message || 'Falha ao consultar serviço');
+    throw badRequest(result.message || 'Falha ao consultar serviço');
   }
 
-  const payload = await response.json();
+  const payload = await result.response.json();
   return {
-    status: response.status,
-    headers: Object.fromEntries(response.headers.entries()),
+    status: result.response.status,
+    headers: Object.fromEntries(result.response.headers.entries()),
     dados: parseDados(payload),
     raw: payload
   };
