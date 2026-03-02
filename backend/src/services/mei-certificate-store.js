@@ -139,6 +139,9 @@ export const loadCertificate = async (userId) => {
     .eq('user_id', userId)
     .maybeSingle();
   if (error || !data) return null;
+  if (!data.pfx_base64 || !data.passphrase_enc || !data.passphrase_iv) {
+    return null;
+  }
   return {
     pfxBase64: data.pfx_base64,
     passphraseEnc: data.passphrase_enc,

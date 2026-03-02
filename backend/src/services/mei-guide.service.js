@@ -307,6 +307,9 @@ const ensureUserCertLoaded = async (userId) => {
     return;
   }
   if (!loaded) return;
+  if (!loaded.pfxBase64 || !loaded.passphraseEnc || !loaded.passphraseIv) {
+    return;
+  }
   const pfx = Buffer.from(loaded.pfxBase64, 'base64');
   let passphrase;
   try {
