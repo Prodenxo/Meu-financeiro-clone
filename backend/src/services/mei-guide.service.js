@@ -1261,9 +1261,7 @@ export const listPeriods = async (userId, payload) => {
 };
 
 export const listPeriodsByCnpj = async (userId, payload) => {
-  if (!isNoMtlsEnabled()) {
-    throw badRequest('Consulta por CNPJ requer SERPRO_OAUTH_TOKEN_NO_MTLS=true');
-  }
+  ensureConfigured();
   const cnpjNumerico = normalizeCnpj(payload?.cnpj);
   if (!validateCnpj(cnpjNumerico)) {
     throw badRequest('CNPJ do MEI inválido');
