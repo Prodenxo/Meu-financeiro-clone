@@ -12,6 +12,17 @@ interface EmpresaModalProps {
 
 const REGIMES = ['Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI'];
 
+const matchRegime = (apiRegimes: { ano: number; forma_de_tributacao: string }[]): string => {
+  if (!Array.isArray(apiRegimes) || apiRegimes.length === 0) return '';
+  const latest = [...apiRegimes].sort((a, b) => b.ano - a.ano)[0];
+  const raw = (latest.forma_de_tributacao || '').toUpperCase();
+  if (raw.includes('SIMPLES')) return 'Simples Nacional';
+  if (raw.includes('MEI')) return 'MEI';
+  if (raw.includes('PRESUMIDO')) return 'Lucro Presumido';
+  if (raw.includes('REAL')) return 'Lucro Real';
+  return '';
+};
+
 const formatCnpj = (value: string) => {
   const digits = value.replace(/\D/g, '').slice(0, 14);
   return digits
@@ -49,8 +60,8 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
-  const handleCnpjBlur = async () => {
-    const digits = onlyDigits(form.cnpj || '');
+  const handleCnpjBlur = async (currentValue?: string) => {
+    const digits = onlyDigits(currentValue ?? form.cnpj ?? '');
     if (digits.length !== 14) return;
 
     setCnpjLoading(true);
@@ -64,6 +75,7 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
       const data = await res.json();
       setForm((prev) => ({
         ...prev,
+        empresa: data.razao_social || prev.empresa || '',
         razao_social: data.razao_social || prev.razao_social || '',
         nome_fantasia: data.nome_fantasia || prev.nome_fantasia || '',
         logradouro: data.logradouro || prev.logradouro || '',
@@ -77,6 +89,7 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
           ? data.ddd_telefone_1.replace(/\D/g, '')
           : prev.telefone || '',
         email: data.email || prev.email || '',
+        regime_tributario: matchRegime(data.regime_tributario) || prev.regime_tributario || '',
       }));
     } catch {
       setCnpjError('Erro de conexão ao consultar CNPJ.');
@@ -87,8 +100,10 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
 
   const validate = () => {
     const newErrors: Partial<Record<keyof EmpresaData, string>> = {};
-    if (!form.empresa?.trim()) newErrors.empresa = 'Razão Social é obrigatória';
-    if (form.cnpj && onlyDigits(form.cnpj).length > 0 && onlyDigits(form.cnpj).length !== 14) {
+    const cnpjDigits = onlyDigits(form.cnpj || '');
+    if (!cnpjDigits) {
+      newErrors.cnpj = 'CNPJ é obrigatório';
+    } else if (cnpjDigits.length !== 14) {
       newErrors.cnpj = 'CNPJ deve ter 14 dígitos';
     }
     setErrors(newErrors);
@@ -151,20 +166,30 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
         )}
 
         <div className="grid gap-4 md:grid-cols-2">
-          {/* Razão Social */}
-          <div className="md:col-span-2">
+          {/* CNPJ — primeiro, pois autopreenche os demais */}
+          <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Razão Social <span className="text-red-500">*</span>
+              CNPJ <span className="text-red-500">*</span>
+              {cnpjLoading && <span className="ml-2 text-xs text-blue-400">Consultando...</span>}
             </label>
             <input
               ref={firstInputRef}
               type="text"
-              value={form.empresa || ''}
-              onChange={(e) => set('empresa', e.target.value)}
-              className={`planner-input-compact w-full ${errors.empresa ? 'border-red-500' : ''}`}
-              placeholder="Razão Social"
+              value={form.cnpj || ''}
+              onChange={(e) => {
+                const formatted = formatCnpj(e.target.value);
+                set('cnpj', formatted);
+                if (onlyDigits(formatted).length === 14) {
+                  void handleCnpjBlur(formatted);
+                }
+              }}
+              onBlur={() => void handleCnpjBlur()}
+              className={`planner-input-compact w-full ${errors.cnpj ? 'border-red-500' : ''}`}
+              placeholder="00.000.000/0001-00"
+              maxLength={18}
             />
-            {errors.empresa && <p className="text-red-500 text-xs mt-1">{errors.empresa}</p>}
+            {errors.cnpj && <p className="text-red-500 text-xs mt-1">{errors.cnpj}</p>}
+            {cnpjError && <p className="text-amber-500 text-xs mt-1">{cnpjError}</p>}
           </div>
 
           {/* Nome Fantasia */}
@@ -181,23 +206,18 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
             />
           </div>
 
-          {/* CNPJ */}
-          <div>
+          {/* Razão Social — autopreenchida pelo CNPJ */}
+          <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              CNPJ
-              {cnpjLoading && <span className="ml-2 text-xs text-blue-400">Consultando...</span>}
+              Razão Social
             </label>
             <input
               type="text"
-              value={form.cnpj || ''}
-              onChange={(e) => set('cnpj', formatCnpj(e.target.value))}
-              onBlur={handleCnpjBlur}
-              className={`planner-input-compact w-full ${errors.cnpj ? 'border-red-500' : ''}`}
-              placeholder="00.000.000/0001-00"
-              maxLength={18}
+              value={form.empresa || ''}
+              onChange={(e) => set('empresa', e.target.value)}
+              className="planner-input-compact w-full"
+              placeholder="Preenchida automaticamente pelo CNPJ"
             />
-            {errors.cnpj && <p className="text-red-500 text-xs mt-1">{errors.cnpj}</p>}
-            {cnpjError && <p className="text-amber-500 text-xs mt-1">{cnpjError}</p>}
           </div>
 
           {/* Inscrição Estadual */}
