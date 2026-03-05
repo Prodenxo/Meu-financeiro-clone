@@ -7,6 +7,8 @@ import { initiateGoogleAuthFlow } from '../lib/google-auth-flow';
 import { MessageCircle } from 'lucide-react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
+import EmpresaModal, { type EmpresaData } from '../components/EmpresaModal';
+import { getEmpresa } from '../services/usersService';
 
 export default function Settings() {
   const { user, userId, phone, displayName, updatePhone, updateDisplayName, signOut, role } = useAuthStore();
@@ -20,6 +22,8 @@ export default function Settings() {
   
   const [editPhone, setEditPhone] = useState(phone || '');
   const [editDisplayName, setEditDisplayName] = useState(displayName || '');
+  const [empresaModalOpen, setEmpresaModalOpen] = useState(false);
+  const [empresaData, setEmpresaData] = useState<EmpresaData | null>(null);
 
   useEffect(() => {
     checkGoogleAuthStatus();
@@ -28,6 +32,14 @@ export default function Settings() {
   useEffect(() => {
     console.log('[Settings] role atual:', role, 'userId:', userId, 'email:', user?.email);
   }, [role, userId, user?.email]);
+
+  useEffect(() => {
+    if (role === 'superadmin') {
+      getEmpresa()
+        .then((res) => setEmpresaData(res.empresa || null))
+        .catch(() => setEmpresaData(null));
+    }
+  }, [role]);
 
   const checkGoogleAuthStatus = async () => {
     setCheckingAuth(true);
@@ -50,8 +62,8 @@ export default function Settings() {
       await updatePhone(editPhone);
       setSuccess('Telefone atualizado com sucesso!');
       setTimeout(() => setSuccess(''), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao atualizar telefone');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar telefone');
     } finally {
       setLoading(false);
     }
@@ -66,8 +78,8 @@ export default function Settings() {
       await updateDisplayName(editDisplayName);
       setSuccess('Nome atualizado com sucesso!');
       setTimeout(() => setSuccess(''), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao atualizar nome');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar nome');
     } finally {
       setLoading(false);
     }
@@ -79,15 +91,13 @@ export default function Settings() {
     
     try {
       await initiateGoogleAuthFlow();
-      // O redirecionamento será feito pela função
-    } catch (err: any) {
-      setError(err.message || 'Erro ao iniciar autenticação Google');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao iniciar autenticação Google');
       setLoading(false);
     }
   };
 
   const handleDisconnectGoogle = async () => {
-    // Implementar desconexão se necessário
     setError('Funcionalidade de desconexão ainda não implementada');
   };
 
@@ -95,8 +105,8 @@ export default function Settings() {
     try {
       await signOut();
       navigate('/login');
-    } catch (err: any) {
-      setError(err.message || 'Erro ao fazer logout');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao fazer logout');
     }
   };
 
@@ -266,6 +276,35 @@ export default function Settings() {
             </div>
           </div>
         )}
+
+        {role === 'superadmin' && (
+          <div className="planner-card p-4 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Empresa</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              {empresaData
+                ? `Configurações de ${empresaData.empresa || 'empresa cadastrada'}.`
+                : 'Cadastre os dados da empresa para uso no sistema.'}
+            </p>
+            <button
+              onClick={() => setEmpresaModalOpen(true)}
+              className="planner-button"
+            >
+              {empresaData ? 'Editar empresa' : 'Configurar empresa'}
+            </button>
+          </div>
+        )}
+
+        <EmpresaModal
+          open={empresaModalOpen}
+          initial={empresaData}
+          onClose={() => setEmpresaModalOpen(false)}
+          onSuccess={(updated) => {
+            setEmpresaData(updated);
+            setEmpresaModalOpen(false);
+            setSuccess('Empresa salva com sucesso!');
+            setTimeout(() => setSuccess(''), 3000);
+          }}
+        />
 
         {/* Integração Google Calendar */}
         <div className="planner-card p-4 md:p-6">

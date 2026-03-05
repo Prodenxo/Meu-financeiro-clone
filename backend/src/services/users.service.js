@@ -236,6 +236,75 @@ export const listEmpresas = async (accessToken) => {
   return { empresas: data || [] };
 };
 
+const EMPRESA_FIELDS = [
+  'empresa', 'cnpj', 'razao_social', 'nome_fantasia', 'inscricao_estadual',
+  'regime_tributario', 'logradouro', 'numero', 'complemento', 'bairro',
+  'cidade', 'estado', 'cep', 'telefone', 'email',
+];
+
+const sanitizeEmpresaPayload = (input) => {
+  const payload = {};
+  for (const field of EMPRESA_FIELDS) {
+    if (input[field] !== undefined) {
+      payload[field] = input[field]?.trim() || null;
+    }
+  }
+  return payload;
+};
+
+export const createEmpresa = async (accessToken, input) => {
+  const { role } = await getRequesterContext(accessToken);
+  if (role !== 'superadmin') throw forbidden();
+
+  const payload = sanitizeEmpresaPayload(input);
+  if (!payload.empresa) throw badRequest('Razão Social (empresa) é obrigatória');
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const { data, error } = await adminClient
+    .from('empresas')
+    .insert(payload)
+    .select('id, empresa')
+    .single();
+
+  if (error) throw badRequest(error.message);
+  return { empresa: data };
+};
+
+export const updateEmpresa = async (accessToken, empresaId, input) => {
+  const { role } = await getRequesterContext(accessToken);
+  if (role !== 'superadmin') throw forbidden();
+  if (!empresaId) throw badRequest('empresaId é obrigatório');
+
+  const payload = sanitizeEmpresaPayload(input);
+  if (Object.keys(payload).length === 0) throw badRequest('Nenhum campo fornecido para atualização');
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const { data, error } = await adminClient
+    .from('empresas')
+    .update(payload)
+    .eq('id', empresaId)
+    .select('id, empresa')
+    .single();
+
+  if (error) throw badRequest(error.message);
+  return { empresa: data };
+};
+
+export const getEmpresa = async (accessToken) => {
+  const { role, empresaId } = await getRequesterContext(accessToken);
+  if (role !== 'superadmin') throw forbidden();
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const { data, error } = await adminClient
+    .from('empresas')
+    .select('id, empresa, cnpj, razao_social, nome_fantasia, inscricao_estadual, regime_tributario, logradouro, numero, complemento, bairro, cidade, estado, cep, telefone, email')
+    .eq('id', empresaId)
+    .maybeSingle();
+
+  if (error) throw badRequest(error.message);
+  return { empresa: data };
+};
+
 export const createUser = async (accessToken, input) => {
   const { role: requesterRole, empresaId: requesterEmpresaId } = await getRequesterContext(accessToken);
   if (!ROLE_CREATE_ALLOWED.has(requesterRole)) throw forbidden();
