@@ -43,6 +43,7 @@ export async function signIn(email: string, password: string) {
       displayName: string | null;
       role: 'superadmin' | 'admin' | 'usuario' | 'outsider';
       empresaId: string | null;
+    mei?: boolean | null;
       session: any;
     }>('/auth/signin', { email, password });
 
@@ -72,6 +73,7 @@ export async function signIn(email: string, password: string) {
       displayName: result.displayName,
       role: result.role,
       empresaId: result.empresaId || null,
+      mei: result.mei ?? true,
     };
   } catch (error: any) {
     console.error('Erro ao fazer login:', error);
@@ -129,6 +131,7 @@ export async function getSession() {
         expires_at: parsed.expires_at,
         role: result.session.role,
         empresaId: result.session.empresaId || null,
+        mei: result.session.mei ?? true,
       };
     }
     

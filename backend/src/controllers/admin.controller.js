@@ -39,6 +39,17 @@ const ensureCanViewUser = async (accessToken, targetUserId) => {
   if (!allowed) throw forbidden();
 };
 
+const ensureMeiEnabledForUser = async (accessToken, targetUserId) => {
+  if (typeof usersServiceRef.listUsers !== 'function') {
+    return { mei: true };
+  }
+  const user = await resolveAdminUserContext(accessToken, targetUserId);
+  if (user?.mei === false) {
+    throw forbidden('Acesso MEI desabilitado para este usuário');
+  }
+  return user;
+};
+
 const resolveAdminUserContext = async (accessToken, targetUserId) => {
   const { users } = await usersServiceRef.listUsers(accessToken);
   const user = (users || []).find((item) => item.id === targetUserId);
@@ -167,6 +178,7 @@ export const getAdminMeiCertificateStatus = async (req, res, next) => {
   try {
     const userId = req.params.userId;
     await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
     const data = await meiGuideServiceRef.getCertificateStatus(userId);
     return sendSuccess(res, data, 'Status do certificado obtido');
   } catch (error) {
@@ -178,6 +190,7 @@ export const listAdminMeiPeriods = async (req, res, next) => {
   try {
     const userId = req.params.userId;
     await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
     const data = await meiGuideServiceRef.listPeriods(userId, {
       cnpj: req.query?.cnpj
     });
@@ -191,6 +204,7 @@ export const listAdminMeiPeriodsByCnpj = async (req, res, next) => {
   try {
     const userId = req.params.userId;
     await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
     const data = await meiGuideServiceRef.listPeriodsByCnpj(userId, {
       cnpj: req.query?.cnpj
     });
@@ -205,6 +219,7 @@ export const downloadAdminMeiGuide = async (req, res, next) => {
     const userId = req.params.userId;
     const periodoApuracao = req.params.periodoApuracao;
     await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
     const file = await meiGuideServiceRef.downloadGuide({
       userId,
       cnpj: req.query?.cnpj,
@@ -231,7 +246,7 @@ export const sendAdminMeiWhatsapp = async (req, res, next) => {
       throw badRequest('Período de apuração é obrigatório');
     }
     await ensureCanViewUser(req.accessToken, userId);
-    const user = await resolveAdminUserContext(req.accessToken, userId);
+    const user = await ensureMeiEnabledForUser(req.accessToken, userId);
     if (!user?.phone) {
       throw badRequest('Telefone do usuário não encontrado para envio');
     }

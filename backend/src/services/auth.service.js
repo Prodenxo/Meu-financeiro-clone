@@ -13,14 +13,14 @@ const normalizeRoleValue = (role) => {
 };
 
 const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
-  if (!accessToken || !userId) return { role: null, empresaId: null };
+  if (!accessToken || !userId) return { role: null, empresaId: null, mei: null };
 
   const linkClient = env.SUPABASE_SERVICE_ROLE_KEY
     ? createSupabaseClient({ useServiceRole: true })
     : createSupabaseClient({ accessToken });
   const { data: linkData, error } = await linkClient
     .from('role_x_user_x_empresa')
-    .select('empresas_id, roles_id')
+    .select('empresas_id, roles_id, mei')
     .eq('user_id', userId)
     .eq('status', true)
     .order('created_at', { ascending: false })
@@ -43,14 +43,16 @@ const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
     }
 
     if (roleData?.roles) {
+      const mei = typeof linkData?.mei === 'boolean' ? linkData.mei : true;
       return {
         role: normalizeRoleValue(roleData.roles),
-        empresaId: linkData.empresas_id || null
+        empresaId: linkData.empresas_id || null,
+        mei
       };
     }
   }
 
-  return { role: null, empresaId: null };
+  return { role: null, empresaId: null, mei: null };
 };
 
 const ensureUserNotBlocked = async ({ accessToken, userId }) => {
@@ -100,7 +102,8 @@ const getResolvedRoleAndCompany = async ({ accessToken, userId }) => {
   }
 
   const profileRole = await getOrCreateProfileRole({ accessToken, userId });
-  return { role: profileRole, empresaId: linkResult.empresaId || null };
+  const mei = typeof linkResult.mei === 'boolean' ? linkResult.mei : true;
+  return { role: profileRole, empresaId: linkResult.empresaId || null, mei };
 };
 
 export const signUp = async ({ email, password, phone, displayName }) => {
@@ -218,7 +221,7 @@ export const signIn = async ({ email, password }) => {
     userId: data.user?.id ?? ''
   });
 
-  const { role, empresaId } = await getResolvedRoleAndCompany({
+  const { role, empresaId, mei } = await getResolvedRoleAndCompany({
     accessToken: data.session?.access_token ?? null,
     userId: data.user?.id ?? ''
   });
@@ -230,6 +233,7 @@ export const signIn = async ({ email, password }) => {
     displayName: data.user?.user_metadata?.display_name || null,
     role,
     empresaId,
+    mei,
     session: data.session
   };
 };
@@ -251,13 +255,14 @@ export const getSession = async (accessToken) => {
 
   await ensureUserNotBlocked({ accessToken, userId: user.id });
 
-  const { role, empresaId } = await getResolvedRoleAndCompany({ accessToken, userId: user.id });
+  const { role, empresaId, mei } = await getResolvedRoleAndCompany({ accessToken, userId: user.id });
 
   return {
     user,
     access_token: accessToken,
     role,
-    empresaId
+    empresaId,
+    mei
   };
 };
 
