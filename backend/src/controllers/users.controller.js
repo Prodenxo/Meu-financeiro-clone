@@ -92,6 +92,15 @@ export const getEmpresa = async (req, res, next) => {
   }
 };
 
+export const getEmpresaById = async (req, res, next) => {
+  try {
+    const result = await usersService.getEmpresaById(req.accessToken, req.params.empresaId);
+    return sendSuccess(res, result, 'Empresa carregada');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const createEmpresa = async (req, res, next) => {
   try {
     const result = await usersService.createEmpresa(req.accessToken, req.body);

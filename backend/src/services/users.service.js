@@ -309,6 +309,23 @@ export const getEmpresa = async (accessToken) => {
   return { empresa: data };
 };
 
+/** Superadmin: busca empresa por id (para edição via filtro). */
+export const getEmpresaById = async (accessToken, empresaId) => {
+  const { role } = await getRequesterContext(accessToken);
+  if (role !== 'superadmin') throw forbidden();
+  if (!empresaId) throw badRequest('empresaId é obrigatório');
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const { data, error } = await adminClient
+    .from('empresas')
+    .select('id, empresa, cnpj, razao_social, nome_fantasia, inscricao_estadual, regime_tributario, logradouro, numero, complemento, bairro, cidade, estado, cep, telefone, email')
+    .eq('id', empresaId)
+    .maybeSingle();
+
+  if (error) throw badRequest(error.message);
+  return { empresa: data };
+};
+
 export const createUser = async (accessToken, input) => {
   const { role: requesterRole, empresaId: requesterEmpresaId } = await getRequesterContext(accessToken);
   if (!ROLE_CREATE_ALLOWED.has(requesterRole)) throw forbidden();

@@ -8,7 +8,7 @@ import { MessageCircle } from 'lucide-react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import EmpresaModal, { type EmpresaData } from '../components/EmpresaModal';
-import { getEmpresa } from '../services/usersService';
+import { listEmpresas, getEmpresaById } from '../services/usersService';
 
 export default function Settings() {
   const { user, userId, phone, displayName, updatePhone, updateDisplayName, signOut, role } = useAuthStore();
@@ -24,6 +24,10 @@ export default function Settings() {
   const [editDisplayName, setEditDisplayName] = useState(displayName || '');
   const [empresaModalOpen, setEmpresaModalOpen] = useState(false);
   const [empresaData, setEmpresaData] = useState<EmpresaData | null>(null);
+  const [empresasList, setEmpresasList] = useState<{ id: string; empresa: string }[]>([]);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState('');
+  const [loadingEmpresas, setLoadingEmpresas] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(false);
 
   useEffect(() => {
     checkGoogleAuthStatus();
@@ -35,9 +39,11 @@ export default function Settings() {
 
   useEffect(() => {
     if (role === 'superadmin') {
-      getEmpresa()
-        .then((res) => setEmpresaData(res.empresa || null))
-        .catch(() => setEmpresaData(null));
+      setLoadingEmpresas(true);
+      listEmpresas()
+        .then((list) => setEmpresasList(list || []))
+        .catch(() => setEmpresasList([]))
+        .finally(() => setLoadingEmpresas(false));
     }
   }, [role]);
 
@@ -277,20 +283,63 @@ export default function Settings() {
           </div>
         )}
 
+        {/* Card Criar empresa: apenas superadmin; criar nova ou editar via filtro */}
         {role === 'superadmin' && (
           <div className="planner-card p-4 md:p-6">
-            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Empresa</h2>
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Criar empresa</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              {empresaData
-                ? `Configurações de ${empresaData.empresa || 'empresa cadastrada'}.`
-                : 'Cadastre os dados da empresa para uso no sistema.'}
+              Cadastre uma nova empresa ou selecione uma no filtro abaixo para editar os dados.
             </p>
-            <button
-              onClick={() => setEmpresaModalOpen(true)}
-              className="planner-button"
-            >
-              {empresaData ? 'Editar empresa' : 'Configurar empresa'}
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex-1 min-w-0">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Empresa para editar
+                </label>
+                <select
+                  value={selectedEmpresaId}
+                  onChange={(e) => setSelectedEmpresaId(e.target.value)}
+                  disabled={loadingEmpresas}
+                  className="planner-input-compact w-full"
+                >
+                  <option value="">Nenhuma (criar nova)</option>
+                  {empresasList.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.empresa || e.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <button
+                  onClick={() => {
+                    setEmpresaData(null);
+                    setEmpresaModalOpen(true);
+                  }}
+                  className="planner-button"
+                >
+                  Criar empresa
+                </button>
+                {selectedEmpresaId && (
+                  <button
+                    onClick={() => {
+                      setError('');
+                      setLoadingEdit(true);
+                      getEmpresaById(selectedEmpresaId)
+                        .then((res) => {
+                          setEmpresaData(res.empresa || null);
+                          setEmpresaModalOpen(true);
+                        })
+                        .catch(() => setError('Erro ao carregar empresa'))
+                        .finally(() => setLoadingEdit(false));
+                    }}
+                    disabled={loadingEdit}
+                    className="planner-button-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingEdit ? 'Carregando...' : 'Editar selecionada'}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -301,6 +350,13 @@ export default function Settings() {
           onSuccess={(updated) => {
             setEmpresaData(updated);
             setEmpresaModalOpen(false);
+            if (empresasList.some((e) => e.id === updated?.id)) {
+              setEmpresasList((prev) =>
+                prev.map((e) => (e.id === updated?.id ? { id: e.id, empresa: updated?.empresa ?? e.empresa } : e))
+              );
+            } else if (updated?.id) {
+              setEmpresasList((prev) => [...prev, { id: updated.id, empresa: updated?.empresa ?? '' }]);
+            }
             setSuccess('Empresa salva com sucesso!');
             setTimeout(() => setSuccess(''), 3000);
           }}

@@ -93,6 +93,10 @@ export async function getEmpresa() {
   return apiClient.get<{ empresa: EmpresaFullData }>('/users/empresas/current');
 }
 
+export async function getEmpresaById(empresaId: string) {
+  return apiClient.get<{ empresa: EmpresaFullData }>(`/users/empresas/${empresaId}`);
+}
+
 export async function createEmpresa(input: EmpresaFullData) {
   return apiClient.post<{ empresa: EmpresaFullData }>('/users/empresas', input);
 }

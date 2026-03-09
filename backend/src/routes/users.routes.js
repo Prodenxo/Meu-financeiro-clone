@@ -8,6 +8,7 @@ const router = Router();
 router.get('/', requireAuth, controller.listUsers);
 router.get('/empresas', requireAuth, controller.listEmpresas);
 router.get('/empresas/current', requireAuth, requireSuperAdmin, controller.getEmpresa);
+router.get('/empresas/:empresaId', requireAuth, requireSuperAdmin, controller.getEmpresaById);
 router.post('/empresas', requireAuth, requireSuperAdmin, controller.createEmpresa);
 router.put('/empresas/:empresaId', requireAuth, requireSuperAdmin, controller.updateEmpresa);
 router.post('/sync-phone', requireAuth, controller.syncPhone);

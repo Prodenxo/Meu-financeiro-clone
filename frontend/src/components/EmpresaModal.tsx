@@ -23,8 +23,11 @@ const matchRegime = (apiRegimes: { ano: number; forma_de_tributacao: string }[])
   return '';
 };
 
+/** Remove tudo que não for dígito e limita a 14 caracteres. */
+const normalizeCnpjInput = (value: string) => value.replace(/\D/g, '').slice(0, 14);
+
 const formatCnpj = (value: string) => {
-  const digits = value.replace(/\D/g, '').slice(0, 14);
+  const digits = normalizeCnpjInput(value);
   return digits
     .replace(/^(\d{2})(\d)/, '$1.$2')
     .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
@@ -101,10 +104,9 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
   const validate = () => {
     const newErrors: Partial<Record<keyof EmpresaData, string>> = {};
     const cnpjDigits = onlyDigits(form.cnpj || '');
-    if (!cnpjDigits) {
-      newErrors.cnpj = 'CNPJ é obrigatório';
-    } else if (cnpjDigits.length !== 14) {
-      newErrors.cnpj = 'CNPJ deve ter 14 dígitos';
+    // CNPJ agora é opcional: só valida formato se houver valor
+    if (cnpjDigits && cnpjDigits.length !== 14) {
+      newErrors.cnpj = 'CNPJ deve ter 14 dígitos ou fique em branco';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -166,10 +168,10 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
         )}
 
         <div className="grid gap-4 md:grid-cols-2">
-          {/* CNPJ — primeiro, pois autopreenche os demais */}
+          {/* CNPJ — opcional, mas autopreenche os demais quando informado */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              CNPJ <span className="text-red-500">*</span>
+              CNPJ <span className="text-xs text-gray-500 ml-1">(opcional)</span>
               {cnpjLoading && <span className="ml-2 text-xs text-blue-400">Consultando...</span>}
             </label>
             <input
@@ -180,6 +182,16 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
                 const formatted = formatCnpj(e.target.value);
                 set('cnpj', formatted);
                 if (onlyDigits(formatted).length === 14) {
+                  void handleCnpjBlur(formatted);
+                }
+              }}
+              onPaste={(e) => {
+                e.preventDefault();
+                const pasted = (e.clipboardData?.getData('text') || '').trim();
+                const digits = normalizeCnpjInput(pasted);
+                const formatted = formatCnpj(digits);
+                set('cnpj', formatted);
+                if (digits.length === 14) {
                   void handleCnpjBlur(formatted);
                 }
               }}
