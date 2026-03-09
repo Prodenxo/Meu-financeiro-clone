@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Fuse from 'fuse.js';
 import { useTransactionStore } from '../store/transactionStore';
 import { useAuthStore } from '../store/authStore';
 import { fetchCategoriesByType } from '../services/categoryService';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Download, PlusCircle } from 'lucide-react';
+import { AlertTriangle, Download, PlusCircle, Filter } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const meses = [
@@ -16,6 +17,8 @@ interface Categoria {
   nome: string;
   tipo: string;
 }
+
+type SortField = 'classificacao' | 'valor' | 'tipo' | 'data' | 'status' | 'obs';
 
 // Função para formatar valor como moeda brasileira (recebe string de números)
 const formatCurrency = (value: string): string => {
@@ -644,6 +647,18 @@ export default function Transactions() {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [aplicarFiltroDatas, setAplicarFiltroDatas] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [tipoFiltro, setTipoFiltro] = useState<'normal' | 'receita' | 'despesa'>('normal');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [searchFields, setSearchFields] = useState({
+    classificacao: true,
+    obs: true,
+    status: true,
+    valor: true,
+  });
+  const [sortConfig, setSortConfig] = useState<{ field: SortField | null; direction: 'asc' | 'desc' }>({
+    field: null,
+    direction: 'asc',
+  });
 
   // Estado para mês/ano selecionado
   const now = new Date();
@@ -694,8 +709,51 @@ export default function Transactions() {
     return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
   }
 
-  // Filtro de busca e de período
-  const filtered = transactions.filter(t => {
+  const normalizeSortText = (value: unknown) =>
+    (value ?? '')
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  const handleToggleSearchField = (field: keyof typeof searchFields) => {
+    setSearchFields((prev) => {
+      const next = { ...prev, [field]: !prev[field] };
+      // Garante que sempre exista pelo menos um campo selecionado
+      if (!Object.values(next).some(Boolean)) {
+        return prev;
+      }
+      return next;
+    });
+  };
+
+  const handleSort = (field: SortField) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        // Ciclo: asc -> desc -> padrão (sem ordenação)
+        if (prev.direction === 'asc') {
+          return {
+            field,
+            direction: 'desc',
+          };
+        }
+        if (prev.direction === 'desc') {
+          return {
+            field: null,
+            direction: 'asc',
+          };
+        }
+      }
+      return {
+        field,
+        direction: 'asc',
+      };
+    });
+  };
+
+  // Filtro de busca, período e tipo (Normal/Receita/Despesas)
+  const filteredByPeriod = transactions.filter(t => {
     const data = t.data ? new Date(`${t.data}T00:00:00-03:00`) : new Date(t.criado_em);
     let periodoOk = false;
     if (aplicarFiltroDatas && dateRange.start && dateRange.end) {
@@ -713,9 +771,111 @@ export default function Transactions() {
       periodoOk = data.getMonth() === selectedMonth && data.getFullYear() === selectedYear;
     }
     if (!periodoOk) return false;
-    if (search && !t.classificacao.toLowerCase().includes(search.toLowerCase())) return false;
+
+    // Filtro por tipo (Normal / Receita / Despesas)
+    if (tipoFiltro !== 'normal') {
+      const tipoRaw = t.tipo;
+      const tipoNormalizado = tipoRaw === 'saida' ? 'saída' : tipoRaw;
+      if (tipoFiltro === 'receita' && tipoNormalizado !== 'entrada') return false;
+      if (tipoFiltro === 'despesa' && tipoNormalizado !== 'saída') return false;
+    }
+
     return true;
   });
+
+  let filtered = filteredByPeriod;
+
+  if (search.trim()) {
+    const normalizeText = (value: unknown) =>
+      (value ?? '')
+        .toString()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+
+    const normalizedSearch = normalizeText(search);
+
+    const activeTextKeys: Array<'classificacao' | 'obs' | 'status'> = [];
+    if (searchFields.classificacao) activeTextKeys.push('classificacao');
+    if (searchFields.obs) activeTextKeys.push('obs');
+    if (searchFields.status) activeTextKeys.push('status');
+
+    let fuzzyResults: typeof filteredByPeriod = [];
+    if (activeTextKeys.length > 0) {
+      // Fuzzy search para textos selecionados, já normalizados (sem acento, minúsculo)
+      const fuse = new Fuse(filteredByPeriod, {
+        keys: activeTextKeys,
+        threshold: 0.4,
+        ignoreLocation: true,
+        getFn: (obj: any, path: string) => normalizeText(obj[path])
+      });
+
+      fuzzyResults = fuse.search(normalizedSearch).map(result => result.item);
+    }
+
+    // Match direto por "includes" (acento-insensitive), para casos como "me" → "médico"
+    let directTextResults: typeof filteredByPeriod = [];
+    if (activeTextKeys.length > 0) {
+      directTextResults = filteredByPeriod.filter((t) =>
+        activeTextKeys.some((key) =>
+          normalizeText((t as any)[key]).includes(normalizedSearch)
+        )
+      );
+    }
+
+    // Busca numérica por valor (aceita "100", "100,00", "1.000,00", "R$ 100,00", etc.)
+    const numericQuery = search.trim().replace(/[^\d]/g, '');
+    let numericResults: typeof filteredByPeriod = [];
+
+    if (searchFields.valor && numericQuery) {
+      const searchInt = parseInt(numericQuery, 10);
+      if (!Number.isNaN(searchInt)) {
+        numericResults = filteredByPeriod.filter((t) => {
+          if (typeof t.valor !== 'number') return false;
+          // Trabalhar em centavos para manter precisão e comparar por "contém"
+          const valorCents = Math.round(t.valor * 100);
+          return String(valorCents).includes(String(searchInt));
+        });
+      }
+    }
+
+    // Unir resultados textuais (fuzzy + includes) e numéricos sem duplicar (usa id como chave)
+    const byId = new Map<any, (typeof filteredByPeriod)[number]>();
+    [...fuzzyResults, ...directTextResults, ...numericResults].forEach((item) => {
+      byId.set(item.id, item);
+    });
+
+    filtered = Array.from(byId.values());
+  }
+
+  if (sortConfig.field) {
+    const { field, direction } = sortConfig;
+    const multiplier = direction === 'asc' ? 1 : -1;
+
+    filtered = [...filtered].sort((a, b) => {
+      if (field === 'valor') {
+        const av = typeof a.valor === 'number' ? a.valor : 0;
+        const bv = typeof b.valor === 'number' ? b.valor : 0;
+        if (av === bv) return 0;
+        return av < bv ? -1 * multiplier : 1 * multiplier;
+      }
+
+      if (field === 'data') {
+        const ad = a.data ? new Date(`${a.data}T00:00:00-03:00`) : new Date(a.criado_em);
+        const bd = b.data ? new Date(`${b.data}T00:00:00-03:00`) : new Date(b.criado_em);
+        const at = ad.getTime();
+        const bt = bd.getTime();
+        if (at === bt) return 0;
+        return at < bt ? -1 * multiplier : 1 * multiplier;
+      }
+
+      const av = normalizeSortText((a as any)[field]);
+      const bv = normalizeSortText((b as any)[field]);
+      if (av === bv) return 0;
+      return av < bv ? -1 * multiplier : 1 * multiplier;
+    });
+  }
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -945,13 +1105,70 @@ export default function Transactions() {
       {/* Header e busca - Mobile */}
       <div className="mb-4 md:mb-6">
         <h2 className="text-xl md:text-2xl font-bold mb-1 dark:text-white">Transações</h2>
-        <input
-          type="text"
-          placeholder="Pesquisar receitas ou gastos"
-          className="planner-input mb-4"
-          value={search}
-          onChange={e=>setSearch(e.target.value)}
-        />
+        <div className="relative mb-4">
+          <input
+            type="text"
+            placeholder="Pesquisar receitas ou gastos"
+            className="planner-input pr-11"
+            value={search}
+            onChange={e=>setSearch(e.target.value)}
+          />
+          <button
+            type="button"
+            aria-label="Filtrar campos de pesquisa"
+            className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-200"
+            onClick={() => setIsFilterOpen(prev => !prev)}
+          >
+            <Filter size={18} />
+          </button>
+          {isFilterOpen && (
+            <div className="absolute right-0 top-11 z-50 w-64 rounded-xl border border-slate-200/70 bg-white shadow-soft dark:border-slate-800/70 dark:bg-slate-900">
+              <div className="px-4 py-3 border-b border-slate-200/60 dark:border-slate-800/60">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  Campos para pesquisar
+                </p>
+              </div>
+              <div className="px-4 py-3 space-y-2 text-sm text-slate-700 dark:text-slate-200">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    checked={searchFields.classificacao}
+                    onChange={() => handleToggleSearchField('classificacao')}
+                  />
+                  <span>Descrição</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    checked={searchFields.obs}
+                    onChange={() => handleToggleSearchField('obs')}
+                  />
+                  <span>Observações</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    checked={searchFields.status}
+                    onChange={() => handleToggleSearchField('status')}
+                  />
+                  <span>Status</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    checked={searchFields.valor}
+                    onChange={() => handleToggleSearchField('valor')}
+                  />
+                  <span>Valor</span>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Filtros - Desktop */}
@@ -998,6 +1215,44 @@ export default function Transactions() {
       </div>
 
       <div className="planner-card p-4 md:p-6 relative">
+        {/* Filtro por tipo (Normal / Receita / Despesas) */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Tipo
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setTipoFiltro('normal')}
+              className={tipoFiltro === 'normal' ? 'planner-tab planner-tab-active' : 'planner-tab'}
+            >
+              Normal
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipoFiltro('receita')}
+              className={
+                tipoFiltro === 'receita'
+                  ? 'planner-tab planner-tab-active bg-emerald-600 text-white'
+                  : 'planner-tab'
+              }
+            >
+              Receitas
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipoFiltro('despesa')}
+              className={
+                tipoFiltro === 'despesa'
+                  ? 'planner-tab planner-tab-active bg-rose-600 text-white'
+                  : 'planner-tab'
+              }
+            >
+              Despesas
+            </button>
+          </div>
+        </div>
+
         {/* Ações (desktop) - no fluxo para evitar sobreposição com tabela */}
         <div className="hidden md:flex items-center justify-end gap-2 mb-4">
           <button
@@ -1020,12 +1275,90 @@ export default function Transactions() {
           <table className="w-full text-sm text-gray-700 dark:text-gray-200">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-700">
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">Descrição</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">Valor</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">Tipo</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">Data</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">Status</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">Observações</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400"
+                    onClick={() => handleSort('classificacao')}
+                  >
+                    Descrição
+                    {sortConfig.field === 'classificacao' && (
+                      <span className="text-xs">
+                        {sortConfig.direction === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400"
+                    onClick={() => handleSort('valor')}
+                  >
+                    Valor
+                    {sortConfig.field === 'valor' && (
+                      <span className="text-xs">
+                        {sortConfig.direction === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400"
+                    onClick={() => handleSort('tipo')}
+                  >
+                    Tipo
+                    {sortConfig.field === 'tipo' && (
+                      <span className="text-xs">
+                        {sortConfig.direction === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400"
+                    onClick={() => handleSort('data')}
+                  >
+                    Data
+                    {sortConfig.field === 'data' && (
+                      <span className="text-xs">
+                        {sortConfig.direction === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400"
+                    onClick={() => handleSort('status')}
+                  >
+                    Status
+                    {sortConfig.field === 'status' && (
+                      <span className="text-xs">
+                        {sortConfig.direction === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400"
+                    onClick={() => handleSort('obs')}
+                  >
+                    Observações
+                    {sortConfig.field === 'obs' && (
+                      <span className="text-xs">
+                        {sortConfig.direction === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-100"></th>
               </tr>
             </thead>
