@@ -57,7 +57,8 @@ describe('authService.getSession', () => {
       refresh_token: 'refresh-1',
       expires_at: 123,
       role: 'admin',
-      empresaId: 'empresa-1'
+      empresaId: 'empresa-1',
+      mei: true
     });
   });
 

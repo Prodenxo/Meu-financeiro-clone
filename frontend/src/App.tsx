@@ -270,7 +270,8 @@ function GoogleOAuthCallback() {
 }
 
 function AppRoutes() {
-  const { user, role } = useAuthStore();
+  const { user, role, mei } = useAuthStore();
+  const meiEnabled = mei !== false;
 
   return (
     <>
@@ -299,7 +300,10 @@ function AppRoutes() {
                   <Route path="/orcamentos" element={<Orcamentos />} />
                   <Route path="/categorias" element={<Categorias />} />
                   <Route path="/agenda" element={<Agenda />} />
-                  <Route path="/guias-mei" element={<GuidesMei />} />
+                  <Route
+                    path="/guias-mei"
+                    element={meiEnabled ? <GuidesMei /> : <Navigate to="/" replace />}
+                  />
                   <Route path="/settings" element={<Settings />} />
                   <Route
                     path="/settings/users"

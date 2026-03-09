@@ -66,7 +66,7 @@ export const getRequesterContext = async (accessToken) => {
   const linkClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await linkClient
     .from('role_x_user_x_empresa')
-    .select('empresas_id, roles_id, status')
+    .select('empresas_id, roles_id, status, mei')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -91,10 +91,12 @@ export const getRequesterContext = async (accessToken) => {
     }
 
     if (roleData?.roles) {
+      const mei = typeof linkData?.mei === 'boolean' ? linkData.mei : true;
       return {
         userId: user.id,
         role: normalizeRoleValue(roleData.roles),
-        empresaId: linkData.empresas_id || null
+        empresaId: linkData.empresas_id || null,
+        mei
       };
     }
   }
@@ -108,7 +110,8 @@ export const getRequesterContext = async (accessToken) => {
   return {
     userId: user.id,
     role: normalizeRoleValue(profile?.role) || 'usuario',
-    empresaId: null
+    empresaId: null,
+    mei: true
   };
 };
 
@@ -119,7 +122,7 @@ export const listUsers = async (accessToken) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   let query = adminClient
     .from('role_x_user_x_empresa')
-    .select('user_id, empresas_id, roles_id, status');
+    .select('user_id, empresas_id, roles_id, status, mei');
 
   if (role === 'admin') {
     if (!empresaId) throw forbidden();
@@ -177,7 +180,8 @@ export const listUsers = async (accessToken) => {
           role: normalizeRoleValue(roleMap.get(link.roles_id) || 'usuario'),
           empresaId: link.empresas_id || null,
           empresaName: empresaMap.get(link.empresas_id)?.empresa || null,
-          status: link.status ?? true
+          status: link.status ?? true,
+          mei: typeof link.mei === 'boolean' ? link.mei : true
         };
       })
       .filter(Boolean)
@@ -399,6 +403,7 @@ export const updateUser = async (accessToken, userId, input) => {
   const requestedEmpresaId = input?.empresaId || null;
   const requestedDisplayName = input?.displayName?.trim();
   const requestedPhone = cleanPhone(input?.phone?.trim());
+  const requestedMei = typeof input?.mei === 'boolean' ? input.mei : undefined;
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await adminClient
@@ -446,13 +451,14 @@ export const updateUser = async (accessToken, userId, input) => {
     if (existingLinkError) throw badRequest(existingLinkError.message);
 
     if (existingLink?.id) {
-      const { data: updatedLink, error: updateLinkError } = await adminClient
-        .from('role_x_user_x_empresa')
-        .update({
-          roles_id: roleId,
-          empresas_id: requestedEmpresaId,
-          status: true
-        })
+    const { data: updatedLink, error: updateLinkError } = await adminClient
+      .from('role_x_user_x_empresa')
+      .update({
+        roles_id: roleId,
+        empresas_id: requestedEmpresaId,
+        status: true,
+        ...(requestedMei !== undefined ? { mei: requestedMei } : {})
+      })
         .eq('id', existingLink.id)
         .select('id, empresas_id, roles_id')
         .maybeSingle();
@@ -460,14 +466,15 @@ export const updateUser = async (accessToken, userId, input) => {
       if (updateLinkError) throw badRequest(updateLinkError.message);
       linkRecord = updatedLink;
     } else {
-      const { data: createdLink, error: createLinkError } = await adminClient
-        .from('role_x_user_x_empresa')
-        .insert({
-          user_id: userId,
-          roles_id: roleId,
-          empresas_id: requestedEmpresaId,
-          status: true
-        })
+    const { data: createdLink, error: createLinkError } = await adminClient
+      .from('role_x_user_x_empresa')
+      .insert({
+        user_id: userId,
+        roles_id: roleId,
+        empresas_id: requestedEmpresaId,
+        status: true,
+        mei: requestedMei ?? true
+      })
         .select('id, empresas_id, roles_id')
         .maybeSingle();
 
@@ -528,7 +535,8 @@ export const updateUser = async (accessToken, userId, input) => {
     .from('role_x_user_x_empresa')
     .update({
       roles_id: roleId,
-      empresas_id: finalEmpresaId
+      empresas_id: finalEmpresaId,
+      ...(requestedMei !== undefined ? { mei: requestedMei } : {})
     })
     .eq('id', linkRecord.id);
 

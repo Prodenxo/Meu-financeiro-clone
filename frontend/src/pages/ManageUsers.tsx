@@ -34,6 +34,7 @@ export default function ManageUsers() {
   const [editEmpresaOpen, setEditEmpresaOpen] = useState(false);
   const [editDisplayName, setEditDisplayName] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editMei, setEditMei] = useState(true);
   const [lastPasswords, setLastPasswords] = useState<Record<string, string>>({});
   const [userQuery, setUserQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -199,6 +200,7 @@ export default function ManageUsers() {
     setEditEmpresaOpen(false);
     setEditDisplayName(user.displayName || '');
     setEditPhone(user.phone || '');
+    setEditMei(user.mei !== false);
   };
 
   const handleUpdateUser = async (user: ManagedUser) => {
@@ -213,12 +215,14 @@ export default function ManageUsers() {
               role: editRole,
               empresaId: editEmpresaId || undefined,
               displayName: editDisplayName || undefined,
-              phone: editPhone || undefined
+              phone: editPhone || undefined,
+              mei: editMei
             }
           : {
               role: 'usuario',
               displayName: editDisplayName || undefined,
-              phone: editPhone || undefined
+              phone: editPhone || undefined,
+              mei: editMei
             };
       await updateUser(user.id, payload);
       setSuccess('Usuário atualizado com sucesso.');
@@ -732,6 +736,15 @@ export default function ManageUsers() {
                           <option value="usuario">User</option>
                           {role === 'superadmin' && <option value="outsider">Outsider</option>}
                         </select>
+                        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={editMei}
+                            onChange={(e) => setEditMei(e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          MEI habilitado
+                        </label>
                         {role === 'superadmin' ? (
                           <div className="relative">
                             <div className="flex items-center gap-2">
@@ -847,6 +860,7 @@ export default function ManageUsers() {
                       <>
                         <p>Role: {user.role}</p>
                         <p>Empresa: {user.empresaName || user.empresaId || '-'}</p>
+                        <p>MEI: {user.mei === false ? 'Desativado' : 'Ativo'}</p>
                         {canEdit && (
                           <button
                             onClick={() => startEditUser(user)}

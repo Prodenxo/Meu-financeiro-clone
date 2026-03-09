@@ -18,6 +18,7 @@ export interface ManagedUser {
   empresaId: string | null;
   empresaName?: string | null;
   status?: boolean | null;
+  mei?: boolean | null;
 }
 
 export interface EmpresaOption {
@@ -30,6 +31,7 @@ export async function listUsers() {
   return (result.users || []).map((user) => ({
     ...user,
     role: normalizeRole(user.role) || user.role,
+    mei: user.mei ?? true
   }));
 }
 
@@ -40,7 +42,7 @@ export async function listEmpresas() {
 
 export async function updateUser(
   userId: string,
-  input: { role?: string; empresaId?: string; displayName?: string; phone?: string }
+  input: { role?: string; empresaId?: string; displayName?: string; phone?: string; mei?: boolean }
 ) {
   const sanitizedRole = sanitizeUserRole(input.role);
   const payload = {
