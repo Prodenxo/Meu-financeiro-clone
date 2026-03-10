@@ -6,7 +6,7 @@ import 'react-phone-input-2/lib/style.css';
 import { toast } from 'react-toastify';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
-import { banUser, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
+import { banUser, createEmpresa, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateEmpresa, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
 
 export default function ManageUsers() {
   const { role } = useAuthStore();
@@ -22,6 +22,14 @@ export default function ManageUsers() {
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
   const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [empresaNome, setEmpresaNome] = useState('');
+  const [empresaMaxMei, setEmpresaMaxMei] = useState('');
+  const [empresaMaxNaoMei, setEmpresaMaxNaoMei] = useState('');
+  const [empresaEdits, setEmpresaEdits] = useState<Record<string, { empresa: string; maxMei: string; maxNaoMei: string }>>({});
+  const [empresaEditQuery, setEmpresaEditQuery] = useState('');
+  const [empresaEditOpen, setEmpresaEditOpen] = useState(false);
+  const [empresaEditSelectedId, setEmpresaEditSelectedId] = useState('');
+  const [empresaEditHighlightedIndex, setEmpresaEditHighlightedIndex] = useState(-1);
   const [selectedRole, setSelectedRole] = useState<'admin' | 'usuario' | 'outsider'>('usuario');
   const [targetEmpresaId, setTargetEmpresaId] = useState('');
   const [empresaQuery, setEmpresaQuery] = useState('');
@@ -65,6 +73,17 @@ export default function ManageUsers() {
     }
   };
 
+  const fetchEmpresas = async () => {
+    try {
+      const data = await listEmpresas();
+      console.log('[ManageUsers] empresas recebidas:', data);
+      setEmpresas(data);
+    } catch (err: any) {
+      console.log('[ManageUsers] erro ao listar empresas:', err);
+      setError(err.message || 'Erro ao listar empresas');
+    }
+  };
+
   useEffect(() => {
     if (canManage) {
       void fetchUsers();
@@ -84,15 +103,7 @@ export default function ManageUsers() {
 
   useEffect(() => {
     if (!canManage || role !== 'superadmin') return;
-    listEmpresas()
-      .then((data) => {
-        console.log('[ManageUsers] empresas recebidas:', data);
-        setEmpresas(data);
-      })
-      .catch((err: unknown) => {
-        console.log('[ManageUsers] erro ao listar empresas:', err);
-        setError(err instanceof Error ? err.message : 'Erro ao listar empresas');
-      });
+    void fetchEmpresas();
   }, [canManage, role]);
 
   const baseUsers =
@@ -133,6 +144,29 @@ export default function ManageUsers() {
   const endDisplay = Math.min(startIndex + pageSize, filteredUsers.length);
   const pagedUsers = filteredUsers.slice(startIndex, startIndex + pageSize);
 
+  const sortedEmpresas = [...empresas].sort((empresaA, empresaB) => {
+    return empresaA.empresa.localeCompare(empresaB.empresa, 'pt-BR', { sensitivity: 'base' });
+  });
+  const empresaEditQueryNormalized = empresaEditQuery.trim().toLowerCase();
+  const filteredEmpresas = empresaEditQueryNormalized
+    ? sortedEmpresas.filter((empresa) =>
+        empresa.empresa.toLowerCase().includes(empresaEditQueryNormalized)
+      )
+    : sortedEmpresas;
+  const selectedEmpresa = empresas.find((empresa) => empresa.id === empresaEditSelectedId) || null;
+  const selectedEmpresaEdit = selectedEmpresa
+    ? (empresaEdits[selectedEmpresa.id] || {
+        empresa: selectedEmpresa.empresa,
+        maxMei: selectedEmpresa.max_mei !== undefined && selectedEmpresa.max_mei !== null
+          ? String(selectedEmpresa.max_mei)
+          : '',
+        maxNaoMei: selectedEmpresa.max_usuarios_nao_mei !== undefined
+          && selectedEmpresa.max_usuarios_nao_mei !== null
+          ? String(selectedEmpresa.max_usuarios_nao_mei)
+          : ''
+      })
+    : null;
+
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
@@ -144,6 +178,19 @@ export default function ManageUsers() {
       setHighlightedIndex(filteredUsers.length - 1);
     }
   }, [filteredUsers.length, highlightedIndex]);
+
+  useEffect(() => {
+    if (empresaEditHighlightedIndex >= filteredEmpresas.length) {
+      setEmpresaEditHighlightedIndex(filteredEmpresas.length - 1);
+    }
+  }, [filteredEmpresas.length, empresaEditHighlightedIndex]);
+
+  useEffect(() => {
+    if (!selectedEmpresa) return;
+    if (!empresaEditQuery.trim()) {
+      setEmpresaEditQuery(selectedEmpresa.empresa);
+    }
+  }, [selectedEmpresa?.id]);
 
   const handleCreateUser = async () => {
     setLoading(true);
@@ -183,6 +230,108 @@ export default function ManageUsers() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao criar usuário');
       toast.error(err.message || 'Erro ao criar usuário');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const parseLimitValue = (value: string, fieldLabel: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    if (!Number.isFinite(numeric) || !Number.isInteger(numeric) || numeric < 0) {
+      throw new Error(`${fieldLabel} deve ser um inteiro maior ou igual a 0`);
+    }
+    return numeric;
+  };
+
+  const handleCreateEmpresa = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const nome = empresaNome.trim();
+      if (!nome) {
+        throw new Error('Empresa é obrigatória');
+      }
+
+      const payload = {
+        empresa: nome,
+        max_mei: parseLimitValue(empresaMaxMei, 'Max MEI'),
+        max_usuarios_nao_mei: parseLimitValue(empresaMaxNaoMei, 'Max não MEI')
+      };
+
+      await createEmpresa(payload);
+      setSuccess('Empresa criada com sucesso.');
+      toast.success('Empresa criada com sucesso.');
+      setEmpresaNome('');
+      setEmpresaMaxMei('');
+      setEmpresaMaxNaoMei('');
+      await fetchEmpresas();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar empresa');
+      toast.error(err.message || 'Erro ao criar empresa');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateEmpresaEdit = (
+    empresaId: string,
+    updates: Partial<{ empresa: string; maxMei: string; maxNaoMei: string }>
+  ) => {
+    setEmpresaEdits((prev) => ({
+      ...prev,
+      [empresaId]: {
+        ...prev[empresaId],
+        ...updates
+      }
+    }));
+  };
+
+  const selectEmpresaForEdit = (empresa: EmpresaOption) => {
+    setEmpresaEditSelectedId(empresa.id);
+    setEmpresaEditQuery(empresa.empresa);
+    setEmpresaEditOpen(false);
+    setEmpresaEditHighlightedIndex(-1);
+    setEmpresaEdits((prev) => ({
+      ...prev,
+      [empresa.id]: {
+        empresa: empresa.empresa,
+        maxMei: empresa.max_mei !== undefined && empresa.max_mei !== null ? String(empresa.max_mei) : '',
+        maxNaoMei:
+          empresa.max_usuarios_nao_mei !== undefined && empresa.max_usuarios_nao_mei !== null
+            ? String(empresa.max_usuarios_nao_mei)
+            : ''
+      }
+    }));
+  };
+
+  const handleUpdateEmpresa = async (empresaId: string) => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const edit = empresaEdits[empresaId];
+      if (!edit) throw new Error('Empresa não encontrada');
+      const nome = edit.empresa.trim();
+      if (!nome) throw new Error('Empresa é obrigatória');
+
+      const payload = {
+        empresa: nome,
+        max_mei: parseLimitValue(edit.maxMei, 'Max MEI'),
+        max_usuarios_nao_mei: parseLimitValue(edit.maxNaoMei, 'Max não MEI')
+      };
+
+      await updateEmpresa(empresaId, payload);
+      setSuccess('Empresa atualizada com sucesso.');
+      toast.success('Empresa atualizada com sucesso.');
+      await fetchEmpresas();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao atualizar empresa');
+      toast.error(err.message || 'Erro ao atualizar empresa');
     } finally {
       setLoading(false);
     }
@@ -351,6 +500,199 @@ export default function ManageUsers() {
             {success}
           </div>
         )}
+
+        {role === 'superadmin' ? (
+          <div className="planner-card p-4 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Criar empresa</h2>
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <input
+                  type="text"
+                  value={empresaNome}
+                  onChange={(e) => setEmpresaNome(e.target.value)}
+                  className="planner-input-compact"
+                  placeholder="Nome da empresa"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={empresaMaxMei}
+                  onChange={(e) => setEmpresaMaxMei(e.target.value)}
+                  className="planner-input-compact"
+                  placeholder="Max MEI (0 = sem limite)"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={empresaMaxNaoMei}
+                  onChange={(e) => setEmpresaMaxNaoMei(e.target.value)}
+                  className="planner-input-compact"
+                  placeholder="Max não MEI (0 = sem limite)"
+                />
+              </div>
+              <button
+                onClick={handleCreateEmpresa}
+                disabled={loading || !empresaNome.trim()}
+                className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Salvando...' : 'Criar empresa'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {role === 'superadmin' ? (
+          <div className="planner-card p-4 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Editar empresas</h2>
+            {empresas.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma empresa cadastrada.</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="relative">
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Buscar empresa</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={empresaEditQuery}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setEmpresaEditQuery(value);
+                        setEmpresaEditOpen(true);
+                        setEmpresaEditHighlightedIndex(-1);
+                        if (empresaEditSelectedId) {
+                          const selectedLabel = selectedEmpresa ? selectedEmpresa.empresa : '';
+                          if (value.trim().toLowerCase() !== selectedLabel.trim().toLowerCase()) {
+                            setEmpresaEditSelectedId('');
+                          }
+                        }
+                      }}
+                      onFocus={() => setEmpresaEditOpen(true)}
+                      onBlur={() => {
+                        window.setTimeout(() => setEmpresaEditOpen(false), 150);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'ArrowDown') {
+                          event.preventDefault();
+                          setEmpresaEditOpen(true);
+                          setEmpresaEditHighlightedIndex((index) =>
+                            Math.min(index + 1, filteredEmpresas.length - 1)
+                          );
+                          return;
+                        }
+                        if (event.key === 'ArrowUp') {
+                          event.preventDefault();
+                          setEmpresaEditHighlightedIndex((index) => Math.max(index - 1, 0));
+                          return;
+                        }
+                        if (event.key === 'Enter') {
+                          if (empresaEditHighlightedIndex >= 0 && filteredEmpresas[empresaEditHighlightedIndex]) {
+                            selectEmpresaForEdit(filteredEmpresas[empresaEditHighlightedIndex]);
+                            return;
+                          }
+                          if (filteredEmpresas.length === 1) {
+                            selectEmpresaForEdit(filteredEmpresas[0]);
+                          }
+                        }
+                        if (event.key === 'Escape') {
+                          setEmpresaEditOpen(false);
+                          setEmpresaEditHighlightedIndex(-1);
+                        }
+                      }}
+                      className="planner-input-compact"
+                      placeholder="Digite para filtrar"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEmpresaEditOpen((open) => !open)}
+                      className="planner-button-secondary-compact"
+                      aria-label="Alternar lista de empresas"
+                    >
+                      ▾
+                    </button>
+                  </div>
+                  {empresaEditOpen && (
+                    <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/80 shadow-soft backdrop-blur">
+                      {filteredEmpresas.length === 0 ? (
+                        <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
+                          Nenhuma empresa encontrada.
+                        </div>
+                      ) : (
+                        filteredEmpresas.map((empresa, index) => (
+                          <button
+                            key={empresa.id}
+                            type="button"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              selectEmpresaForEdit(empresa);
+                            }}
+                            className={`w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 ${
+                              empresaEditHighlightedIndex === index ? 'bg-slate-100/80 dark:bg-slate-800/60' : ''
+                            }`}
+                          >
+                            {empresa.empresa}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {!selectedEmpresaEdit ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Selecione uma empresa para editar seus dados.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <input
+                        type="text"
+                        value={selectedEmpresaEdit.empresa}
+                        onChange={(e) =>
+                          updateEmpresaEdit(empresaEditSelectedId, { empresa: e.target.value })
+                        }
+                        className="planner-input-compact"
+                        placeholder="Nome da empresa"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={selectedEmpresaEdit.maxMei}
+                        onChange={(e) =>
+                          updateEmpresaEdit(empresaEditSelectedId, { maxMei: e.target.value })
+                        }
+                        className="planner-input-compact"
+                        placeholder="Max MEI (0 = sem limite)"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={selectedEmpresaEdit.maxNaoMei}
+                        onChange={(e) =>
+                          updateEmpresaEdit(empresaEditSelectedId, { maxNaoMei: e.target.value })
+                        }
+                        className="planner-input-compact"
+                        placeholder="Max não MEI (0 = sem limite)"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleUpdateEmpresa(empresaEditSelectedId)}
+                        disabled={loading || !selectedEmpresaEdit.empresa.trim()}
+                        className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loading ? 'Salvando...' : 'Salvar alterações'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : null}
 
         <div className="planner-card p-4 md:p-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Criar usuário</h2>

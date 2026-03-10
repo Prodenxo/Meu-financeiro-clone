@@ -7,11 +7,8 @@ const router = Router();
 
 router.get('/', requireAuth, controller.listUsers);
 router.get('/empresas', requireAuth, controller.listEmpresas);
-router.get('/empresas/current', requireAuth, requireSuperAdmin, controller.getEmpresa);
-router.get('/empresas/:empresaId', requireAuth, requireSuperAdmin, controller.getEmpresaById);
-router.post('/empresas', requireAuth, requireSuperAdmin, controller.createEmpresa);
-router.put('/empresas/:empresaId', requireAuth, requireSuperAdmin, controller.updateEmpresa);
-router.post('/sync-phone', requireAuth, controller.syncPhone);
+router.post('/empresas', requireAuth, controller.createEmpresa);
+router.put('/empresas/:empresaId', requireAuth, controller.updateEmpresa);
 router.post('/:userId/ban', requireAuth, controller.banUser);
 router.post('/:userId/unban', requireAuth, controller.unbanUser);
 router.post('/:userId/reset-password', requireAuth, controller.resetUserPassword);

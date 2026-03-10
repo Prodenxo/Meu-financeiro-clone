@@ -56,6 +56,86 @@ const cleanPhone = (phone) => (phone?.startsWith('+') ? phone.substring(1) : pho
 
 const generatePassword = () => crypto.randomBytes(9).toString('base64').slice(0, 12);
 
+const normalizeLimitInput = (value, fieldName) => {
+  if (value === undefined || value === null || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || !Number.isInteger(numeric)) {
+    throw badRequest(`${fieldName} deve ser um inteiro valido`);
+  }
+  if (numeric < 0) {
+    throw badRequest(`${fieldName} deve ser maior ou igual a 0`);
+  }
+  if (numeric === 0) return null;
+  return numeric;
+};
+
+const normalizeLimitValue = (value) => {
+  if (value === undefined || value === null) return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return numeric;
+};
+
+const resolveMeiValue = (value) => (typeof value === 'boolean' ? value : true);
+
+const isUnlimitedLimit = (value) => value === null || value === 0;
+
+const getEmpresaLimits = async (adminClient, empresaId) => {
+  if (!empresaId) throw badRequest('Empresa e obrigatoria');
+
+  const { data, error } = await adminClient
+    .from('empresas')
+    .select('id, max_mei, max_usuarios_nao_mei')
+    .eq('id', empresaId)
+    .maybeSingle();
+
+  if (error) throw badRequest(error.message);
+  if (!data?.id) throw badRequest('Empresa nao encontrada');
+
+  return {
+    maxMei: normalizeLimitValue(data.max_mei),
+    maxNaoMei: normalizeLimitValue(data.max_usuarios_nao_mei)
+  };
+};
+
+const countActiveUsersByMei = async (adminClient, { empresaId, mei, ignoreUserId }) => {
+  let query = adminClient
+    .from('role_x_user_x_empresa')
+    .select('id', { count: 'exact', head: true })
+    .eq('empresas_id', empresaId)
+    .eq('status', true);
+
+  if (mei) {
+    query = query.or('mei.is.null,mei.eq.true');
+  } else {
+    query = query.eq('mei', false);
+  }
+
+  if (ignoreUserId) {
+    query = query.neq('user_id', ignoreUserId);
+  }
+
+  const { count, error } = await query;
+  if (error) throw badRequest(error.message);
+  return count || 0;
+};
+
+const ensureEmpresaCapacity = async (adminClient, { empresaId, mei, ignoreUserId }) => {
+  const { maxMei, maxNaoMei } = await getEmpresaLimits(adminClient, empresaId);
+  const limit = mei ? maxMei : maxNaoMei;
+
+  if (isUnlimitedLimit(limit)) return;
+
+  const total = await countActiveUsersByMei(adminClient, { empresaId, mei, ignoreUserId });
+  if (total >= limit) {
+    throw badRequest(
+      mei
+        ? 'Limite de MEI atingido para esta empresa'
+        : 'Limite de usuarios nao MEI atingido para esta empresa'
+    );
+  }
+};
+
 export const getRequesterContext = async (accessToken) => {
   if (!accessToken) throw unauthorized();
 
@@ -225,7 +305,7 @@ export const listEmpresas = async (accessToken) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   let query = adminClient
     .from('empresas')
-    .select('id, empresa')
+    .select('id, empresa, max_mei, max_usuarios_nao_mei')
     .order('empresa', { ascending: true });
 
   if (role === 'admin') {
@@ -240,89 +320,68 @@ export const listEmpresas = async (accessToken) => {
   return { empresas: data || [] };
 };
 
-const EMPRESA_FIELDS = [
-  'empresa', 'cnpj', 'razao_social', 'nome_fantasia', 'inscricao_estadual',
-  'regime_tributario', 'logradouro', 'numero', 'complemento', 'bairro',
-  'cidade', 'estado', 'cep', 'telefone', 'email',
-];
-
-const sanitizeEmpresaPayload = (input) => {
-  const payload = {};
-  for (const field of EMPRESA_FIELDS) {
-    if (input[field] !== undefined) {
-      payload[field] = input[field]?.trim() || null;
-    }
-  }
-  return payload;
-};
-
 export const createEmpresa = async (accessToken, input) => {
   const { role } = await getRequesterContext(accessToken);
   if (role !== 'superadmin') throw forbidden();
 
-  const payload = sanitizeEmpresaPayload(input);
-  if (!payload.empresa) throw badRequest('Razão Social (empresa) é obrigatória');
+  const nomeEmpresa = input?.empresa?.trim();
+  if (!nomeEmpresa) throw badRequest('Empresa e obrigatoria');
+
+  const maxMei = normalizeLimitInput(input?.max_mei, 'max_mei');
+  const maxNaoMei = normalizeLimitInput(input?.max_usuarios_nao_mei, 'max_usuarios_nao_mei');
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data, error } = await adminClient
     .from('empresas')
-    .insert(payload)
-    .select('id, empresa')
-    .single();
+    .insert({
+      empresa: nomeEmpresa,
+      max_mei: maxMei,
+      max_usuarios_nao_mei: maxNaoMei
+    })
+    .select('id, empresa, max_mei, max_usuarios_nao_mei')
+    .maybeSingle();
 
-  if (error) throw badRequest(error.message);
+  if (error) throw badRequest(error.message || 'Erro ao criar empresa');
+
   return { empresa: data };
 };
 
 export const updateEmpresa = async (accessToken, empresaId, input) => {
   const { role } = await getRequesterContext(accessToken);
   if (role !== 'superadmin') throw forbidden();
-  if (!empresaId) throw badRequest('empresaId é obrigatório');
+  if (!empresaId) throw badRequest('Empresa e obrigatoria');
 
-  const payload = sanitizeEmpresaPayload(input);
-  if (Object.keys(payload).length === 0) throw badRequest('Nenhum campo fornecido para atualização');
+  const updates = {};
+  if (Object.prototype.hasOwnProperty.call(input || {}, 'empresa')) {
+    const nomeEmpresa = input?.empresa?.trim();
+    if (!nomeEmpresa) throw badRequest('Empresa e obrigatoria');
+    updates.empresa = nomeEmpresa;
+  }
+  if (Object.prototype.hasOwnProperty.call(input || {}, 'max_mei')) {
+    updates.max_mei = normalizeLimitInput(input?.max_mei, 'max_mei');
+  }
+  if (Object.prototype.hasOwnProperty.call(input || {}, 'max_usuarios_nao_mei')) {
+    updates.max_usuarios_nao_mei = normalizeLimitInput(
+      input?.max_usuarios_nao_mei,
+      'max_usuarios_nao_mei'
+    );
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw badRequest('Nenhum campo informado para atualizar');
+  }
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data, error } = await adminClient
     .from('empresas')
-    .update(payload)
+    .update(updates)
     .eq('id', empresaId)
-    .select('id, empresa')
-    .single();
-
-  if (error) throw badRequest(error.message);
-  return { empresa: data };
-};
-
-export const getEmpresa = async (accessToken) => {
-  const { role, empresaId } = await getRequesterContext(accessToken);
-  if (role !== 'superadmin') throw forbidden();
-
-  const adminClient = createSupabaseClient({ useServiceRole: true });
-  const { data, error } = await adminClient
-    .from('empresas')
-    .select('id, empresa, cnpj, razao_social, nome_fantasia, inscricao_estadual, regime_tributario, logradouro, numero, complemento, bairro, cidade, estado, cep, telefone, email')
-    .eq('id', empresaId)
+    .select('id, empresa, max_mei, max_usuarios_nao_mei')
     .maybeSingle();
 
-  if (error) throw badRequest(error.message);
-  return { empresa: data };
-};
+  if (error) throw badRequest(error.message || 'Erro ao atualizar empresa');
+  if (!data?.id) throw badRequest('Empresa nao encontrada');
 
-/** Superadmin: busca empresa por id (para edição via filtro). */
-export const getEmpresaById = async (accessToken, empresaId) => {
-  const { role } = await getRequesterContext(accessToken);
-  if (role !== 'superadmin') throw forbidden();
-  if (!empresaId) throw badRequest('empresaId é obrigatório');
-
-  const adminClient = createSupabaseClient({ useServiceRole: true });
-  const { data, error } = await adminClient
-    .from('empresas')
-    .select('id, empresa, cnpj, razao_social, nome_fantasia, inscricao_estadual, regime_tributario, logradouro, numero, complemento, bairro, cidade, estado, cep, telefone, email')
-    .eq('id', empresaId)
-    .maybeSingle();
-
-  if (error) throw badRequest(error.message);
   return { empresa: data };
 };
 
@@ -360,6 +419,9 @@ export const createUser = async (accessToken, input) => {
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
 
+  const targetMei = resolveMeiValue(input?.mei);
+  await ensureEmpresaCapacity(adminClient, { empresaId: finalEmpresaId, mei: targetMei });
+
   const { roleId, role: resolvedRole } = await ensureRoleId(adminClient, finalRole);
   if (!roleId) throw badRequest('Role não encontrada');
   if (resolvedRole && resolvedRole !== finalRole) {
@@ -387,7 +449,8 @@ export const createUser = async (accessToken, input) => {
       user_id: createdUser.user.id,
       roles_id: roleId,
       empresas_id: finalEmpresaId,
-      status: true
+      status: true,
+      mei: targetMei
     });
 
   if (linkError) throw badRequest(linkError.message);
@@ -425,7 +488,7 @@ export const updateUser = async (accessToken, userId, input) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await adminClient
     .from('role_x_user_x_empresa')
-    .select('id, empresas_id, roles_id')
+    .select('id, empresas_id, roles_id, mei')
     .eq('user_id', userId)
     .eq('status', true)
     .order('created_at', { ascending: false })
@@ -433,6 +496,11 @@ export const updateUser = async (accessToken, userId, input) => {
     .maybeSingle();
 
   if (linkError) throw badRequest(linkError.message);
+  const currentEmpresaId = linkData?.empresas_id || null;
+  const currentMei = resolveMeiValue(linkData?.mei);
+  let targetMei = requestedMei !== undefined ? requestedMei : currentMei;
+  let targetEmpresaId = currentEmpresaId;
+  let capacityChecked = false;
   let linkRecord = linkData;
   if (!linkRecord?.roles_id) {
     if (requester.role !== 'superadmin') {
@@ -459,13 +527,24 @@ export const updateUser = async (accessToken, userId, input) => {
 
     const { data: existingLink, error: existingLinkError } = await adminClient
       .from('role_x_user_x_empresa')
-      .select('id, empresas_id, roles_id')
+      .select('id, empresas_id, roles_id, mei')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (existingLinkError) throw badRequest(existingLinkError.message);
+
+    targetEmpresaId = requestedEmpresaId;
+    const fallbackMei = resolveMeiValue(existingLink?.mei);
+    targetMei = requestedMei !== undefined ? requestedMei : fallbackMei;
+
+    await ensureEmpresaCapacity(adminClient, {
+      empresaId: targetEmpresaId,
+      mei: targetMei,
+      ignoreUserId: userId
+    });
+    capacityChecked = true;
 
     if (existingLink?.id) {
     const { data: updatedLink, error: updateLinkError } = await adminClient
@@ -490,7 +569,7 @@ export const updateUser = async (accessToken, userId, input) => {
         roles_id: roleId,
         empresas_id: requestedEmpresaId,
         status: true,
-        mei: requestedMei ?? true
+        mei: targetMei
       })
         .select('id, empresas_id, roles_id')
         .maybeSingle();
@@ -529,6 +608,19 @@ export const updateUser = async (accessToken, userId, input) => {
   if (requester.role === 'superadmin') {
     if (!requestedEmpresaId) throw badRequest('Empresa é obrigatória');
     finalEmpresaId = requestedEmpresaId;
+  }
+
+  targetEmpresaId = finalEmpresaId;
+
+  if (!capacityChecked) {
+    const shouldCheckCapacity = targetEmpresaId !== currentEmpresaId || targetMei !== currentMei;
+    if (shouldCheckCapacity) {
+      await ensureEmpresaCapacity(adminClient, {
+        empresaId: targetEmpresaId,
+        mei: targetMei,
+        ignoreUserId: userId
+      });
+    }
   }
 
   console.log('[Users] updateUser', {

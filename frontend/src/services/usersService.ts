@@ -24,6 +24,20 @@ export interface ManagedUser {
 export interface EmpresaOption {
   id: string;
   empresa: string;
+  max_mei?: number | null;
+  max_usuarios_nao_mei?: number | null;
+}
+
+export interface EmpresaLimitsPayload {
+  empresa: string;
+  max_mei?: number | null;
+  max_usuarios_nao_mei?: number | null;
+}
+
+export interface EmpresaUpdatePayload {
+  empresa?: string;
+  max_mei?: number | null;
+  max_usuarios_nao_mei?: number | null;
 }
 
 export async function listUsers() {
@@ -38,6 +52,16 @@ export async function listUsers() {
 export async function listEmpresas() {
   const result = await apiClient.get<{ empresas: EmpresaOption[] }>('/users/empresas');
   return result.empresas || [];
+}
+
+export async function createEmpresa(input: EmpresaLimitsPayload) {
+  return apiClient.post<{
+    empresa: EmpresaOption & { max_mei?: number | null; max_usuarios_nao_mei?: number | null };
+  }>('/users/empresas', input);
+}
+
+export async function updateEmpresa(empresaId: string, input: EmpresaUpdatePayload) {
+  return apiClient.put<{ empresa: EmpresaOption }>(`/users/empresas/${empresaId}`, input);
 }
 
 export async function updateUser(
