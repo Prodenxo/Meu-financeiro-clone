@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Fuse from 'fuse.js';
+import LoadingOverlay from '../components/LoadingOverlay';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { toast } from 'react-toastify';
@@ -10,8 +12,10 @@ export default function ManageUsers() {
   const { role } = useAuthStore();
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,6 +45,8 @@ export default function ManageUsers() {
   const [editMei, setEditMei] = useState(true);
   const [lastPasswords, setLastPasswords] = useState<Record<string, string>>({});
   const [userQuery, setUserQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [currentPage, setCurrentPage] = useState(1);
@@ -50,13 +56,19 @@ export default function ManageUsers() {
 
   const fetchUsers = async () => {
     setLoading(true);
-    setError('');
+    setFetchError('');
+    if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+    fetchTimeoutRef.current = setTimeout(() => {
+      setLoading(false);
+      setFetchError('Tempo esgotado ao carregar usuários. Tente novamente.');
+    }, 15000);
     try {
       const data = await listUsers();
       setUsers(data);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao listar usuários');
+    } catch (err: unknown) {
+      setFetchError(err instanceof Error ? err.message : 'Erro ao listar usuários');
     } finally {
+      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
       setLoading(false);
     }
   };
@@ -74,9 +86,20 @@ export default function ManageUsers() {
 
   useEffect(() => {
     if (canManage) {
-      fetchUsers();
+      void fetchUsers();
     }
   }, [canManage]);
+
+  useEffect(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      setDebouncedQuery(userQuery);
+      setCurrentPage(1);
+    }, 200);
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [userQuery]);
 
   useEffect(() => {
     if (!canManage || role !== 'superadmin') return;
@@ -89,24 +112,31 @@ export default function ManageUsers() {
       : users;
   const getUserLabel = (user: ManagedUser) =>
     user.displayName || user.email || 'Usuário sem nome';
-  const sortedUsers = [...baseUsers].sort((userA, userB) => {
-    const labelA = (userA.displayName || userA.email || '').toLowerCase();
-    const labelB = (userB.displayName || userB.email || '').toLowerCase();
-    return labelA.localeCompare(labelB, 'pt-BR', { sensitivity: 'base' });
-  });
-  const normalizedQuery = userQuery.trim().toLowerCase();
-  const filteredUsers = normalizedQuery
-    ? sortedUsers.filter((user) => {
-        const name = (user.displayName || '').toLowerCase();
-        const emailValue = (user.email || '').toLowerCase();
-        const empresaValue = (user.empresaName || '').toLowerCase();
-        return (
-          name.includes(normalizedQuery) ||
-          emailValue.includes(normalizedQuery) ||
-          empresaValue.includes(normalizedQuery)
-        );
-      })
-    : sortedUsers;
+  const sortedUsers = useMemo(
+    () =>
+      [...baseUsers].sort((userA, userB) => {
+        const labelA = (userA.displayName || userA.email || '').toLowerCase();
+        const labelB = (userB.displayName || userB.email || '').toLowerCase();
+        return labelA.localeCompare(labelB, 'pt-BR', { sensitivity: 'base' });
+      }),
+    [baseUsers]
+  );
+  const fuseInstance = useMemo(
+    () =>
+      new Fuse(sortedUsers, {
+        keys: ['displayName', 'email', 'empresaName'],
+        threshold: 0.4,
+        ignoreLocation: true,
+      }),
+    [sortedUsers]
+  );
+  const filteredUsers = useMemo(
+    () =>
+      debouncedQuery.trim()
+        ? fuseInstance.search(debouncedQuery.trim()).map((result) => result.item)
+        : sortedUsers,
+    [debouncedQuery, fuseInstance, sortedUsers]
+  );
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const currentPageSafe = Math.min(currentPage, totalPages);
   const startIndex = (currentPageSafe - 1) * pageSize;
@@ -197,8 +227,8 @@ export default function ManageUsers() {
         setSelectedRole('usuario');
       }
       await fetchUsers();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao criar usuário');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao criar usuário');
       toast.error(err.message || 'Erro ao criar usuário');
     } finally {
       setLoading(false);
@@ -348,8 +378,8 @@ export default function ManageUsers() {
       toast.success('Usuário atualizado com sucesso.');
       setEditingUserId(null);
       await fetchUsers();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao atualizar usuário');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar usuário');
       toast.error(err.message || 'Erro ao atualizar usuário');
     } finally {
       setLoading(false);
@@ -368,8 +398,8 @@ export default function ManageUsers() {
       toast.success('Usuário bloqueado com sucesso.');
       setEditingUserId(null);
       await fetchUsers();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao bloquear usuário');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao bloquear usuário');
       toast.error(err.message || 'Erro ao bloquear usuário');
     } finally {
       setLoading(false);
@@ -388,8 +418,8 @@ export default function ManageUsers() {
       toast.success('Usuário desbloqueado com sucesso.');
       setEditingUserId(null);
       await fetchUsers();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao desbloquear usuário');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao desbloquear usuário');
       toast.error(err.message || 'Erro ao desbloquear usuário');
     } finally {
       setLoading(false);
@@ -410,8 +440,8 @@ export default function ManageUsers() {
       toast.success('Usuário excluído com sucesso.');
       setEditingUserId(null);
       await fetchUsers();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao excluir usuário');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao excluir usuário');
       toast.error(err.message || 'Erro ao excluir usuário');
     } finally {
       setLoading(false);
@@ -430,8 +460,8 @@ export default function ManageUsers() {
       const message = `Senha redefinida com sucesso.`;
       setSuccess(message);
       toast.success(message);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao redefinir senha');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao redefinir senha');
       toast.error(err.message || 'Erro ao redefinir senha');
     } finally {
       setLoading(false);
@@ -820,9 +850,9 @@ export default function ManageUsers() {
         <div className="planner-card p-4 md:p-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Usuários</h2>
           {loading ? (
-            <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
-          ) : filteredUsers.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400">Nenhum usuário encontrado.</p>
+            <LoadingOverlay message="Carregando usuários..." />
+          ) : fetchError ? (
+            <p className="text-red-500 dark:text-red-400 text-sm">{fetchError}</p>
           ) : (
             <div className="space-y-3">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -831,11 +861,9 @@ export default function ManageUsers() {
                     type="text"
                     value={userQuery}
                     onChange={(event) => {
-                      const value = event.target.value;
-                      setUserQuery(value);
+                      setUserQuery(event.target.value);
                       setUserDropdownOpen(true);
                       setHighlightedIndex(-1);
-                      setCurrentPage(1);
                     }}
                     onFocus={() => setUserDropdownOpen(true)}
                     onBlur={() => {
@@ -955,6 +983,13 @@ export default function ManageUsers() {
                   </select>
                 </div>
               </div>
+              {filteredUsers.length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400 text-sm py-4">
+                  {userQuery !== ''
+                    ? `Nenhum usuário encontrado para "${userQuery}".`
+                    : 'Nenhum usuário cadastrado.'}
+                </p>
+              ) : null}
               {pagedUsers.map((user) => {
                 const canEdit =
                   role === 'superadmin'
@@ -1215,3 +1250,4 @@ export default function ManageUsers() {
     </>
   );
 }
+

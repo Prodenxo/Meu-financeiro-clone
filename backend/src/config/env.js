@@ -18,7 +18,7 @@ const requiredInProduction = (key, fallback = '') => {
   return value || fallback;
 };
 
-const DEFAULT_DEV_CORS_ORIGINS = ['http://localhost:3000', 'http://localhost:3002'];
+const DEFAULT_DEV_CORS_ORIGINS = ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'];
 const DEFAULT_PROD_CORS_ORIGIN = process.env.FRONTEND_URL || 'https://meu-financeiro-frontend.vercel.app';
 const DEFAULT_CORS_ORIGINS = process.env.NODE_ENV === 'development'
   ? DEFAULT_DEV_CORS_ORIGINS

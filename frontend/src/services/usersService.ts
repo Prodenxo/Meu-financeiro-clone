@@ -94,6 +94,41 @@ export async function resetUserPassword(userId: string, password?: string) {
   });
 }
 
+export interface EmpresaFullData {
+  id?: string;
+  empresa?: string;
+  cnpj?: string;
+  razao_social?: string;
+  nome_fantasia?: string;
+  inscricao_estadual?: string;
+  regime_tributario?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
+  cep?: string;
+  telefone?: string;
+  email?: string;
+}
+
+export async function getEmpresa() {
+  return apiClient.get<{ empresa: EmpresaFullData }>('/users/empresas/current');
+}
+
+export async function getEmpresaById(empresaId: string) {
+  return apiClient.get<{ empresa: EmpresaFullData }>(`/users/empresas/${empresaId}`);
+}
+
+export async function createEmpresa(input: EmpresaFullData) {
+  return apiClient.post<{ empresa: EmpresaFullData }>('/users/empresas', input);
+}
+
+export async function updateEmpresa(empresaId: string, input: EmpresaFullData) {
+  return apiClient.put<{ empresa: EmpresaFullData }>(`/users/empresas/${empresaId}`, input);
+}
+
 export async function createUser(input: {
   email: string;
   password?: string;

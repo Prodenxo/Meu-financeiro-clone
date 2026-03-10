@@ -4,7 +4,7 @@ const path = require('path');
 const sourceDir = path.join(__dirname, '..', 'frontend', 'dist');
 const destDir = path.join(__dirname, '..', 'dist');
 
-// Função para copiar recursivamente
+// Função para copiar recursivamente......
 function copyRecursiveSync(src, dest) {
   const exists = fs.existsSync(src);
   const stats = exists && fs.statSync(src);
@@ -44,3 +44,4 @@ try {
   console.error('❌ Erro ao copiar arquivos:', error);
   process.exit(1);
 }
+

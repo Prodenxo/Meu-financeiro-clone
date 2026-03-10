@@ -4,6 +4,7 @@ import { Grid3X3, X } from 'lucide-react';
 import Header from './Header';
 import Sidebar from './Sidebar';
 import BottomNavigation from '../components/BottomNavigation';
+import UpdatesPanel from '../components/UpdatesPanel';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 
@@ -33,6 +34,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         onToggleSidebar={() => setSidebarExpanded((prev) => !prev)}
       />
       <Sidebar expanded={sidebarExpanded} />
+      <UpdatesPanel />
       <main
         className={`flex-1 w-full overflow-y-auto px-3 md:px-6 pt-24 pb-24 md:pb-6 transition-[padding] duration-200 ${
           sidebarExpanded ? 'md:pl-60' : 'md:pl-24'
