@@ -4,7 +4,7 @@ import 'react-phone-input-2/lib/style.css';
 import { toast } from 'react-toastify';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
-import { banUser, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
+import { banUser, createEmpresa, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateEmpresa, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
 
 export default function ManageUsers() {
   const { role } = useAuthStore();
@@ -18,6 +18,10 @@ export default function ManageUsers() {
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
   const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [empresaNome, setEmpresaNome] = useState('');
+  const [empresaMaxMei, setEmpresaMaxMei] = useState('');
+  const [empresaMaxNaoMei, setEmpresaMaxNaoMei] = useState('');
+  const [empresaEdits, setEmpresaEdits] = useState<Record<string, { empresa: string; maxMei: string; maxNaoMei: string }>>({});
   const [selectedRole, setSelectedRole] = useState<'admin' | 'usuario' | 'outsider'>('usuario');
   const [targetEmpresaId, setTargetEmpresaId] = useState('');
   const [empresaQuery, setEmpresaQuery] = useState('');
@@ -53,6 +57,30 @@ export default function ManageUsers() {
     }
   };
 
+  const buildEmpresaEdits = (items: EmpresaOption[]) =>
+    items.reduce<Record<string, { empresa: string; maxMei: string; maxNaoMei: string }>>((acc, item) => {
+      acc[item.id] = {
+        empresa: item.empresa,
+        maxMei: item.max_mei !== undefined && item.max_mei !== null ? String(item.max_mei) : '',
+        maxNaoMei: item.max_usuarios_nao_mei !== undefined && item.max_usuarios_nao_mei !== null
+          ? String(item.max_usuarios_nao_mei)
+          : ''
+      };
+      return acc;
+    }, {});
+
+  const fetchEmpresas = async () => {
+    try {
+      const data = await listEmpresas();
+      console.log('[ManageUsers] empresas recebidas:', data);
+      setEmpresas(data);
+      setEmpresaEdits(buildEmpresaEdits(data));
+    } catch (err: any) {
+      console.log('[ManageUsers] erro ao listar empresas:', err);
+      setError(err.message || 'Erro ao listar empresas');
+    }
+  };
+
   useEffect(() => {
     if (canManage) {
       fetchUsers();
@@ -61,15 +89,7 @@ export default function ManageUsers() {
 
   useEffect(() => {
     if (!canManage || role !== 'superadmin') return;
-    listEmpresas()
-      .then((data) => {
-        console.log('[ManageUsers] empresas recebidas:', data);
-        setEmpresas(data);
-      })
-      .catch((err: any) => {
-        console.log('[ManageUsers] erro ao listar empresas:', err);
-        setError(err.message || 'Erro ao listar empresas');
-      });
+    void fetchEmpresas();
   }, [canManage, role]);
 
   const baseUsers =
@@ -153,6 +173,90 @@ export default function ManageUsers() {
     } catch (err: any) {
       setError(err.message || 'Erro ao criar usuário');
       toast.error(err.message || 'Erro ao criar usuário');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const parseLimitValue = (value: string, fieldLabel: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    if (!Number.isFinite(numeric) || !Number.isInteger(numeric) || numeric < 0) {
+      throw new Error(`${fieldLabel} deve ser um inteiro maior ou igual a 0`);
+    }
+    return numeric;
+  };
+
+  const handleCreateEmpresa = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const nome = empresaNome.trim();
+      if (!nome) {
+        throw new Error('Empresa é obrigatória');
+      }
+
+      const payload = {
+        empresa: nome,
+        max_mei: parseLimitValue(empresaMaxMei, 'Max MEI'),
+        max_usuarios_nao_mei: parseLimitValue(empresaMaxNaoMei, 'Max não MEI')
+      };
+
+      await createEmpresa(payload);
+      setSuccess('Empresa criada com sucesso.');
+      toast.success('Empresa criada com sucesso.');
+      setEmpresaNome('');
+      setEmpresaMaxMei('');
+      setEmpresaMaxNaoMei('');
+      await fetchEmpresas();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar empresa');
+      toast.error(err.message || 'Erro ao criar empresa');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateEmpresaEdit = (
+    empresaId: string,
+    updates: Partial<{ empresa: string; maxMei: string; maxNaoMei: string }>
+  ) => {
+    setEmpresaEdits((prev) => ({
+      ...prev,
+      [empresaId]: {
+        ...prev[empresaId],
+        ...updates
+      }
+    }));
+  };
+
+  const handleUpdateEmpresa = async (empresaId: string) => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const edit = empresaEdits[empresaId];
+      if (!edit) throw new Error('Empresa não encontrada');
+      const nome = edit.empresa.trim();
+      if (!nome) throw new Error('Empresa é obrigatória');
+
+      const payload = {
+        empresa: nome,
+        max_mei: parseLimitValue(edit.maxMei, 'Max MEI'),
+        max_usuarios_nao_mei: parseLimitValue(edit.maxNaoMei, 'Max não MEI')
+      };
+
+      await updateEmpresa(empresaId, payload);
+      setSuccess('Empresa atualizada com sucesso.');
+      toast.success('Empresa atualizada com sucesso.');
+      await fetchEmpresas();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao atualizar empresa');
+      toast.error(err.message || 'Erro ao atualizar empresa');
     } finally {
       setLoading(false);
     }
@@ -321,6 +425,113 @@ export default function ManageUsers() {
             {success}
           </div>
         )}
+
+        {role === 'superadmin' ? (
+          <div className="planner-card p-4 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Criar empresa</h2>
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <input
+                  type="text"
+                  value={empresaNome}
+                  onChange={(e) => setEmpresaNome(e.target.value)}
+                  className="planner-input-compact"
+                  placeholder="Nome da empresa"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={empresaMaxMei}
+                  onChange={(e) => setEmpresaMaxMei(e.target.value)}
+                  className="planner-input-compact"
+                  placeholder="Max MEI (0 = sem limite)"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={empresaMaxNaoMei}
+                  onChange={(e) => setEmpresaMaxNaoMei(e.target.value)}
+                  className="planner-input-compact"
+                  placeholder="Max não MEI (0 = sem limite)"
+                />
+              </div>
+              <button
+                onClick={handleCreateEmpresa}
+                disabled={loading || !empresaNome.trim()}
+                className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Salvando...' : 'Criar empresa'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {role === 'superadmin' ? (
+          <div className="planner-card p-4 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Editar empresas</h2>
+            {empresas.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma empresa cadastrada.</p>
+            ) : (
+              <div className="space-y-3">
+                {empresas.map((empresa) => {
+                  const edit = empresaEdits[empresa.id] || {
+                    empresa: empresa.empresa,
+                    maxMei: empresa.max_mei !== undefined && empresa.max_mei !== null ? String(empresa.max_mei) : '',
+                    maxNaoMei:
+                      empresa.max_usuarios_nao_mei !== undefined && empresa.max_usuarios_nao_mei !== null
+                        ? String(empresa.max_usuarios_nao_mei)
+                        : ''
+                  };
+                  return (
+                    <div
+                      key={empresa.id}
+                      className="border border-slate-200/70 dark:border-slate-800/70 rounded-xl p-3 bg-white/70 dark:bg-slate-900/50"
+                    >
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <input
+                          type="text"
+                          value={edit.empresa}
+                          onChange={(e) => updateEmpresaEdit(empresa.id, { empresa: e.target.value })}
+                          className="planner-input-compact"
+                          placeholder="Nome da empresa"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={edit.maxMei}
+                          onChange={(e) => updateEmpresaEdit(empresa.id, { maxMei: e.target.value })}
+                          className="planner-input-compact"
+                          placeholder="Max MEI (0 = sem limite)"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={edit.maxNaoMei}
+                          onChange={(e) => updateEmpresaEdit(empresa.id, { maxNaoMei: e.target.value })}
+                          className="planner-input-compact"
+                          placeholder="Max não MEI (0 = sem limite)"
+                        />
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => handleUpdateEmpresa(empresa.id)}
+                          disabled={loading || !edit.empresa.trim()}
+                          className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {loading ? 'Salvando...' : 'Salvar alterações'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : null}
 
         <div className="planner-card p-4 md:p-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Criar usuário</h2>
