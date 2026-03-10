@@ -1,5 +1,3 @@
-
-
 # Environment & Secrets (AIOX)
 .env
 .env.local
@@ -36,3 +34,7 @@ Thumbs.db
 .github
 .aiox-core
 .antigravity
+
+# AIOS Local (AIOS)
+.aios-core/local/
+.aios/install-log.txt

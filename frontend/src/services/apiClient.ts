@@ -8,10 +8,21 @@ const isLocalhostUrl = (value?: string) => {
   }
 };
 
+/** Garante que a URL seja absoluta (https:// ou http://). URLs relativas ou sem protocolo causam 405/404. */
+const ensureAbsoluteApiUrl = (value: string | undefined, fallback: string): string => {
+  if (!value || typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) return trimmed.replace(/\/$/, '');
+  console.warn('[API Client] VITE_API_URL deve ser absoluta (https://...). Usando fallback:', fallback);
+  return fallback;
+};
+
 const configuredApiUrl = import.meta.env.VITE_API_URL;
 const DEFAULT_DEV_API_URL = 'http://localhost:3333';
 const DEFAULT_PROD_API_URL = 'https://meu-financeiro-backend.vercel.app';
-const API_URL = configuredApiUrl || (import.meta.env.DEV ? DEFAULT_DEV_API_URL : DEFAULT_PROD_API_URL);
+const fallbackUrl = import.meta.env.DEV ? DEFAULT_DEV_API_URL : DEFAULT_PROD_API_URL;
+const API_URL = ensureAbsoluteApiUrl(configuredApiUrl, fallbackUrl);
 const TOKEN_STORAGE_KEY = 'financas-pessoais-auth-token';
 
 if (!API_URL) {
