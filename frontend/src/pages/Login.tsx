@@ -12,11 +12,23 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     try {
       await signIn(email, password);
       navigate('/');
     } catch (err: any) {
-      setError(err.message);
+      const msg = err?.message ?? '';
+      if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
+        setError(
+          'Não foi possível conectar ao servidor. Verifique se o backend está rodando (na pasta backend: npm run dev) e se a URL da API está correta.'
+        );
+      } else if (msg.includes('405') || /method not allowed/i.test(msg)) {
+        setError(
+          'O servidor recusou o login (erro 405). Em desenvolvimento, use o proxy: não defina VITE_API_URL no .env do frontend e rode o backend em http://localhost:3333.'
+        );
+      } else {
+        setError(msg);
+      }
     }
   };
 
