@@ -44,7 +44,7 @@ PLUGNOTAS_TIMEOUT_MS=15000
 PLUGNOTAS_WEBHOOK_TOKEN=
 ```
 Observações sobre CORS:
-- `CORS_ORIGIN` aceita múltiplas origens separadas por vírgula (ex.: `https://meu-financeiro-frontend.vercel.app,http://localhost:3000`).
+- `CORS_ORIGIN` aceita múltiplas origens separadas por vírgula (ex.: `https://meu-financeiro-frontend.vercel.app,http://localhost:3000,http://localhost:3001`).
 - Em produção, se `CORS_ORIGIN` não estiver definido, o backend usa `FRONTEND_URL` como fallback.
 
 ### Instalação e execução
