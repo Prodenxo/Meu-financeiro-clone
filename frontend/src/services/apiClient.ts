@@ -37,8 +37,10 @@ class ApiClient {
   baseUrl: string;
 
   constructor() {
-    const trimmed = (API_URL || '').replace(/\/$/, '');
-    this.baseUrl = `${trimmed}/api`;
+    // Em DEV sem VITE_API_URL: usa origem relativa para o proxy do Vite (/api → backend)
+    const useProxy = import.meta.env.DEV && !configuredApiUrl;
+    const base = useProxy ? '' : (API_URL || '').replace(/\/$/, '');
+    this.baseUrl = `${base}/api`;
   }
 
   private sanitizeHeaders(headers?: HeadersInit): Record<string, string> | undefined {
