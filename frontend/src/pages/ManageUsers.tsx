@@ -6,7 +6,7 @@ import 'react-phone-input-2/lib/style.css';
 import { toast } from 'react-toastify';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
-import { banUser, createEmpresa, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateEmpresa, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
+import { banUser, createEmpresaLimits, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateEmpresaLimits, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
 
 export default function ManageUsers() {
   const { role } = useAuthStore();
@@ -246,7 +246,7 @@ export default function ManageUsers() {
         max_usuarios_nao_mei: parseLimitValue(empresaMaxNaoMei, 'Max não MEI')
       };
 
-      await createEmpresa(payload);
+      await createEmpresaLimits(payload);
       setSuccess('Empresa criada com sucesso.');
       toast.success('Empresa criada com sucesso.');
       setEmpresaNome('');
@@ -294,7 +294,7 @@ export default function ManageUsers() {
         max_usuarios_nao_mei: parseLimitValue(empresaEditMaxNaoMei, 'Max não MEI')
       };
 
-      const result = await updateEmpresa(empresaId, payload);
+      const result = await updateEmpresaLimits(empresaId, payload);
       if (result?.empresa) {
         setEmpresaEditNome(result.empresa.empresa);
         setEmpresaEditQuery(result.empresa.empresa);
