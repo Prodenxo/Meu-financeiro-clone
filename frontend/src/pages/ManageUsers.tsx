@@ -21,11 +21,13 @@ export default function ManageUsers() {
   const [empresaNome, setEmpresaNome] = useState('');
   const [empresaMaxMei, setEmpresaMaxMei] = useState('');
   const [empresaMaxNaoMei, setEmpresaMaxNaoMei] = useState('');
-  const [empresaEdits, setEmpresaEdits] = useState<Record<string, { empresa: string; maxMei: string; maxNaoMei: string }>>({});
   const [empresaEditQuery, setEmpresaEditQuery] = useState('');
   const [empresaEditOpen, setEmpresaEditOpen] = useState(false);
   const [empresaEditSelectedId, setEmpresaEditSelectedId] = useState('');
   const [empresaEditHighlightedIndex, setEmpresaEditHighlightedIndex] = useState(-1);
+  const [empresaEditNome, setEmpresaEditNome] = useState('');
+  const [empresaEditMaxMei, setEmpresaEditMaxMei] = useState('');
+  const [empresaEditMaxNaoMei, setEmpresaEditMaxNaoMei] = useState('');
   const [selectedRole, setSelectedRole] = useState<'admin' | 'usuario' | 'outsider'>('usuario');
   const [targetEmpresaId, setTargetEmpresaId] = useState('');
   const [empresaQuery, setEmpresaQuery] = useState('');
@@ -124,18 +126,7 @@ export default function ManageUsers() {
       )
     : sortedEmpresas;
   const selectedEmpresa = empresas.find((empresa) => empresa.id === empresaEditSelectedId) || null;
-  const selectedEmpresaEdit = selectedEmpresa
-    ? (empresaEdits[selectedEmpresa.id] || {
-        empresa: selectedEmpresa.empresa,
-        maxMei: selectedEmpresa.max_mei !== undefined && selectedEmpresa.max_mei !== null
-          ? String(selectedEmpresa.max_mei)
-          : '',
-        maxNaoMei: selectedEmpresa.max_usuarios_nao_mei !== undefined
-          && selectedEmpresa.max_usuarios_nao_mei !== null
-          ? String(selectedEmpresa.max_usuarios_nao_mei)
-          : ''
-      })
-    : null;
+  const hasSelectedEmpresa = Boolean(selectedEmpresa);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -154,13 +145,6 @@ export default function ManageUsers() {
       setEmpresaEditHighlightedIndex(filteredEmpresas.length - 1);
     }
   }, [filteredEmpresas.length, empresaEditHighlightedIndex]);
-
-  useEffect(() => {
-    if (!selectedEmpresa) return;
-    if (!empresaEditQuery.trim()) {
-      setEmpresaEditQuery(selectedEmpresa.empresa);
-    }
-  }, [selectedEmpresa?.id]);
 
   const handleCreateUser = async () => {
     setLoading(true);
@@ -247,55 +231,54 @@ export default function ManageUsers() {
     }
   };
 
-  const updateEmpresaEdit = (
-    empresaId: string,
-    updates: Partial<{ empresa: string; maxMei: string; maxNaoMei: string }>
-  ) => {
-    setEmpresaEdits((prev) => ({
-      ...prev,
-      [empresaId]: {
-        ...prev[empresaId],
-        ...updates
-      }
-    }));
-  };
-
   const selectEmpresaForEdit = (empresa: EmpresaOption) => {
     setEmpresaEditSelectedId(empresa.id);
     setEmpresaEditQuery(empresa.empresa);
+    setEmpresaEditNome(empresa.empresa);
+    setEmpresaEditMaxMei(
+      empresa.max_mei !== undefined && empresa.max_mei !== null ? String(empresa.max_mei) : ''
+    );
+    setEmpresaEditMaxNaoMei(
+      empresa.max_usuarios_nao_mei !== undefined && empresa.max_usuarios_nao_mei !== null
+        ? String(empresa.max_usuarios_nao_mei)
+        : ''
+    );
     setEmpresaEditOpen(false);
     setEmpresaEditHighlightedIndex(-1);
-    setEmpresaEdits((prev) => ({
-      ...prev,
-      [empresa.id]: {
-        empresa: empresa.empresa,
-        maxMei: empresa.max_mei !== undefined && empresa.max_mei !== null ? String(empresa.max_mei) : '',
-        maxNaoMei:
-          empresa.max_usuarios_nao_mei !== undefined && empresa.max_usuarios_nao_mei !== null
-            ? String(empresa.max_usuarios_nao_mei)
-            : ''
-      }
-    }));
   };
 
-  const handleUpdateEmpresa = async (empresaId: string) => {
+  const handleUpdateEmpresa = async () => {
     setLoading(true);
     setError('');
     setSuccess('');
 
     try {
-      const edit = empresaEdits[empresaId];
-      if (!edit) throw new Error('Empresa não encontrada');
-      const nome = edit.empresa.trim();
+      const empresaId = empresaEditSelectedId;
+      if (!empresaId) throw new Error('Empresa não selecionada');
+      const nome = empresaEditNome.trim();
       if (!nome) throw new Error('Empresa é obrigatória');
 
       const payload = {
         empresa: nome,
-        max_mei: parseLimitValue(edit.maxMei, 'Max MEI'),
-        max_usuarios_nao_mei: parseLimitValue(edit.maxNaoMei, 'Max não MEI')
+        max_mei: parseLimitValue(empresaEditMaxMei, 'Max MEI'),
+        max_usuarios_nao_mei: parseLimitValue(empresaEditMaxNaoMei, 'Max não MEI')
       };
 
-      await updateEmpresa(empresaId, payload);
+      const result = await updateEmpresa(empresaId, payload);
+      if (result?.empresa) {
+        setEmpresaEditNome(result.empresa.empresa);
+        setEmpresaEditQuery(result.empresa.empresa);
+        setEmpresaEditMaxMei(
+          result.empresa.max_mei !== undefined && result.empresa.max_mei !== null
+            ? String(result.empresa.max_mei)
+            : ''
+        );
+        setEmpresaEditMaxNaoMei(
+          result.empresa.max_usuarios_nao_mei !== undefined && result.empresa.max_usuarios_nao_mei !== null
+            ? String(result.empresa.max_usuarios_nao_mei)
+            : ''
+        );
+      }
       setSuccess('Empresa atualizada com sucesso.');
       toast.success('Empresa atualizada com sucesso.');
       await fetchEmpresas();
@@ -535,6 +518,9 @@ export default function ManageUsers() {
                           const selectedLabel = selectedEmpresa ? selectedEmpresa.empresa : '';
                           if (value.trim().toLowerCase() !== selectedLabel.trim().toLowerCase()) {
                             setEmpresaEditSelectedId('');
+                            setEmpresaEditNome('');
+                            setEmpresaEditMaxMei('');
+                            setEmpresaEditMaxNaoMei('');
                           }
                         }
                       }}
@@ -609,7 +595,7 @@ export default function ManageUsers() {
                   )}
                 </div>
 
-                {!selectedEmpresaEdit ? (
+                {!hasSelectedEmpresa ? (
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     Selecione uma empresa para editar seus dados.
                   </p>
@@ -618,10 +604,8 @@ export default function ManageUsers() {
                     <div className="grid gap-3 md:grid-cols-3">
                       <input
                         type="text"
-                        value={selectedEmpresaEdit.empresa}
-                        onChange={(e) =>
-                          updateEmpresaEdit(empresaEditSelectedId, { empresa: e.target.value })
-                        }
+                        value={empresaEditNome}
+                        onChange={(e) => setEmpresaEditNome(e.target.value)}
                         className="planner-input-compact"
                         placeholder="Nome da empresa"
                       />
@@ -629,10 +613,8 @@ export default function ManageUsers() {
                         type="number"
                         min={0}
                         step={1}
-                        value={selectedEmpresaEdit.maxMei}
-                        onChange={(e) =>
-                          updateEmpresaEdit(empresaEditSelectedId, { maxMei: e.target.value })
-                        }
+                        value={empresaEditMaxMei}
+                        onChange={(e) => setEmpresaEditMaxMei(e.target.value)}
                         className="planner-input-compact"
                         placeholder="Max MEI (0 = sem limite)"
                       />
@@ -640,18 +622,16 @@ export default function ManageUsers() {
                         type="number"
                         min={0}
                         step={1}
-                        value={selectedEmpresaEdit.maxNaoMei}
-                        onChange={(e) =>
-                          updateEmpresaEdit(empresaEditSelectedId, { maxNaoMei: e.target.value })
-                        }
+                        value={empresaEditMaxNaoMei}
+                        onChange={(e) => setEmpresaEditMaxNaoMei(e.target.value)}
                         className="planner-input-compact"
                         placeholder="Max não MEI (0 = sem limite)"
                       />
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={() => handleUpdateEmpresa(empresaEditSelectedId)}
-                        disabled={loading || !selectedEmpresaEdit.empresa.trim()}
+                        onClick={handleUpdateEmpresa}
+                        disabled={loading || !empresaEditNome.trim() || !hasSelectedEmpresa}
                         className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {loading ? 'Salvando...' : 'Salvar alterações'}
