@@ -73,6 +73,13 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    proxy: {
+      // Em desenvolvimento, /api vai para o backend (evita CORS e 405 por preflight)
+      '/api': {
+        target: 'http://localhost:3333',
+        changeOrigin: true,
+      },
+    },
   },
   publicDir: 'public',
 });
