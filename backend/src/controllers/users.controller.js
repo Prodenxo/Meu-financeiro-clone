@@ -122,21 +122,3 @@ export const getEmpresaById = async (req, res, next) => {
     return next(error);
   }
 };
-
-export const createEmpresa = async (req, res, next) => {
-  try {
-    const result = await usersService.createEmpresa(req.accessToken, req.body);
-    return sendSuccess(res, result, 'Empresa criada');
-  } catch (error) {
-    return next(error);
-  }
-};
-
-export const updateEmpresa = async (req, res, next) => {
-  try {
-    const result = await usersService.updateEmpresa(req.accessToken, req.params.empresaId, req.body);
-    return sendSuccess(res, result, 'Empresa atualizada');
-  } catch (error) {
-    return next(error);
-  }
-};
