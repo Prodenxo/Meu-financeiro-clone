@@ -54,13 +54,13 @@ export async function listEmpresas() {
   return result.empresas || [];
 }
 
-export async function createEmpresa(input: EmpresaLimitsPayload) {
+export async function createEmpresaLimits(input: EmpresaLimitsPayload) {
   return apiClient.post<{
     empresa: EmpresaOption & { max_mei?: number | null; max_usuarios_nao_mei?: number | null };
   }>('/users/empresas', input);
 }
 
-export async function updateEmpresa(empresaId: string, input: EmpresaUpdatePayload) {
+export async function updateEmpresaLimits(empresaId: string, input: EmpresaUpdatePayload) {
   return apiClient.put<{ empresa: EmpresaOption }>(`/users/empresas/${empresaId}`, input);
 }
 
