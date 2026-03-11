@@ -269,7 +269,7 @@ function GoogleOAuthCallback() {
   return null;
 }
 
-function AppRoutes() {
+export function AppRoutes() {
   const { user, role, mei } = useAuthStore();
   const meiEnabled = mei !== false;
 

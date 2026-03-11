@@ -69,6 +69,33 @@ describe('meiNotasService', () => {
     expect(result).toEqual(response);
   });
 
+  it('obtem NFSe sem query quando sync=false', async () => {
+    const response = { id: 'nfse-1', user_id: 'user-1' } as NfseRecord;
+    mockedApiClient.get.mockResolvedValueOnce(response);
+
+    const result = await obterNfse('nfse-1');
+
+    expect(mockedApiClient.get).toHaveBeenCalledWith('/mei-notas/nfse-1');
+    expect(result).toEqual(response);
+  });
+
+  it('codifica ID antes de chamar endpoints de detalhe/download', async () => {
+    const response = { id: 'nfse 1/2', user_id: 'user-1' } as NfseRecord;
+    mockedApiClient.get.mockResolvedValueOnce(response);
+    mockedApiClient.requestBlob.mockResolvedValue({
+      blob: new Blob(['dummy'], { type: 'application/pdf' }),
+      filename: 'nfse.pdf'
+    });
+
+    await obterNfse('nfse 1/2', true);
+    await baixarNfsePdf('nfse 1/2');
+    await baixarNfseXml('nfse 1/2');
+
+    expect(mockedApiClient.get).toHaveBeenCalledWith('/mei-notas/nfse%201%2F2?sync=true');
+    expect(mockedApiClient.requestBlob).toHaveBeenNthCalledWith(1, '/mei-notas/nfse%201%2F2/pdf', { method: 'GET' });
+    expect(mockedApiClient.requestBlob).toHaveBeenNthCalledWith(2, '/mei-notas/nfse%201%2F2/xml', { method: 'GET' });
+  });
+
   it('baixa PDF e XML pelos endpoints corretos', async () => {
     const fileResponse = {
       blob: new Blob(['dummy'], { type: 'application/pdf' }),

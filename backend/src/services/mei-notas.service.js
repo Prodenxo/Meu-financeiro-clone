@@ -187,6 +187,15 @@ const validatePayload = (payload) => {
   }
 };
 
+const normalizePayloadShape = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  const next = { ...payload };
+  if (next.servico && !Array.isArray(next.servico)) {
+    next.servico = [next.servico];
+  }
+  return next;
+};
+
 const getDb = () => createSupabaseClient({ useServiceRole: true });
 
 const insertRecord = async (userId, data) => {
@@ -268,7 +277,7 @@ const refreshWithPlugNotas = async (record) => {
 
 export const emitirNota = async (userId, input) => {
   const payloadBase = input?.payload && typeof input.payload === 'object'
-    ? prune(input.payload)
+    ? normalizePayloadShape(prune(input.payload))
     : null;
   const { payload, prestadorDoc, tomadorDoc } = payloadBase
     ? { payload: payloadBase, prestadorDoc: normalizeDoc(payloadBase?.prestador?.cpfCnpj || ''), tomadorDoc: normalizeDoc(payloadBase?.tomador?.cpfCnpj || '') }
