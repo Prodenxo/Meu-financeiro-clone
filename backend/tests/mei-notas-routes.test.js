@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import router from '../src/routes/mei-notas.routes.js';
+import indexRouter from '../src/routes/index.js';
 import { requireAuth } from '../src/middlewares/auth.js';
 import { requireMeiEnabled } from '../src/middlewares/requireMei.js';
 import * as controller from '../src/controllers/mei-notas.controller.js';
@@ -40,4 +41,13 @@ test('webhook de mei-notas não usa middleware de usuário', () => {
   const handlers = getRouteHandlers('/webhook', 'post');
 
   assert.deepEqual(handlers, [controller.webhook]);
+});
+
+test('router principal mantém alias legado /notas para mei-notas', () => {
+  const mounts = indexRouter.stack.filter((layer) => layer.handle === router);
+  const hasOfficialMount = mounts.some((layer) => String(layer.regexp).includes('^\\/mei-notas'));
+  const hasLegacyMount = mounts.some((layer) => String(layer.regexp).includes('^\\/notas'));
+
+  assert.equal(hasOfficialMount, true, 'Mount oficial /mei-notas não encontrado');
+  assert.equal(hasLegacyMount, true, 'Alias legado /notas não encontrado');
 });

@@ -20,5 +20,6 @@ router.use('/health', healthRoutes);
 router.use('/google-calendar', googleCalendarRoutes);
 router.use('/mei-guide', meiGuideRoutes);
 router.use('/mei-notas', meiNotasRoutes);
+router.use('/notas', meiNotasRoutes);
 
 export default router;

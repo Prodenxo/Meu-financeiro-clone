@@ -122,13 +122,6 @@ const getMeiStatusLabel = (status?: AdminMeiPeriod['status'] | null) => {
   return status === 'pago' ? 'Pago' : 'Pendente';
 };
 
-const getMeiStatusClasses = (status?: AdminMeiPeriod['status'] | null) => {
-  if (status === 'pago') {
-    return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
-  }
-  return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
-};
-
 const getDefaultDasCompetencia = () => {
   const now = new Date();
   const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -586,6 +579,15 @@ export default function AdminUserData() {
   const dasTotalClientes = dasPendingSummary?.totalClientes || 0;
   const dasPendentes = dasPendingSummary?.pendentes || 0;
   const dasItemsCount = dasPendingSummary?.items?.length || 0;
+  const meiPendingCount = useMemo(
+    () => meiPeriods.filter((period) => period.status !== 'pago').length,
+    [meiPeriods]
+  );
+  const meiCertificateStatusLabel = useMemo(() => {
+    if (meiCertificateStatus?.hasUserCertificate) return 'Cliente';
+    if (meiCertificateStatus?.hasEnvCertificate) return 'Servidor';
+    return 'Indisponível';
+  }, [meiCertificateStatus?.hasEnvCertificate, meiCertificateStatus?.hasUserCertificate]);
 
   if (!canView) {
     return (
@@ -977,6 +979,27 @@ export default function AdminUserData() {
                 </button>
               </div>
 
+              <div className="admin-stat-grid">
+                <div className="admin-stat-card">
+                  <p className="admin-stat-label">Períodos DAS</p>
+                  <p className="admin-stat-value">{meiPeriods.length}</p>
+                </div>
+                <div className="admin-stat-card">
+                  <p className="admin-stat-label">Pendências DAS</p>
+                  <p className="admin-stat-value">{meiPendingCount}</p>
+                </div>
+                <div className="admin-stat-card">
+                  <p className="admin-stat-label">Contato WhatsApp</p>
+                  <p className="admin-stat-value text-base md:text-lg">
+                    {selectedUser?.phone ? 'Disponível' : 'Sem telefone'}
+                  </p>
+                </div>
+                <div className="admin-stat-card">
+                  <p className="admin-stat-label">Certificado</p>
+                  <p className="admin-stat-value text-base md:text-lg">{meiCertificateStatusLabel}</p>
+                </div>
+              </div>
+
               {meiActionError && (
                 <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
                   {meiActionError}
@@ -989,8 +1012,8 @@ export default function AdminUserData() {
                 </div>
               )}
 
-              <div className="admin-toolbar grid gap-3 md:grid-cols-3">
-                <div className="md:col-span-1">
+              <div className="admin-toolbar grid gap-3 lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
+                <div>
                   <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">CNPJ do MEI</label>
                   <input
                     type="text"
@@ -1000,118 +1023,110 @@ export default function AdminUserData() {
                     className="planner-input-compact"
                   />
                   {meiStatusLoading ? (
-                    <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                      Carregando certificado...
-                    </div>
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                      Carregando status do certificado...
+                    </p>
                   ) : (
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2 admin-actions">
                       {meiCertificateStatus?.hasUserCertificate && (
-                        <span className="planner-chip dark:bg-blue-900/30 dark:text-blue-200">
-                          Certificado do cliente ativo
-                        </span>
+                        <span className="admin-badge-success">Certificado do cliente ativo</span>
                       )}
                       {!meiCertificateStatus?.hasUserCertificate && meiCertificateStatus?.hasEnvCertificate && (
-                        <span className="planner-chip dark:bg-blue-900/30 dark:text-blue-200">
-                          Certificado do servidor disponível
-                        </span>
+                        <span className="admin-badge-primary">Certificado do servidor disponível</span>
                       )}
                       {!meiCertificateStatus?.hasUserCertificate &&
                         !meiCertificateStatus?.hasEnvCertificate && (
-                          <span className="planner-chip dark:bg-amber-900/30 dark:text-amber-200">
-                            Sem certificado disponível
-                          </span>
+                          <span className="admin-badge-warning">Sem certificado disponível</span>
                         )}
                     </div>
                   )}
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Mês</label>
-                  <select
-                    className="planner-input-compact"
-                    value={meiSelectedMonth}
-                    onChange={(event) => setMeiSelectedMonth(event.target.value)}
-                  >
-                    {availableMeiMonths.map((month) => (
-                      <option key={month} value={month}>
-                        {month}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Ano</label>
-                  <select
-                    className="planner-input-compact"
-                    value={meiSelectedYear}
-                    onChange={(event) => setMeiSelectedYear(Number(event.target.value))}
-                  >
-                    {availableMeiYears.map((year) => (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
 
-              <div className="admin-actions">
-                <button
-                  type="button"
-                  onClick={handleMeiDownload}
-                  disabled={meiDownloading}
-                  className="planner-button-compact w-full sm:w-auto"
-                >
-                  {meiDownloading ? 'Baixando...' : 'Baixar guia'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleMeiSendWhatsapp}
-                  disabled={meiSending || !selectedUser?.phone}
-                  className="planner-button-compact w-full sm:w-auto"
-                >
-                  {meiSending ? 'Enviando...' : 'Enviar por zap'}
-                </button>
+                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-[170px_170px_auto] md:items-end">
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Mês</label>
+                    <select
+                      className="planner-input-compact"
+                      value={meiSelectedMonth}
+                      onChange={(event) => setMeiSelectedMonth(event.target.value)}
+                    >
+                      {availableMeiMonths.map((month) => (
+                        <option key={month} value={month}>
+                          {month}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Ano</label>
+                    <select
+                      className="planner-input-compact"
+                      value={meiSelectedYear}
+                      onChange={(event) => setMeiSelectedYear(Number(event.target.value))}
+                    >
+                      {availableMeiYears.map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="admin-actions md:justify-self-start">
+                    <button
+                      type="button"
+                      onClick={handleMeiDownload}
+                      disabled={meiDownloading}
+                      className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {meiDownloading ? 'Baixando...' : 'Baixar guia'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleMeiSendWhatsapp}
+                      disabled={meiSending || !selectedUser?.phone}
+                      className="planner-button-secondary-compact w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {meiSending ? 'Enviando...' : 'Enviar por zap'}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {!selectedUser?.phone && (
-                <p className="text-xs text-amber-600 dark:text-amber-300">
-                  Telefone do cliente nao cadastrado. Atualize antes de enviar.
-                </p>
+                <div className="rounded-xl border border-amber-300/90 bg-amber-50/90 px-4 py-3 text-amber-700 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-300">
+                  Telefone do cliente não cadastrado. Atualize antes de enviar.
+                </div>
               )}
 
-              <div className="admin-toolbar">
-                <h3 className="text-base font-semibold dark:text-white">Histórico do DAS</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Últimos períodos consultados e situação do pagamento.
-                </p>
+              <div className="admin-toolbar space-y-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-white">Histórico do DAS</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Últimos períodos consultados e situação do pagamento.
+                  </p>
+                </div>
 
                 {!canLoadMeiPeriods ? (
-                  <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                    Informe o CNPJ do MEI para consultar meses pagos.
-                  </div>
+                  <div className="admin-empty-state">Informe o CNPJ do MEI para consultar meses pagos.</div>
                 ) : meiPeriodsLoading ? (
-                  <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    Carregando histórico...
-                  </div>
+                  <div className="admin-empty-state">Carregando histórico...</div>
                 ) : meiPeriodsError ? (
-                  <div className="mt-2 text-sm text-rose-600 dark:text-rose-400">
+                  <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
                     {meiPeriodsError}
                   </div>
                 ) : meiPeriods.length === 0 ? (
-                  <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    Nenhum período encontrado.
-                  </div>
+                  <div className="admin-empty-state">Nenhum período encontrado.</div>
                 ) : (
-                  <div className="mt-3 space-y-2">
+                  <div className="space-y-2">
                     {meiPeriods.map((period) => (
                       <div
                         key={`${period.competencia}-${period.guideId || period.status}`}
-                        className="flex items-center justify-between rounded-lg border border-slate-200/70 px-3 py-2 dark:border-slate-700"
+                        className="admin-toolbar flex items-center justify-between gap-2"
                       >
                         <div className="text-sm text-slate-700 dark:text-gray-200">
                           {formatDasCompetenciaLabel(period.competencia)}
                         </div>
-                        <span className={`planner-chip ${getMeiStatusClasses(period.status)}`}>
+                        <span className={period.status === 'pago' ? 'admin-badge-success' : 'admin-badge-warning'}>
                           {getMeiStatusLabel(period.status)}
                         </span>
                       </div>
