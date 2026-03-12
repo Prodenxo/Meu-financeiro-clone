@@ -66,11 +66,11 @@
   }
 
   .admin-page-shell {
-    @apply max-w-6xl mx-auto space-y-4 md:space-y-6;
+    @apply max-w-6xl mx-auto space-y-4 md:space-y-6 px-1.5 sm:px-0;
   }
 
   .admin-hero {
-    @apply planner-card px-4 py-4 md:px-6 md:py-6;
+    @apply planner-card px-4 py-4 md:px-6 md:py-6 bg-gradient-to-br from-white/95 via-white/80 to-slate-50/70 dark:from-slate-900/85 dark:via-slate-900/75 dark:to-slate-950/55;
   }
 
   .admin-hero-title {
@@ -78,7 +78,7 @@
   }
 
   .admin-hero-subtitle {
-    @apply mt-2 text-sm md:text-base text-slate-500 dark:text-slate-400;
+    @apply mt-2 text-sm md:text-base text-slate-500 dark:text-slate-300/90;
   }
 
   .admin-stat-grid {
@@ -86,7 +86,7 @@
   }
 
   .admin-stat-card {
-    @apply rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/60 p-3;
+    @apply rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/60 p-2.5 sm:p-3 transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-soft hover:border-slate-300/80 dark:hover:border-slate-700/80;
   }
 
   .admin-stat-label {
@@ -94,11 +94,11 @@
   }
 
   .admin-stat-value {
-    @apply mt-1 text-xl font-semibold text-slate-900 dark:text-white;
+    @apply mt-1 text-lg sm:text-xl font-semibold text-slate-900 dark:text-white;
   }
 
   .admin-section-card {
-    @apply planner-card p-4 md:p-6 space-y-4;
+    @apply planner-card p-4 md:p-6 space-y-3 md:space-y-4 bg-gradient-to-br from-white/90 to-slate-50/70 dark:from-slate-900/75 dark:to-slate-950/50;
   }
 
   .admin-section-header {
@@ -110,7 +110,7 @@
   }
 
   .admin-section-subtitle {
-    @apply text-sm text-slate-500 dark:text-slate-400;
+    @apply text-sm text-slate-500 dark:text-slate-300/90;
   }
 
   .admin-split-grid {
@@ -118,7 +118,7 @@
   }
 
   .admin-toolbar {
-    @apply rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-slate-50/70 dark:bg-slate-900/40 p-3 md:p-4;
+    @apply rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-slate-50/70 dark:bg-slate-900/40 p-2.5 md:p-4 backdrop-blur-sm;
   }
 
   .admin-table-shell {
@@ -138,43 +138,63 @@
   }
 
   .admin-table-row {
-    @apply border-t border-slate-200/70 dark:border-slate-800/70;
+    @apply border-t border-slate-200/70 dark:border-slate-800/70 transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-900/45;
   }
 
   .admin-table-cell {
-    @apply py-2.5 px-3;
+    @apply py-2.5 px-2.5 md:px-3;
   }
 
   .admin-empty-state {
-    @apply rounded-xl border border-dashed border-slate-300/90 dark:border-slate-700/90 bg-slate-50/80 dark:bg-slate-900/40 px-4 py-6 text-sm text-slate-500 dark:text-slate-400 text-center;
+    @apply rounded-xl border border-dashed border-slate-300/90 dark:border-slate-700/90 bg-slate-50/80 dark:bg-slate-900/40 px-3 md:px-4 py-5 md:py-6 text-sm text-slate-500 dark:text-slate-400 text-center leading-relaxed;
   }
 
   .admin-badge {
-    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
+    @apply inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm;
   }
 
   .admin-badge-neutral {
-    @apply admin-badge bg-slate-100 text-slate-700 dark:bg-slate-800/70 dark:text-slate-200;
+    @apply admin-badge border-slate-200/90 bg-slate-100 text-slate-700 dark:border-slate-700/80 dark:bg-slate-800/70 dark:text-slate-200;
   }
 
   .admin-badge-primary {
-    @apply admin-badge bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300;
+    @apply admin-badge border-blue-200/90 bg-blue-100 text-blue-700 dark:border-blue-700/80 dark:bg-blue-900/40 dark:text-blue-300;
   }
 
   .admin-badge-success {
-    @apply admin-badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300;
+    @apply admin-badge border-emerald-200/90 bg-emerald-100 text-emerald-700 dark:border-emerald-700/80 dark:bg-emerald-900/40 dark:text-emerald-300;
   }
 
   .admin-badge-warning {
-    @apply admin-badge bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300;
+    @apply admin-badge border-amber-200/90 bg-amber-100 text-amber-700 dark:border-amber-700/80 dark:bg-amber-900/40 dark:text-amber-300;
   }
 
   .admin-badge-danger {
-    @apply admin-badge bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300;
+    @apply admin-badge border-rose-200/90 bg-rose-100 text-rose-700 dark:border-rose-700/80 dark:bg-rose-900/40 dark:text-rose-300;
   }
 
   .admin-actions {
-    @apply flex flex-wrap items-center gap-2;
+    @apply flex flex-wrap items-center gap-1.5 sm:gap-2;
+  }
+
+  .admin-icon-button {
+    @apply inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200;
+  }
+
+  .admin-dropdown-panel {
+    @apply absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-700/80 bg-white/95 dark:bg-slate-900/90 shadow-soft backdrop-blur;
+  }
+
+  .admin-dropdown-option {
+    @apply w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 transition-colors hover:bg-slate-100/90 dark:hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400/50;
+  }
+
+  .admin-dropdown-option-active {
+    @apply bg-slate-100/90 dark:bg-slate-800/70;
+  }
+
+  .admin-user-card {
+    @apply rounded-2xl border border-slate-200/70 bg-gradient-to-br from-white/90 via-white/70 to-slate-50/60 p-4 md:p-5 dark:border-slate-800/70 dark:from-slate-900/70 dark:via-slate-900/60 dark:to-slate-950/50 transition duration-200 hover:shadow-soft;
   }
 }
 

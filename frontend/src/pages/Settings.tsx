@@ -282,13 +282,13 @@ export default function Settings() {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
                   onClick={() => navigate('/settings/users')}
-                  className="planner-button"
+                  className="planner-button w-full sm:w-auto justify-center"
                 >
                   Gerenciar usuários
                 </button>
                 <button
                   onClick={() => navigate('/settings/usuarios-dados')}
-                  className="planner-button-secondary"
+                  className="planner-button-secondary w-full sm:w-auto justify-center"
                 >
                   Dados dos usuários
                 </button>

@@ -673,7 +673,7 @@ export default function AdminUserData() {
                 })
               }
               disabled={loadingDasPending}
-              className="planner-button disabled:cursor-not-allowed disabled:opacity-50"
+              className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loadingDasPending ? 'Atualizando...' : 'Atualizar pendências'}
             </button>
@@ -783,7 +783,7 @@ export default function AdminUserData() {
               type="button"
               onClick={() => selectedUserId && loadUserData(selectedUserId)}
               disabled={!selectedUserId || loadingData}
-              className="planner-button disabled:cursor-not-allowed disabled:opacity-50"
+              className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loadingData ? 'Atualizando...' : 'Atualizar dados'}
             </button>
@@ -857,7 +857,7 @@ export default function AdminUserData() {
                     setUserDropdownOpen(false);
                     setHighlightedIndex(-1);
                   }}
-                  className="text-gray-400 hover:text-gray-200"
+                  className="admin-icon-button"
                   aria-label="Limpar seleção"
                 >
                   ✕
@@ -866,14 +866,14 @@ export default function AdminUserData() {
               <button
                 type="button"
                 onClick={() => setUserDropdownOpen((open) => !open)}
-                className="text-gray-400 hover:text-gray-200"
+                className="admin-icon-button"
                 aria-label="Alternar lista de usuários"
               >
                 ▾
               </button>
             </div>
             {userDropdownOpen && (
-              <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/80 shadow-soft backdrop-blur">
+              <div className="admin-dropdown-panel">
                 {loadingUsers ? (
                   <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
                     Carregando usuários...
@@ -894,8 +894,8 @@ export default function AdminUserData() {
                         setUserDropdownOpen(false);
                         setHighlightedIndex(-1);
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                        highlightedIndex === index ? 'bg-gray-100 dark:bg-gray-700' : ''
+                      className={`admin-dropdown-option ${
+                        highlightedIndex === index ? 'admin-dropdown-option-active' : ''
                       }`}
                     >
                       <div className="flex flex-col">
@@ -971,7 +971,7 @@ export default function AdminUserData() {
                   type="button"
                   onClick={() => selectedUserId && loadMeiPeriods(selectedUserId)}
                   disabled={!canLoadMeiPeriods || meiPeriodsLoading}
-                  className="planner-button disabled:cursor-not-allowed disabled:opacity-50"
+                  className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {meiPeriodsLoading ? 'Atualizando...' : 'Atualizar histórico'}
                 </button>
@@ -1059,7 +1059,7 @@ export default function AdminUserData() {
                   type="button"
                   onClick={handleMeiDownload}
                   disabled={meiDownloading}
-                  className="planner-button-compact"
+                  className="planner-button-compact w-full sm:w-auto"
                 >
                   {meiDownloading ? 'Baixando...' : 'Baixar guia'}
                 </button>
@@ -1067,7 +1067,7 @@ export default function AdminUserData() {
                   type="button"
                   onClick={handleMeiSendWhatsapp}
                   disabled={meiSending || !selectedUser?.phone}
-                  className="planner-button-compact"
+                  className="planner-button-compact w-full sm:w-auto"
                 >
                   {meiSending ? 'Enviando...' : 'Enviar por zap'}
                 </button>
@@ -1128,7 +1128,7 @@ export default function AdminUserData() {
                   onClick={() => setOpenAccordion('balance')}
                   aria-expanded={openAccordion === 'balance'}
                   aria-controls="accordion-panel-balance"
-                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
+                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 dark:hover:bg-slate-900/45"
                 >
                   <div className="flex-1">
                     <h2 className="text-lg md:text-xl font-semibold dark:text-white">Saldo</h2>
@@ -1198,7 +1198,7 @@ export default function AdminUserData() {
                   onClick={() => setOpenAccordion('transactions')}
                   aria-expanded={openAccordion === 'transactions'}
                   aria-controls="accordion-panel-transactions"
-                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
+                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 dark:hover:bg-slate-900/45"
                 >
                   <div className="flex-1">
                     <h2 className="text-lg md:text-xl font-semibold dark:text-white">Transações</h2>
@@ -1281,7 +1281,7 @@ export default function AdminUserData() {
                   onClick={() => setOpenAccordion('budgets')}
                   aria-expanded={openAccordion === 'budgets'}
                   aria-controls="accordion-panel-budgets"
-                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
+                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 dark:hover:bg-slate-900/45"
                 >
                   <div className="flex-1">
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -1364,7 +1364,7 @@ export default function AdminUserData() {
                   onClick={() => setOpenAccordion('categories')}
                   aria-expanded={openAccordion === 'categories'}
                   aria-controls="accordion-panel-categories"
-                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
+                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 dark:hover:bg-slate-900/45"
                 >
                   <div className="flex-1">
                     <h2 className="text-lg md:text-xl font-semibold dark:text-white">Categorias</h2>
@@ -1399,7 +1399,7 @@ export default function AdminUserData() {
                           {categories.map((category) => (
                             <div
                               key={category.id}
-                              className="rounded-lg border border-slate-200/70 p-3 dark:border-slate-700"
+                              className="admin-stat-card"
                             >
                               <p className="font-semibold text-gray-800 dark:text-gray-100">{category.nome}</p>
                               <p className="text-xs text-gray-500 dark:text-gray-400">Tipo: {category.tipo}</p>
