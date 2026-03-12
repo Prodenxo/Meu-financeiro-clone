@@ -45,8 +45,9 @@ export interface AdminMeiCertificateStatus {
 
 export interface AdminMeiPeriod {
   competencia: string;
-  status: 'pago' | 'a_pagar';
+  status: 'pago' | 'a_pagar' | 'erro';
   guideId?: string | null;
+  errorMessage?: string | null;
 }
 
 export interface AdminMeiWhatsappResult {

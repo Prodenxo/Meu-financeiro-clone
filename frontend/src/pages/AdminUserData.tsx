@@ -119,7 +119,15 @@ const getDasStatusClasses = (status: 'pago' | 'pendente' | 'erro') => {
 };
 
 const getMeiStatusLabel = (status?: AdminMeiPeriod['status'] | null) => {
-  return status === 'pago' ? 'Pago' : 'Pendente';
+  if (status === 'pago') return 'Pago';
+  if (status === 'erro') return 'Erro/Indeterminado';
+  return 'Em aberto';
+};
+
+const getMeiStatusClasses = (status?: AdminMeiPeriod['status'] | null) => {
+  if (status === 'pago') return 'admin-badge-success';
+  if (status === 'erro') return 'admin-badge-danger';
+  return 'admin-badge-warning';
 };
 
 const getDefaultDasCompetencia = () => {
@@ -1123,10 +1131,17 @@ export default function AdminUserData() {
                         key={`${period.competencia}-${period.guideId || period.status}`}
                         className="admin-toolbar flex items-center justify-between gap-2"
                       >
-                        <div className="text-sm text-slate-700 dark:text-gray-200">
-                          {formatDasCompetenciaLabel(period.competencia)}
+                        <div className="min-w-0">
+                          <div className="text-sm text-slate-700 dark:text-gray-200">
+                            {formatDasCompetenciaLabel(period.competencia)}
+                          </div>
+                          {period.status === 'erro' ? (
+                            <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">
+                              {period.errorMessage || 'Falha ao consultar o período no Serpro.'}
+                            </p>
+                          ) : null}
                         </div>
-                        <span className={period.status === 'pago' ? 'admin-badge-success' : 'admin-badge-warning'}>
+                        <span className={getMeiStatusClasses(period.status)}>
                           {getMeiStatusLabel(period.status)}
                         </span>
                       </div>

@@ -250,6 +250,7 @@ const normalizePeriodoApuracao = (periodo, mes, ano) => {
 };
 
 const PAID_PERIOD_BUSINESS_MESSAGE = 'Período já consta como pago. Não é necessário emitir nova guia.';
+const HISTORICO_DAS_ERROR_FALLBACK = 'Falha técnica ao consultar período no Serpro.';
 const SERPRO_PAID_ERROR_PATTERNS = [
   /j[aá]\s*est[aá]\s*pago/i,
   /j[aá]\s*foi\s*pago/i,
@@ -260,11 +261,31 @@ const SERPRO_PAID_ERROR_PATTERNS = [
   /n[aã]o\s+possui\s+pend[êe]ncias?/i,
   /guia\s+j[aá]\s+quitada/i
 ];
+const SERPRO_SEM_PDF_PATTERNS = [
+  /pdf\s+do\s+das\s+n[aã]o\s+retornado/i,
+  /arquivo\s+da\s+guia\s+mei\s+n[aã]o\s+dispon[íi]vel/i
+];
 
 const isPeriodoPagoSerproError = (error) => {
   const message = String(error?.message || '').trim();
   if (!message) return false;
   return SERPRO_PAID_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+};
+
+const isPeriodoSemPdfError = (error) => {
+  const message = String(error?.message || '').trim();
+  if (!message) return false;
+  return SERPRO_SEM_PDF_PATTERNS.some((pattern) => pattern.test(message));
+};
+
+const shouldMarkCompetenciaAsPaid = (error) => {
+  return isPeriodoPagoSerproError(error) || isPeriodoSemPdfError(error);
+};
+
+const getPeriodHistoryErrorMessage = (error) => {
+  const message = String(error?.message || '').trim();
+  if (!message) return HISTORICO_DAS_ERROR_FALLBACK;
+  return message.slice(0, 220);
 };
 
 const normalizeDocumentoFiscalForStatus = (value) => {
@@ -1248,7 +1269,7 @@ export const downloadGuide = async (payload, dependencies = {}) => {
         contribuinte: contrib
       });
     } catch (error) {
-      if (!competencia || !isPeriodoPagoSerproError(error)) {
+      if (!competencia || !shouldMarkCompetenciaAsPaid(error)) {
         throw error;
       }
       await persistPaidCompetenciaSafely({
@@ -1273,7 +1294,7 @@ export const downloadGuide = async (payload, dependencies = {}) => {
         periodoApuracao
       });
     } catch (error) {
-      if (!competencia || !isPeriodoPagoSerproError(error)) {
+      if (!competencia || !shouldMarkCompetenciaAsPaid(error)) {
         throw error;
       }
       await persistPaidCompetenciaSafely({
@@ -1352,11 +1373,12 @@ const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
         guideId: period
       });
     } catch (error) {
-      if (!isPeriodoPagoSerproError(error)) {
+      if (!shouldMarkCompetenciaAsPaid(error)) {
         items.push({
           competencia,
-          status: 'a_pagar',
-          guideId: period
+          status: 'erro',
+          guideId: period,
+          errorMessage: getPeriodHistoryErrorMessage(error)
         });
         continue;
       }

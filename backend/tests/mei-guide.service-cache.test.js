@@ -29,7 +29,7 @@ test('mei-guide usa cache local para marcar períodos pagos sem chamar SERPRO', 
   assert.equal(items.every((item) => item.status === 'pago'), true);
 });
 
-test('mei-guide não marca pago em erro genérico da SERPRO', async () => {
+test('mei-guide classifica timeout da SERPRO como erro técnico no histórico', async () => {
   const { __buildPeriodsFromPdfForTests } = await import('../src/services/mei-guide.service.js');
   let persistedPaid = 0;
 
@@ -48,7 +48,31 @@ test('mei-guide não marca pago em erro genérico da SERPRO', async () => {
 
   assert.equal(persistedPaid, 0);
   assert.equal(items.length, 12);
-  assert.equal(items.every((item) => item.status === 'a_pagar'), true);
+  assert.equal(items.every((item) => item.status === 'erro'), true);
+  assert.equal(items.every((item) => String(item.errorMessage || '').includes('timeout')), true);
+});
+
+test('mei-guide classifica erro de autorização como erro técnico', async () => {
+  const { __buildPeriodsFromPdfForTests } = await import('../src/services/mei-guide.service.js');
+  let persistedPaid = 0;
+
+  const items = await __buildPeriodsFromPdfForTests('user-2b', {
+    cnpj: '12345678000199',
+    useCertificate: false
+  }, {
+    listPaidCompetenciasFn: async () => [],
+    createGuideByCnpjFn: async () => {
+      throw new Error('Não autorizado pela Serpro');
+    },
+    markCompetenciaAsPaidFn: async () => {
+      persistedPaid += 1;
+    }
+  });
+
+  assert.equal(persistedPaid, 0);
+  assert.equal(items.length, 12);
+  assert.equal(items.every((item) => item.status === 'erro'), true);
+  assert.equal(items.every((item) => String(item.errorMessage || '').toLowerCase().includes('não autorizado')), true);
 });
 
 test('mei-guide persiste pago quando erro indica período quitado', async () => {
@@ -62,6 +86,28 @@ test('mei-guide persiste pago quando erro indica período quitado', async () => 
     listPaidCompetenciasFn: async () => [],
     createGuideByCnpjFn: async () => {
       throw new Error('Guia já foi pago para o período');
+    },
+    markCompetenciaAsPaidFn: async () => {
+      persistedPaid += 1;
+    }
+  });
+
+  assert.equal(items.length, 12);
+  assert.equal(items.every((item) => item.status === 'pago'), true);
+  assert.equal(persistedPaid, items.length);
+});
+
+test('mei-guide marca período como pago quando resposta vem sem PDF', async () => {
+  const { __buildPeriodsFromPdfForTests } = await import('../src/services/mei-guide.service.js');
+  let persistedPaid = 0;
+
+  const items = await __buildPeriodsFromPdfForTests('user-3b', {
+    cnpj: '12345678000199',
+    useCertificate: false
+  }, {
+    listPaidCompetenciasFn: async () => [],
+    createGuideByCnpjFn: async () => {
+      throw new Error('PDF do DAS não retornado');
     },
     markCompetenciaAsPaidFn: async () => {
       persistedPaid += 1;
@@ -108,6 +154,30 @@ test('downloadGuide persiste pago quando SERPRO retorna período quitado', async
       isCompetenciaPaidFn: async () => false,
       createGuideByCnpjFn: async () => {
         throw new Error('Não há débitos para o período informado');
+      },
+      markCompetenciaAsPaidFn: async () => {
+        persistedPaid += 1;
+      }
+    }),
+    /Período já consta como pago/
+  );
+
+  assert.equal(persistedPaid, 1);
+});
+
+test('downloadGuide persiste pago quando SERPRO responde sem PDF', async () => {
+  const { downloadGuide } = await import('../src/services/mei-guide.service.js');
+  let persistedPaid = 0;
+
+  await assert.rejects(
+    () => downloadGuide({
+      userId: 'user-6',
+      cnpj: '12345678000199',
+      periodoApuracao: '202603'
+    }, {
+      isCompetenciaPaidFn: async () => false,
+      createGuideByCnpjFn: async () => {
+        throw new Error('PDF do DAS não retornado');
       },
       markCompetenciaAsPaidFn: async () => {
         persistedPaid += 1;
