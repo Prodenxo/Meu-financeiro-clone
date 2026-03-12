@@ -8,6 +8,8 @@ const router = Router();
 router.post('/webhook', controller.webhook);
 router.post('/emitir', requireAuth, requireMeiEnabled, controller.emitir);
 router.get('/', requireAuth, requireMeiEnabled, controller.listar);
+router.get('/catalogo/clientes', requireAuth, requireMeiEnabled, controller.listarCatalogoClientes);
+router.get('/catalogo/produtos', requireAuth, requireMeiEnabled, controller.listarCatalogoProdutos);
 router.patch('/:id', requireAuth, requireMeiEnabled, controller.atualizar);
 router.post('/:id/cancelar', requireAuth, requireMeiEnabled, controller.cancelar);
 router.post('/:id/arquivar', requireAuth, requireMeiEnabled, controller.arquivar);

@@ -6,6 +6,13 @@ import { sendSuccess } from '../utils/response.js';
 const firstValue = (value) => (Array.isArray(value) ? value[0] : value);
 const toToken = (value) => String(firstValue(value) || '').trim();
 const stripBearer = (value) => String(value || '').replace(/^Bearer\s+/i, '').trim();
+const parseLimit = (value, fallback = 20, max = 50) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const normalized = Math.trunc(parsed);
+  if (normalized <= 0) return fallback;
+  return Math.min(normalized, max);
+};
 
 const ensureWebhookToken = (req) => {
   const expectedToken = String(env.PLUGNOTAS_WEBHOOK_TOKEN || '').trim();
@@ -41,6 +48,30 @@ export const listar = async (req, res, next) => {
     const includeArchived = String(req.query?.includeArchived || '').toLowerCase() === 'true';
     const data = await meiNotasService.listarNotas(req.user.id, { includeArchived });
     return sendSuccess(res, data, 'NFSe listadas');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listarCatalogoClientes = async (req, res, next) => {
+  try {
+    const q = String(req.query?.q || '').trim();
+    const limit = parseLimit(req.query?.limit);
+    const documentType = String(req.query?.documentType || '').trim() || undefined;
+    const data = await meiNotasService.listarCatalogoClientes(req.user.id, { q, limit, documentType });
+    return sendSuccess(res, data, 'Catálogo de clientes listado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listarCatalogoProdutos = async (req, res, next) => {
+  try {
+    const q = String(req.query?.q || '').trim();
+    const limit = parseLimit(req.query?.limit);
+    const documentType = String(req.query?.documentType || '').trim() || undefined;
+    const data = await meiNotasService.listarCatalogoProdutos(req.user.id, { q, limit, documentType });
+    return sendSuccess(res, data, 'Catálogo de produtos listado');
   } catch (error) {
     return next(error);
   }

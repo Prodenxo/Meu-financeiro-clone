@@ -4,6 +4,8 @@ import {
   atualizarNfse,
   emitirNfse,
   cancelarNfse,
+  listarCatalogoNfseClientes,
+  listarCatalogoNfseProdutos,
   listarNfse,
   obterNfse,
   baixarNfsePdf,
@@ -72,6 +74,20 @@ describe('meiNotasService', () => {
 
     expect(mockedApiClient.get).toHaveBeenCalledWith('/mei-notas?includeArchived=true');
     expect(result).toEqual(response);
+  });
+
+  it('lista catálogo de clientes e produtos com query params', async () => {
+    mockedApiClient.get
+      .mockResolvedValueOnce([{ id: 'cliente-1', nome: 'Cliente Teste' }])
+      .mockResolvedValueOnce([{ id: 'produto-1', codigo: '1.02' }]);
+
+    const clientes = await listarCatalogoNfseClientes({ q: 'cliente', limit: 15, documentType: 'NFSE' });
+    const produtos = await listarCatalogoNfseProdutos({ q: '1.02', limit: 10, documentType: 'NFSE' });
+
+    expect(mockedApiClient.get).toHaveBeenNthCalledWith(1, '/mei-notas/catalogo/clientes?q=cliente&limit=15&documentType=NFSE');
+    expect(mockedApiClient.get).toHaveBeenNthCalledWith(2, '/mei-notas/catalogo/produtos?q=1.02&limit=10&documentType=NFSE');
+    expect(clientes).toEqual([{ id: 'cliente-1', nome: 'Cliente Teste' }]);
+    expect(produtos).toEqual([{ id: 'produto-1', codigo: '1.02' }]);
   });
 
   it('obtem NFSe com query sync=true quando solicitado', async () => {

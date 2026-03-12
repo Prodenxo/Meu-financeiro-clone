@@ -65,6 +65,50 @@ export interface ArquivarNfseInput {
   reason?: string;
 }
 
+export interface NfseCatalogCliente {
+  id: string;
+  document_type?: string | null;
+  documento?: string | null;
+  nome?: string | null;
+  email?: string | null;
+  metadata_json?: Record<string, unknown> | null;
+  last_used_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface NfseCatalogProduto {
+  id: string;
+  document_type?: string | null;
+  codigo?: string | null;
+  cnae?: string | null;
+  discriminacao?: string | null;
+  aliquota?: number | null;
+  valor_sugerido?: number | null;
+  metadata_json?: Record<string, unknown> | null;
+  last_used_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ListarCatalogoNfseInput {
+  q?: string;
+  limit?: number;
+  documentType?: 'NFSE' | 'NFE' | 'NFCE' | 'CTE';
+}
+
+const buildCatalogSuffix = (options: ListarCatalogoNfseInput = {}) => {
+  const query = new URLSearchParams({
+    ...(options.q ? { q: options.q } : {}),
+    ...(typeof options.limit === 'number' && Number.isFinite(options.limit)
+      ? { limit: String(Math.trunc(options.limit)) }
+      : {}),
+    ...(options.documentType ? { documentType: options.documentType } : {})
+  });
+  const text = query.toString();
+  return text ? `?${text}` : '';
+};
+
 export async function emitirNfse(input: EmitirNfseInput): Promise<NfseRecord> {
   return await apiClient.post<NfseRecord>('/mei-notas/emitir', input);
 }
@@ -101,4 +145,18 @@ export async function cancelarNfse(id: string, input: CancelarNfseInput = {}): P
 
 export async function arquivarNfse(id: string, input: ArquivarNfseInput = {}): Promise<NfseRecord> {
   return await apiClient.post<NfseRecord>(`/mei-notas/${encodeURIComponent(id)}/arquivar`, input);
+}
+
+export async function listarCatalogoNfseClientes(
+  options: ListarCatalogoNfseInput = {}
+): Promise<NfseCatalogCliente[]> {
+  const suffix = buildCatalogSuffix(options);
+  return await apiClient.get<NfseCatalogCliente[]>(`/mei-notas/catalogo/clientes${suffix}`);
+}
+
+export async function listarCatalogoNfseProdutos(
+  options: ListarCatalogoNfseInput = {}
+): Promise<NfseCatalogProduto[]> {
+  const suffix = buildCatalogSuffix(options);
+  return await apiClient.get<NfseCatalogProduto[]>(`/mei-notas/catalogo/produtos${suffix}`);
 }

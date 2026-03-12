@@ -19,6 +19,8 @@ test('rotas autenticadas de mei-notas exigem requireMeiEnabled', () => {
   const protectedRoutes = [
     { method: 'post', path: '/emitir' },
     { method: 'get', path: '/' },
+    { method: 'get', path: '/catalogo/clientes' },
+    { method: 'get', path: '/catalogo/produtos' },
     { method: 'patch', path: '/:id' },
     { method: 'post', path: '/:id/cancelar' },
     { method: 'post', path: '/:id/arquivar' },

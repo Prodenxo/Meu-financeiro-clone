@@ -13,7 +13,10 @@ import {
 } from './plugnotas/nfse.service.js';
 
 const TABLE = 'mei_nfse';
+const CLIENTS_TABLE = 'mei_nfse_clientes';
+const PRODUCTS_TABLE = 'mei_nfse_produtos';
 const DOCUMENT_TYPE_NFSE = 'NFSE';
+const SUPPORTED_DOCUMENT_TYPES = new Set(['NFSE', 'NFE', 'NFCE', 'CTE']);
 const PROVIDER_PLUGNOTAS = 'plugnotas';
 const EDITABLE_STATUSES = new Set(['processando', 'rejeitado', 'interrompido']);
 
@@ -28,6 +31,34 @@ const toNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(String(value).replace(',', '.'));
   return Number.isNaN(parsed) ? null : parsed;
+};
+
+const normalizeText = (value) => String(value || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase();
+
+const normalizeEmail = (value) => normalizeText(value);
+
+const toCatalogLimit = (value, { defaultValue = 20, max = 50 } = {}) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return defaultValue;
+  const normalized = Math.trunc(parsed);
+  if (normalized <= 0) return defaultValue;
+  return Math.min(normalized, max);
+};
+
+const sanitizeSearchTerm = (value) => String(value || '')
+  .trim()
+  .replace(/[,%()]/g, ' ')
+  .replace(/\s+/g, ' ');
+
+const normalizeDocumentType = (value = DOCUMENT_TYPE_NFSE) => {
+  const normalized = String(value || DOCUMENT_TYPE_NFSE).trim().toUpperCase();
+  if (!SUPPORTED_DOCUMENT_TYPES.has(normalized)) {
+    throw badRequest('documentType inválido');
+  }
+  return normalized;
 };
 
 const collectResponseCandidates = (response) => {
@@ -290,6 +321,59 @@ const parseArchivedInput = (value) => {
   throw badRequest('Campo archived deve ser booleano');
 };
 
+const buildClienteCatalogEntry = (payload) => {
+  const tomador = toObject(payload?.tomador);
+  const documento = normalizeDoc(tomador.cpfCnpj);
+  const nome = String(tomador.razaoSocial || '').trim();
+  const email = normalizeEmail(tomador.email);
+
+  if (!documento && !nome && !email) return null;
+
+  const fallbackKey = [normalizeText(nome), email].filter(Boolean).join('|');
+  if (!documento && !fallbackKey) return null;
+
+  return {
+    dedupe_key: documento ? `doc:${documento}` : `fallback:${fallbackKey}`,
+    documento: documento || null,
+    nome: nome || null,
+    email: email || null
+  };
+};
+
+const buildProdutoCatalogEntries = (payload) => {
+  const servicos = Array.isArray(payload?.servico) ? payload.servico : [];
+  return servicos
+    .map((item) => {
+      const codigo = String(item?.codigo || '').trim();
+      const cnae = String(item?.cnae || '').trim();
+      const discriminacao = String(item?.discriminacao || '').trim();
+      const discriminacaoNorm = normalizeText(discriminacao);
+      const aliquota = toNumber(item?.iss?.aliquota);
+      const valorSugerido = toNumber(item?.valor?.servico);
+      const aliquotaKey = aliquota === null ? '' : aliquota.toFixed(4);
+
+      if (!codigo && !cnae && !discriminacaoNorm) return null;
+
+      return {
+        dedupe_key: `servico:${normalizeText(codigo)}|${normalizeText(cnae)}|${discriminacaoNorm}|${aliquotaKey}`,
+        codigo,
+        cnae,
+        discriminacao,
+        aliquota,
+        valor_sugerido: valorSugerido
+      };
+    })
+    .filter(Boolean);
+};
+
+const applyCatalogSearch = (query, q, fields) => {
+  const search = sanitizeSearchTerm(q);
+  if (!search) return query;
+  const like = `%${search}%`;
+  const filters = fields.map((field) => `${field}.ilike.${like}`);
+  return query.or(filters.join(','));
+};
+
 const getDb = () => createSupabaseClient({ useServiceRole: true });
 
 const insertRecord = async (userId, data) => {
@@ -331,6 +415,47 @@ const findRecord = async (userId, id) => {
   if (error) throw badRequest(error.message);
   if (!data) throw notFound('NFSe não encontrada');
   return data;
+};
+
+const upsertClienteCatalogo = async (userId, payload, { documentType = DOCUMENT_TYPE_NFSE } = {}) => {
+  const normalizedType = normalizeDocumentType(documentType);
+  const entry = buildClienteCatalogEntry(payload);
+  if (!entry) return null;
+
+  const now = new Date().toISOString();
+  const dbClient = getDb();
+  const { error } = await dbClient
+    .from(CLIENTS_TABLE)
+    .upsert({
+      ...entry,
+      user_id: userId,
+      document_type: normalizedType,
+      last_used_at: now,
+      updated_at: now
+    }, { onConflict: 'user_id,document_type,dedupe_key' });
+  if (error) throw badRequest(error.message);
+  return entry;
+};
+
+const upsertProdutosCatalogo = async (userId, payload, { documentType = DOCUMENT_TYPE_NFSE } = {}) => {
+  const normalizedType = normalizeDocumentType(documentType);
+  const entries = buildProdutoCatalogEntries(payload);
+  if (!entries.length) return 0;
+
+  const now = new Date().toISOString();
+  const rows = entries.map((entry) => ({
+    ...entry,
+    user_id: userId,
+    document_type: normalizedType,
+    last_used_at: now,
+    updated_at: now
+  }));
+  const dbClient = getDb();
+  const { error } = await dbClient
+    .from(PRODUCTS_TABLE)
+    .upsert(rows, { onConflict: 'user_id,document_type,dedupe_key' });
+  if (error) throw badRequest(error.message);
+  return rows.length;
 };
 
 const extractPlugNotasStatus = (response) => {
@@ -390,7 +515,7 @@ export const emitirNota = async (userId, input) => {
   const protocol = extractProtocol(response);
   const metadata = sanitizeMetadata(input?.metadata);
 
-  return await insertRecord(userId, {
+  const created = await insertRecord(userId, {
     plugnotas_id: plugnotasId,
     protocol,
     id_integracao: idIntegracao,
@@ -403,6 +528,18 @@ export const emitirNota = async (userId, input) => {
     response_json: response,
     metadata_json: Object.keys(metadata).length ? metadata : null
   });
+
+  try {
+    await upsertClienteCatalogo(userId, payload, { documentType: DOCUMENT_TYPE_NFSE });
+    await upsertProdutosCatalogo(userId, payload, { documentType: DOCUMENT_TYPE_NFSE });
+  } catch (error) {
+    console.warn(
+      '[mei-notas] Falha ao atualizar catalogo NFSe',
+      error instanceof Error ? error.message : error
+    );
+  }
+
+  return created;
 };
 
 export const listarNotas = async (userId, { includeArchived = false } = {}) => {
@@ -416,6 +553,50 @@ export const listarNotas = async (userId, { includeArchived = false } = {}) => {
   if (!includeArchived) {
     query = query.is('archived_at', null);
   }
+  const { data, error } = await query;
+  if (error) throw badRequest(error.message);
+  return data || [];
+};
+
+export const listarCatalogoClientes = async (
+  userId,
+  { q = '', limit = 20, documentType = DOCUMENT_TYPE_NFSE } = {}
+) => {
+  const normalizedType = normalizeDocumentType(documentType);
+  const safeLimit = toCatalogLimit(limit);
+  const dbClient = getDb();
+  let query = dbClient
+    .from(CLIENTS_TABLE)
+    .select('id, document_type, documento, nome, email, metadata_json, last_used_at, created_at, updated_at')
+    .eq('user_id', userId)
+    .eq('document_type', normalizedType)
+    .order('last_used_at', { ascending: false })
+    .limit(safeLimit);
+
+  query = applyCatalogSearch(query, q, ['documento', 'nome', 'email']);
+
+  const { data, error } = await query;
+  if (error) throw badRequest(error.message);
+  return data || [];
+};
+
+export const listarCatalogoProdutos = async (
+  userId,
+  { q = '', limit = 20, documentType = DOCUMENT_TYPE_NFSE } = {}
+) => {
+  const normalizedType = normalizeDocumentType(documentType);
+  const safeLimit = toCatalogLimit(limit);
+  const dbClient = getDb();
+  let query = dbClient
+    .from(PRODUCTS_TABLE)
+    .select('id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, last_used_at, created_at, updated_at')
+    .eq('user_id', userId)
+    .eq('document_type', normalizedType)
+    .order('last_used_at', { ascending: false })
+    .limit(safeLimit);
+
+  query = applyCatalogSearch(query, q, ['codigo', 'cnae', 'discriminacao']);
+
   const { data, error } = await query;
   if (error) throw badRequest(error.message);
   return data || [];

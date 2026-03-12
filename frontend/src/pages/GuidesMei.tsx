@@ -16,8 +16,12 @@ import {
   baixarNfseXml,
   cancelarNfse,
   emitirNfse,
+  listarCatalogoNfseClientes,
+  listarCatalogoNfseProdutos,
   listarNfse,
   obterNfse,
+  type NfseCatalogCliente,
+  type NfseCatalogProduto,
   type EmitirNfseInput,
   type NfseRecord
 } from '../services/meiNotasService';
@@ -101,6 +105,24 @@ const formatDateTime = (value?: string | null) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString('pt-BR');
+};
+
+const buildClienteCatalogLabel = (item: NfseCatalogCliente) => {
+  const chunks = [
+    item.nome || null,
+    item.documento ? formatDocument(item.documento) : null,
+    item.email || null
+  ].filter(Boolean);
+  return chunks.length ? chunks.join(' • ') : 'Cliente sem identificação';
+};
+
+const buildProdutoCatalogLabel = (item: NfseCatalogProduto) => {
+  const chunks = [
+    item.codigo || null,
+    item.cnae ? `CNAE ${item.cnae}` : null,
+    item.discriminacao || null
+  ].filter(Boolean);
+  return chunks.length ? chunks.join(' • ') : 'Serviço sem identificação';
 };
 
 const toNfseMetadata = (value: unknown): Record<string, unknown> => {
@@ -228,6 +250,12 @@ export default function GuidesMei() {
   const [nfseActionMap, setNfseActionMap] = useState<Record<string, boolean>>({});
   const [nfseError, setNfseError] = useState<string | null>(null);
   const [nfseSuccess, setNfseSuccess] = useState<string | null>(null);
+  const [nfseCatalogLoading, setNfseCatalogLoading] = useState(false);
+  const [nfseCatalogError, setNfseCatalogError] = useState<string | null>(null);
+  const [nfseCatalogClientes, setNfseCatalogClientes] = useState<NfseCatalogCliente[]>([]);
+  const [nfseCatalogProdutos, setNfseCatalogProdutos] = useState<NfseCatalogProduto[]>([]);
+  const [selectedCatalogClienteId, setSelectedCatalogClienteId] = useState('');
+  const [selectedCatalogProdutoId, setSelectedCatalogProdutoId] = useState('');
   const [nfseStatusFilter, setNfseStatusFilter] = useState('all');
   const [nfsePeriodFilter, setNfsePeriodFilter] = useState('all');
   const [nfseShowArchived, setNfseShowArchived] = useState(false);
@@ -291,6 +319,23 @@ export default function GuidesMei() {
     }
   }, [nfseShowArchived]);
 
+  const loadNfseCatalog = useCallback(async () => {
+    setNfseCatalogLoading(true);
+    setNfseCatalogError(null);
+    try {
+      const [clientes, produtos] = await Promise.all([
+        listarCatalogoNfseClientes({ limit: 30, documentType: 'NFSE' }),
+        listarCatalogoNfseProdutos({ limit: 30, documentType: 'NFSE' })
+      ]);
+      setNfseCatalogClientes(clientes || []);
+      setNfseCatalogProdutos(produtos || []);
+    } catch (error) {
+      setNfseCatalogError(error instanceof Error ? error.message : 'Erro ao carregar catálogo de NFSe.');
+    } finally {
+      setNfseCatalogLoading(false);
+    }
+  }, []);
+
   const updateNfseForm = (updates: Partial<EmitirNfseInput>) => {
     setNfseForm((current) => ({ ...current, ...updates }));
   };
@@ -313,6 +358,32 @@ export default function GuidesMei() {
         ...updates
       }
     }));
+  };
+
+  const handleSelectCatalogCliente = (id: string) => {
+    setSelectedCatalogClienteId(id);
+    if (!id) return;
+    const selected = nfseCatalogClientes.find((item) => item.id === id);
+    if (!selected) return;
+    updateNfseForm({
+      tomadorCpfCnpj: selected.documento ? formatDocument(selected.documento) : '',
+      tomadorRazaoSocial: selected.nome || '',
+      tomadorEmail: selected.email || ''
+    });
+  };
+
+  const handleSelectCatalogProduto = (id: string) => {
+    setSelectedCatalogProdutoId(id);
+    if (!id) return;
+    const selected = nfseCatalogProdutos.find((item) => item.id === id);
+    if (!selected) return;
+    updateNfseServico({
+      codigo: selected.codigo || '',
+      cnae: selected.cnae || '',
+      discriminacao: selected.discriminacao || '',
+      aliquota: selected.aliquota ?? '',
+      valorServico: selected.valor_sugerido ?? ''
+    });
   };
 
   const isNfseActionLoading = (actionKey: string) => Boolean(nfseActionMap[actionKey]);
@@ -347,6 +418,10 @@ export default function GuidesMei() {
   useEffect(() => {
     void loadNfseList();
   }, [loadNfseList]);
+
+  useEffect(() => {
+    void loadNfseCatalog();
+  }, [loadNfseCatalog]);
 
   useEffect(() => {
     if (!normalizedContribuinte) return;
@@ -507,7 +582,9 @@ export default function GuidesMei() {
           ? `NFSe enviada. Protocolo ${created.protocol}.`
           : 'NFSe enviada. Acompanhe o status na lista.'
       );
-      await loadNfseList();
+      await Promise.all([loadNfseList(), loadNfseCatalog()]);
+      setSelectedCatalogClienteId('');
+      setSelectedCatalogProdutoId('');
     } catch (error) {
       setNfseError(error instanceof Error ? error.message : 'Erro ao emitir NFSe.');
     } finally {
@@ -888,6 +965,48 @@ export default function GuidesMei() {
         <p className="text-sm text-slate-500 dark:text-gray-400 mb-3">
           Preencha os dados essenciais para emissão da NFSe via PlugNotas.
         </p>
+        <div className="grid gap-3 md:grid-cols-2 mb-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 dark:text-gray-400 mb-1">
+              Cliente salvo (atalho)
+            </label>
+            <select
+              className="planner-input-compact w-full"
+              value={selectedCatalogClienteId}
+              onChange={(event) => handleSelectCatalogCliente(event.target.value)}
+            >
+              <option value="">Selecionar cliente...</option>
+              {nfseCatalogClientes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {buildClienteCatalogLabel(item)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 dark:text-gray-400 mb-1">
+              Serviço salvo (atalho)
+            </label>
+            <select
+              className="planner-input-compact w-full"
+              value={selectedCatalogProdutoId}
+              onChange={(event) => handleSelectCatalogProduto(event.target.value)}
+            >
+              <option value="">Selecionar serviço...</option>
+              {nfseCatalogProdutos.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {buildProdutoCatalogLabel(item)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {nfseCatalogLoading && (
+          <div className="mb-3 text-xs text-slate-500 dark:text-gray-400">Atualizando catálogo de clientes e serviços...</div>
+        )}
+        {nfseCatalogError && (
+          <div className="mb-3 text-xs text-rose-600 dark:text-rose-400">{nfseCatalogError}</div>
+        )}
         <div className="grid gap-3 md:grid-cols-2">
           <div>
             <label className="block text-xs font-semibold text-slate-600 dark:text-gray-400 mb-1">
