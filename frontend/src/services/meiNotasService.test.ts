@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
 import {
+  arquivarNfse,
+  atualizarNfse,
   emitirNfse,
+  cancelarNfse,
   listarNfse,
   obterNfse,
   baixarNfsePdf,
@@ -14,6 +17,7 @@ vi.mock('./apiClient', () => ({
   apiClient: {
     post: vi.fn(),
     get: vi.fn(),
+    patch: vi.fn(),
     requestBlob: vi.fn()
   }
 }));
@@ -21,6 +25,7 @@ vi.mock('./apiClient', () => ({
 const mockedApiClient = apiClient as unknown as {
   post: Mock;
   get: Mock;
+  patch: Mock;
   requestBlob: Mock;
 };
 
@@ -56,6 +61,16 @@ describe('meiNotasService', () => {
     const result = await listarNfse();
 
     expect(mockedApiClient.get).toHaveBeenCalledWith('/mei-notas');
+    expect(result).toEqual(response);
+  });
+
+  it('lista NFSe incluindo arquivadas quando solicitado', async () => {
+    const response: NfseRecord[] = [{ id: 'nfse-2', user_id: 'user-1', archived_at: '2026-03-11T12:00:00Z' }];
+    mockedApiClient.get.mockResolvedValueOnce(response);
+
+    const result = await listarNfse({ includeArchived: true });
+
+    expect(mockedApiClient.get).toHaveBeenCalledWith('/mei-notas?includeArchived=true');
     expect(result).toEqual(response);
   });
 
@@ -110,5 +125,22 @@ describe('meiNotasService', () => {
     expect(mockedApiClient.requestBlob).toHaveBeenNthCalledWith(2, '/mei-notas/nfse-1/xml', { method: 'GET' });
     expect(pdf).toEqual(fileResponse);
     expect(xml).toEqual(fileResponse);
+  });
+
+  it('atualiza, cancela e arquiva NFSe nos endpoints corretos', async () => {
+    const response = { id: 'nfse-1', user_id: 'user-1' } as NfseRecord;
+    mockedApiClient.patch.mockResolvedValueOnce(response);
+    mockedApiClient.post.mockResolvedValue(response);
+
+    const updated = await atualizarNfse('nfse-1', { descricaoInterna: 'Ajuste interno' });
+    const cancelled = await cancelarNfse('nfse-1', { reason: 'Solicitação do cliente' });
+    const archived = await arquivarNfse('nfse-1', { archived: true });
+
+    expect(mockedApiClient.patch).toHaveBeenCalledWith('/mei-notas/nfse-1', { descricaoInterna: 'Ajuste interno' });
+    expect(mockedApiClient.post).toHaveBeenNthCalledWith(1, '/mei-notas/nfse-1/cancelar', { reason: 'Solicitação do cliente' });
+    expect(mockedApiClient.post).toHaveBeenNthCalledWith(2, '/mei-notas/nfse-1/arquivar', { archived: true });
+    expect(updated).toEqual(response);
+    expect(cancelled).toEqual(response);
+    expect(archived).toEqual(response);
   });
 });

@@ -10,8 +10,11 @@ import {
   type MeiPeriod
 } from '../services/guidesMeiService';
 import {
+  arquivarNfse,
+  atualizarNfse,
   baixarNfsePdf,
   baixarNfseXml,
+  cancelarNfse,
   emitirNfse,
   listarNfse,
   obterNfse,
@@ -70,14 +73,26 @@ const triggerFileDownload = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(downloadUrl);
 };
 
-const formatNfseStatus = (status?: string | null) => {
+const getNfseStatusKey = (status?: string | null) => {
   const text = String(status || '').toLowerCase();
-  if (!text) return 'Processando';
-  if (text.includes('concluido') || text.includes('autoriz')) return 'Concluída';
-  if (text.includes('process')) return 'Processando';
-  if (text.includes('rejeit')) return 'Rejeitada';
-  if (text.includes('cancel')) return 'Cancelada';
-  if (text.includes('interromp')) return 'Interrompida';
+  if (!text) return 'processando';
+  if (text.includes('cancelamento_pendente')) return 'cancelamento_pendente';
+  if (text.includes('concluido') || text.includes('autoriz')) return 'concluido';
+  if (text.includes('process')) return 'processando';
+  if (text.includes('rejeit')) return 'rejeitado';
+  if (text.includes('cancel')) return 'cancelado';
+  if (text.includes('interromp')) return 'interrompido';
+  return text;
+};
+
+const formatNfseStatus = (status?: string | null) => {
+  const key = getNfseStatusKey(status);
+  if (key === 'concluido') return 'Concluída';
+  if (key === 'processando') return 'Processando';
+  if (key === 'rejeitado') return 'Rejeitada';
+  if (key === 'cancelado') return 'Cancelada';
+  if (key === 'cancelamento_pendente') return 'Cancelamento pendente';
+  if (key === 'interrompido') return 'Interrompida';
   return status || 'Processando';
 };
 
@@ -86,6 +101,18 @@ const formatDateTime = (value?: string | null) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString('pt-BR');
+};
+
+const toNfseMetadata = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+};
+
+const toNfsePeriodKey = (value?: string | null) => {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`;
 };
 
 const formatDasCompetenciaLabel = (value?: string | null) => {
@@ -198,9 +225,12 @@ export default function GuidesMei() {
   const [nfseList, setNfseList] = useState<NfseRecord[]>([]);
   const [nfseLoading, setNfseLoading] = useState(false);
   const [nfseSubmitting, setNfseSubmitting] = useState(false);
-  const [nfseActionKey, setNfseActionKey] = useState<string | null>(null);
+  const [nfseActionMap, setNfseActionMap] = useState<Record<string, boolean>>({});
   const [nfseError, setNfseError] = useState<string | null>(null);
   const [nfseSuccess, setNfseSuccess] = useState<string | null>(null);
+  const [nfseStatusFilter, setNfseStatusFilter] = useState('all');
+  const [nfsePeriodFilter, setNfsePeriodFilter] = useState('all');
+  const [nfseShowArchived, setNfseShowArchived] = useState(false);
   const nfseValidationMessage = useMemo(() => getNfseValidationMessage(nfseForm), [nfseForm]);
 
   const normalizedContribuinte = useMemo(() => normalizeDoc(contribuinteDoc), [contribuinteDoc]);
@@ -252,14 +282,14 @@ export default function GuidesMei() {
     setNfseLoading(true);
     setNfseError(null);
     try {
-      const list = await listarNfse();
+      const list = await listarNfse({ includeArchived: nfseShowArchived });
       setNfseList(list);
     } catch (error) {
       setNfseError(error instanceof Error ? error.message : 'Erro ao listar NFSe.');
     } finally {
       setNfseLoading(false);
     }
-  }, []);
+  }, [nfseShowArchived]);
 
   const updateNfseForm = (updates: Partial<EmitirNfseInput>) => {
     setNfseForm((current) => ({ ...current, ...updates }));
@@ -283,6 +313,22 @@ export default function GuidesMei() {
         ...updates
       }
     }));
+  };
+
+  const isNfseActionLoading = (actionKey: string) => Boolean(nfseActionMap[actionKey]);
+  const isNfseRowBusy = (id: string) => Object.entries(nfseActionMap)
+    .some(([key, value]) => value && key.startsWith(`${id}:`));
+
+  const startNfseAction = (actionKey: string) => {
+    setNfseActionMap((current) => ({ ...current, [actionKey]: true }));
+  };
+
+  const finishNfseAction = (actionKey: string) => {
+    setNfseActionMap((current) => {
+      const next = { ...current };
+      delete next[actionKey];
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -470,9 +516,9 @@ export default function GuidesMei() {
   };
 
   const handleSyncNfse = async (id: string) => {
-    if (nfseActionKey) return;
     const actionKey = `${id}:sync`;
-    setNfseActionKey(actionKey);
+    if (isNfseActionLoading(actionKey)) return;
+    startNfseAction(actionKey);
     setNfseError(null);
     setNfseSuccess(null);
     try {
@@ -482,14 +528,14 @@ export default function GuidesMei() {
     } catch (error) {
       setNfseError(error instanceof Error ? error.message : 'Erro ao atualizar NFSe.');
     } finally {
-      setNfseActionKey((current) => (current === actionKey ? null : current));
+      finishNfseAction(actionKey);
     }
   };
 
   const handleDownloadNfsePdf = async (record: NfseRecord) => {
-    if (nfseActionKey) return;
     const actionKey = `${record.id}:pdf`;
-    setNfseActionKey(actionKey);
+    if (isNfseActionLoading(actionKey)) return;
+    startNfseAction(actionKey);
     setNfseError(null);
     setNfseSuccess(null);
     try {
@@ -499,14 +545,14 @@ export default function GuidesMei() {
     } catch (error) {
       setNfseError(error instanceof Error ? error.message : 'Erro ao baixar PDF da NFSe.');
     } finally {
-      setNfseActionKey((current) => (current === actionKey ? null : current));
+      finishNfseAction(actionKey);
     }
   };
 
   const handleDownloadNfseXml = async (record: NfseRecord) => {
-    if (nfseActionKey) return;
     const actionKey = `${record.id}:xml`;
-    setNfseActionKey(actionKey);
+    if (isNfseActionLoading(actionKey)) return;
+    startNfseAction(actionKey);
     setNfseError(null);
     setNfseSuccess(null);
     try {
@@ -516,7 +562,73 @@ export default function GuidesMei() {
     } catch (error) {
       setNfseError(error instanceof Error ? error.message : 'Erro ao baixar XML da NFSe.');
     } finally {
-      setNfseActionKey((current) => (current === actionKey ? null : current));
+      finishNfseAction(actionKey);
+    }
+  };
+
+  const handleToggleReviewNfse = async (record: NfseRecord) => {
+    const actionKey = `${record.id}:update`;
+    if (isNfseActionLoading(actionKey)) return;
+    const metadata = toNfseMetadata(record.metadata_json);
+    const reviewRequested = Boolean(metadata.reviewRequested);
+    startNfseAction(actionKey);
+    setNfseError(null);
+    setNfseSuccess(null);
+    try {
+      const updated = await atualizarNfse(record.id, {
+        metadata: {
+          reviewRequested: !reviewRequested,
+          reviewRequestedAt: !reviewRequested ? new Date().toISOString() : null
+        }
+      });
+      setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
+      setNfseSuccess(!reviewRequested ? 'NFSe marcada para revisão.' : 'Marcação de revisão removida.');
+    } catch (error) {
+      setNfseError(error instanceof Error ? error.message : 'Erro ao atualizar NFSe.');
+    } finally {
+      finishNfseAction(actionKey);
+    }
+  };
+
+  const handleCancelNfse = async (record: NfseRecord) => {
+    const actionKey = `${record.id}:cancel`;
+    if (isNfseActionLoading(actionKey)) return;
+    if (!window.confirm('Deseja solicitar o cancelamento desta NFSe?')) return;
+
+    const reason = window.prompt('Motivo do cancelamento (opcional):', '') || '';
+    startNfseAction(actionKey);
+    setNfseError(null);
+    setNfseSuccess(null);
+    try {
+      const updated = await cancelarNfse(record.id, {
+        ...(reason.trim() ? { reason: reason.trim() } : {})
+      });
+      setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
+      setNfseSuccess('Solicitação de cancelamento processada.');
+    } catch (error) {
+      setNfseError(error instanceof Error ? error.message : 'Erro ao cancelar NFSe.');
+    } finally {
+      finishNfseAction(actionKey);
+    }
+  };
+
+  const handleArchiveNfse = async (record: NfseRecord) => {
+    const actionKey = `${record.id}:archive`;
+    if (isNfseActionLoading(actionKey)) return;
+    const isArchived = Boolean(record.archived_at);
+    if (!window.confirm(isArchived ? 'Deseja desarquivar esta NFSe?' : 'Deseja arquivar esta NFSe?')) return;
+
+    startNfseAction(actionKey);
+    setNfseError(null);
+    setNfseSuccess(null);
+    try {
+      const updated = await arquivarNfse(record.id, { archived: !isArchived });
+      setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
+      setNfseSuccess(!isArchived ? 'NFSe arquivada com sucesso.' : 'NFSe desarquivada com sucesso.');
+    } catch (error) {
+      setNfseError(error instanceof Error ? error.message : 'Erro ao atualizar arquivamento da NFSe.');
+    } finally {
+      finishNfseAction(actionKey);
     }
   };
 
@@ -529,6 +641,27 @@ export default function GuidesMei() {
   const availableMonths = useMemo(() => (
     Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'))
   ), []);
+
+  const nfsePeriodOptions = useMemo(() => {
+    const uniquePeriods = Array.from(new Set(
+      nfseList
+        .map((item) => toNfsePeriodKey(item.created_at))
+        .filter(Boolean)
+    ));
+    return uniquePeriods.sort().reverse();
+  }, [nfseList]);
+
+  const filteredNfseList = useMemo(() => {
+    return nfseList.filter((item) => {
+      if (nfseStatusFilter !== 'all' && getNfseStatusKey(item.status) !== nfseStatusFilter) {
+        return false;
+      }
+      if (nfsePeriodFilter !== 'all' && toNfsePeriodKey(item.created_at) !== nfsePeriodFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [nfseList, nfsePeriodFilter, nfseStatusFilter]);
 
   const handleDownloadClick = async () => {
     if (isDownloadingGuide) return;
@@ -993,23 +1126,67 @@ export default function GuidesMei() {
       <div className="mt-5 planner-card p-4 md:p-5">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
           <h2 className="text-base md:text-lg font-semibold dark:text-white">Notas emitidas</h2>
-          <button
-            className="planner-button-compact"
-            onClick={loadNfseList}
-            disabled={nfseLoading}
+          <div className="flex flex-wrap gap-2 items-center">
+            <label className="text-xs text-slate-600 dark:text-gray-400 inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={nfseShowArchived}
+                onChange={(event) => setNfseShowArchived(event.target.checked)}
+              />
+              Mostrar arquivadas
+            </label>
+            <button
+              className="planner-button-compact"
+              onClick={() => void loadNfseList()}
+              disabled={nfseLoading}
+            >
+              {nfseLoading ? 'Atualizando...' : 'Atualizar lista'}
+            </button>
+          </div>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2 mb-3">
+          <select
+            className="planner-input-compact"
+            value={nfseStatusFilter}
+            onChange={(event) => setNfseStatusFilter(event.target.value)}
           >
-            {nfseLoading ? 'Atualizando...' : 'Atualizar lista'}
-          </button>
+            <option value="all">Todos os status</option>
+            <option value="processando">Processando</option>
+            <option value="concluido">Concluída</option>
+            <option value="rejeitado">Rejeitada</option>
+            <option value="interrompido">Interrompida</option>
+            <option value="cancelamento_pendente">Cancelamento pendente</option>
+            <option value="cancelado">Cancelada</option>
+          </select>
+          <select
+            className="planner-input-compact"
+            value={nfsePeriodFilter}
+            onChange={(event) => setNfsePeriodFilter(event.target.value)}
+          >
+            <option value="all">Todos os períodos</option>
+            {nfsePeriodOptions.map((period) => (
+              <option key={period} value={period}>
+                {period.split('-').reverse().join('/')}
+              </option>
+            ))}
+          </select>
         </div>
         {nfseLoading && (
           <div className="text-sm text-slate-500 dark:text-gray-400">Carregando notas...</div>
         )}
-        {nfseList.length === 0 && !nfseLoading && (
+        {filteredNfseList.length === 0 && !nfseLoading && (
           <div className="text-sm text-slate-500 dark:text-gray-400">
             Nenhuma NFSe emitida ainda.
           </div>
         )}
-        {nfseList.map((item) => (
+        {filteredNfseList.map((item) => {
+          const statusKey = getNfseStatusKey(item.status);
+          const rowBusy = isNfseRowBusy(item.id);
+          const metadata = toNfseMetadata(item.metadata_json);
+          const reviewRequested = Boolean(metadata.reviewRequested);
+          const isArchived = Boolean(item.archived_at);
+          return (
           <div
             key={item.id}
             className="mt-3 rounded-xl border border-slate-200/70 dark:border-slate-700 p-3"
@@ -1018,9 +1195,21 @@ export default function GuidesMei() {
               <div className="text-sm font-semibold text-slate-700 dark:text-gray-200">
                 {item.id_integracao || item.plugnotas_id || item.id}
               </div>
-              <span className="planner-chip dark:bg-blue-900/30 dark:text-blue-200">
-                {formatNfseStatus(item.status)}
-              </span>
+              <div className="flex flex-wrap gap-2">
+                <span className="planner-chip dark:bg-blue-900/30 dark:text-blue-200">
+                  {formatNfseStatus(item.status)}
+                </span>
+                {isArchived && (
+                  <span className="planner-chip dark:bg-slate-800 dark:text-slate-200">
+                    Arquivada
+                  </span>
+                )}
+                {reviewRequested && (
+                  <span className="planner-chip dark:bg-amber-900/40 dark:text-amber-200">
+                    Revisão
+                  </span>
+                )}
+              </div>
             </div>
             <div className="mt-1 text-xs text-slate-500 dark:text-gray-400">
               Emitida em {formatDateTime(item.created_at)}
@@ -1030,27 +1219,57 @@ export default function GuidesMei() {
               <button
                 className="planner-button-compact"
                 onClick={() => handleSyncNfse(item.id)}
-                disabled={Boolean(nfseActionKey)}
+                disabled={rowBusy}
               >
-                {nfseActionKey === `${item.id}:sync` ? 'Atualizando...' : 'Atualizar status'}
+                {isNfseActionLoading(`${item.id}:sync`) ? 'Atualizando...' : 'Atualizar status'}
               </button>
               <button
                 className="planner-button-compact"
                 onClick={() => handleDownloadNfsePdf(item)}
-                disabled={Boolean(nfseActionKey)}
+                disabled={rowBusy || statusKey === 'processando'}
               >
-                {nfseActionKey === `${item.id}:pdf` ? 'Baixando PDF...' : 'Baixar PDF'}
+                {isNfseActionLoading(`${item.id}:pdf`) ? 'Baixando PDF...' : 'Baixar PDF'}
               </button>
               <button
                 className="planner-button-compact"
                 onClick={() => handleDownloadNfseXml(item)}
-                disabled={Boolean(nfseActionKey)}
+                disabled={rowBusy || statusKey === 'processando'}
               >
-                {nfseActionKey === `${item.id}:xml` ? 'Baixando XML...' : 'Baixar XML'}
+                {isNfseActionLoading(`${item.id}:xml`) ? 'Baixando XML...' : 'Baixar XML'}
+              </button>
+              <button
+                className="planner-button-compact"
+                onClick={() => handleToggleReviewNfse(item)}
+                disabled={rowBusy || isArchived}
+              >
+                {isNfseActionLoading(`${item.id}:update`)
+                  ? 'Salvando...'
+                  : reviewRequested
+                    ? 'Remover revisão'
+                    : 'Marcar revisão'}
+              </button>
+              <button
+                className="planner-button-compact"
+                onClick={() => handleCancelNfse(item)}
+                disabled={rowBusy || statusKey === 'cancelado' || statusKey === 'cancelamento_pendente'}
+              >
+                {isNfseActionLoading(`${item.id}:cancel`) ? 'Cancelando...' : 'Cancelar NFSe'}
+              </button>
+              <button
+                className="planner-button-compact"
+                onClick={() => handleArchiveNfse(item)}
+                disabled={rowBusy}
+              >
+                {isNfseActionLoading(`${item.id}:archive`)
+                  ? 'Salvando...'
+                  : isArchived
+                    ? 'Desarquivar'
+                    : 'Arquivar'}
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

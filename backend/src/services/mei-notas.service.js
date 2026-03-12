@@ -1,6 +1,7 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest, notFound } from '../utils/errors.js';
 import {
+  cancelarNfse,
   consultarNfse,
   consultarNfsePorIdOuProtocolo,
   consultarNfsePorIntegracao,
@@ -12,6 +13,9 @@ import {
 } from './plugnotas/nfse.service.js';
 
 const TABLE = 'mei_nfse';
+const DOCUMENT_TYPE_NFSE = 'NFSE';
+const PROVIDER_PLUGNOTAS = 'plugnotas';
+const EDITABLE_STATUSES = new Set(['processando', 'rejeitado', 'interrompido']);
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 const isValidCnpj = (value) => normalizeDoc(value).length === 14;
@@ -196,6 +200,96 @@ const normalizePayloadShape = (payload) => {
   return next;
 };
 
+const ensureRecordId = (id) => {
+  if (!id) throw badRequest('ID da NFSe é obrigatório');
+};
+
+const toObject = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value;
+};
+
+const sanitizeMetadata = (value) => {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw badRequest('metadata deve ser um objeto');
+  }
+  return prune(value) || {};
+};
+
+const sanitizeReason = (value, { required = false } = {}) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    if (required) throw badRequest('Informe o motivo da operação');
+    return null;
+  }
+  if (normalized.length > 500) {
+    throw badRequest('Motivo deve ter no máximo 500 caracteres');
+  }
+  return normalized;
+};
+
+const appendAuditEvent = (record, event) => {
+  const current = toObject(record?.metadata_json);
+  const history = Array.isArray(current.audit) ? current.audit : [];
+  return prune({
+    ...current,
+    audit: [...history, event].slice(-50)
+  }) || {};
+};
+
+const mergeResponsePayload = (record, extra) => {
+  const current = record?.response_json;
+  if (!current || typeof current !== 'object' || Array.isArray(current)) {
+    return prune(extra) || null;
+  }
+  return prune({
+    ...current,
+    ...extra
+  }) || null;
+};
+
+const parseUpdateInput = (input) => {
+  const metadata = sanitizeMetadata(input?.metadata);
+  const internalDescriptionRaw = input?.descricaoInterna;
+  const hasDescription = internalDescriptionRaw !== undefined;
+  const descricaoInterna = hasDescription ? String(internalDescriptionRaw || '').trim() : null;
+  if (hasDescription && descricaoInterna.length > 500) {
+    throw badRequest('Descrição interna deve ter no máximo 500 caracteres');
+  }
+
+  const rawTags = input?.tags;
+  let tags;
+  if (rawTags !== undefined) {
+    if (!Array.isArray(rawTags)) {
+      throw badRequest('tags deve ser uma lista');
+    }
+    tags = rawTags
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 20);
+  }
+
+  if (!Object.keys(metadata).length && !hasDescription && rawTags === undefined) {
+    throw badRequest('Informe ao menos um campo editável para atualizar a NFSe');
+  }
+
+  return {
+    metadata,
+    ...(hasDescription ? { descricaoInterna } : {}),
+    ...(rawTags !== undefined ? { tags } : {})
+  };
+};
+
+const parseArchivedInput = (value) => {
+  if (value === undefined) return true;
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value || '').toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  throw badRequest('Campo archived deve ser booleano');
+};
+
 const getDb = () => createSupabaseClient({ useServiceRole: true });
 
 const insertRecord = async (userId, data) => {
@@ -294,27 +388,35 @@ export const emitirNota = async (userId, input) => {
   const idIntegracao = extractIntegracaoId(response) || payload.idIntegracao;
   const status = extractPlugNotasStatus(response);
   const protocol = extractProtocol(response);
+  const metadata = sanitizeMetadata(input?.metadata);
 
   return await insertRecord(userId, {
     plugnotas_id: plugnotasId,
     protocol,
     id_integracao: idIntegracao,
     status,
+    document_type: DOCUMENT_TYPE_NFSE,
+    provider: PROVIDER_PLUGNOTAS,
     cnpj_prestador: prestadorDoc || normalizeDoc(payload?.prestador?.cpfCnpj || ''),
     cnpj_tomador: tomadorDoc || normalizeDoc(payload?.tomador?.cpfCnpj || ''),
     payload_json: payload,
-    response_json: response
+    response_json: response,
+    metadata_json: Object.keys(metadata).length ? metadata : null
   });
 };
 
-export const listarNotas = async (userId) => {
+export const listarNotas = async (userId, { includeArchived = false } = {}) => {
   const dbClient = getDb();
-  const { data, error } = await dbClient
+  let query = dbClient
     .from(TABLE)
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(50);
+  if (!includeArchived) {
+    query = query.is('archived_at', null);
+  }
+  const { data, error } = await query;
   if (error) throw badRequest(error.message);
   return data || [];
 };
@@ -337,6 +439,124 @@ export const obterNota = async (userId, id, { sync = false } = {}) => {
     protocol,
     status,
     response_json: response
+  });
+};
+
+export const atualizarNota = async (userId, id, input) => {
+  ensureRecordId(id);
+  const updateInput = parseUpdateInput(input);
+  const record = await findRecord(userId, id);
+  if (record?.archived_at) {
+    throw badRequest('NFSe arquivada não permite edição');
+  }
+
+  const status = normalizeStatus(record?.status);
+  if (!EDITABLE_STATUSES.has(status)) {
+    throw badRequest('NFSe no status atual não permite edição');
+  }
+  const metadata = prune({
+    ...toObject(record?.metadata_json),
+    ...updateInput.metadata,
+    ...(updateInput.descricaoInterna !== undefined ? { descricaoInterna: updateInput.descricaoInterna } : {}),
+    ...(updateInput.tags !== undefined ? { tags: updateInput.tags } : {}),
+    updatedAt: new Date().toISOString()
+  }) || {};
+
+  const metadataWithAudit = appendAuditEvent({ metadata_json: metadata }, {
+    type: 'update',
+    at: new Date().toISOString()
+  });
+
+  return await updateRecord(userId, id, {
+    metadata_json: metadataWithAudit
+  });
+};
+
+export const cancelarNota = async (userId, id, input) => {
+  ensureRecordId(id);
+  const record = await findRecord(userId, id);
+  const statusAtual = normalizeStatus(record?.status);
+  if (statusAtual === 'cancelado') {
+    return record;
+  }
+
+  const reason = sanitizeReason(input?.reason);
+  let providerResponse = null;
+  let providerError = null;
+  let nextStatus = 'cancelado';
+
+  if (record?.plugnotas_id) {
+    try {
+      providerResponse = await cancelarNfse(record.plugnotas_id, { reason });
+      nextStatus = extractPlugNotasStatus(providerResponse) || 'cancelado';
+    } catch (error) {
+      providerError = error;
+      nextStatus = 'cancelamento_pendente';
+    }
+  }
+
+  const metadata = prune({
+    ...toObject(record?.metadata_json),
+    cancelamento: prune({
+      requestedAt: new Date().toISOString(),
+      reason,
+      mode: record?.plugnotas_id ? 'provider' : 'local',
+      ...(providerError ? { providerError: String(providerError?.message || providerError) } : {})
+    })
+  }) || {};
+  const metadataWithAudit = appendAuditEvent({ metadata_json: metadata }, {
+    type: 'cancel',
+    at: new Date().toISOString(),
+    ...(reason ? { reason } : {})
+  });
+
+  const updates = {
+    status: nextStatus,
+    metadata_json: metadataWithAudit
+  };
+
+  if (providerResponse) {
+    updates.response_json = mergeResponsePayload(record, { cancelamento: providerResponse });
+  } else if (providerError) {
+    updates.response_json = mergeResponsePayload(record, {
+      cancelamento: {
+        status: 'erro',
+        message: String(providerError?.message || providerError)
+      }
+    });
+  }
+
+  return await updateRecord(userId, id, updates);
+};
+
+export const arquivarNota = async (userId, id, input = {}) => {
+  ensureRecordId(id);
+  const record = await findRecord(userId, id);
+  const archived = parseArchivedInput(input?.archived);
+  const reason = sanitizeReason(input?.reason);
+
+  if (Boolean(record?.archived_at) === archived) {
+    return record;
+  }
+
+  const archivedAt = archived ? new Date().toISOString() : null;
+  const metadata = prune({
+    ...toObject(record?.metadata_json),
+    arquivamento: prune({
+      updatedAt: new Date().toISOString(),
+      archived,
+      reason
+    })
+  }) || {};
+  const metadataWithAudit = appendAuditEvent({ metadata_json: metadata }, {
+    type: archived ? 'archive' : 'unarchive',
+    at: new Date().toISOString(),
+    ...(reason ? { reason } : {})
+  });
+
+  return await updateRecord(userId, id, {
+    archived_at: archivedAt,
+    metadata_json: metadataWithAudit
   });
 };
 

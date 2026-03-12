@@ -123,6 +123,21 @@ export const consultarNfsePorIdOuProtocolo = async (idOrProtocol) => {
   return await requestJson('GET', `/nfse/consultar/${encodeURIComponent(idOrProtocol)}`);
 };
 
+const resolveCancelPath = (id) => {
+  const template = String(env.PLUGNOTAS_NFSE_CANCEL_PATH || '/nfse/:id/cancelar').trim();
+  const safeId = encodeURIComponent(id);
+  if (!template.includes(':id')) {
+    return `${template.replace(/\/$/, '')}/${safeId}`;
+  }
+  return template.replace(':id', safeId);
+};
+
+export const cancelarNfse = async (id, { reason } = {}) => {
+  if (!id) throw badRequest('ID da NFSe é obrigatório');
+  const payload = reason ? { reason } : {};
+  return await requestJson('POST', resolveCancelPath(id), payload);
+};
+
 export const downloadNfsePdf = async (id) => {
   if (!id) throw badRequest('ID da NFSe é obrigatório');
   return await requestDownload(

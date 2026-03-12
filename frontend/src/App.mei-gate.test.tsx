@@ -6,12 +6,8 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { AppRoutes } from './App';
 
-declare global {
-  // React 18 testing flag to avoid act environment warnings.
-  var IS_REACT_ACT_ENVIRONMENT: boolean;
-}
-
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const globalWithActFlag = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+globalWithActFlag.IS_REACT_ACT_ENVIRONMENT = true;
 
 const { useAuthStoreMock } = vi.hoisted(() => {
   const state = {

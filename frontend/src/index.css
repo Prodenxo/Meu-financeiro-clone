@@ -64,6 +64,118 @@
   .planner-tab-active {
     @apply bg-blue-600 text-white shadow-soft dark:text-white;
   }
+
+  .admin-page-shell {
+    @apply max-w-6xl mx-auto space-y-4 md:space-y-6;
+  }
+
+  .admin-hero {
+    @apply planner-card px-4 py-4 md:px-6 md:py-6;
+  }
+
+  .admin-hero-title {
+    @apply text-xl md:text-3xl font-bold text-slate-900 dark:text-white;
+  }
+
+  .admin-hero-subtitle {
+    @apply mt-2 text-sm md:text-base text-slate-500 dark:text-slate-400;
+  }
+
+  .admin-stat-grid {
+    @apply mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4;
+  }
+
+  .admin-stat-card {
+    @apply rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/60 p-3;
+  }
+
+  .admin-stat-label {
+    @apply text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400;
+  }
+
+  .admin-stat-value {
+    @apply mt-1 text-xl font-semibold text-slate-900 dark:text-white;
+  }
+
+  .admin-section-card {
+    @apply planner-card p-4 md:p-6 space-y-4;
+  }
+
+  .admin-section-header {
+    @apply flex flex-col gap-2 md:flex-row md:items-center md:justify-between;
+  }
+
+  .admin-section-title {
+    @apply text-lg md:text-xl font-semibold text-slate-900 dark:text-white;
+  }
+
+  .admin-section-subtitle {
+    @apply text-sm text-slate-500 dark:text-slate-400;
+  }
+
+  .admin-split-grid {
+    @apply grid gap-4 xl:grid-cols-2;
+  }
+
+  .admin-toolbar {
+    @apply rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-slate-50/70 dark:bg-slate-900/40 p-3 md:p-4;
+  }
+
+  .admin-table-shell {
+    @apply overflow-hidden rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/80 dark:bg-slate-950/40;
+  }
+
+  .admin-table-wrap {
+    @apply overflow-x-auto;
+  }
+
+  .admin-table {
+    @apply min-w-full text-sm text-left text-slate-600 dark:text-slate-300;
+  }
+
+  .admin-table-head {
+    @apply text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 bg-slate-100/70 dark:bg-slate-900/70;
+  }
+
+  .admin-table-row {
+    @apply border-t border-slate-200/70 dark:border-slate-800/70;
+  }
+
+  .admin-table-cell {
+    @apply py-2.5 px-3;
+  }
+
+  .admin-empty-state {
+    @apply rounded-xl border border-dashed border-slate-300/90 dark:border-slate-700/90 bg-slate-50/80 dark:bg-slate-900/40 px-4 py-6 text-sm text-slate-500 dark:text-slate-400 text-center;
+  }
+
+  .admin-badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+
+  .admin-badge-neutral {
+    @apply admin-badge bg-slate-100 text-slate-700 dark:bg-slate-800/70 dark:text-slate-200;
+  }
+
+  .admin-badge-primary {
+    @apply admin-badge bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300;
+  }
+
+  .admin-badge-success {
+    @apply admin-badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300;
+  }
+
+  .admin-badge-warning {
+    @apply admin-badge bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300;
+  }
+
+  .admin-badge-danger {
+    @apply admin-badge bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300;
+  }
+
+  .admin-actions {
+    @apply flex flex-wrap items-center gap-2;
+  }
 }
 
 /* Estilos para react-big-calendar no modo escuro */

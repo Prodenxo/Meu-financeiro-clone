@@ -317,6 +317,13 @@ class ApiClient {
     });
   }
 
+  patch<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: 'PATCH',
+      body: JSON.stringify(body || {})
+    });
+  }
+
   postForm<T>(path: string, formData: FormData): Promise<T> {
     return this.requestForm<T>(path, {
       method: 'POST',

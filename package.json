@@ -21,7 +21,9 @@
     "sync:skills:codex": "node .aios-core/infrastructure/scripts/codex-skills-sync/index.js",
     "sync:skills:codex:global": "node .aios-core/infrastructure/scripts/codex-skills-sync/index.js --global",
     "validate:structure": "node .aios-core/infrastructure/scripts/validate-paths.js",
-    "validate:agents": "node .aios-core/infrastructure/scripts/validate-agents.js"
+    "validate:agents": "node .aios-core/infrastructure/scripts/validate-agents.js",
+    "db:migrate:prod:check": "node scripts/supabase-migrate-prod.mjs --check",
+    "db:migrate:prod": "node scripts/supabase-migrate-prod.mjs --apply"
   },
   "workspaces": [
     "frontend",

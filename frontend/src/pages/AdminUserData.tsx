@@ -583,14 +583,18 @@ export default function AdminUserData() {
     });
   }, [canView, dasCompetencia, dasStatusFilter, debouncedDasSearch]);
 
+  const dasTotalClientes = dasPendingSummary?.totalClientes || 0;
+  const dasPendentes = dasPendingSummary?.pendentes || 0;
+  const dasItemsCount = dasPendingSummary?.items?.length || 0;
+
   if (!canView) {
     return (
       <>
-        <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
-          <h1 className="text-xl md:text-3xl font-bold dark:text-white">Dados dos usuários</h1>
-          <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
-            Você não tem permissão para acessar esta página.
-          </p>
+        <div className="admin-page-shell">
+          <section className="admin-hero">
+            <h1 className="admin-hero-title">Dados dos usuários</h1>
+            <p className="admin-hero-subtitle">Você não tem permissão para acessar esta página.</p>
+          </section>
         </div>
       </>
     );
@@ -598,55 +602,88 @@ export default function AdminUserData() {
 
   return (
     <>
-      <div className="max-w-5xl mx-auto space-y-4 md:space-y-6">
-        <h1 className="text-xl md:text-3xl font-bold dark:text-white">Dados dos usuários</h1>
-        <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
-          Visualize transações, orçamentos, categorias e saldos dos usuários.
-        </p>
+      <div className="admin-page-shell">
+        <section className="admin-hero">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="admin-hero-title">Dados dos usuários</h1>
+              <p className="admin-hero-subtitle">
+                Visualize transações, orçamentos, categorias e saldos dos usuários.
+              </p>
+            </div>
+            <span className="admin-badge-primary">
+              {selectedUserId ? 'Usuário selecionado' : 'Selecione um usuário'}
+            </span>
+          </div>
+          <div className="admin-stat-grid">
+            <div className="admin-stat-card">
+              <p className="admin-stat-label">Clientes na competência</p>
+              <p className="admin-stat-value">{dasTotalClientes}</p>
+            </div>
+            <div className="admin-stat-card">
+              <p className="admin-stat-label">Pendências DAS</p>
+              <p className="admin-stat-value">{dasPendentes}</p>
+            </div>
+            <div className="admin-stat-card">
+              <p className="admin-stat-label">Registros retornados</p>
+              <p className="admin-stat-value">{dasItemsCount}</p>
+            </div>
+            <div className="admin-stat-card">
+              <p className="admin-stat-label">Período</p>
+              <p className="admin-stat-value text-base md:text-lg">
+                {dateFilter ? `${formatDate(dateStart)} - ${formatDate(dateEnd)}` : 'Sem filtro'}
+              </p>
+            </div>
+          </div>
+        </section>
 
         {error && (
-          <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded">
+          <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
             {error}
           </div>
         )}
 
         {dataError && (
-          <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded">
+          <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
             {dataError}
           </div>
         )}
 
         {dasError && (
-          <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded">
+          <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
             {dasError}
           </div>
         )}
 
-        <div className="planner-card p-4 md:p-6 space-y-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="admin-section-card">
+          <div className="admin-section-header">
             <div>
-              <h2 className="text-lg md:text-xl font-semibold dark:text-white">Pendências DAS</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <h2 className="admin-section-title">Pendências DAS</h2>
+              <p className="admin-section-subtitle">
                 Clientes pendentes de pagamento do DAS na competência selecionada.
               </p>
             </div>
             <button
               type="button"
-              onClick={() => void loadDasPending({
-                competencia: dasCompetencia,
-                status: dasStatusFilter === 'todos' ? undefined : dasStatusFilter,
-                q: dasSearch
-              })}
+              onClick={() =>
+                void loadDasPending({
+                  competencia: dasCompetencia,
+                  status: dasStatusFilter === 'todos' ? undefined : dasStatusFilter,
+                  q: dasSearch
+                })
+              }
               disabled={loadingDasPending}
-              className="px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
+              className="planner-button disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loadingDasPending ? 'Atualizando...' : 'Atualizar pendências'}
             </button>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="admin-toolbar grid gap-3 md:grid-cols-4">
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Competência (YYYY-MM)</label>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                Competência (YYYY-MM)
+              </label>
               <input
                 type="month"
                 value={dasCompetencia}
@@ -655,10 +692,12 @@ export default function AdminUserData() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Status</label>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Status</label>
               <select
                 value={dasStatusFilter}
-                onChange={(event) => setDasStatusFilter(event.target.value as 'pendente' | 'pago' | 'erro' | 'todos')}
+                onChange={(event) =>
+                  setDasStatusFilter(event.target.value as 'pendente' | 'pago' | 'erro' | 'todos')
+                }
                 className="planner-input-compact"
               >
                 <option value="pendente">Pendente</option>
@@ -668,7 +707,7 @@ export default function AdminUserData() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Buscar cliente</label>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Buscar cliente</label>
               <input
                 type="text"
                 value={dasSearch}
@@ -678,65 +717,65 @@ export default function AdminUserData() {
               />
             </div>
             <div className="md:col-span-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Total de clientes</p>
-                <p className="text-xl font-bold dark:text-white">{dasPendingSummary?.totalClientes || 0}</p>
+              <div className="admin-stat-card">
+                <p className="admin-stat-label">Total de clientes</p>
+                <p className="admin-stat-value">{dasTotalClientes}</p>
               </div>
-              <div className="rounded-lg border border-amber-300 dark:border-amber-700 p-3">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Pendentes DAS</p>
-                <p className="text-xl font-bold text-amber-600 dark:text-amber-400">
-                  {dasPendingSummary?.pendentes || 0}
-                </p>
+              <div className="admin-stat-card border-amber-300 dark:border-amber-800/70">
+                <p className="admin-stat-label">Pendentes DAS</p>
+                <p className="admin-stat-value text-amber-600 dark:text-amber-400">{dasPendentes}</p>
               </div>
             </div>
           </div>
 
           {loadingDasPending ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">Carregando pendências...</p>
+            <div className="admin-empty-state">Carregando pendências...</div>
           ) : (dasPendingSummary?.items?.length || 0) === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma pendência de DAS para esta competência.</p>
+            <div className="admin-empty-state">Nenhuma pendência de DAS para esta competência.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm text-left text-gray-600 dark:text-gray-300">
-                <thead className="text-xs uppercase text-gray-500 dark:text-gray-400">
-                  <tr>
-                    <th className="py-2 px-3">Cliente</th>
-                    <th className="py-2 px-3">Empresa</th>
-                    <th className="py-2 px-3">CNPJ</th>
-                    <th className="py-2 px-3">Competência</th>
-                    <th className="py-2 px-3">Status</th>
-                    <th className="py-2 px-3">PDF</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(dasPendingSummary?.items || []).map((item) => (
-                    <tr key={`${item.userId}-${item.competencia}`} className="border-t border-gray-200 dark:border-gray-700">
-                      <td className="py-2 px-3">
-                        <div className="font-semibold">{item.displayName}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{item.email || '-'}</div>
-                      </td>
-                      <td className="py-2 px-3">{item.empresaName || item.empresaId || '-'}</td>
-                      <td className="py-2 px-3">{item.cnpj}</td>
-                      <td className="py-2 px-3">{item.competencia}</td>
-                      <td className="py-2 px-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getDasStatusClasses(item.status)}`}>
-                          {getDasStatusLabel(item.status)}
-                        </span>
-                      </td>
-                      <td className="py-2 px-3">{item.hasPdf ? 'Disponível' : 'Não gerado'}</td>
+            <div className="admin-table-shell">
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead className="admin-table-head">
+                    <tr>
+                      <th className="admin-table-cell">Cliente</th>
+                      <th className="admin-table-cell">Empresa</th>
+                      <th className="admin-table-cell">CNPJ</th>
+                      <th className="admin-table-cell">Competência</th>
+                      <th className="admin-table-cell">Status</th>
+                      <th className="admin-table-cell">PDF</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(dasPendingSummary?.items || []).map((item) => (
+                      <tr key={`${item.userId}-${item.competencia}`} className="admin-table-row">
+                        <td className="admin-table-cell">
+                          <div className="font-semibold">{item.displayName}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">{item.email || '-'}</div>
+                        </td>
+                        <td className="admin-table-cell">{item.empresaName || item.empresaId || '-'}</td>
+                        <td className="admin-table-cell">{item.cnpj}</td>
+                        <td className="admin-table-cell">{item.competencia}</td>
+                        <td className="admin-table-cell">
+                          <span className={`admin-badge ${getDasStatusClasses(item.status)}`}>
+                            {getDasStatusLabel(item.status)}
+                          </span>
+                        </td>
+                        <td className="admin-table-cell">{item.hasPdf ? 'Disponível' : 'Não gerado'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
 
-        <div className="planner-card p-4 md:p-6 space-y-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="admin-section-card">
+          <div className="admin-section-header">
             <div>
-              <h2 className="text-lg md:text-xl font-semibold dark:text-white">Selecionar usuário</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <h2 className="admin-section-title">Selecionar usuário</h2>
+              <p className="admin-section-subtitle">
                 Escolha um usuário para consultar os dados financeiros.
               </p>
             </div>
@@ -744,13 +783,13 @@ export default function AdminUserData() {
               type="button"
               onClick={() => selectedUserId && loadUserData(selectedUserId)}
               disabled={!selectedUserId || loadingData}
-              className="px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
+              className="planner-button disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loadingData ? 'Atualizando...' : 'Atualizar dados'}
             </button>
           </div>
-          <div className="relative">
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Buscar usuário</label>
+          <div className="admin-toolbar relative">
+            <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Buscar usuário</label>
             <input
               type="text"
               value={userQuery}
@@ -873,9 +912,9 @@ export default function AdminUserData() {
               </div>
             )}
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="admin-toolbar grid gap-3 md:grid-cols-3">
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Data inicial</label>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Data inicial</label>
               <input
                 type="date"
                 value={dateStart}
@@ -884,7 +923,7 @@ export default function AdminUserData() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Data final</label>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Data final</label>
               <input
                 type="date"
                 value={dateEnd}
@@ -906,7 +945,7 @@ export default function AdminUserData() {
             </div>
           </div>
           {selectedUser && (
-            <div className="text-sm text-gray-600 dark:text-gray-300">
+            <div className="admin-toolbar text-sm text-slate-600 dark:text-slate-300">
               <p>Role: {selectedUser.role}</p>
               <p>Empresa: {selectedUser.empresaName || selectedUser.empresaId || '-'}</p>
               <p>Email: {selectedUser.email || '-'}</p>
@@ -915,18 +954,16 @@ export default function AdminUserData() {
         </div>
 
         {!selectedUserId ? (
-          <div className="planner-card p-4 md:p-6">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Selecione um usuário para visualizar os dados e o Meu MEI.
-            </p>
+          <div className="admin-empty-state">
+            Selecione um usuário para visualizar os dados e o Meu MEI.
           </div>
         ) : (
           <>
-            <div className="planner-card p-4 md:p-6 space-y-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="admin-section-card">
+              <div className="admin-section-header">
                 <div>
-                  <h2 className="text-lg md:text-xl font-semibold dark:text-white">Meu MEI (cliente)</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <h2 className="admin-section-title">Meu MEI (cliente)</h2>
+                  <p className="admin-section-subtitle">
                     Gere, baixe e envie a guia DAS do cliente selecionado.
                   </p>
                 </div>
@@ -934,27 +971,27 @@ export default function AdminUserData() {
                   type="button"
                   onClick={() => selectedUserId && loadMeiPeriods(selectedUserId)}
                   disabled={!canLoadMeiPeriods || meiPeriodsLoading}
-                  className="px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700"
+                  className="planner-button disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {meiPeriodsLoading ? 'Atualizando...' : 'Atualizar histórico'}
                 </button>
               </div>
 
               {meiActionError && (
-                <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded">
+                <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
                   {meiActionError}
                 </div>
               )}
 
               {meiActionSuccess && (
-                <div className="bg-green-100 dark:bg-green-900 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 px-4 py-3 rounded">
+                <div className="rounded-xl border border-emerald-300/90 bg-emerald-50/90 px-4 py-3 text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300">
                   {meiActionSuccess}
                 </div>
               )}
 
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="admin-toolbar grid gap-3 md:grid-cols-3">
                 <div className="md:col-span-1">
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">CNPJ do MEI</label>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">CNPJ do MEI</label>
                   <input
                     type="text"
                     value={meiCnpj}
@@ -978,41 +1015,46 @@ export default function AdminUserData() {
                           Certificado do servidor disponível
                         </span>
                       )}
-                      {!meiCertificateStatus?.hasUserCertificate && !meiCertificateStatus?.hasEnvCertificate && (
-                        <span className="planner-chip dark:bg-amber-900/30 dark:text-amber-200">
-                          Sem certificado disponível
-                        </span>
-                      )}
+                      {!meiCertificateStatus?.hasUserCertificate &&
+                        !meiCertificateStatus?.hasEnvCertificate && (
+                          <span className="planner-chip dark:bg-amber-900/30 dark:text-amber-200">
+                            Sem certificado disponível
+                          </span>
+                        )}
                     </div>
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Mês</label>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Mês</label>
                   <select
                     className="planner-input-compact"
                     value={meiSelectedMonth}
                     onChange={(event) => setMeiSelectedMonth(event.target.value)}
                   >
                     {availableMeiMonths.map((month) => (
-                      <option key={month} value={month}>{month}</option>
+                      <option key={month} value={month}>
+                        {month}
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Ano</label>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Ano</label>
                   <select
                     className="planner-input-compact"
                     value={meiSelectedYear}
                     onChange={(event) => setMeiSelectedYear(Number(event.target.value))}
                   >
                     {availableMeiYears.map((year) => (
-                      <option key={year} value={year}>{year}</option>
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="admin-actions">
                 <button
                   type="button"
                   onClick={handleMeiDownload}
@@ -1037,15 +1079,11 @@ export default function AdminUserData() {
                 </p>
               )}
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold dark:text-white">Histórico do DAS</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Últimos períodos consultados e situação do pagamento.
-                    </p>
-                  </div>
-                </div>
+              <div className="admin-toolbar">
+                <h3 className="text-base font-semibold dark:text-white">Histórico do DAS</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Últimos períodos consultados e situação do pagamento.
+                </p>
 
                 {!canLoadMeiPeriods ? (
                   <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
@@ -1068,7 +1106,7 @@ export default function AdminUserData() {
                     {meiPeriods.map((period) => (
                       <div
                         key={`${period.competencia}-${period.guideId || period.status}`}
-                        className="flex items-center justify-between rounded-lg border border-slate-200/70 dark:border-slate-700 px-3 py-2"
+                        className="flex items-center justify-between rounded-lg border border-slate-200/70 px-3 py-2 dark:border-slate-700"
                       >
                         <div className="text-sm text-slate-700 dark:text-gray-200">
                           {formatDasCompetenciaLabel(period.competencia)}
@@ -1084,300 +1122,296 @@ export default function AdminUserData() {
             </div>
 
             <div className="space-y-3">
-            <div className="planner-card">
-              <button
-                type="button"
-                onClick={() => setOpenAccordion('balance')}
-                aria-expanded={openAccordion === 'balance'}
-                aria-controls="accordion-panel-balance"
-                className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
-              >
-                <div className="flex-1">
-                  <h2 className="text-lg md:text-xl font-semibold dark:text-white">Saldo</h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Período: {balancePeriodLabel}
-                  </p>
-                </div>
-                <ChevronDown
-                  className={`h-5 w-5 text-gray-400 transition-transform ${
-                    openAccordion === 'balance' ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-              <div
-                className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-                  openAccordion === 'balance' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-                }`}
-              >
-                <div className="overflow-hidden">
-                  <div
-                    id="accordion-panel-balance"
-                    aria-hidden={openAccordion !== 'balance'}
-                    className={`border-t border-gray-100 dark:border-gray-700 px-4 md:px-6 pb-4 md:pb-6 pt-4 transition-opacity duration-300 ease-in-out ${
-                      openAccordion === 'balance' ? 'opacity-100' : 'opacity-0'
-                    }`}
-                  >
-                    {loadingData ? (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Carregando saldo...</p>
-                    ) : balance || dateFilter ? (
-                      <div className="grid gap-4 md:grid-cols-3">
-                        <div>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            {dateFilter ? 'Saldo no período' : 'Saldo atual'}
-                          </p>
-                          <p className="text-xl font-bold dark:text-white">
-                            {formatCurrency(dateFilter ? filteredTotals.balance : (balance?.balance || 0))}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">Total de entradas</p>
-                          <p className="text-xl font-bold text-emerald-500">
-                            {formatCurrency(dateFilter ? filteredTotals.totalEntradas : (balance?.totalEntradas || 0))}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">Total de saídas</p>
-                          <p className="text-xl font-bold text-rose-500">
-                            {formatCurrency(dateFilter ? filteredTotals.totalSaidas : (balance?.totalSaidas || 0))}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum saldo disponível.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="planner-card">
-              <button
-                type="button"
-                onClick={() => setOpenAccordion('transactions')}
-                aria-expanded={openAccordion === 'transactions'}
-                aria-controls="accordion-panel-transactions"
-                className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
-              >
-                <div className="flex-1">
-                  <h2 className="text-lg md:text-xl font-semibold dark:text-white">Transações</h2>
-                  {dateFilter && (
+              <div className="planner-card overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setOpenAccordion('balance')}
+                  aria-expanded={openAccordion === 'balance'}
+                  aria-controls="accordion-panel-balance"
+                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
+                >
+                  <div className="flex-1">
+                    <h2 className="text-lg md:text-xl font-semibold dark:text-white">Saldo</h2>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Filtro aplicado nas datas selecionadas.
+                      Período: {balancePeriodLabel}
                     </p>
-                  )}
-                </div>
-                <ChevronDown
-                  className={`h-5 w-5 text-gray-400 transition-transform ${
-                    openAccordion === 'transactions' ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-              <div
-                className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-                  openAccordion === 'transactions' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-                }`}
-              >
-                <div className="overflow-hidden">
-                  <div
-                    id="accordion-panel-transactions"
-                    aria-hidden={openAccordion !== 'transactions'}
-                    className={`border-t border-gray-100 dark:border-gray-700 px-4 md:px-6 pb-4 md:pb-6 pt-4 transition-opacity duration-300 ease-in-out ${
-                      openAccordion === 'transactions' ? 'opacity-100' : 'opacity-0'
-                    }`}
-                  >
-                    {loadingData ? (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Carregando transações...
-                      </p>
-                    ) : displayedTransactions.length === 0 ? (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Nenhuma transação encontrada.
-                      </p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm text-left text-gray-600 dark:text-gray-300">
-                          <thead className="text-xs uppercase text-gray-500 dark:text-gray-400">
-                            <tr>
-                              <th className="py-2 px-3">Data</th>
-                              <th className="py-2 px-3">Classificação</th>
-                              <th className="py-2 px-3">Tipo</th>
-                              <th className="py-2 px-3">Valor</th>
-                              <th className="py-2 px-3">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {displayedTransactions.map((transaction) => (
-                              <tr key={transaction.id} className="border-t border-gray-200 dark:border-gray-700">
-                                <td className="py-2 px-3">
-                                  {formatDate(transaction.data || transaction.criado_em)}
-                                </td>
-                                <td className="py-2 px-3">{transaction.classificacao}</td>
-                                <td className="py-2 px-3 capitalize">{transaction.tipo}</td>
-                                <td className="py-2 px-3">
-                                  {formatCurrency(Number(transaction.valor || 0))}
-                                </td>
-                                <td className="py-2 px-3">{transaction.status}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {filteredTransactions.length > displayedTransactions.length && (
-                          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                            Mostrando {displayedTransactions.length} de {filteredTransactions.length} transações.
-                          </p>
-                        )}
-                      </div>
-                    )}
                   </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="planner-card">
-              <button
-                type="button"
-                onClick={() => setOpenAccordion('budgets')}
-                aria-expanded={openAccordion === 'budgets'}
-                aria-controls="accordion-panel-budgets"
-                className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
-              >
-                <div className="flex-1">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                    <div>
-                      <h2 className="text-lg md:text-xl font-semibold dark:text-white">Orçamentos</h2>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Período: {budgetLabel}
-                      </p>
-                    </div>
-                    {isCrossMonthRange && (
-                      <span className="text-xs text-amber-500">
-                        Intervalo cobre mais de um mês; orçamentos usam o mês inicial.
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ChevronDown
-                  className={`h-5 w-5 text-gray-400 transition-transform ${
-                    openAccordion === 'budgets' ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-              <div
-                className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-                  openAccordion === 'budgets' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-                }`}
-              >
-                <div className="overflow-hidden">
-                  <div
-                    id="accordion-panel-budgets"
-                    aria-hidden={openAccordion !== 'budgets'}
-                    className={`border-t border-gray-100 dark:border-gray-700 px-4 md:px-6 pb-4 md:pb-6 pt-4 transition-opacity duration-300 ease-in-out ${
-                      openAccordion === 'budgets' ? 'opacity-100' : 'opacity-0'
+                  <ChevronDown
+                    className={`h-5 w-5 text-gray-400 transition-transform ${
+                      openAccordion === 'balance' ? 'rotate-180' : ''
                     }`}
-                  >
-                    {loadingData || loadingBudgets ? (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Carregando orçamentos...
-                      </p>
-                    ) : budgetSummary.length === 0 ? (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Nenhum orçamento encontrado para o período selecionado.
-                      </p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm text-left text-gray-600 dark:text-gray-300">
-                          <thead className="text-xs uppercase text-gray-500 dark:text-gray-400">
-                            <tr>
-                              <th className="py-2 px-3">Categoria</th>
-                              <th className="py-2 px-3">Orçado</th>
-                              <th className="py-2 px-3">Gasto</th>
-                              <th className="py-2 px-3">Recebido</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {budgetSummary.map((row) => (
-                              <tr key={row.categorias_id} className="border-t border-gray-200 dark:border-gray-700">
-                                <td className="py-2 px-3">
-                                  {categoriesMap.get(row.categorias_id) || `Categoria ${row.categorias_id}`}
-                                </td>
-                                <td className="py-2 px-3">
-                                  {row.valor_orcado !== null ? formatCurrency(row.valor_orcado) : '-'}
-                                </td>
-                                <td className="py-2 px-3">{formatCurrency(row.valor_gasto || 0)}</td>
-                                <td className="py-2 px-3">
-                                  {formatCurrency(row.valor_recebido || 0)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="planner-card">
-              <button
-                type="button"
-                onClick={() => setOpenAccordion('categories')}
-                aria-expanded={openAccordion === 'categories'}
-                aria-controls="accordion-panel-categories"
-                className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
-              >
-                <div className="flex-1">
-                  <h2 className="text-lg md:text-xl font-semibold dark:text-white">Categorias</h2>
-                </div>
-                <ChevronDown
-                  className={`h-5 w-5 text-gray-400 transition-transform ${
-                    openAccordion === 'categories' ? 'rotate-180' : ''
+                  />
+                </button>
+                <div
+                  className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+                    openAccordion === 'balance' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
                   }`}
-                />
-              </button>
-              <div
-                className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-                  openAccordion === 'categories' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-                }`}
-              >
-                <div className="overflow-hidden">
-                  <div
-                    id="accordion-panel-categories"
-                    aria-hidden={openAccordion !== 'categories'}
-                    className={`border-t border-gray-100 dark:border-gray-700 px-4 md:px-6 pb-4 md:pb-6 pt-4 transition-opacity duration-300 ease-in-out ${
-                      openAccordion === 'categories' ? 'opacity-100' : 'opacity-0'
-                    }`}
-                  >
-                    {loadingData ? (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Carregando categorias...
-                      </p>
-                    ) : categories.length === 0 ? (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Nenhuma categoria encontrada.
-                      </p>
-                    ) : (
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {categories.map((category) => (
-                          <div
-                            key={category.id}
-                            className="border border-gray-200 dark:border-gray-700 rounded-lg p-3"
-                          >
-                            <p className="font-semibold text-gray-800 dark:text-gray-100">
-                              {category.nome}
+                >
+                  <div className="overflow-hidden">
+                    <div
+                      id="accordion-panel-balance"
+                      aria-hidden={openAccordion !== 'balance'}
+                      className={`border-t border-gray-100 dark:border-gray-700 px-4 md:px-6 pb-4 md:pb-6 pt-4 transition-opacity duration-300 ease-in-out ${
+                        openAccordion === 'balance' ? 'opacity-100' : 'opacity-0'
+                      }`}
+                    >
+                      {loadingData ? (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Carregando saldo...</p>
+                      ) : balance || dateFilter ? (
+                        <div className="grid gap-4 md:grid-cols-3">
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {dateFilter ? 'Saldo no período' : 'Saldo atual'}
                             </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Tipo: {category.tipo}
+                            <p className="text-xl font-bold dark:text-white">
+                              {formatCurrency(dateFilter ? filteredTotals.balance : (balance?.balance || 0))}
                             </p>
                           </div>
-                        ))}
-                      </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Total de entradas</p>
+                            <p className="text-xl font-bold text-emerald-500">
+                              {formatCurrency(
+                                dateFilter ? filteredTotals.totalEntradas : (balance?.totalEntradas || 0)
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Total de saídas</p>
+                            <p className="text-xl font-bold text-rose-500">
+                              {formatCurrency(
+                                dateFilter ? filteredTotals.totalSaidas : (balance?.totalSaidas || 0)
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum saldo disponível.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="planner-card overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setOpenAccordion('transactions')}
+                  aria-expanded={openAccordion === 'transactions'}
+                  aria-controls="accordion-panel-transactions"
+                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
+                >
+                  <div className="flex-1">
+                    <h2 className="text-lg md:text-xl font-semibold dark:text-white">Transações</h2>
+                    {dateFilter && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Filtro aplicado nas datas selecionadas.
+                      </p>
                     )}
+                  </div>
+                  <ChevronDown
+                    className={`h-5 w-5 text-gray-400 transition-transform ${
+                      openAccordion === 'transactions' ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+                <div
+                  className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+                    openAccordion === 'transactions' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div
+                      id="accordion-panel-transactions"
+                      aria-hidden={openAccordion !== 'transactions'}
+                      className={`border-t border-gray-100 dark:border-gray-700 px-4 md:px-6 pb-4 md:pb-6 pt-4 transition-opacity duration-300 ease-in-out ${
+                        openAccordion === 'transactions' ? 'opacity-100' : 'opacity-0'
+                      }`}
+                    >
+                      {loadingData ? (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Carregando transações...</p>
+                      ) : displayedTransactions.length === 0 ? (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Nenhuma transação encontrada.
+                        </p>
+                      ) : (
+                        <div className="admin-table-shell">
+                          <div className="admin-table-wrap">
+                            <table className="admin-table">
+                              <thead className="admin-table-head">
+                                <tr>
+                                  <th className="admin-table-cell">Data</th>
+                                  <th className="admin-table-cell">Classificação</th>
+                                  <th className="admin-table-cell">Tipo</th>
+                                  <th className="admin-table-cell">Valor</th>
+                                  <th className="admin-table-cell">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {displayedTransactions.map((transaction) => (
+                                  <tr key={transaction.id} className="admin-table-row">
+                                    <td className="admin-table-cell">
+                                      {formatDate(transaction.data || transaction.criado_em)}
+                                    </td>
+                                    <td className="admin-table-cell">{transaction.classificacao}</td>
+                                    <td className="admin-table-cell capitalize">{transaction.tipo}</td>
+                                    <td className="admin-table-cell">
+                                      {formatCurrency(Number(transaction.valor || 0))}
+                                    </td>
+                                    <td className="admin-table-cell">{transaction.status}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                      {filteredTransactions.length > displayedTransactions.length && (
+                        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                          Mostrando {displayedTransactions.length} de {filteredTransactions.length} transações.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="planner-card overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setOpenAccordion('budgets')}
+                  aria-expanded={openAccordion === 'budgets'}
+                  aria-controls="accordion-panel-budgets"
+                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
+                >
+                  <div className="flex-1">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h2 className="text-lg md:text-xl font-semibold dark:text-white">Orçamentos</h2>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Período: {budgetLabel}</p>
+                      </div>
+                      {isCrossMonthRange && (
+                        <span className="text-xs text-amber-500">
+                          Intervalo cobre mais de um mês; orçamentos usam o mês inicial.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronDown
+                    className={`h-5 w-5 text-gray-400 transition-transform ${
+                      openAccordion === 'budgets' ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+                <div
+                  className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+                    openAccordion === 'budgets' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div
+                      id="accordion-panel-budgets"
+                      aria-hidden={openAccordion !== 'budgets'}
+                      className={`border-t border-gray-100 dark:border-gray-700 px-4 md:px-6 pb-4 md:pb-6 pt-4 transition-opacity duration-300 ease-in-out ${
+                        openAccordion === 'budgets' ? 'opacity-100' : 'opacity-0'
+                      }`}
+                    >
+                      {loadingData || loadingBudgets ? (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Carregando orçamentos...</p>
+                      ) : budgetSummary.length === 0 ? (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Nenhum orçamento encontrado para o período selecionado.
+                        </p>
+                      ) : (
+                        <div className="admin-table-shell">
+                          <div className="admin-table-wrap">
+                            <table className="admin-table">
+                              <thead className="admin-table-head">
+                                <tr>
+                                  <th className="admin-table-cell">Categoria</th>
+                                  <th className="admin-table-cell">Orçado</th>
+                                  <th className="admin-table-cell">Gasto</th>
+                                  <th className="admin-table-cell">Recebido</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {budgetSummary.map((row) => (
+                                  <tr key={row.categorias_id} className="admin-table-row">
+                                    <td className="admin-table-cell">
+                                      {categoriesMap.get(row.categorias_id) || `Categoria ${row.categorias_id}`}
+                                    </td>
+                                    <td className="admin-table-cell">
+                                      {row.valor_orcado !== null ? formatCurrency(row.valor_orcado) : '-'}
+                                    </td>
+                                    <td className="admin-table-cell">{formatCurrency(row.valor_gasto || 0)}</td>
+                                    <td className="admin-table-cell">
+                                      {formatCurrency(row.valor_recebido || 0)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="planner-card overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setOpenAccordion('categories')}
+                  aria-expanded={openAccordion === 'categories'}
+                  aria-controls="accordion-panel-categories"
+                  className="w-full flex items-start justify-between gap-4 p-4 md:p-6 text-left"
+                >
+                  <div className="flex-1">
+                    <h2 className="text-lg md:text-xl font-semibold dark:text-white">Categorias</h2>
+                  </div>
+                  <ChevronDown
+                    className={`h-5 w-5 text-gray-400 transition-transform ${
+                      openAccordion === 'categories' ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+                <div
+                  className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+                    openAccordion === 'categories' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div
+                      id="accordion-panel-categories"
+                      aria-hidden={openAccordion !== 'categories'}
+                      className={`border-t border-gray-100 dark:border-gray-700 px-4 md:px-6 pb-4 md:pb-6 pt-4 transition-opacity duration-300 ease-in-out ${
+                        openAccordion === 'categories' ? 'opacity-100' : 'opacity-0'
+                      }`}
+                    >
+                      {loadingData ? (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Carregando categorias...</p>
+                      ) : categories.length === 0 ? (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Nenhuma categoria encontrada.
+                        </p>
+                      ) : (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {categories.map((category) => (
+                            <div
+                              key={category.id}
+                              className="rounded-lg border border-slate-200/70 p-3 dark:border-slate-700"
+                            >
+                              <p className="font-semibold text-gray-800 dark:text-gray-100">{category.nome}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Tipo: {category.tipo}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
           </>
         )}
       </div>

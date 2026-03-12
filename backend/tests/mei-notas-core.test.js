@@ -67,3 +67,29 @@ test('mei-notas rejeita webhook sem identificadores', async () => {
     /Webhook sem identificadores da NFSe/
   );
 });
+
+test('mei-notas rejeita atualização sem campos editáveis', async () => {
+  const { atualizarNota } = await import('../src/services/mei-notas.service.js');
+
+  await assert.rejects(
+    () => atualizarNota('user-1', 'nfse-1', {}),
+    /Informe ao menos um campo editável/
+  );
+});
+
+test('mei-notas rejeita operações sem ID', async () => {
+  const { atualizarNota, cancelarNota, arquivarNota } = await import('../src/services/mei-notas.service.js');
+
+  await assert.rejects(
+    () => atualizarNota('user-1', '', { descricaoInterna: 'teste' }),
+    /ID da NFSe é obrigatório/
+  );
+  await assert.rejects(
+    () => cancelarNota('user-1', '', {}),
+    /ID da NFSe é obrigatório/
+  );
+  await assert.rejects(
+    () => arquivarNota('user-1', '', {}),
+    /ID da NFSe é obrigatório/
+  );
+});

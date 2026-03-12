@@ -38,8 +38,36 @@ export const emitir = async (req, res, next) => {
 
 export const listar = async (req, res, next) => {
   try {
-    const data = await meiNotasService.listarNotas(req.user.id);
+    const includeArchived = String(req.query?.includeArchived || '').toLowerCase() === 'true';
+    const data = await meiNotasService.listarNotas(req.user.id, { includeArchived });
     return sendSuccess(res, data, 'NFSe listadas');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const atualizar = async (req, res, next) => {
+  try {
+    const data = await meiNotasService.atualizarNota(req.user.id, req.params.id, req.body);
+    return sendSuccess(res, data, 'NFSe atualizada');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const cancelar = async (req, res, next) => {
+  try {
+    const data = await meiNotasService.cancelarNota(req.user.id, req.params.id, req.body);
+    return sendSuccess(res, data, 'Cancelamento da NFSe processado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const arquivar = async (req, res, next) => {
+  try {
+    const data = await meiNotasService.arquivarNota(req.user.id, req.params.id, req.body);
+    return sendSuccess(res, data, 'Arquivamento da NFSe atualizado');
   } catch (error) {
     return next(error);
   }
