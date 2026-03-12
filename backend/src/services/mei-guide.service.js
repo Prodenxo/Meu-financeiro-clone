@@ -13,6 +13,12 @@ import {
   deleteCertificate,
   getCertificateDocument
 } from './mei-certificate-store.js';
+import {
+  isCompetenciaPaid,
+  listPaidCompetencias,
+  markCompetenciaAsPaid,
+  periodoApuracaoToCompetencia
+} from './mei-period-status.service.js';
 
 const require = createRequire(import.meta.url);
 const { SignedXml } = require('xml-crypto');
@@ -241,6 +247,55 @@ const normalizePeriodoApuracao = (periodo, mes, ano) => {
   }
 
   return null;
+};
+
+const PAID_PERIOD_BUSINESS_MESSAGE = 'Período já consta como pago. Não é necessário emitir nova guia.';
+const SERPRO_PAID_ERROR_PATTERNS = [
+  /j[aá]\s*est[aá]\s*pago/i,
+  /j[aá]\s*foi\s*pago/i,
+  /d[ée]bitos?\s+inexistentes?/i,
+  /n[aã]o\s+h[aá]\s+d[ée]bitos?/i,
+  /n[aã]o\s+existem\s+d[ée]bitos?/i,
+  /sem\s+d[ée]bitos?/i,
+  /n[aã]o\s+possui\s+pend[êe]ncias?/i,
+  /guia\s+j[aá]\s+quitada/i
+];
+
+const isPeriodoPagoSerproError = (error) => {
+  const message = String(error?.message || '').trim();
+  if (!message) return false;
+  return SERPRO_PAID_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+};
+
+const normalizeDocumentoFiscalForStatus = (value) => {
+  const digits = normalizeDoc(value);
+  return digits.length === 14 ? digits : null;
+};
+
+const persistPaidCompetenciaSafely = async ({
+  userId,
+  competencia,
+  documentoFiscal,
+  source,
+  markCompetenciaAsPaidFn = markCompetenciaAsPaid
+}) => {
+  if (!userId || !competencia) return;
+  try {
+    await markCompetenciaAsPaidFn({
+      userId,
+      competencia,
+      documentoFiscal,
+      source
+    });
+  } catch (error) {
+    if (env.NODE_ENV !== 'production') {
+      console.warn('[mei-guide] Falha ao persistir competência paga', {
+        userId,
+        competencia,
+        message: error instanceof Error ? error.message : String(error || '')
+      });
+    }
+  }
 };
 
 const tokenCache = new Map();
@@ -1160,23 +1215,51 @@ export const createGuide = async (userId, payload) => {
   };
 };
 
-export const downloadGuide = async (payload) => {
+export const downloadGuide = async (payload, dependencies = {}) => {
   ensureConfigured();
   const { userId, cnpj, periodoApuracao, contribuinte } = payload || {};
   if (!periodoApuracao) throw badRequest('Período de apuração é obrigatório');
+  const {
+    isCompetenciaPaidFn = isCompetenciaPaid,
+    markCompetenciaAsPaidFn = markCompetenciaAsPaid,
+    createGuideFn = createGuide,
+    createGuideByCnpjFn = createGuideByCnpj
+  } = dependencies;
+  const competencia = periodoApuracaoToCompetencia(periodoApuracao);
 
   const cnpjFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
   const hasCert = userId ? hasUserCertificate(userId) : false;
+
+  if (userId && competencia) {
+    const paidInCache = await isCompetenciaPaidFn({ userId, competencia });
+    if (paidInCache) {
+      throw badRequest(PAID_PERIOD_BUSINESS_MESSAGE);
+    }
+  }
 
   let guide;
   if (hasCert) {
     await ensureClientCertificate(userId);
     const contrib = resolveContribuinte(userId, contribuinte, cnpj);
-    guide = await createGuide(userId, {
-      cnpj,
-      periodoApuracao,
-      contribuinte: contrib
-    });
+    try {
+      guide = await createGuideFn(userId, {
+        cnpj,
+        periodoApuracao,
+        contribuinte: contrib
+      });
+    } catch (error) {
+      if (!competencia || !isPeriodoPagoSerproError(error)) {
+        throw error;
+      }
+      await persistPaidCompetenciaSafely({
+        userId,
+        competencia,
+        documentoFiscal: normalizeDocumentoFiscalForStatus(contrib?.numero || cnpjFromRequest),
+        source: 'download_serpro',
+        markCompetenciaAsPaidFn
+      });
+      throw badRequest(PAID_PERIOD_BUSINESS_MESSAGE);
+    }
     return await ensureDownloadBuffer(guide, userId, {
       autorPedidoDados: contrib,
       contribuinte: contrib
@@ -1184,10 +1267,24 @@ export const downloadGuide = async (payload) => {
   }
 
   if (cnpjFromRequest && validateDoc(cnpjFromRequest)) {
-    guide = await createGuideByCnpj(userId, {
-      cnpj: cnpjFromRequest,
-      periodoApuracao
-    });
+    try {
+      guide = await createGuideByCnpjFn(userId, {
+        cnpj: cnpjFromRequest,
+        periodoApuracao
+      });
+    } catch (error) {
+      if (!competencia || !isPeriodoPagoSerproError(error)) {
+        throw error;
+      }
+      await persistPaidCompetenciaSafely({
+        userId,
+        competencia,
+        documentoFiscal: normalizeDocumentoFiscalForStatus(cnpjFromRequest),
+        source: 'download_serpro',
+        markCompetenciaAsPaidFn
+      });
+      throw badRequest(PAID_PERIOD_BUSINESS_MESSAGE);
+    }
     return await ensureDownloadBuffer(guide, userId, null);
   }
 
@@ -1209,24 +1306,42 @@ const buildRecentCompetencias = (count = 12, includeCurrent = false) => {
   return competencias;
 };
 
-const buildPeriodsFromPdf = async (userId, options = {}) => {
+const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
   const { cnpj, contribuinte, useCertificate = false } = options;
+  const {
+    listPaidCompetenciasFn = listPaidCompetencias,
+    markCompetenciaAsPaidFn = markCompetenciaAsPaid,
+    createGuideFn = createGuide,
+    createGuideByCnpjFn = createGuideByCnpj
+  } = dependencies;
   const competencias = buildRecentCompetencias(12, false);
   const items = [];
+  const paidCompetencias = userId
+    ? new Set(await listPaidCompetenciasFn({ userId, competencias }))
+    : new Set();
+  const documentoFiscal = normalizeDocumentoFiscalForStatus(cnpj || contribuinte?.numero);
 
   for (const competencia of competencias) {
     const period = normalizePeriodoApuracao(competencia);
     if (!period) continue;
+    if (paidCompetencias.has(competencia)) {
+      items.push({
+        competencia,
+        status: 'pago',
+        guideId: period
+      });
+      continue;
+    }
 
     try {
       if (useCertificate) {
-        await createGuide(userId, {
+        await createGuideFn(userId, {
           cnpj,
           periodoApuracao: period,
           contribuinte
         });
       } else {
-        await createGuideByCnpj(userId, {
+        await createGuideByCnpjFn(userId, {
           cnpj,
           periodoApuracao: period
         });
@@ -1236,7 +1351,23 @@ const buildPeriodsFromPdf = async (userId, options = {}) => {
         status: 'a_pagar',
         guideId: period
       });
-    } catch {
+    } catch (error) {
+      if (!isPeriodoPagoSerproError(error)) {
+        items.push({
+          competencia,
+          status: 'a_pagar',
+          guideId: period
+        });
+        continue;
+      }
+      paidCompetencias.add(competencia);
+      await persistPaidCompetenciaSafely({
+        userId,
+        competencia,
+        documentoFiscal,
+        source: 'consulta_serpro',
+        markCompetenciaAsPaidFn
+      });
       items.push({
         competencia,
         status: 'pago',
@@ -1246,6 +1377,14 @@ const buildPeriodsFromPdf = async (userId, options = {}) => {
   }
 
   return items;
+};
+
+export const __buildPeriodsFromPdfForTests = async (userId, options = {}, dependencies = {}) => {
+  return await buildPeriodsFromPdf(userId, options, dependencies);
+};
+
+export const __isPeriodoPagoSerproErrorForTests = (error) => {
+  return isPeriodoPagoSerproError(error);
 };
 
 export const listPeriods = async (userId, payload) => {
