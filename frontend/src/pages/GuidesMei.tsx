@@ -758,7 +758,7 @@ export default function GuidesMei() {
   );
 
   const certificateScopeLabel = useMemo(() => {
-    if (hasUserCertificate) return 'Certificado do cliente';
+    if (hasUserCertificate) return 'Certificado';
     if (hasServerCertificate) return 'Certificado do servidor';
     return 'Sem certificado ativo';
   }, [hasServerCertificate, hasUserCertificate]);
@@ -834,20 +834,20 @@ export default function GuidesMei() {
             <div>
               <h2 className="admin-section-title">Certificado digital</h2>
               <p className="admin-section-subtitle">
-                Envie o certificado PFX do cliente ou valide o CNPJ para usar o fluxo sem certificado.
+                Envie o certificado PFX ou valide o CNPJ para usar o fluxo sem certificado.
               </p>
             </div>
           </div>
 
           {hasUserCertificate && (
             <div className="rounded-xl border border-emerald-300/90 bg-emerald-50/90 px-4 py-3 text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300">
-              Certificado do cliente em uso. Ele expira após algumas horas ou ao reiniciar o servidor.
+              Certificado em uso. Ele expira após algumas horas ou ao reiniciar o servidor.
             </div>
           )}
 
           {!hasCertificate && (
             <div className="rounded-xl border border-amber-300/90 bg-amber-50/90 px-4 py-3 text-amber-700 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-300">
-              Opcional: envie o certificado do cliente para autenticar. Sem certificado, informe o CNPJ e
+              Opcional: envie o certificado para autenticar. Sem certificado, informe o CNPJ e
               selecione o período abaixo.
             </div>
           )}
@@ -998,7 +998,7 @@ export default function GuidesMei() {
 
           {!hasUserCertificate && canLoadPeriods ? (
             <div className="rounded-xl border border-amber-300/90 bg-amber-50/90 px-4 py-3 text-amber-700 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-300">
-              Consulta via CNPJ sem certificado. Se houver falha, envie o certificado do cliente.
+              Consulta via CNPJ sem certificado. Se houver falha, envie o certificado.
             </div>
           ) : null}
 
