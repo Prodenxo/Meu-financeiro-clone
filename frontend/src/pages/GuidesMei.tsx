@@ -183,6 +183,7 @@ const getDefaultPeriod = () => {
 
 const hasRequiredText = (value: unknown) => String(value || '').trim().length > 0;
 type PlugNotasRegimeTributario = '1' | '2' | '3';
+type GuidesMeiWorkspace = 'overview' | 'das' | 'nfse';
 
 type PlugNotasCompanyForm = {
   razaoSocial: string;
@@ -335,6 +336,7 @@ const getNfseValidationMessage = (input: EmitirNfseInput) => {
 
 export default function GuidesMei() {
   const [contribuinteDoc, setContribuinteDoc] = useState('');
+  const [activeWorkspace, setActiveWorkspace] = useState<GuidesMeiWorkspace>('overview');
   const defaultPeriod = useMemo(() => getDefaultPeriod(), []);
   const [selectedYear, setSelectedYear] = useState<number>(defaultPeriod.year);
   const [selectedMonth, setSelectedMonth] = useState<string>(defaultPeriod.month);
@@ -1009,6 +1011,27 @@ export default function GuidesMei() {
     return 'Sem certificado ativo';
   }, [hasServerCertificate, hasUserCertificate]);
 
+  const workspaceTabs = useMemo(() => ([
+    {
+      id: 'overview' as const,
+      label: 'Visão geral',
+      description: 'Resumo e atalhos rápidos',
+      badge: `${meiPeriods.length} períodos DAS`
+    },
+    {
+      id: 'das' as const,
+      label: 'Certificado e DAS',
+      description: 'Configuração e geração de guias',
+      badge: dasPendentesCount > 0 ? `${dasPendentesCount} pendências` : 'Sem pendências'
+    },
+    {
+      id: 'nfse' as const,
+      label: 'NFSe',
+      description: 'Emissão e acompanhamento',
+      badge: `${filteredNfseList.length} notas no filtro`
+    }
+  ]), [dasPendentesCount, filteredNfseList.length, meiPeriods.length]);
+
   const handleDownloadClick = async () => {
     if (isDownloadingGuide) return;
     if (!normalizedContribuinte) {
@@ -1078,47 +1101,129 @@ export default function GuidesMei() {
         <section className="admin-section-card">
           <div className="admin-section-header">
             <div>
+              <h2 className="admin-section-title">Fluxo do MEI</h2>
+              <p className="admin-section-subtitle">
+                Navegue por contexto para reduzir rolagem e focar no que precisa agora.
+              </p>
+            </div>
+          </div>
+          <div className="admin-toolbar space-y-3">
+            <div className="grid gap-2 md:grid-cols-3">
+              {workspaceTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveWorkspace(tab.id)}
+                  className={`planner-tab h-full w-full items-start justify-between rounded-xl px-4 py-3 text-left ${
+                    activeWorkspace === tab.id ? 'planner-tab-active' : ''
+                  }`}
+                  aria-pressed={activeWorkspace === tab.id}
+                >
+                  <span className="flex flex-col items-start gap-1">
+                    <span className="text-sm font-semibold">{tab.label}</span>
+                    <span className="text-xs opacity-90">{tab.description}</span>
+                  </span>
+                  <span className="text-xs font-medium opacity-90">{tab.badge}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {activeWorkspace === 'overview' ? (
+          <section className="admin-section-card">
+            <div className="admin-section-header">
+              <div>
+                <h2 className="admin-section-title">Visão geral operacional</h2>
+                <p className="admin-section-subtitle">
+                  Escolha uma etapa para continuar com menos ruído visual.
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setActiveWorkspace('das')}
+                className="admin-toolbar text-left transition hover:border-slate-300/80 dark:hover:border-slate-700/80"
+              >
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Certificado e DAS</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Configure certificado, valide CNPJ e gere o DAS do período.
+                </p>
+                <div className="mt-3 admin-actions">
+                  <span className={hasUserCertificate ? 'admin-badge-success' : 'admin-badge-warning'}>
+                    {hasUserCertificate ? 'Certificado em uso' : 'Certificado pendente'}
+                  </span>
+                  <span className={dasPendentesCount > 0 ? 'admin-badge-warning' : 'admin-badge-success'}>
+                    {dasPendentesCount > 0 ? `${dasPendentesCount} pendências DAS` : 'DAS sem pendências'}
+                  </span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveWorkspace('nfse')}
+                className="admin-toolbar text-left transition hover:border-slate-300/80 dark:hover:border-slate-700/80"
+              >
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">NFSe</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Preencha dados essenciais e acompanhe o ciclo das notas emitidas.
+                </p>
+                <div className="mt-3 admin-actions">
+                  <span className="admin-badge-primary">{`${filteredNfseList.length} notas no filtro`}</span>
+                  <span className="admin-badge-neutral">Emissão com PlugNotas</span>
+                </div>
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {activeWorkspace === 'das' ? (
+          <>
+            <section className="admin-section-card">
+          <div className="admin-section-header">
+            <div>
               <h2 className="admin-section-title">Certificado digital</h2>
             </div>
           </div>
 
           {hasUserCertificate && (
-            <div className="rounded-xl border border-emerald-300/90 bg-emerald-50/90 px-4 py-3 text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <div className="admin-alert-success">
               Certificado em uso. Ele expira após algumas horas ou ao reiniciar o servidor.
             </div>
           )}
 
           {!hasCertificate && (
-            <div className="rounded-xl border border-amber-300/90 bg-amber-50/90 px-4 py-3 text-amber-700 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-300">
+            <div className="admin-alert-warning">
               Opcional: envie o certificado para autenticar. Sem certificado, informe o CNPJ e
               selecione o período abaixo para gerar o DAS.
             </div>
           )}
 
-          <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+          <div className="admin-alert-warning">
             Atenção: para emissão de notas fiscais, a empresa emitente precisa estar cadastrada com certificado digital A1 válido.
           </div>
 
           {certificateError && (
-            <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+            <div className="admin-alert-danger">
               {certificateError}
             </div>
           )}
 
           {certificateSuccess && (
-            <div className="rounded-xl border border-emerald-300/90 bg-emerald-50/90 px-4 py-3 text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <div className="admin-alert-success">
               {certificateSuccess}
             </div>
           )}
 
           {validationSuccess && (
-            <div className="rounded-xl border border-emerald-300/90 bg-emerald-50/90 px-4 py-3 text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <div className="admin-alert-success">
               {validationSuccess}
             </div>
           )}
 
           {validationError && (
-            <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+            <div className="admin-alert-danger">
               {validationError}
             </div>
           )}
@@ -1159,8 +1264,9 @@ export default function GuidesMei() {
 
               <div className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Dados minimos para emisão de notas fiscais
+                  Dados mínimos para emissão de notas fiscais
                 </p>
+                <p className="admin-field-hint mb-2">Campos com * são obrigatórios para a configuração inicial.</p>
                 <div className="grid gap-2 md:grid-cols-2">
                   <input
                     className="planner-input-compact"
@@ -1320,7 +1426,7 @@ export default function GuidesMei() {
           </div>
 
           {periodError && (
-            <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+            <div className="admin-alert-danger">
               {periodError}
             </div>
           )}
@@ -1382,7 +1488,7 @@ export default function GuidesMei() {
           </div>
 
           {!hasUserCertificate && canLoadPeriods ? (
-            <div className="rounded-xl border border-amber-300/90 bg-amber-50/90 px-4 py-3 text-amber-700 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-300">
+            <div className="admin-alert-warning">
               Consulta via CNPJ sem certificado. Se houver falha, envie o certificado.
             </div>
           ) : null}
@@ -1392,7 +1498,7 @@ export default function GuidesMei() {
           ) : meiPeriodsLoading ? (
             <div className="admin-empty-state">Carregando histórico...</div>
           ) : meiPeriodsError ? (
-            <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+            <div className="admin-alert-danger">
               {meiPeriodsError}
             </div>
           ) : meiPeriods.length === 0 ? (
@@ -1422,8 +1528,12 @@ export default function GuidesMei() {
             </div>
           )}
         </section>
+          </>
+        ) : null}
 
-        <section className="admin-section-card">
+        {activeWorkspace === 'nfse' ? (
+          <>
+            <section className="admin-section-card">
           <div className="admin-section-header">
             <div>
               <h2 className="admin-section-title">Emitir NFSe</h2>
@@ -1433,9 +1543,12 @@ export default function GuidesMei() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+          <div className="admin-alert-warning">
             Atenção: para emissão de notas fiscais, a empresa emitente precisa estar cadastrada com certificado digital A1 válido.
           </div>
+          <p className="admin-field-hint">
+            Campos obrigatórios: CNPJ do prestador, código do serviço, CNAE, alíquota, valor e discriminação.
+          </p>
 
           <div className="admin-toolbar space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
@@ -1483,14 +1596,17 @@ export default function GuidesMei() {
           </div>
 
           {nfseCatalogError && (
-            <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+            <div className="admin-alert-danger">
               {nfseCatalogError}
             </div>
           )}
 
           <div className="admin-toolbar grid gap-3 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">CNPJ do prestador</label>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                CNPJ do prestador
+                <span className="admin-required-mark">*</span>
+              </label>
               <input
                 className="planner-input-compact w-full"
                 type="text"
@@ -1603,6 +1719,7 @@ export default function GuidesMei() {
               <div>
                 <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
                   Código do serviço
+                  <span className="admin-required-mark">*</span>
                 </label>
                 <input
                   className="planner-input-compact w-full"
@@ -1613,7 +1730,10 @@ export default function GuidesMei() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">CNAE</label>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                  CNAE
+                  <span className="admin-required-mark">*</span>
+                </label>
                 <input
                   className="planner-input-compact w-full"
                   type="text"
@@ -1625,6 +1745,7 @@ export default function GuidesMei() {
               <div>
                 <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
                   Alíquota ISS (%)
+                  <span className="admin-required-mark">*</span>
                 </label>
                 <input
                   className="planner-input-compact w-full"
@@ -1638,6 +1759,7 @@ export default function GuidesMei() {
               <div>
                 <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
                   Valor do serviço
+                  <span className="admin-required-mark">*</span>
                 </label>
                 <input
                   className="planner-input-compact w-full"
@@ -1652,6 +1774,7 @@ export default function GuidesMei() {
             <div>
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
                 Discriminação do serviço
+                <span className="admin-required-mark">*</span>
               </label>
               <textarea
                 className="planner-input-compact w-full min-h-[90px]"
@@ -1712,16 +1835,16 @@ export default function GuidesMei() {
           </div>
 
           {nfseValidationMessage && (
-            <p className="text-xs text-slate-500 dark:text-slate-400">{nfseValidationMessage}</p>
+            <div className="admin-alert-warning">{nfseValidationMessage}</div>
           )}
 
           {nfseError && (
-            <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+            <div className="admin-alert-danger">
               {nfseError}
             </div>
           )}
           {nfseSuccess && (
-            <div className="rounded-xl border border-emerald-300/90 bg-emerald-50/90 px-4 py-3 text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <div className="admin-alert-success">
               {nfseSuccess}
             </div>
           )}
@@ -1735,8 +1858,8 @@ export default function GuidesMei() {
                 Acompanhe status, revise e baixe XML/PDF das notas emitidas.
               </p>
             </div>
-            <div className="admin-actions">
-              <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+              <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200/70 bg-slate-50/70 px-3 py-2 text-xs text-slate-600 dark:border-slate-700/70 dark:bg-slate-900/50 dark:text-slate-400">
                 <input
                   type="checkbox"
                   className="h-4 w-4"
@@ -1755,7 +1878,7 @@ export default function GuidesMei() {
             </div>
           </div>
 
-          <div className="admin-toolbar grid gap-2 md:grid-cols-3">
+          <div className="admin-toolbar grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             <select
               className="planner-input-compact"
               value={nfseDocumentTypeFilter}
@@ -1826,30 +1949,30 @@ export default function GuidesMei() {
                         {reviewRequested && <span className="admin-badge-warning">Revisão</span>}
                       </div>
                     </div>
-                    <div className="mt-3 admin-actions">
+                    <div className="admin-actions-grid">
                       <button
-                        className="planner-button-secondary-compact w-full sm:w-auto"
+                        className="planner-button-secondary-compact w-full"
                         onClick={() => handleSyncNfse(item.id)}
                         disabled={rowBusy}
                       >
                         {isNfseActionLoading(`${item.id}:sync`) ? 'Atualizando...' : 'Atualizar status'}
                       </button>
                       <button
-                        className="planner-button-secondary-compact w-full sm:w-auto"
+                        className="planner-button-secondary-compact w-full"
                         onClick={() => handleDownloadNfsePdf(item)}
                         disabled={rowBusy || statusKey === 'processando'}
                       >
                         {isNfseActionLoading(`${item.id}:pdf`) ? 'Baixando PDF...' : 'Baixar PDF'}
                       </button>
                       <button
-                        className="planner-button-secondary-compact w-full sm:w-auto"
+                        className="planner-button-secondary-compact w-full"
                         onClick={() => handleDownloadNfseXml(item)}
                         disabled={rowBusy || statusKey === 'processando'}
                       >
                         {isNfseActionLoading(`${item.id}:xml`) ? 'Baixando XML...' : 'Baixar XML'}
                       </button>
                       <button
-                        className="planner-button-secondary-compact w-full sm:w-auto"
+                        className="planner-button-secondary-compact w-full"
                         onClick={() => handleToggleReviewNfse(item)}
                         disabled={rowBusy || isArchived}
                       >
@@ -1860,14 +1983,14 @@ export default function GuidesMei() {
                             : 'Marcar revisão'}
                       </button>
                       <button
-                        className="planner-button-secondary-compact w-full sm:w-auto"
+                        className="planner-button-secondary-compact w-full"
                         onClick={() => handleCancelNfse(item)}
                         disabled={rowBusy || statusKey === 'cancelado' || statusKey === 'cancelamento_pendente'}
                       >
                         {isNfseActionLoading(`${item.id}:cancel`) ? 'Cancelando...' : 'Cancelar NFSe'}
                       </button>
                       <button
-                        className="planner-button-secondary-compact w-full sm:w-auto"
+                        className="planner-button-secondary-compact w-full"
                         onClick={() => handleArchiveNfse(item)}
                         disabled={rowBusy}
                       >
@@ -1884,6 +2007,8 @@ export default function GuidesMei() {
             </div>
           )}
         </section>
+          </>
+        ) : null}
       </div>
     </>
   );
