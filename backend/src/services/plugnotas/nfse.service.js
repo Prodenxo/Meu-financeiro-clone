@@ -24,11 +24,61 @@ const buildHeaders = (accept = 'application/json') => ({
   'x-api-key': env.PLUGNOTAS_API_KEY
 });
 
+const collectErrorMessages = (value) => {
+  if (value === null || value === undefined) return [];
+  if (typeof value === 'string') {
+    const text = value.trim();
+    return text ? [text] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectErrorMessages(item));
+  }
+  if (typeof value === 'object') {
+    const entries = [];
+    const field = String(value.field || value.campo || '').trim();
+    const reason = String(value.reason || value.error || value.motivo || '').trim();
+    if (field && reason) {
+      entries.push(`${field}: ${reason}`);
+    }
+    entries.push(
+      ...collectErrorMessages(value.message),
+      ...collectErrorMessages(value.mensagem),
+      ...collectErrorMessages(value.description),
+      ...collectErrorMessages(value.descricao),
+      ...collectErrorMessages(value.details),
+      ...collectErrorMessages(value.detalhes),
+      ...collectErrorMessages(value.errors),
+      ...collectErrorMessages(value.erros),
+      ...collectErrorMessages(value.validationErrors)
+    );
+    return entries;
+  }
+  return [];
+};
+
 const parseErrorMessage = async (response) => {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const payload = await response.json();
-    return payload?.error?.message || payload?.message || payload?.error || response.statusText;
+    const baseMessage = String(
+      payload?.error?.message
+      || payload?.message
+      || (typeof payload?.error === 'string' ? payload.error : '')
+      || response.statusText
+      || ''
+    ).trim();
+    const detailMessages = [
+      ...collectErrorMessages(payload?.error?.details),
+      ...collectErrorMessages(payload?.error?.errors),
+      ...collectErrorMessages(payload?.details),
+      ...collectErrorMessages(payload?.errors),
+      ...collectErrorMessages(payload?.erros)
+    ].filter(Boolean);
+    const details = [...new Set(detailMessages)].join(' | ');
+    if (baseMessage && details && !baseMessage.includes(details)) {
+      return `${baseMessage}: ${details}`;
+    }
+    return baseMessage || details || response.statusText;
   }
   const text = await response.text();
   return text || response.statusText;

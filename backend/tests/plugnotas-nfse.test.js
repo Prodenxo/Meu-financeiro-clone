@@ -32,3 +32,30 @@ test('nfse service baixa PDF com sucesso', async () => {
     global.fetch = originalFetch;
   }
 });
+
+test('nfse service preserva detalhes de validacao retornados pela API', async () => {
+  const { emitirNfse } = await import('../src/services/plugnotas/nfse.service.js');
+  const originalFetch = global.fetch;
+
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    statusText: 'Bad Request',
+    headers: { get: () => 'application/json' },
+    json: async () => ({
+      message: 'Falha na validação do JSON de NFSe',
+      errors: [
+        { field: 'tomador.cpfCnpj', error: 'campo obrigatório' }
+      ]
+    })
+  });
+
+  try {
+    await assert.rejects(
+      () => emitirNfse({ idIntegracao: 'nfse-teste' }),
+      /Falha na validação do JSON de NFSe: tomador\.cpfCnpj: campo obrigatório/
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});

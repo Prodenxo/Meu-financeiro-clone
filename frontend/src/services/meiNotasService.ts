@@ -15,6 +15,16 @@ export interface EmitirNfseInput {
   prestadorInscricaoMunicipal?: string;
   prestadorRazaoSocial?: string;
   prestadorEmail?: string;
+  prestadorEndereco?: {
+    logradouro?: string;
+    numero?: string;
+    codigoCidade?: string;
+    cep?: string;
+    complemento?: string;
+    bairro?: string;
+    estado?: string;
+    descricaoCidade?: string;
+  };
   tomadorCpfCnpj?: string;
   tomadorRazaoSocial?: string;
   tomadorEmail?: string;

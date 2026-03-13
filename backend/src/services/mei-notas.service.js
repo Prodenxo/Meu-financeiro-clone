@@ -227,6 +227,34 @@ const buildServicoFromInput = (input) => {
   });
 };
 
+const buildPrestadorEnderecoFromInput = (input) => {
+  const enderecoInput = (
+    input?.prestadorEndereco
+    && typeof input.prestadorEndereco === 'object'
+    && !Array.isArray(input.prestadorEndereco)
+      ? input.prestadorEndereco
+      : (
+          input?.prestador?.endereco
+          && typeof input.prestador.endereco === 'object'
+          && !Array.isArray(input.prestador.endereco)
+            ? input.prestador.endereco
+            : {}
+        )
+  );
+
+  return prune({
+    ...enderecoInput,
+    logradouro: enderecoInput?.logradouro || null,
+    numero: enderecoInput?.numero || null,
+    codigoCidade: enderecoInput?.codigoCidade || null,
+    cep: enderecoInput?.cep ? normalizeDoc(enderecoInput.cep).slice(0, 8) : null,
+    complemento: enderecoInput?.complemento || null,
+    bairro: enderecoInput?.bairro || null,
+    estado: enderecoInput?.estado ? String(enderecoInput.estado).trim().toUpperCase() : null,
+    descricaoCidade: enderecoInput?.descricaoCidade || null
+  });
+};
+
 const buildPayloadFromInput = (input, userId) => {
   const idIntegracao = input?.idIntegracao || `mei-${userId}-${Date.now()}`;
   const prestadorDoc = normalizeDoc(
@@ -246,6 +274,7 @@ const buildPayloadFromInput = (input, userId) => {
   const servicosList = Array.isArray(servicosInput)
     ? servicosInput.map(buildServicoFromInput).filter(Boolean)
     : [buildServicoFromInput(servicosInput)].filter(Boolean);
+  const prestadorEndereco = buildPrestadorEnderecoFromInput(input);
 
   const payload = prune({
     idIntegracao,
@@ -258,7 +287,8 @@ const buildPayloadFromInput = (input, userId) => {
       cpfCnpj: prestadorDoc || input?.prestador?.cpfCnpj || null,
       inscricaoMunicipal: input?.prestador?.inscricaoMunicipal || input?.prestadorInscricaoMunicipal || null,
       razaoSocial: input?.prestador?.razaoSocial || input?.prestadorRazaoSocial || null,
-      email: input?.prestador?.email || input?.prestadorEmail || null
+      email: input?.prestador?.email || input?.prestadorEmail || null,
+      endereco: prestadorEndereco
     }),
     tomador: prune({
       ...(input?.tomador || {}),
@@ -331,10 +361,34 @@ const validatePayload = (payload) => {
   if (!isValidCnpj(prestadorDoc)) {
     throw badRequest('CNPJ do prestador deve ter 14 dígitos');
   }
+  const prestadorEndereco = payload?.prestador?.endereco;
+  const prestadorLogradouro = String(prestadorEndereco?.logradouro || '').trim();
+  if (!prestadorLogradouro) {
+    throw badRequest('Logradouro do prestador é obrigatório');
+  }
+  const prestadorNumero = String(prestadorEndereco?.numero || '').trim();
+  if (!prestadorNumero) {
+    throw badRequest('Número do endereço do prestador é obrigatório');
+  }
+  const prestadorCodigoCidade = String(prestadorEndereco?.codigoCidade || '').trim();
+  if (!prestadorCodigoCidade) {
+    throw badRequest('Código IBGE da cidade do prestador é obrigatório');
+  }
+  const prestadorCep = normalizeDoc(prestadorEndereco?.cep || '');
+  if (prestadorCep.length !== 8) {
+    throw badRequest('CEP do prestador deve ter 8 dígitos');
+  }
 
   const tomadorDoc = normalizeDoc(payload?.tomador?.cpfCnpj || '');
+  if (!tomadorDoc) {
+    throw badRequest('CPF/CNPJ do tomador é obrigatório');
+  }
   if (!isValidCpfOrCnpj(tomadorDoc)) {
     throw badRequest('CPF/CNPJ do tomador inválido');
+  }
+  const tomadorRazaoSocial = String(payload?.tomador?.razaoSocial || '').trim();
+  if (!tomadorRazaoSocial) {
+    throw badRequest('Razão social do tomador é obrigatória');
   }
 
   const servicos = Array.isArray(payload?.servico) ? payload.servico : [];

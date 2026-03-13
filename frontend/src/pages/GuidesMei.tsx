@@ -204,6 +204,31 @@ type PlugNotasCompanyForm = {
   estado: string;
 };
 
+type NfsePrestadorEndereco = {
+  logradouro: string;
+  numero: string;
+  codigoCidade: string;
+  cep: string;
+  complemento: string;
+  bairro: string;
+  estado: string;
+  descricaoCidade: string;
+};
+
+const resolvePrestadorEndereco = (
+  endereco: EmitirNfseInput['prestadorEndereco'],
+  fallback: Partial<NfsePrestadorEndereco> = {}
+): NfsePrestadorEndereco => ({
+  logradouro: String(endereco?.logradouro || fallback.logradouro || '').trim(),
+  numero: String(endereco?.numero || fallback.numero || '').trim(),
+  codigoCidade: String(endereco?.codigoCidade || fallback.codigoCidade || '').trim(),
+  cep: normalizeDoc(String(endereco?.cep || fallback.cep || '')).slice(0, 8),
+  complemento: String(endereco?.complemento || fallback.complemento || '').trim(),
+  bairro: String(endereco?.bairro || fallback.bairro || '').trim(),
+  estado: String(endereco?.estado || fallback.estado || '').trim().toUpperCase(),
+  descricaoCidade: String(endereco?.descricaoCidade || fallback.descricaoCidade || '').trim()
+});
+
 const getDefaultPlugNotasCompanyForm = (): PlugNotasCompanyForm => ({
   razaoSocial: '',
   nomeFantasia: '',
@@ -305,15 +330,38 @@ const buildPlugNotasEmpresaPayload = ({
   return payload;
 };
 
-const getNfseValidationMessage = (input: EmitirNfseInput) => {
+const getNfseValidationMessage = (
+  input: EmitirNfseInput,
+  fallbackPrestadorEndereco: Partial<NfsePrestadorEndereco> = {}
+) => {
   const prestadorCpfCnpj = normalizeDoc(input.prestadorCpfCnpj || '');
   if (prestadorCpfCnpj.length !== 14) {
     return 'Informe um CNPJ válido do prestador.';
   }
+  const prestadorEndereco = resolvePrestadorEndereco(input.prestadorEndereco, fallbackPrestadorEndereco);
+  if (!prestadorEndereco.logradouro) {
+    return 'Informe o logradouro do prestador.';
+  }
+  if (!prestadorEndereco.numero) {
+    return 'Informe o número do endereço do prestador.';
+  }
+  if (!prestadorEndereco.codigoCidade) {
+    return 'Informe o código IBGE da cidade do prestador.';
+  }
+  if (prestadorEndereco.cep.length !== 8) {
+    return 'Informe um CEP válido do prestador com 8 dígitos.';
+  }
 
   const tomadorCpfCnpj = normalizeDoc(input.tomadorCpfCnpj || '');
-  if (tomadorCpfCnpj && tomadorCpfCnpj.length !== 11 && tomadorCpfCnpj.length !== 14) {
+  if (!tomadorCpfCnpj) {
+    return 'Informe o CPF/CNPJ do tomador.';
+  }
+  if (tomadorCpfCnpj.length !== 11 && tomadorCpfCnpj.length !== 14) {
     return 'CPF/CNPJ do tomador inválido.';
+  }
+  const tomadorRazaoSocial = String(input.tomadorRazaoSocial || '').trim();
+  if (!tomadorRazaoSocial) {
+    return 'Informe a razão social do tomador.';
   }
 
   const servico = input.servico;
@@ -362,6 +410,16 @@ export default function GuidesMei() {
     prestadorInscricaoMunicipal: '',
     prestadorRazaoSocial: '',
     prestadorEmail: '',
+    prestadorEndereco: {
+      logradouro: '',
+      numero: '',
+      codigoCidade: '',
+      cep: '',
+      complemento: '',
+      bairro: '',
+      estado: '',
+      descricaoCidade: ''
+    },
     tomadorCpfCnpj: '',
     tomadorRazaoSocial: '',
     tomadorEmail: '',
@@ -402,7 +460,19 @@ export default function GuidesMei() {
   const [plugNotasCompanyForm, setPlugNotasCompanyForm] = useState<PlugNotasCompanyForm>(() => (
     getDefaultPlugNotasCompanyForm()
   ));
-  const nfseValidationMessage = useMemo(() => getNfseValidationMessage(nfseForm), [nfseForm]);
+  const nfseValidationMessage = useMemo(
+    () => getNfseValidationMessage(nfseForm, {
+      logradouro: plugNotasCompanyForm.logradouro,
+      numero: plugNotasCompanyForm.numero,
+      codigoCidade: plugNotasCompanyForm.codigoCidade,
+      cep: plugNotasCompanyForm.cep,
+      complemento: plugNotasCompanyForm.complemento,
+      bairro: plugNotasCompanyForm.bairro,
+      estado: plugNotasCompanyForm.estado,
+      descricaoCidade: plugNotasCompanyForm.descricaoCidade
+    }),
+    [nfseForm, plugNotasCompanyForm]
+  );
 
   const normalizedContribuinte = useMemo(() => normalizeDoc(contribuinteDoc), [contribuinteDoc]);
   const contribuinteTipo = useMemo(() => getDocType(normalizedContribuinte), [normalizedContribuinte]);
@@ -501,6 +571,18 @@ export default function GuidesMei() {
       ...current,
       cidadePrestacao: {
         ...(current.cidadePrestacao || {}),
+        ...updates
+      }
+    }));
+  };
+
+  const updateNfsePrestadorEndereco = (
+    updates: Partial<NonNullable<EmitirNfseInput['prestadorEndereco']>>
+  ) => {
+    setNfseForm((current) => ({
+      ...current,
+      prestadorEndereco: {
+        ...(current.prestadorEndereco || {}),
         ...updates
       }
     }));
@@ -692,7 +774,17 @@ export default function GuidesMei() {
           : {}),
         ...(plugNotasCompanyForm.email.trim()
           ? { prestadorEmail: plugNotasCompanyForm.email.trim() }
-          : {})
+          : {}),
+        prestadorEndereco: resolvePrestadorEndereco(undefined, {
+          logradouro: plugNotasCompanyForm.logradouro,
+          numero: plugNotasCompanyForm.numero,
+          codigoCidade: plugNotasCompanyForm.codigoCidade,
+          cep: plugNotasCompanyForm.cep,
+          complemento: plugNotasCompanyForm.complemento,
+          bairro: plugNotasCompanyForm.bairro,
+          estado: plugNotasCompanyForm.estado,
+          descricaoCidade: plugNotasCompanyForm.descricaoCidade
+        })
       });
 
       setCertificateFile(null);
@@ -778,6 +870,16 @@ export default function GuidesMei() {
     const prestadorCpfCnpj = normalizeDoc(nfseForm.prestadorCpfCnpj);
     const tomadorCpfCnpj = normalizeDoc(nfseForm.tomadorCpfCnpj || '');
     const servico = nfseForm.servico;
+    const prestadorEndereco = resolvePrestadorEndereco(nfseForm.prestadorEndereco, {
+      logradouro: plugNotasCompanyForm.logradouro,
+      numero: plugNotasCompanyForm.numero,
+      codigoCidade: plugNotasCompanyForm.codigoCidade,
+      cep: plugNotasCompanyForm.cep,
+      complemento: plugNotasCompanyForm.complemento,
+      bairro: plugNotasCompanyForm.bairro,
+      estado: plugNotasCompanyForm.estado,
+      descricaoCidade: plugNotasCompanyForm.descricaoCidade
+    });
 
     const payload: EmitirNfseInput = {
       prestadorCpfCnpj,
@@ -787,6 +889,16 @@ export default function GuidesMei() {
         discriminacao: servico.discriminacao.trim(),
         aliquota: servico.aliquota,
         valorServico: servico.valorServico
+      },
+      prestadorEndereco: {
+        logradouro: prestadorEndereco.logradouro,
+        numero: prestadorEndereco.numero,
+        codigoCidade: prestadorEndereco.codigoCidade,
+        cep: prestadorEndereco.cep,
+        ...(prestadorEndereco.complemento ? { complemento: prestadorEndereco.complemento } : {}),
+        ...(prestadorEndereco.bairro ? { bairro: prestadorEndereco.bairro } : {}),
+        ...(prestadorEndereco.estado ? { estado: prestadorEndereco.estado } : {}),
+        ...(prestadorEndereco.descricaoCidade ? { descricaoCidade: prestadorEndereco.descricaoCidade } : {})
       },
       enviarEmail: Boolean(nfseForm.enviarEmail)
     };
@@ -1547,7 +1659,8 @@ export default function GuidesMei() {
             Atenção: para emissão de notas fiscais, a empresa emitente precisa estar cadastrada com certificado digital A1 válido.
           </div>
           <p className="admin-field-hint">
-            Campos obrigatórios: CNPJ do prestador, código do serviço, CNAE, alíquota, valor e discriminação.
+            Campos obrigatórios: CNPJ e endereço mínimo do prestador, CPF/CNPJ e razão social do tomador, código do
+            serviço, CNAE, alíquota, valor e discriminação.
           </p>
 
           <div className="admin-toolbar space-y-3">
@@ -1658,7 +1771,68 @@ export default function GuidesMei() {
             </div>
             <div>
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
-                CPF/CNPJ do tomador (opcional)
+                Logradouro do prestador
+                <span className="admin-required-mark">*</span>
+              </label>
+              <input
+                className="planner-input-compact w-full"
+                type="text"
+                value={nfseForm.prestadorEndereco?.logradouro || ''}
+                onChange={(event) => updateNfsePrestadorEndereco({ logradouro: event.target.value })}
+                placeholder="Rua / Avenida"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                Número do prestador
+                <span className="admin-required-mark">*</span>
+              </label>
+              <input
+                className="planner-input-compact w-full"
+                type="text"
+                value={nfseForm.prestadorEndereco?.numero || ''}
+                onChange={(event) => updateNfsePrestadorEndereco({ numero: event.target.value })}
+                placeholder="123"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                Código IBGE da cidade do prestador
+                <span className="admin-required-mark">*</span>
+              </label>
+              <input
+                className="planner-input-compact w-full"
+                type="text"
+                value={nfseForm.prestadorEndereco?.codigoCidade || ''}
+                onChange={(event) => updateNfsePrestadorEndereco({ codigoCidade: event.target.value })}
+                placeholder="3304557"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                CEP do prestador
+                <span className="admin-required-mark">*</span>
+              </label>
+              <input
+                className="planner-input-compact w-full"
+                type="text"
+                inputMode="numeric"
+                value={nfseForm.prestadorEndereco?.cep || ''}
+                onChange={(event) => updateNfsePrestadorEndereco({
+                  cep: normalizeDoc(event.target.value).slice(0, 8)
+                })}
+                placeholder="20040002"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Dica: se você já configurou a empresa na PlugNotas, os dados salvos serão usados como fallback no envio.
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                CPF/CNPJ do tomador
+                <span className="admin-required-mark">*</span>
               </label>
               <input
                 className="planner-input-compact w-full"
@@ -1675,7 +1849,8 @@ export default function GuidesMei() {
             </div>
             <div>
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
-                Razão social do tomador (opcional)
+                Razão social do tomador
+                <span className="admin-required-mark">*</span>
               </label>
               <input
                 className="planner-input-compact w-full"

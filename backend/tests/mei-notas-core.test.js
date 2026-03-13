@@ -46,6 +46,12 @@ test('mei-notas rejeita tomador com documento invalido', async () => {
   await assert.rejects(
     () => emitirNota('user-1', {
       prestadorCpfCnpj: '12345678000199',
+      prestadorEndereco: {
+        logradouro: 'Rua Teste',
+        numero: '123',
+        codigoCidade: '3304557',
+        cep: '20040002'
+      },
       tomadorCpfCnpj: '12345',
       servico: {
         codigo: '1.01',
@@ -56,6 +62,102 @@ test('mei-notas rejeita tomador com documento invalido', async () => {
       }
     }),
     /CPF\/CNPJ do tomador inválido/
+  );
+});
+
+test('mei-notas exige documento do tomador na emissao NFSe', async () => {
+  const { emitirNota } = await import('../src/services/mei-notas.service.js');
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      prestadorCpfCnpj: '12345678000199',
+      prestadorEndereco: {
+        logradouro: 'Rua Teste',
+        numero: '123',
+        codigoCidade: '3304557',
+        cep: '20040002'
+      },
+      tomadorRazaoSocial: 'Cliente teste',
+      servico: {
+        codigo: '1.01',
+        cnae: '6201500',
+        discriminacao: 'Servico teste',
+        aliquota: 2,
+        valorServico: 100
+      }
+    }),
+    /CPF\/CNPJ do tomador é obrigatório/
+  );
+});
+
+test('mei-notas exige razao social do tomador na emissao NFSe', async () => {
+  const { emitirNota } = await import('../src/services/mei-notas.service.js');
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      prestadorCpfCnpj: '12345678000199',
+      prestadorEndereco: {
+        logradouro: 'Rua Teste',
+        numero: '123',
+        codigoCidade: '3304557',
+        cep: '20040002'
+      },
+      tomadorCpfCnpj: '12345678901',
+      servico: {
+        codigo: '1.01',
+        cnae: '6201500',
+        discriminacao: 'Servico teste',
+        aliquota: 2,
+        valorServico: 100
+      }
+    }),
+    /Razão social do tomador é obrigatória/
+  );
+});
+
+test('mei-notas exige endereco minimo do prestador na emissao NFSe', async () => {
+  const { emitirNota } = await import('../src/services/mei-notas.service.js');
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      prestadorCpfCnpj: '12345678000199',
+      tomadorCpfCnpj: '12345678901',
+      tomadorRazaoSocial: 'Cliente teste',
+      servico: {
+        codigo: '1.01',
+        cnae: '6201500',
+        discriminacao: 'Servico teste',
+        aliquota: 2,
+        valorServico: 100
+      }
+    }),
+    /Logradouro do prestador é obrigatório/
+  );
+});
+
+test('mei-notas valida endereco do prestador e segue para regras do servico', async () => {
+  const { emitirNota } = await import('../src/services/mei-notas.service.js');
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      prestadorCpfCnpj: '12345678000199',
+      prestadorEndereco: {
+        logradouro: 'Rua Teste',
+        numero: '123',
+        codigoCidade: '3304557',
+        cep: '20040-002'
+      },
+      tomadorCpfCnpj: '12345678901',
+      tomadorRazaoSocial: 'Cliente teste',
+      servico: {
+        codigo: '1.01',
+        cnae: '',
+        discriminacao: '',
+        aliquota: 2,
+        valorServico: 100
+      }
+    }),
+    /Serviço da NFSe está incompleto/
   );
 });
 
