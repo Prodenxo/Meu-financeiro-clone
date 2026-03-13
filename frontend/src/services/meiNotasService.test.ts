@@ -1,13 +1,23 @@
 import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
 import {
+  arquivarNota,
   arquivarNfse,
+  atualizarNota,
   atualizarNfse,
+  emitirNota,
   emitirNfse,
+  emitirNfe,
+  emitirNfce,
+  cancelarNota,
   cancelarNfse,
   listarCatalogoNfseClientes,
   listarCatalogoNfseProdutos,
+  listarNotas,
   listarNfse,
+  obterNota,
   obterNfse,
+  baixarNotaPdf,
+  baixarNotaXml,
   baixarNfsePdf,
   baixarNfseXml,
   type EmitirNfseInput,
@@ -52,8 +62,45 @@ describe('meiNotasService', () => {
 
     const result = await emitirNfse(input);
 
-    expect(mockedApiClient.post).toHaveBeenCalledWith('/mei-notas/emitir', input);
+    expect(mockedApiClient.post).toHaveBeenCalledWith('/mei-notas/emitir', { documentType: 'NFSE', ...input });
     expect(result).toEqual(response);
+  });
+
+  it('envia emissão de NFe e NFCe no endpoint correto', async () => {
+    const response = { id: 'nota-1', user_id: 'user-1' } as NfseRecord;
+    mockedApiClient.post.mockResolvedValue(response);
+
+    await emitirNfe({
+      idIntegracao: 'nfe-1',
+      emitente: { cpfCnpj: '12345678000199' },
+      destinatario: { cpfCnpj: '12345678901' },
+      itens: [{ codigo: 'A1', descricao: 'Produto A', valor: 10 }]
+    });
+    await emitirNfce({
+      idIntegracao: 'nfce-1',
+      emitente: { cpfCnpj: '12345678000199' },
+      destinatario: { cpfCnpj: '12345678901' },
+      itens: [{ codigo: 'B1', descricao: 'Produto B', valor: 20 }]
+    });
+
+    expect(mockedApiClient.post).toHaveBeenNthCalledWith(1, '/mei-notas/emitir', {
+      documentType: 'NFE',
+      payload: {
+        idIntegracao: 'nfe-1',
+        emitente: { cpfCnpj: '12345678000199' },
+        destinatario: { cpfCnpj: '12345678901' },
+        itens: [{ codigo: 'A1', descricao: 'Produto A', valor: 10 }]
+      }
+    });
+    expect(mockedApiClient.post).toHaveBeenNthCalledWith(2, '/mei-notas/emitir', {
+      documentType: 'NFCE',
+      payload: {
+        idIntegracao: 'nfce-1',
+        emitente: { cpfCnpj: '12345678000199' },
+        destinatario: { cpfCnpj: '12345678901' },
+        itens: [{ codigo: 'B1', descricao: 'Produto B', valor: 20 }]
+      }
+    });
   });
 
   it('lista NFSe no endpoint esperado', async () => {
@@ -73,6 +120,16 @@ describe('meiNotasService', () => {
     const result = await listarNfse({ includeArchived: true });
 
     expect(mockedApiClient.get).toHaveBeenCalledWith('/mei-notas?includeArchived=true');
+    expect(result).toEqual(response);
+  });
+
+  it('lista notas por tipo de documento quando informado', async () => {
+    const response: NfseRecord[] = [{ id: 'nfe-1', user_id: 'user-1', document_type: 'NFE' }];
+    mockedApiClient.get.mockResolvedValueOnce(response);
+
+    const result = await listarNotas({ documentType: 'NFE' });
+
+    expect(mockedApiClient.get).toHaveBeenCalledWith('/mei-notas?documentType=NFE');
     expect(result).toEqual(response);
   });
 
@@ -110,6 +167,16 @@ describe('meiNotasService', () => {
     expect(result).toEqual(response);
   });
 
+  it('obtem nota de forma genérica', async () => {
+    const response = { id: 'nfe-2', user_id: 'user-1', document_type: 'NFE' } as NfseRecord;
+    mockedApiClient.get.mockResolvedValueOnce(response);
+
+    const result = await obterNota('nfe-2');
+
+    expect(mockedApiClient.get).toHaveBeenCalledWith('/mei-notas/nfe-2');
+    expect(result).toEqual(response);
+  });
+
   it('codifica ID antes de chamar endpoints de detalhe/download', async () => {
     const response = { id: 'nfse 1/2', user_id: 'user-1' } as NfseRecord;
     mockedApiClient.get.mockResolvedValueOnce(response);
@@ -143,6 +210,22 @@ describe('meiNotasService', () => {
     expect(xml).toEqual(fileResponse);
   });
 
+  it('baixa PDF/XML com funções genéricas', async () => {
+    const fileResponse = {
+      blob: new Blob(['dummy'], { type: 'application/pdf' }),
+      filename: 'nota.pdf'
+    };
+    mockedApiClient.requestBlob.mockResolvedValue(fileResponse);
+
+    const pdf = await baixarNotaPdf('nfe-1');
+    const xml = await baixarNotaXml('nfe-1');
+
+    expect(mockedApiClient.requestBlob).toHaveBeenNthCalledWith(1, '/mei-notas/nfe-1/pdf', { method: 'GET' });
+    expect(mockedApiClient.requestBlob).toHaveBeenNthCalledWith(2, '/mei-notas/nfe-1/xml', { method: 'GET' });
+    expect(pdf).toEqual(fileResponse);
+    expect(xml).toEqual(fileResponse);
+  });
+
   it('atualiza, cancela e arquiva NFSe nos endpoints corretos', async () => {
     const response = { id: 'nfse-1', user_id: 'user-1' } as NfseRecord;
     mockedApiClient.patch.mockResolvedValueOnce(response);
@@ -158,5 +241,37 @@ describe('meiNotasService', () => {
     expect(updated).toEqual(response);
     expect(cancelled).toEqual(response);
     expect(archived).toEqual(response);
+  });
+
+  it('atualiza, cancela e arquiva nota com funções genéricas', async () => {
+    const response = { id: 'nfe-1', user_id: 'user-1', document_type: 'NFE' } as NfseRecord;
+    mockedApiClient.patch.mockResolvedValueOnce(response);
+    mockedApiClient.post.mockResolvedValue(response);
+
+    await atualizarNota('nfe-1', { descricaoInterna: 'Ajuste NFe' });
+    await cancelarNota('nfe-1', { reason: 'Cancelamento genérico' });
+    await arquivarNota('nfe-1', { archived: true });
+
+    expect(mockedApiClient.patch).toHaveBeenCalledWith('/mei-notas/nfe-1', { descricaoInterna: 'Ajuste NFe' });
+    expect(mockedApiClient.post).toHaveBeenNthCalledWith(1, '/mei-notas/nfe-1/cancelar', { reason: 'Cancelamento genérico' });
+    expect(mockedApiClient.post).toHaveBeenNthCalledWith(2, '/mei-notas/nfe-1/arquivar', { archived: true });
+  });
+
+  it('envia emissão genérica preservando payload informado', async () => {
+    const response = { id: 'nota-generic-1', user_id: 'user-1' } as NfseRecord;
+    mockedApiClient.post.mockResolvedValueOnce(response);
+    const input = {
+      documentType: 'NFE' as const,
+      payload: {
+        idIntegracao: 'generic-1',
+        emitente: { cpfCnpj: '12345678000199' },
+        itens: [{ codigo: 'X1', descricao: 'Produto X', valor: 15 }]
+      }
+    };
+
+    const result = await emitirNota(input);
+
+    expect(mockedApiClient.post).toHaveBeenCalledWith('/mei-notas/emitir', input);
+    expect(result).toEqual(response);
   });
 });

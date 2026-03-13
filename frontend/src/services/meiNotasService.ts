@@ -1,5 +1,7 @@
 import { apiClient } from './apiClient';
 
+export type DocumentType = 'NFSE' | 'NFE' | 'NFCE' | 'CTE';
+
 export interface NfseServicoInput {
   codigo: string;
   discriminacao: string;
@@ -27,6 +29,15 @@ export interface EmitirNfseInput {
   descricao?: string;
   informacoesComplementares?: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface EmitirNotaInput extends Partial<EmitirNfseInput> {
+  documentType?: DocumentType;
+  payload?: Record<string, unknown>;
+  emitenteCpfCnpj?: string;
+  destinatarioCpfCnpj?: string;
+  itens?: Record<string, unknown>[];
+  config?: Record<string, unknown>;
 }
 
 export interface NfseRecord {
@@ -94,7 +105,12 @@ export interface NfseCatalogProduto {
 export interface ListarCatalogoNfseInput {
   q?: string;
   limit?: number;
-  documentType?: 'NFSE' | 'NFE' | 'NFCE' | 'CTE';
+  documentType?: DocumentType;
+}
+
+export interface ListarNotasInput {
+  includeArchived?: boolean;
+  documentType?: DocumentType;
 }
 
 const buildCatalogSuffix = (options: ListarCatalogoNfseInput = {}) => {
@@ -109,42 +125,94 @@ const buildCatalogSuffix = (options: ListarCatalogoNfseInput = {}) => {
   return text ? `?${text}` : '';
 };
 
-export async function emitirNfse(input: EmitirNfseInput): Promise<NfseRecord> {
+const buildListSuffix = (options: ListarNotasInput = {}) => {
+  const query = new URLSearchParams({
+    ...(options.includeArchived ? { includeArchived: 'true' } : {}),
+    ...(options.documentType ? { documentType: options.documentType } : {})
+  });
+  const text = query.toString();
+  return text ? `?${text}` : '';
+};
+
+export async function emitirNota(input: EmitirNotaInput): Promise<NfseRecord> {
   return await apiClient.post<NfseRecord>('/mei-notas/emitir', input);
 }
 
-export async function listarNfse(options: { includeArchived?: boolean } = {}): Promise<NfseRecord[]> {
-  const query = new URLSearchParams({
-    ...(options.includeArchived ? { includeArchived: 'true' } : {})
+export async function emitirNfse(input: EmitirNfseInput): Promise<NfseRecord> {
+  return await emitirNota({ documentType: 'NFSE', ...input });
+}
+
+export async function emitirNfe(payload: Record<string, unknown>): Promise<NfseRecord> {
+  return await emitirNota({
+    documentType: 'NFE',
+    payload
   });
-  const suffix = query.toString() ? `?${query.toString()}` : '';
+}
+
+export async function emitirNfce(payload: Record<string, unknown>): Promise<NfseRecord> {
+  return await emitirNota({
+    documentType: 'NFCE',
+    payload
+  });
+}
+
+export async function listarNotas(options: ListarNotasInput = {}): Promise<NfseRecord[]> {
+  const suffix = buildListSuffix(options);
   return await apiClient.get<NfseRecord[]>(`/mei-notas${suffix}`);
 }
 
-export async function obterNfse(id: string, sync = false): Promise<NfseRecord> {
+export async function listarNfse(options: ListarNotasInput = {}): Promise<NfseRecord[]> {
+  return await listarNotas(options);
+}
+
+export async function obterNota(id: string, sync = false): Promise<NfseRecord> {
   const query = new URLSearchParams({ ...(sync ? { sync: 'true' } : {}) });
   const suffix = query.toString() ? `?${query.toString()}` : '';
   return await apiClient.get<NfseRecord>(`/mei-notas/${encodeURIComponent(id)}${suffix}`);
 }
 
-export async function baixarNfsePdf(id: string): Promise<{ blob: Blob; filename: string | null }> {
+export async function obterNfse(id: string, sync = false): Promise<NfseRecord> {
+  return await obterNota(id, sync);
+}
+
+export async function baixarNotaPdf(id: string): Promise<{ blob: Blob; filename: string | null }> {
   return await apiClient.requestBlob(`/mei-notas/${encodeURIComponent(id)}/pdf`, { method: 'GET' });
 }
 
-export async function baixarNfseXml(id: string): Promise<{ blob: Blob; filename: string | null }> {
+export async function baixarNfsePdf(id: string): Promise<{ blob: Blob; filename: string | null }> {
+  return await baixarNotaPdf(id);
+}
+
+export async function baixarNotaXml(id: string): Promise<{ blob: Blob; filename: string | null }> {
   return await apiClient.requestBlob(`/mei-notas/${encodeURIComponent(id)}/xml`, { method: 'GET' });
 }
 
-export async function atualizarNfse(id: string, input: AtualizarNfseInput): Promise<NfseRecord> {
+export async function baixarNfseXml(id: string): Promise<{ blob: Blob; filename: string | null }> {
+  return await baixarNotaXml(id);
+}
+
+export async function atualizarNota(id: string, input: AtualizarNfseInput): Promise<NfseRecord> {
   return await apiClient.patch<NfseRecord>(`/mei-notas/${encodeURIComponent(id)}`, input);
 }
 
-export async function cancelarNfse(id: string, input: CancelarNfseInput = {}): Promise<NfseRecord> {
+export async function atualizarNfse(id: string, input: AtualizarNfseInput): Promise<NfseRecord> {
+  return await atualizarNota(id, input);
+}
+
+export async function cancelarNota(id: string, input: CancelarNfseInput = {}): Promise<NfseRecord> {
   return await apiClient.post<NfseRecord>(`/mei-notas/${encodeURIComponent(id)}/cancelar`, input);
 }
 
-export async function arquivarNfse(id: string, input: ArquivarNfseInput = {}): Promise<NfseRecord> {
+export async function cancelarNfse(id: string, input: CancelarNfseInput = {}): Promise<NfseRecord> {
+  return await cancelarNota(id, input);
+}
+
+export async function arquivarNota(id: string, input: ArquivarNfseInput = {}): Promise<NfseRecord> {
   return await apiClient.post<NfseRecord>(`/mei-notas/${encodeURIComponent(id)}/arquivar`, input);
+}
+
+export async function arquivarNfse(id: string, input: ArquivarNfseInput = {}): Promise<NfseRecord> {
+  return await arquivarNota(id, input);
 }
 
 export async function listarCatalogoNfseClientes(

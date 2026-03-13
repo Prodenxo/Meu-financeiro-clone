@@ -11,11 +11,36 @@ import {
   downloadNfseXmlPorIntegracao,
   emitirNfse
 } from './plugnotas/nfse.service.js';
+import {
+  cancelarNfe,
+  consultarNfe,
+  consultarNfePorIdOuProtocolo,
+  consultarNfePorIntegracao,
+  downloadNfePdf,
+  downloadNfePdfPorIntegracao,
+  downloadNfeXml,
+  downloadNfeXmlPorIntegracao,
+  emitirNfe,
+  relatorioNfe
+} from './plugnotas/nfe.service.js';
+import {
+  cancelarNfce,
+  consultarNfce,
+  consultarNfcePorIdOuProtocolo,
+  consultarNfcePorIntegracao,
+  downloadNfcePdf,
+  downloadNfcePdfPorIntegracao,
+  downloadNfceXml,
+  downloadNfceXmlPorIntegracao,
+  emitirNfce
+} from './plugnotas/nfce.service.js';
 
 const TABLE = 'mei_nfse';
 const CLIENTS_TABLE = 'mei_nfse_clientes';
 const PRODUCTS_TABLE = 'mei_nfse_produtos';
 const DOCUMENT_TYPE_NFSE = 'NFSE';
+const DOCUMENT_TYPE_NFE = 'NFE';
+const DOCUMENT_TYPE_NFCE = 'NFCE';
 const SUPPORTED_DOCUMENT_TYPES = new Set(['NFSE', 'NFE', 'NFCE', 'CTE']);
 const PROVIDER_PLUGNOTAS = 'plugnotas';
 const EDITABLE_STATUSES = new Set(['processando', 'rejeitado', 'interrompido']);
@@ -59,6 +84,72 @@ const normalizeDocumentType = (value = DOCUMENT_TYPE_NFSE) => {
     throw badRequest('documentType inválido');
   }
   return normalized;
+};
+
+const parseBooleanLike = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  const text = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'sim'].includes(text)) return true;
+  if (['0', 'false', 'no', 'nao', 'não'].includes(text)) return false;
+  return fallback;
+};
+
+const normalizeWebhookDocumentType = (value) => {
+  const text = String(value || '').trim().toLowerCase();
+  if (text === 'nfse') return DOCUMENT_TYPE_NFSE;
+  if (text === 'nfe') return DOCUMENT_TYPE_NFE;
+  if (text === 'nfce') return DOCUMENT_TYPE_NFCE;
+  if (!text) return null;
+  return null;
+};
+
+const resolveInputDocumentType = (input = {}) => {
+  return normalizeDocumentType(input?.documentType || input?.document_type || DOCUMENT_TYPE_NFSE);
+};
+
+const getAdapterByDocumentType = (documentType) => {
+  const normalized = normalizeDocumentType(documentType);
+  if (normalized === DOCUMENT_TYPE_NFSE) {
+    return {
+      emitir: emitirNfse,
+      consultar: consultarNfse,
+      consultarPorIdOuProtocolo: consultarNfsePorIdOuProtocolo,
+      consultarPorIntegracao: consultarNfsePorIntegracao,
+      cancelar: cancelarNfse,
+      downloadPdf: downloadNfsePdf,
+      downloadPdfPorIntegracao: downloadNfsePdfPorIntegracao,
+      downloadXml: downloadNfseXml,
+      downloadXmlPorIntegracao: downloadNfseXmlPorIntegracao
+    };
+  }
+  if (normalized === DOCUMENT_TYPE_NFE) {
+    return {
+      emitir: emitirNfe,
+      consultar: consultarNfe,
+      consultarPorIdOuProtocolo: consultarNfePorIdOuProtocolo,
+      consultarPorIntegracao: consultarNfePorIntegracao,
+      cancelar: cancelarNfe,
+      downloadPdf: downloadNfePdf,
+      downloadPdfPorIntegracao: downloadNfePdfPorIntegracao,
+      downloadXml: downloadNfeXml,
+      downloadXmlPorIntegracao: downloadNfeXmlPorIntegracao
+    };
+  }
+  if (normalized === DOCUMENT_TYPE_NFCE) {
+    return {
+      emitir: emitirNfce,
+      consultar: consultarNfce,
+      consultarPorIdOuProtocolo: consultarNfcePorIdOuProtocolo,
+      consultarPorIntegracao: consultarNfcePorIntegracao,
+      cancelar: cancelarNfce,
+      downloadPdf: downloadNfcePdf,
+      downloadPdfPorIntegracao: downloadNfcePdfPorIntegracao,
+      downloadXml: downloadNfceXml,
+      downloadXmlPorIntegracao: downloadNfceXmlPorIntegracao
+    };
+  }
+  throw badRequest('documentType sem suporte operacional');
 };
 
 const collectResponseCandidates = (response) => {
@@ -183,6 +274,55 @@ const buildPayloadFromInput = (input, userId) => {
   return { payload, prestadorDoc, tomadorDoc };
 };
 
+const buildNfeLikePayloadFromInput = (input, userId, { defaultModel = '55' } = {}) => {
+  const idIntegracao = input?.idIntegracao || `mei-${userId}-${Date.now()}`;
+  const emitenteDoc = normalizeDoc(
+    input?.emitente?.cpfCnpj
+      || input?.emitenteCpfCnpj
+      || input?.prestadorCpfCnpj
+      || input?.cnpj
+      || ''
+  );
+  const destinatarioDoc = normalizeDoc(
+    input?.destinatario?.cpfCnpj
+      || input?.destinatarioCpfCnpj
+      || input?.tomadorCpfCnpj
+      || ''
+  );
+  const itensInput = Array.isArray(input?.itens)
+    ? input.itens
+    : (input?.item ? [input.item] : []);
+
+  const payload = prune({
+    idIntegracao,
+    ...(input?.payload && typeof input.payload === 'object' ? input.payload : {}),
+    modelo: input?.modelo || defaultModel,
+    natureza: input?.natureza || input?.descricao || 'VENDA',
+    emitente: prune({
+      ...(input?.emitente || {}),
+      cpfCnpj: emitenteDoc || input?.emitente?.cpfCnpj || null,
+      razaoSocial: input?.emitente?.razaoSocial || input?.emitenteRazaoSocial || null,
+      inscricaoEstadual: input?.emitente?.inscricaoEstadual || input?.emitenteInscricaoEstadual || null
+    }),
+    destinatario: prune({
+      ...(input?.destinatario || {}),
+      cpfCnpj: destinatarioDoc || input?.destinatario?.cpfCnpj || null,
+      razaoSocial: input?.destinatario?.razaoSocial || input?.destinatarioRazaoSocial || null,
+      email: input?.destinatario?.email || input?.destinatarioEmail || null
+    }),
+    itens: itensInput,
+    ...(input?.config && typeof input.config === 'object'
+      ? { config: { ...input.config } }
+      : {})
+  }) || {};
+
+  if (payload?.config && payload.config.producao === undefined) {
+    payload.config.producao = parseBooleanLike(input?.producao, false);
+  }
+
+  return { payload, prestadorDoc: emitenteDoc, tomadorDoc: destinatarioDoc };
+};
+
 const validatePayload = (payload) => {
   const prestadorDoc = normalizeDoc(payload?.prestador?.cpfCnpj || '');
   if (!prestadorDoc) {
@@ -222,6 +362,76 @@ const validatePayload = (payload) => {
   }
 };
 
+const validateNfeLikePayload = (payload, { label = 'NF-e' } = {}) => {
+  const emitenteDoc = normalizeDoc(payload?.emitente?.cpfCnpj || '');
+  if (!emitenteDoc) {
+    throw badRequest(`CNPJ do emitente da ${label} é obrigatório`);
+  }
+  if (!isValidCnpj(emitenteDoc)) {
+    throw badRequest(`CNPJ do emitente da ${label} deve ter 14 dígitos`);
+  }
+
+  const destinatarioDoc = normalizeDoc(payload?.destinatario?.cpfCnpj || '');
+  if (destinatarioDoc && !isValidCpfOrCnpj(destinatarioDoc)) {
+    throw badRequest(`CPF/CNPJ do destinatário da ${label} inválido`);
+  }
+
+  const itens = Array.isArray(payload?.itens) ? payload.itens : [];
+  if (!itens.length) {
+    throw badRequest(`Itens da ${label} são obrigatórios`);
+  }
+};
+
+const buildPayloadByDocumentType = (input, userId, documentType) => {
+  const payloadBase = input?.payload && typeof input.payload === 'object'
+    ? normalizePayloadShape(prune(input.payload))
+    : null;
+
+  if (documentType === DOCUMENT_TYPE_NFSE) {
+    if (payloadBase) {
+      return {
+        payload: payloadBase,
+        prestadorDoc: normalizeDoc(payloadBase?.prestador?.cpfCnpj || ''),
+        tomadorDoc: normalizeDoc(payloadBase?.tomador?.cpfCnpj || '')
+      };
+    }
+    return buildPayloadFromInput(input, userId);
+  }
+
+  if (payloadBase) {
+    return {
+      payload: payloadBase,
+      prestadorDoc: normalizeDoc(payloadBase?.emitente?.cpfCnpj || ''),
+      tomadorDoc: normalizeDoc(payloadBase?.destinatario?.cpfCnpj || '')
+    };
+  }
+
+  if (documentType === DOCUMENT_TYPE_NFE) {
+    return buildNfeLikePayloadFromInput(input, userId, { defaultModel: '55' });
+  }
+  if (documentType === DOCUMENT_TYPE_NFCE) {
+    return buildNfeLikePayloadFromInput(input, userId, { defaultModel: '65' });
+  }
+
+  throw badRequest(`documentType ${documentType} sem suporte de payload`);
+};
+
+const validatePayloadByDocumentType = (payload, documentType) => {
+  if (documentType === DOCUMENT_TYPE_NFSE) {
+    validatePayload(payload);
+    return;
+  }
+  if (documentType === DOCUMENT_TYPE_NFE) {
+    validateNfeLikePayload(payload, { label: 'NF-e' });
+    return;
+  }
+  if (documentType === DOCUMENT_TYPE_NFCE) {
+    validateNfeLikePayload(payload, { label: 'NFC-e' });
+    return;
+  }
+  throw badRequest(`documentType ${documentType} sem suporte de validação`);
+};
+
 const normalizePayloadShape = (payload) => {
   if (!payload || typeof payload !== 'object') return payload;
   const next = { ...payload };
@@ -232,7 +442,7 @@ const normalizePayloadShape = (payload) => {
 };
 
 const ensureRecordId = (id) => {
-  if (!id) throw badRequest('ID da NFSe é obrigatório');
+  if (!id) throw badRequest('ID da nota fiscal é obrigatório');
 };
 
 const toObject = (value) => {
@@ -302,7 +512,7 @@ const parseUpdateInput = (input) => {
   }
 
   if (!Object.keys(metadata).length && !hasDescription && rawTags === undefined) {
-    throw badRequest('Informe ao menos um campo editável para atualizar a NFSe');
+    throw badRequest('Informe ao menos um campo editável para atualizar a nota fiscal');
   }
 
   return {
@@ -321,8 +531,11 @@ const parseArchivedInput = (value) => {
   throw badRequest('Campo archived deve ser booleano');
 };
 
-const buildClienteCatalogEntry = (payload) => {
-  const tomador = toObject(payload?.tomador);
+const buildClienteCatalogEntry = (payload, { documentType = DOCUMENT_TYPE_NFSE } = {}) => {
+  const normalizedType = normalizeDocumentType(documentType);
+  const tomador = normalizedType === DOCUMENT_TYPE_NFSE
+    ? toObject(payload?.tomador)
+    : toObject(payload?.destinatario);
   const documento = normalizeDoc(tomador.cpfCnpj);
   const nome = String(tomador.razaoSocial || '').trim();
   const email = normalizeEmail(tomador.email);
@@ -340,7 +553,37 @@ const buildClienteCatalogEntry = (payload) => {
   };
 };
 
-const buildProdutoCatalogEntries = (payload) => {
+const buildProdutoCatalogEntries = (payload, { documentType = DOCUMENT_TYPE_NFSE } = {}) => {
+  const normalizedType = normalizeDocumentType(documentType);
+  if (normalizedType !== DOCUMENT_TYPE_NFSE) {
+    const itens = Array.isArray(payload?.itens) ? payload.itens : [];
+    return itens
+      .map((item) => {
+        const codigo = String(item?.codigo || item?.sku || '').trim();
+        const cnae = String(item?.ncm || item?.cfop || '').trim();
+        const discriminacao = String(item?.descricao || '').trim();
+        const discriminacaoNorm = normalizeText(discriminacao);
+        const aliquota = toNumber(
+          item?.tributos?.icms?.aliquota
+            ?? item?.tributos?.pis?.aliquota
+            ?? item?.tributos?.cofins?.aliquota
+        );
+        const valorSugerido = toNumber(item?.valor || item?.valorUnitario?.comercial);
+        const aliquotaKey = aliquota === null ? '' : aliquota.toFixed(4);
+
+        if (!codigo && !cnae && !discriminacaoNorm) return null;
+
+        return {
+          dedupe_key: `item:${normalizeText(codigo)}|${normalizeText(cnae)}|${discriminacaoNorm}|${aliquotaKey}`,
+          codigo,
+          cnae,
+          discriminacao,
+          aliquota,
+          valor_sugerido: valorSugerido
+        };
+      })
+      .filter(Boolean);
+  }
   const servicos = Array.isArray(payload?.servico) ? payload.servico : [];
   return servicos
     .map((item) => {
@@ -413,13 +656,13 @@ const findRecord = async (userId, id) => {
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw badRequest(error.message);
-  if (!data) throw notFound('NFSe não encontrada');
+  if (!data) throw notFound('Nota fiscal não encontrada');
   return data;
 };
 
 const upsertClienteCatalogo = async (userId, payload, { documentType = DOCUMENT_TYPE_NFSE } = {}) => {
   const normalizedType = normalizeDocumentType(documentType);
-  const entry = buildClienteCatalogEntry(payload);
+  const entry = buildClienteCatalogEntry(payload, { documentType: normalizedType });
   if (!entry) return null;
 
   const now = new Date().toISOString();
@@ -439,7 +682,7 @@ const upsertClienteCatalogo = async (userId, payload, { documentType = DOCUMENT_
 
 const upsertProdutosCatalogo = async (userId, payload, { documentType = DOCUMENT_TYPE_NFSE } = {}) => {
   const normalizedType = normalizeDocumentType(documentType);
-  const entries = buildProdutoCatalogEntries(payload);
+  const entries = buildProdutoCatalogEntries(payload, { documentType: normalizedType });
   if (!entries.length) return 0;
 
   const now = new Date().toISOString();
@@ -486,29 +729,30 @@ const extractProtocol = (response) => {
 };
 
 const refreshWithPlugNotas = async (record) => {
-  if (record?.plugnotas_id) return await consultarNfse(record.plugnotas_id);
-  if (record?.protocol) return await consultarNfsePorIdOuProtocolo(record.protocol);
-  if (record?.id_integracao && record?.cnpj_prestador) {
-    return await consultarNfsePorIntegracao(record.id_integracao, record.cnpj_prestador);
+  const documentType = normalizeDocumentType(record?.document_type || DOCUMENT_TYPE_NFSE);
+  const adapter = getAdapterByDocumentType(documentType);
+  if (record?.plugnotas_id) return await adapter.consultar(record.plugnotas_id);
+  if (record?.protocol && adapter.consultarPorIdOuProtocolo) {
+    return await adapter.consultarPorIdOuProtocolo(record.protocol);
+  }
+  if (record?.id_integracao && record?.cnpj_prestador && adapter.consultarPorIntegracao) {
+    return await adapter.consultarPorIntegracao(record.id_integracao, record.cnpj_prestador);
   }
   return null;
 };
 
 export const emitirNota = async (userId, input) => {
-  const payloadBase = input?.payload && typeof input.payload === 'object'
-    ? normalizePayloadShape(prune(input.payload))
-    : null;
-  const { payload, prestadorDoc, tomadorDoc } = payloadBase
-    ? { payload: payloadBase, prestadorDoc: normalizeDoc(payloadBase?.prestador?.cpfCnpj || ''), tomadorDoc: normalizeDoc(payloadBase?.tomador?.cpfCnpj || '') }
-    : buildPayloadFromInput(input, userId);
+  const documentType = resolveInputDocumentType(input);
+  const adapter = getAdapterByDocumentType(documentType);
+  const { payload, prestadorDoc, tomadorDoc } = buildPayloadByDocumentType(input, userId, documentType);
 
   if (!payload?.idIntegracao) {
     payload.idIntegracao = `mei-${userId}-${Date.now()}`;
   }
 
-  validatePayload(payload);
+  validatePayloadByDocumentType(payload, documentType);
 
-  const response = await emitirNfse(payload);
+  const response = await adapter.emitir(payload);
   const plugnotasId = extractPlugNotasId(response);
   const idIntegracao = extractIntegracaoId(response) || payload.idIntegracao;
   const status = extractPlugNotasStatus(response);
@@ -520,21 +764,23 @@ export const emitirNota = async (userId, input) => {
     protocol,
     id_integracao: idIntegracao,
     status,
-    document_type: DOCUMENT_TYPE_NFSE,
+    document_type: documentType,
     provider: PROVIDER_PLUGNOTAS,
-    cnpj_prestador: prestadorDoc || normalizeDoc(payload?.prestador?.cpfCnpj || ''),
-    cnpj_tomador: tomadorDoc || normalizeDoc(payload?.tomador?.cpfCnpj || ''),
+    cnpj_prestador: prestadorDoc
+      || normalizeDoc(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || ''),
+    cnpj_tomador: tomadorDoc
+      || normalizeDoc(payload?.tomador?.cpfCnpj || payload?.destinatario?.cpfCnpj || ''),
     payload_json: payload,
     response_json: response,
     metadata_json: Object.keys(metadata).length ? metadata : null
   });
 
   try {
-    await upsertClienteCatalogo(userId, payload, { documentType: DOCUMENT_TYPE_NFSE });
-    await upsertProdutosCatalogo(userId, payload, { documentType: DOCUMENT_TYPE_NFSE });
+    await upsertClienteCatalogo(userId, payload, { documentType });
+    await upsertProdutosCatalogo(userId, payload, { documentType });
   } catch (error) {
     console.warn(
-      '[mei-notas] Falha ao atualizar catalogo NFSe',
+      `[mei-notas] Falha ao atualizar catalogo ${documentType}`,
       error instanceof Error ? error.message : error
     );
   }
@@ -542,7 +788,10 @@ export const emitirNota = async (userId, input) => {
   return created;
 };
 
-export const listarNotas = async (userId, { includeArchived = false } = {}) => {
+export const listarNotas = async (
+  userId,
+  { includeArchived = false, documentType } = {}
+) => {
   const dbClient = getDb();
   let query = dbClient
     .from(TABLE)
@@ -550,12 +799,19 @@ export const listarNotas = async (userId, { includeArchived = false } = {}) => {
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(50);
+  if (documentType) {
+    query = query.eq('document_type', normalizeDocumentType(documentType));
+  }
   if (!includeArchived) {
     query = query.is('archived_at', null);
   }
   const { data, error } = await query;
   if (error) throw badRequest(error.message);
   return data || [];
+};
+
+export const listarRelatorioNfe = async (_userId, filters = {}) => {
+  return await relatorioNfe(filters);
 };
 
 export const listarCatalogoClientes = async (
@@ -628,12 +884,12 @@ export const atualizarNota = async (userId, id, input) => {
   const updateInput = parseUpdateInput(input);
   const record = await findRecord(userId, id);
   if (record?.archived_at) {
-    throw badRequest('NFSe arquivada não permite edição');
+    throw badRequest('Nota fiscal arquivada não permite edição');
   }
 
   const status = normalizeStatus(record?.status);
   if (!EDITABLE_STATUSES.has(status)) {
-    throw badRequest('NFSe no status atual não permite edição');
+    throw badRequest('Nota fiscal no status atual não permite edição');
   }
   const metadata = prune({
     ...toObject(record?.metadata_json),
@@ -656,6 +912,8 @@ export const atualizarNota = async (userId, id, input) => {
 export const cancelarNota = async (userId, id, input) => {
   ensureRecordId(id);
   const record = await findRecord(userId, id);
+  const documentType = normalizeDocumentType(record?.document_type || DOCUMENT_TYPE_NFSE);
+  const adapter = getAdapterByDocumentType(documentType);
   const statusAtual = normalizeStatus(record?.status);
   if (statusAtual === 'cancelado') {
     return record;
@@ -665,10 +923,18 @@ export const cancelarNota = async (userId, id, input) => {
   let providerResponse = null;
   let providerError = null;
   let nextStatus = 'cancelado';
-
-  if (record?.plugnotas_id) {
+  let providerId = record?.plugnotas_id || record?.protocol || null;
+  if (!providerId && record?.id_integracao && record?.cnpj_prestador && adapter.consultarPorIntegracao) {
     try {
-      providerResponse = await cancelarNfse(record.plugnotas_id, { reason });
+      const providerLookup = await adapter.consultarPorIntegracao(record.id_integracao, record.cnpj_prestador);
+      providerId = extractPlugNotasId(providerLookup) || providerId;
+    } catch (_error) {
+      // Mantém comportamento de fallback local quando não for possível resolver o ID remoto.
+    }
+  }
+  if (providerId) {
+    try {
+      providerResponse = await adapter.cancelar(providerId, { reason });
       nextStatus = extractPlugNotasStatus(providerResponse) || 'cancelado';
     } catch (error) {
       providerError = error;
@@ -681,7 +947,7 @@ export const cancelarNota = async (userId, id, input) => {
     cancelamento: prune({
       requestedAt: new Date().toISOString(),
       reason,
-      mode: record?.plugnotas_id ? 'provider' : 'local',
+      mode: providerId ? 'provider' : 'local',
       ...(providerError ? { providerError: String(providerError?.message || providerError) } : {})
     })
   }) || {};
@@ -743,24 +1009,32 @@ export const arquivarNota = async (userId, id, input = {}) => {
 
 export const baixarPdf = async (userId, id) => {
   const record = await findRecord(userId, id);
+  const documentType = normalizeDocumentType(record?.document_type || DOCUMENT_TYPE_NFSE);
+  const adapter = getAdapterByDocumentType(documentType);
   if (record?.plugnotas_id) {
-    return await downloadNfsePdf(record.plugnotas_id);
+    const file = await adapter.downloadPdf(record.plugnotas_id);
+    return { ...file, documentType };
   }
-  if (record?.id_integracao && record?.cnpj_prestador) {
-    return await downloadNfsePdfPorIntegracao(record.id_integracao, record.cnpj_prestador);
+  if (record?.id_integracao && record?.cnpj_prestador && adapter.downloadPdfPorIntegracao) {
+    const file = await adapter.downloadPdfPorIntegracao(record.id_integracao, record.cnpj_prestador);
+    return { ...file, documentType };
   }
-  throw notFound('PDF da NFSe não disponível');
+  throw notFound('PDF da nota fiscal não disponível');
 };
 
 export const baixarXml = async (userId, id) => {
   const record = await findRecord(userId, id);
+  const documentType = normalizeDocumentType(record?.document_type || DOCUMENT_TYPE_NFSE);
+  const adapter = getAdapterByDocumentType(documentType);
   if (record?.plugnotas_id) {
-    return await downloadNfseXml(record.plugnotas_id);
+    const file = await adapter.downloadXml(record.plugnotas_id);
+    return { ...file, documentType };
   }
-  if (record?.id_integracao && record?.cnpj_prestador) {
-    return await downloadNfseXmlPorIntegracao(record.id_integracao, record.cnpj_prestador);
+  if (record?.id_integracao && record?.cnpj_prestador && adapter.downloadXmlPorIntegracao) {
+    const file = await adapter.downloadXmlPorIntegracao(record.id_integracao, record.cnpj_prestador);
+    return { ...file, documentType };
   }
-  throw notFound('XML da NFSe não disponível');
+  throw notFound('XML da nota fiscal não disponível');
 };
 
 export const processarWebhook = async (payload) => {
@@ -774,11 +1048,19 @@ export const processarWebhook = async (payload) => {
     || payload?.documents?.[0]?.idIntegracao
     || payload?.documentos?.[0]?.idIntegracao
     || null;
+  const documentType = normalizeWebhookDocumentType(
+    payload?.documento
+      || payload?.document
+      || payload?.tipoDocumento
+      || payload?.documentoTipo
+      || payload?.documents?.[0]?.documento
+      || payload?.documentos?.[0]?.documento
+  );
   const status = extractPlugNotasStatus(payload);
   const protocol = extractProtocol(payload);
 
   if (!plugnotasId && !idIntegracao) {
-    throw badRequest('Webhook sem identificadores da NFSe');
+    throw badRequest('Webhook sem identificadores da nota fiscal');
   }
 
   const dbClient = getDb();
@@ -796,14 +1078,21 @@ export const processarWebhook = async (payload) => {
   if (idIntegracao) {
     updates.id_integracao = idIntegracao;
   }
+  if (documentType) {
+    updates.document_type = documentType;
+  }
 
   const resolveSingleRecordByField = async (field, value) => {
     if (!value) return null;
-    const { data, error } = await dbClient
+    let query = dbClient
       .from(TABLE)
       .select('id')
       .eq(field, value)
       .limit(2);
+    if (documentType) {
+      query = query.eq('document_type', documentType);
+    }
+    const { data, error } = await query;
     if (error) throw badRequest(error.message);
     if (!data?.length) return null;
     if (data.length > 1) {
@@ -834,8 +1123,18 @@ export const processarWebhook = async (payload) => {
     data = await updateById(record?.id);
   }
 
+  // Compatibilidade com webhooks legados sem campo "documento"
+  if (!data && !documentType && plugnotasId) {
+    const record = await resolveSingleRecordByField('plugnotas_id', plugnotasId);
+    data = await updateById(record?.id);
+  }
+  if (!data && !documentType && idIntegracao) {
+    const record = await resolveSingleRecordByField('id_integracao', idIntegracao);
+    data = await updateById(record?.id);
+  }
+
   if (!data) {
-    throw notFound('NFSe referente ao webhook não encontrada');
+    throw notFound('Nota fiscal referente ao webhook não encontrada');
   }
 
   return data;

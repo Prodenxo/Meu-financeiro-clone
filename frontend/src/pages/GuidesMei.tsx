@@ -20,6 +20,7 @@ import {
   listarCatalogoNfseProdutos,
   listarNfse,
   obterNfse,
+  type DocumentType,
   type NfseCatalogCliente,
   type NfseCatalogProduto,
   type EmitirNfseInput,
@@ -271,6 +272,7 @@ export default function GuidesMei() {
   const [nfseStatusFilter, setNfseStatusFilter] = useState('all');
   const [nfsePeriodFilter, setNfsePeriodFilter] = useState('all');
   const [nfseShowArchived, setNfseShowArchived] = useState(false);
+  const [nfseDocumentTypeFilter, setNfseDocumentTypeFilter] = useState<'all' | DocumentType>('NFSE');
   const nfseValidationMessage = useMemo(() => getNfseValidationMessage(nfseForm), [nfseForm]);
 
   const normalizedContribuinte = useMemo(() => normalizeDoc(contribuinteDoc), [contribuinteDoc]);
@@ -322,14 +324,17 @@ export default function GuidesMei() {
     setNfseLoading(true);
     setNfseError(null);
     try {
-      const list = await listarNfse({ includeArchived: nfseShowArchived });
+      const list = await listarNfse({
+        includeArchived: nfseShowArchived,
+        ...(nfseDocumentTypeFilter !== 'all' ? { documentType: nfseDocumentTypeFilter } : {})
+      });
       setNfseList(list);
     } catch (error) {
       setNfseError(error instanceof Error ? error.message : 'Erro ao listar NFSe.');
     } finally {
       setNfseLoading(false);
     }
-  }, [nfseShowArchived]);
+  }, [nfseDocumentTypeFilter, nfseShowArchived]);
 
   const loadNfseCatalog = useCallback(async () => {
     setNfseCatalogLoading(true);
@@ -742,6 +747,12 @@ export default function GuidesMei() {
 
   const filteredNfseList = useMemo(() => {
     return nfseList.filter((item) => {
+      if (
+        nfseDocumentTypeFilter !== 'all'
+        && String(item.document_type || '').toUpperCase() !== nfseDocumentTypeFilter
+      ) {
+        return false;
+      }
       if (nfseStatusFilter !== 'all' && getNfseStatusKey(item.status) !== nfseStatusFilter) {
         return false;
       }
@@ -750,7 +761,7 @@ export default function GuidesMei() {
       }
       return true;
     });
-  }, [nfseList, nfsePeriodFilter, nfseStatusFilter]);
+  }, [nfseDocumentTypeFilter, nfseList, nfsePeriodFilter, nfseStatusFilter]);
 
   const dasPendentesCount = useMemo(
     () => meiPeriods.filter((period) => period.status !== 'pago').length,
@@ -1366,7 +1377,17 @@ export default function GuidesMei() {
             </div>
           </div>
 
-          <div className="admin-toolbar grid gap-2 md:grid-cols-2">
+          <div className="admin-toolbar grid gap-2 md:grid-cols-3">
+            <select
+              className="planner-input-compact"
+              value={nfseDocumentTypeFilter}
+              onChange={(event) => setNfseDocumentTypeFilter(event.target.value as 'all' | DocumentType)}
+            >
+              <option value="all">Todos os tipos</option>
+              <option value="NFSE">NFSe</option>
+              <option value="NFE">NF-e</option>
+              <option value="NFCE">NFC-e</option>
+            </select>
             <select
               className="planner-input-compact"
               value={nfseStatusFilter}
@@ -1397,7 +1418,7 @@ export default function GuidesMei() {
           {nfseLoading ? (
             <div className="admin-empty-state">Carregando notas...</div>
           ) : filteredNfseList.length === 0 ? (
-            <div className="admin-empty-state">Nenhuma NFSe emitida ainda.</div>
+            <div className="admin-empty-state">Nenhuma nota fiscal encontrada para o filtro atual.</div>
           ) : (
             <div className="space-y-3">
               {filteredNfseList.map((item) => {
@@ -1415,6 +1436,7 @@ export default function GuidesMei() {
                         </p>
                         <p className="text-xs text-slate-500 dark:text-gray-400">
                           Emitida em {formatDateTime(item.created_at)}
+                          {item.document_type ? ` • Tipo ${item.document_type}` : ''}
                           {item.protocol ? ` • Protocolo ${item.protocol}` : ''}
                         </p>
                       </div>

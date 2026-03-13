@@ -64,7 +64,7 @@ test('mei-notas rejeita webhook sem identificadores', async () => {
 
   await assert.rejects(
     () => processarWebhook({}),
-    /Webhook sem identificadores da NFSe/
+    /Webhook sem identificadores da nota fiscal/
   );
 });
 
@@ -82,14 +82,52 @@ test('mei-notas rejeita operações sem ID', async () => {
 
   await assert.rejects(
     () => atualizarNota('user-1', '', { descricaoInterna: 'teste' }),
-    /ID da NFSe é obrigatório/
+    /ID da nota fiscal é obrigatório/
   );
   await assert.rejects(
     () => cancelarNota('user-1', '', {}),
-    /ID da NFSe é obrigatório/
+    /ID da nota fiscal é obrigatório/
   );
   await assert.rejects(
     () => arquivarNota('user-1', '', {}),
-    /ID da NFSe é obrigatório/
+    /ID da nota fiscal é obrigatório/
+  );
+});
+
+test('mei-notas rejeita documentType inválido', async () => {
+  const { emitirNota } = await import('../src/services/mei-notas.service.js');
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      documentType: 'ABC',
+      payload: {}
+    }),
+    /documentType inválido/
+  );
+});
+
+test('mei-notas valida payload mínimo para NFe e NFCe', async () => {
+  const { emitirNota } = await import('../src/services/mei-notas.service.js');
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      documentType: 'NFE',
+      payload: {
+        emitente: { cpfCnpj: '12345678000199' }
+      }
+    }),
+    /Itens da NF-e são obrigatórios/
+  );
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      documentType: 'NFCE',
+      payload: {
+        emitente: { cpfCnpj: '12345678000199' },
+        itens: [{ codigo: 'A1', descricao: 'Produto', valor: 10 }],
+        destinatario: { cpfCnpj: '123' }
+      }
+    }),
+    /CPF\/CNPJ do destinatário da NFC-e inválido/
   );
 });
