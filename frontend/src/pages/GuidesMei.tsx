@@ -14,6 +14,8 @@ import {
   atualizarNfse,
   baixarNfsePdf,
   baixarNfseXml,
+  cadastrarPlugNotasCertificado,
+  cadastrarPlugNotasEmpresa,
   cancelarNfse,
   emitirNfse,
   listarCatalogoNfseClientes,
@@ -180,6 +182,127 @@ const getDefaultPeriod = () => {
 };
 
 const hasRequiredText = (value: unknown) => String(value || '').trim().length > 0;
+type PlugNotasRegimeTributario = '1' | '2' | '3';
+
+type PlugNotasCompanyForm = {
+  razaoSocial: string;
+  nomeFantasia: string;
+  inscricaoMunicipal: string;
+  inscricaoEstadual: string;
+  email: string;
+  regimeTributario: PlugNotasRegimeTributario;
+  simplesNacional: boolean;
+  cep: string;
+  tipoLogradouro: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  codigoCidade: string;
+  descricaoCidade: string;
+  estado: string;
+};
+
+const getDefaultPlugNotasCompanyForm = (): PlugNotasCompanyForm => ({
+  razaoSocial: '',
+  nomeFantasia: '',
+  inscricaoMunicipal: '',
+  inscricaoEstadual: '',
+  email: '',
+  regimeTributario: '1',
+  simplesNacional: true,
+  cep: '',
+  tipoLogradouro: 'Rua',
+  logradouro: '',
+  numero: '',
+  complemento: '',
+  bairro: '',
+  codigoCidade: '',
+  descricaoCidade: '',
+  estado: ''
+});
+
+const getPlugNotasCompanyValidationMessage = (form: PlugNotasCompanyForm) => {
+  if (!hasRequiredText(form.razaoSocial)) return 'Informe a razão social da empresa para configurar a PlugNotas.';
+  if (!hasRequiredText(form.logradouro)) return 'Informe o logradouro do endereço da empresa.';
+  if (!hasRequiredText(form.numero)) return 'Informe o número do endereço da empresa.';
+  if (!hasRequiredText(form.bairro)) return 'Informe o bairro do endereço da empresa.';
+  if (normalizeDoc(form.cep).length !== 8) return 'Informe um CEP válido com 8 dígitos.';
+  if (!hasRequiredText(form.codigoCidade)) return 'Informe o código IBGE da cidade.';
+  if (!hasRequiredText(form.descricaoCidade)) return 'Informe a cidade da empresa.';
+  if (form.estado.trim().length !== 2) return 'Informe a UF com 2 letras (ex.: PR).';
+  return null;
+};
+
+const buildPlugNotasEmpresaPayload = ({
+  cnpj,
+  certificadoId,
+  form
+}: {
+  cnpj: string;
+  certificadoId: string;
+  form: PlugNotasCompanyForm;
+}) => {
+  const endereco: Record<string, unknown> = {
+    tipoLogradouro: form.tipoLogradouro.trim() || 'Rua',
+    logradouro: form.logradouro.trim(),
+    numero: form.numero.trim(),
+    bairro: form.bairro.trim(),
+    codigoPais: '1058',
+    descricaoPais: 'Brasil',
+    codigoCidade: form.codigoCidade.trim(),
+    descricaoCidade: form.descricaoCidade.trim(),
+    estado: form.estado.trim().toUpperCase(),
+    cep: normalizeDoc(form.cep).slice(0, 8)
+  };
+  if (form.complemento.trim()) {
+    endereco.complemento = form.complemento.trim();
+  }
+
+  const payload: Record<string, unknown> = {
+    cpfCnpj: cnpj,
+    certificado: certificadoId,
+    razaoSocial: form.razaoSocial.trim(),
+    nomeFantasia: form.nomeFantasia.trim() || form.razaoSocial.trim(),
+    regimeTributario: Number(form.regimeTributario || '1'),
+    simplesNacional: Boolean(form.simplesNacional),
+    endereco,
+    nfse: {
+      ativo: true,
+      tipoContrato: 0,
+      config: { producao: false }
+    },
+    nfe: {
+      ativo: true,
+      tipoContrato: 0,
+      config: {
+        producao: false,
+        serie: 1,
+        numero: 1
+      }
+    },
+    nfce: {
+      ativo: true,
+      tipoContrato: 0,
+      config: {
+        producao: false,
+        serie: 1,
+        numero: 1
+      }
+    }
+  };
+  if (form.email.trim()) {
+    payload.email = form.email.trim();
+  }
+  if (form.inscricaoMunicipal.trim()) {
+    payload.inscricaoMunicipal = form.inscricaoMunicipal.trim();
+  }
+  if (form.inscricaoEstadual.trim()) {
+    payload.inscricaoEstadual = form.inscricaoEstadual.trim();
+  }
+
+  return payload;
+};
 
 const getNfseValidationMessage = (input: EmitirNfseInput) => {
   const prestadorCpfCnpj = normalizeDoc(input.prestadorCpfCnpj || '');
@@ -273,6 +396,10 @@ export default function GuidesMei() {
   const [nfsePeriodFilter, setNfsePeriodFilter] = useState('all');
   const [nfseShowArchived, setNfseShowArchived] = useState(false);
   const [nfseDocumentTypeFilter, setNfseDocumentTypeFilter] = useState<'all' | DocumentType>('NFSE');
+  const [certificateSuccess, setCertificateSuccess] = useState<string | null>(null);
+  const [plugNotasCompanyForm, setPlugNotasCompanyForm] = useState<PlugNotasCompanyForm>(() => (
+    getDefaultPlugNotasCompanyForm()
+  ));
   const nfseValidationMessage = useMemo(() => getNfseValidationMessage(nfseForm), [nfseForm]);
 
   const normalizedContribuinte = useMemo(() => normalizeDoc(contribuinteDoc), [contribuinteDoc]);
@@ -377,6 +504,13 @@ export default function GuidesMei() {
     }));
   };
 
+  const updatePlugNotasCompanyForm = (updates: Partial<PlugNotasCompanyForm>) => {
+    setPlugNotasCompanyForm((current) => ({
+      ...current,
+      ...updates
+    }));
+  };
+
   const handleSelectCatalogCliente = (id: string) => {
     setSelectedCatalogClienteId(id);
     if (!id) return;
@@ -450,15 +584,42 @@ export default function GuidesMei() {
   }, [normalizedContribuinte]);
 
   useEffect(() => {
+    setPlugNotasCompanyForm((current) => {
+      const razao = nfseForm.prestadorRazaoSocial?.trim() || '';
+      const email = nfseForm.prestadorEmail?.trim() || '';
+      if (!razao && !email) return current;
+
+      let changed = false;
+      const next = { ...current };
+      if (razao && !current.razaoSocial.trim()) {
+        next.razaoSocial = razao;
+        changed = true;
+      }
+      if (razao && !current.nomeFantasia.trim()) {
+        next.nomeFantasia = razao;
+        changed = true;
+      }
+      if (email && !current.email.trim()) {
+        next.email = email;
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [nfseForm.prestadorEmail, nfseForm.prestadorRazaoSocial]);
+
+  useEffect(() => {
     setValidationError(null);
     setValidationSuccess(null);
   }, [normalizedContribuinte, selectedMonth, selectedYear, hasUserCertificate]);
 
   const handleDownload = async (periodoApuracao: string, competencia?: string | null) => {
+    const contribuinte = normalizedContribuinte && contribuinteTipo !== null
+      ? { numero: normalizedContribuinte, tipo: contribuinteTipo }
+      : undefined;
     const { blob, filename } = await downloadMeiGuide(
       normalizedContribuinte,
       periodoApuracao,
-      normalizedContribuinte ? { numero: normalizedContribuinte, tipo: contribuinteTipo } : undefined
+      contribuinte
     );
     triggerFileDownload(blob, filename || buildFilenameFromCompetencia(competencia || null));
   };
@@ -468,27 +629,101 @@ export default function GuidesMei() {
       setCertificateError('Selecione o arquivo do certificado.');
       return;
     }
-    if (!certificatePassword) {
+    const trimmedPassword = certificatePassword.trim();
+    if (!trimmedPassword) {
       setCertificateError('Informe a senha do certificado.');
       return;
     }
+    const companyValidationMessage = getPlugNotasCompanyValidationMessage(plugNotasCompanyForm);
+    if (companyValidationMessage) {
+      setCertificateError(companyValidationMessage);
+      return;
+    }
+
     setCertificateError(null);
+    setCertificateSuccess(null);
     setIsUploadingCert(true);
+    let uploadedToMei = false;
     try {
-      const status = await uploadMeiCertificate(certificateFile, certificatePassword);
+      const status = await uploadMeiCertificate(certificateFile, trimmedPassword);
+      uploadedToMei = true;
       applyDocumento(status.documento, true);
+
+      const cnpj = normalizeDoc(
+        status.documento
+        || normalizedContribuinte
+        || nfseForm.prestadorCpfCnpj
+        || contribuinteDoc
+      );
+      if (cnpj.length !== 14) {
+        throw new Error('Não foi possível identificar um CNPJ válido para configurar a empresa na PlugNotas.');
+      }
+
+      const certificateResponse = await cadastrarPlugNotasCertificado({
+        arquivo: certificateFile,
+        senha: trimmedPassword,
+        ...(
+          plugNotasCompanyForm.email.trim()
+            ? { email: plugNotasCompanyForm.email.trim() }
+            : {}
+        )
+      });
+      const certificateId = String(certificateResponse.id || '').trim();
+      if (!certificateId) {
+        throw new Error('A PlugNotas não retornou o ID do certificado.');
+      }
+
+      const companyPayload = buildPlugNotasEmpresaPayload({
+        cnpj,
+        certificadoId: certificateId,
+        form: plugNotasCompanyForm
+      });
+      const companyResponse = await cadastrarPlugNotasEmpresa(companyPayload);
+      const returnedCnpj = normalizeDoc(String(companyResponse.cnpj || cnpj));
+      const formattedCnpj = formatDocument(returnedCnpj || cnpj);
+
+      setContribuinteDoc(formattedCnpj);
+      updateNfseForm({
+        prestadorCpfCnpj: formattedCnpj,
+        ...(plugNotasCompanyForm.razaoSocial.trim()
+          ? { prestadorRazaoSocial: plugNotasCompanyForm.razaoSocial.trim() }
+          : {}),
+        ...(plugNotasCompanyForm.email.trim()
+          ? { prestadorEmail: plugNotasCompanyForm.email.trim() }
+          : {})
+      });
+
       setCertificateFile(null);
       setCertificatePassword('');
-      await loadCertificateStatus();
+      setCertificateSuccess(
+        [
+          'Certificado enviado no MEI e configurado na PlugNotas.',
+          certificateResponse.message || null,
+          companyResponse.message || 'Empresa configurada na PlugNotas com sucesso.'
+        ].filter(Boolean).join(' ')
+      );
     } catch (error) {
-      setCertificateError(error instanceof Error ? error.message : 'Erro ao enviar certificado.');
+      const fallbackMessage = error instanceof Error ? error.message : 'Erro ao enviar certificado.';
+      setCertificateError(
+        uploadedToMei
+          ? `Certificado enviado no MEI, mas falhou a configuração automática da PlugNotas: ${fallbackMessage}`
+          : fallbackMessage
+      );
     } finally {
+      if (uploadedToMei) {
+        try {
+          await loadCertificateStatus();
+        } catch {
+          // mantém o resultado principal e evita bloquear o fluxo por refresh de status.
+        }
+      }
       setIsUploadingCert(false);
     }
   };
 
   const handleCertificateRemove = async () => {
     setCertificateError(null);
+    setCertificateSuccess(null);
     setIsRemovingCert(true);
     try {
       await removeMeiCertificate();
@@ -844,9 +1079,6 @@ export default function GuidesMei() {
           <div className="admin-section-header">
             <div>
               <h2 className="admin-section-title">Certificado digital</h2>
-              <p className="admin-section-subtitle">
-                Envie o certificado PFX ou valide o CNPJ para usar o fluxo sem certificado.
-              </p>
             </div>
           </div>
 
@@ -859,13 +1091,23 @@ export default function GuidesMei() {
           {!hasCertificate && (
             <div className="rounded-xl border border-amber-300/90 bg-amber-50/90 px-4 py-3 text-amber-700 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-300">
               Opcional: envie o certificado para autenticar. Sem certificado, informe o CNPJ e
-              selecione o período abaixo.
+              selecione o período abaixo para gerar o DAS.
             </div>
           )}
+
+          <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+            Atenção: para emissão de notas fiscais, a empresa emitente precisa estar cadastrada com certificado digital A1 válido.
+          </div>
 
           {certificateError && (
             <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
               {certificateError}
+            </div>
+          )}
+
+          {certificateSuccess && (
+            <div className="rounded-xl border border-emerald-300/90 bg-emerald-50/90 px-4 py-3 text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300">
+              {certificateSuccess}
             </div>
           )}
 
@@ -915,13 +1157,145 @@ export default function GuidesMei() {
                 />
               </div>
 
+              <div className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Dados minimos para emisão de notas fiscais
+                </p>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.razaoSocial}
+                    onChange={(event) => updatePlugNotasCompanyForm({ razaoSocial: event.target.value })}
+                    placeholder="Razão social *"
+                  />
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.nomeFantasia}
+                    onChange={(event) => updatePlugNotasCompanyForm({ nomeFantasia: event.target.value })}
+                    placeholder="Nome fantasia (opcional)"
+                  />
+                  <input
+                    className="planner-input-compact"
+                    type="email"
+                    value={plugNotasCompanyForm.email}
+                    onChange={(event) => updatePlugNotasCompanyForm({ email: event.target.value })}
+                    placeholder="Email fiscal (opcional)"
+                  />
+                  <select
+                    className="planner-input-compact"
+                    value={plugNotasCompanyForm.regimeTributario}
+                    onChange={(event) => updatePlugNotasCompanyForm({
+                      regimeTributario: event.target.value as PlugNotasRegimeTributario
+                    })}
+                  >
+                    <option value="1">Regime tributário: Simples Nacional (1)</option>
+                    <option value="2">Regime tributário: Simples excesso sublimite (2)</option>
+                    <option value="3">Regime tributário: Regime normal (3)</option>
+                  </select>
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.inscricaoMunicipal}
+                    onChange={(event) => updatePlugNotasCompanyForm({ inscricaoMunicipal: event.target.value })}
+                    placeholder="Inscrição municipal (opcional)"
+                  />
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.inscricaoEstadual}
+                    onChange={(event) => updatePlugNotasCompanyForm({ inscricaoEstadual: event.target.value })}
+                    placeholder="Inscrição estadual (opcional)"
+                  />
+                </div>
+                <div className="mt-2 grid gap-2 md:grid-cols-4">
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    inputMode="numeric"
+                    value={plugNotasCompanyForm.cep}
+                    onChange={(event) => updatePlugNotasCompanyForm({ cep: event.target.value })}
+                    placeholder="CEP *"
+                  />
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.tipoLogradouro}
+                    onChange={(event) => updatePlugNotasCompanyForm({ tipoLogradouro: event.target.value })}
+                    placeholder="Tipo logradouro"
+                  />
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.logradouro}
+                    onChange={(event) => updatePlugNotasCompanyForm({ logradouro: event.target.value })}
+                    placeholder="Logradouro *"
+                  />
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.numero}
+                    onChange={(event) => updatePlugNotasCompanyForm({ numero: event.target.value })}
+                    placeholder="Número *"
+                  />
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.complemento}
+                    onChange={(event) => updatePlugNotasCompanyForm({ complemento: event.target.value })}
+                    placeholder="Complemento (opcional)"
+                  />
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.bairro}
+                    onChange={(event) => updatePlugNotasCompanyForm({ bairro: event.target.value })}
+                    placeholder="Bairro *"
+                  />
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.codigoCidade}
+                    onChange={(event) => updatePlugNotasCompanyForm({ codigoCidade: event.target.value })}
+                    placeholder="Código IBGE cidade *"
+                  />
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    value={plugNotasCompanyForm.descricaoCidade}
+                    onChange={(event) => updatePlugNotasCompanyForm({ descricaoCidade: event.target.value })}
+                    placeholder="Cidade *"
+                  />
+                </div>
+                <div className="mt-2 grid gap-2 md:grid-cols-[120px_auto]">
+                  <input
+                    className="planner-input-compact"
+                    type="text"
+                    maxLength={2}
+                    value={plugNotasCompanyForm.estado}
+                    onChange={(event) => updatePlugNotasCompanyForm({ estado: event.target.value.toUpperCase() })}
+                    placeholder="UF *"
+                  />
+                  <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={plugNotasCompanyForm.simplesNacional}
+                      onChange={(event) => updatePlugNotasCompanyForm({ simplesNacional: event.target.checked })}
+                    />
+                    Empresa optante pelo Simples Nacional
+                  </label>
+                </div>
+              </div>
+
               <div className="admin-actions">
                 <button
                   className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleCertificateUpload}
                   disabled={isUploadingCert || !certificateFile || !certificatePassword}
                 >
-                  {isUploadingCert ? 'Enviando...' : 'Enviar certificado'}
+                  {isUploadingCert ? 'Enviando e configurando...' : 'Enviar certificado'}
                 </button>
                 {hasUserCertificate && (
                   <button
@@ -1057,6 +1431,10 @@ export default function GuidesMei() {
                 Preencha os dados essenciais para emissão via PlugNotas.
               </p>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+            Atenção: para emissão de notas fiscais, a empresa emitente precisa estar cadastrada com certificado digital A1 válido.
           </div>
 
           <div className="admin-toolbar space-y-3">

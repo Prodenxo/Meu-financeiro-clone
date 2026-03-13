@@ -8,6 +8,8 @@ import {
   emitirNfse,
   emitirNfe,
   emitirNfce,
+  cadastrarPlugNotasCertificado,
+  cadastrarPlugNotasEmpresa,
   cancelarNota,
   cancelarNfse,
   listarCatalogoNfseClientes,
@@ -30,6 +32,7 @@ vi.mock('./apiClient', () => ({
     post: vi.fn(),
     get: vi.fn(),
     patch: vi.fn(),
+    postForm: vi.fn(),
     requestBlob: vi.fn()
   }
 }));
@@ -38,6 +41,7 @@ const mockedApiClient = apiClient as unknown as {
   post: Mock;
   get: Mock;
   patch: Mock;
+  postForm: Mock;
   requestBlob: Mock;
 };
 
@@ -272,6 +276,45 @@ describe('meiNotasService', () => {
     const result = await emitirNota(input);
 
     expect(mockedApiClient.post).toHaveBeenCalledWith('/mei-notas/emitir', input);
+    expect(result).toEqual(response);
+  });
+
+  it('cadastra certificado PlugNotas por multipart/form-data', async () => {
+    const response = {
+      id: 'cert-1',
+      message: 'Cadastro efetuado com sucesso',
+      raw: { data: { id: 'cert-1' } }
+    };
+    mockedApiClient.postForm.mockResolvedValueOnce(response);
+    const arquivo = new File(['dummy'], 'certificado.pfx', { type: 'application/x-pkcs12' });
+
+    const result = await cadastrarPlugNotasCertificado({
+      arquivo,
+      senha: '123456',
+      email: 'fiscal@empresa.com.br'
+    });
+
+    expect(mockedApiClient.postForm).toHaveBeenCalledTimes(1);
+    expect(mockedApiClient.postForm.mock.calls[0][0]).toBe('/mei-notas/setup/plugnotas/certificado');
+    expect(result).toEqual(response);
+  });
+
+  it('cadastra empresa PlugNotas no endpoint dedicado', async () => {
+    const response = {
+      cnpj: '17422651000172',
+      message: 'Cadastro efetuado com sucesso',
+      raw: { data: { cnpj: '17422651000172' } }
+    };
+    mockedApiClient.post.mockResolvedValueOnce(response);
+    const payload = {
+      cpfCnpj: '17422651000172',
+      certificado: 'cert-1',
+      razaoSocial: 'Empresa Teste LTDA'
+    };
+
+    const result = await cadastrarPlugNotasEmpresa(payload);
+
+    expect(mockedApiClient.post).toHaveBeenCalledWith('/mei-notas/setup/plugnotas/empresa', { payload });
     expect(result).toEqual(response);
   });
 });

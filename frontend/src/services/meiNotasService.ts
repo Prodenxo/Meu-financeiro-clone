@@ -113,6 +113,24 @@ export interface ListarNotasInput {
   documentType?: DocumentType;
 }
 
+export interface CadastrarPlugNotasCertificadoInput {
+  arquivo: File;
+  senha: string;
+  email?: string;
+}
+
+export interface CadastrarPlugNotasCertificadoResponse {
+  id: string | null;
+  message: string | null;
+  raw: Record<string, unknown>;
+}
+
+export interface CadastrarPlugNotasEmpresaResponse {
+  cnpj: string | null;
+  message: string | null;
+  raw: Record<string, unknown>;
+}
+
 const buildCatalogSuffix = (options: ListarCatalogoNfseInput = {}) => {
   const query = new URLSearchParams({
     ...(options.q ? { q: options.q } : {}),
@@ -154,6 +172,30 @@ export async function emitirNfce(payload: Record<string, unknown>): Promise<Nfse
     documentType: 'NFCE',
     payload
   });
+}
+
+export async function cadastrarPlugNotasCertificado(
+  input: CadastrarPlugNotasCertificadoInput
+): Promise<CadastrarPlugNotasCertificadoResponse> {
+  const formData = new FormData();
+  formData.append('arquivo', input.arquivo);
+  formData.append('senha', input.senha);
+  if (input.email?.trim()) {
+    formData.append('email', input.email.trim());
+  }
+  return await apiClient.postForm<CadastrarPlugNotasCertificadoResponse>(
+    '/mei-notas/setup/plugnotas/certificado',
+    formData
+  );
+}
+
+export async function cadastrarPlugNotasEmpresa(
+  payload: Record<string, unknown>
+): Promise<CadastrarPlugNotasEmpresaResponse> {
+  return await apiClient.post<CadastrarPlugNotasEmpresaResponse>(
+    '/mei-notas/setup/plugnotas/empresa',
+    { payload }
+  );
 }
 
 export async function listarNotas(options: ListarNotasInput = {}): Promise<NfseRecord[]> {

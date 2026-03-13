@@ -1,12 +1,25 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { requireAuth } from '../middlewares/auth.js';
 import { requireMeiEnabled } from '../middlewares/requireMei.js';
 import * as controller from '../controllers/mei-notas.controller.js';
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
 
 router.post('/webhook', controller.webhook);
 router.post('/emitir', requireAuth, requireMeiEnabled, controller.emitir);
+router.post(
+  '/setup/plugnotas/certificado',
+  requireAuth,
+  requireMeiEnabled,
+  upload.single('arquivo'),
+  controller.cadastrarPlugNotasCertificado
+);
+router.post('/setup/plugnotas/empresa', requireAuth, requireMeiEnabled, controller.cadastrarPlugNotasEmpresa);
 router.get('/', requireAuth, requireMeiEnabled, controller.listar);
 router.get('/relatorio/nfe', requireAuth, requireMeiEnabled, controller.relatorioNfe);
 router.get('/catalogo/clientes', requireAuth, requireMeiEnabled, controller.listarCatalogoClientes);

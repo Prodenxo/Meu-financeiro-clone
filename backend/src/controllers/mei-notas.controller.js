@@ -1,5 +1,9 @@
 import { env } from '../config/env.js';
 import * as meiNotasService from '../services/mei-notas.service.js';
+import {
+  cadastrarCertificadoPlugNotas,
+  cadastrarEmpresaPlugNotas
+} from '../services/plugnotas/empresa.service.js';
 import { unauthorized } from '../utils/errors.js';
 import { sendSuccess } from '../utils/response.js';
 
@@ -73,6 +77,36 @@ export const relatorioNfe = async (req, res, next) => {
     };
     const data = await meiNotasService.listarRelatorioNfe(req.user.id, filters);
     return sendSuccess(res, data, 'Relatório de NF-e listado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const cadastrarPlugNotasCertificado = async (req, res, next) => {
+  try {
+    const file = req.file;
+    const senha = String(req.body?.senha || '').trim();
+    const email = String(req.body?.email || '').trim();
+    const data = await cadastrarCertificadoPlugNotas({
+      fileBuffer: file?.buffer,
+      fileName: file?.originalname,
+      mimeType: file?.mimetype,
+      password: senha,
+      ...(email ? { email } : {})
+    });
+    return sendSuccess(res, data, 'Certificado cadastrado na PlugNotas');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
+  try {
+    const payload = req.body?.payload && typeof req.body.payload === 'object'
+      ? req.body.payload
+      : req.body;
+    const data = await cadastrarEmpresaPlugNotas(payload);
+    return sendSuccess(res, data, 'Empresa configurada na PlugNotas');
   } catch (error) {
     return next(error);
   }
