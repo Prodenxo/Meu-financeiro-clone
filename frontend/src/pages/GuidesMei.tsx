@@ -28,6 +28,7 @@ import {
   type EmitirNfseInput,
   type NfseRecord
 } from '../services/meiNotasService';
+import { useAuthStore } from '../store/authStore';
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
   if (!competencia) return 'guia-mei.pdf';
@@ -401,6 +402,8 @@ const getNfseValidationMessage = (
 };
 
 export default function GuidesMei() {
+  const { role } = useAuthStore();
+  const canViewNfse = role === 'superadmin';
   const [contribuinteDoc, setContribuinteDoc] = useState('');
   const [activeWorkspace, setActiveWorkspace] = useState<GuidesMeiWorkspace>('overview');
   const defaultPeriod = useMemo(() => getDefaultPeriod(), []);
@@ -538,6 +541,12 @@ export default function GuidesMei() {
   }, [canLoadPeriods, contribuinteTipo, hasUserCertificate, normalizedContribuinte]);
 
   const loadNfseList = useCallback(async () => {
+    if (!canViewNfse) {
+      setNfseList([]);
+      setNfseLoading(false);
+      setNfseError(null);
+      return;
+    }
     setNfseLoading(true);
     setNfseError(null);
     try {
@@ -551,9 +560,16 @@ export default function GuidesMei() {
     } finally {
       setNfseLoading(false);
     }
-  }, [nfseDocumentTypeFilter, nfseShowArchived]);
+  }, [canViewNfse, nfseDocumentTypeFilter, nfseShowArchived]);
 
   const loadNfseCatalog = useCallback(async () => {
+    if (!canViewNfse) {
+      setNfseCatalogClientes([]);
+      setNfseCatalogProdutos([]);
+      setNfseCatalogLoading(false);
+      setNfseCatalogError(null);
+      return;
+    }
     setNfseCatalogLoading(true);
     setNfseCatalogError(null);
     try {
@@ -568,7 +584,7 @@ export default function GuidesMei() {
     } finally {
       setNfseCatalogLoading(false);
     }
-  }, []);
+  }, [canViewNfse]);
 
   const updateNfseForm = (updates: Partial<EmitirNfseInput>) => {
     setNfseForm((current) => ({ ...current, ...updates }));
@@ -677,6 +693,12 @@ export default function GuidesMei() {
   }, [loadNfseCatalog]);
 
   useEffect(() => {
+    if (!canViewNfse && activeWorkspace === 'nfse') {
+      setActiveWorkspace('overview');
+    }
+  }, [activeWorkspace, canViewNfse]);
+
+  useEffect(() => {
     if (!normalizedContribuinte) return;
     setNfseForm((current) => (
       current.prestadorCpfCnpj
@@ -736,10 +758,12 @@ export default function GuidesMei() {
       setCertificateError('Informe a senha do certificado.');
       return;
     }
-    const companyValidationMessage = getPlugNotasCompanyValidationMessage(plugNotasCompanyForm);
-    if (companyValidationMessage) {
-      setCertificateError(companyValidationMessage);
-      return;
+    if (canViewNfse) {
+      const companyValidationMessage = getPlugNotasCompanyValidationMessage(plugNotasCompanyForm);
+      if (companyValidationMessage) {
+        setCertificateError(companyValidationMessage);
+        return;
+      }
     }
 
     setCertificateError(null);
@@ -750,6 +774,13 @@ export default function GuidesMei() {
       const status = await uploadMeiCertificate(certificateFile, trimmedPassword);
       uploadedToMei = true;
       applyDocumento(status.documento, true);
+
+      if (!canViewNfse) {
+        setCertificateFile(null);
+        setCertificatePassword('');
+        setCertificateSuccess('Certificado enviado com sucesso.');
+        return;
+      }
 
       const cnpj = normalizeDoc(
         status.documento
@@ -1141,26 +1172,38 @@ export default function GuidesMei() {
     return 'Sem certificado ativo';
   }, [hasServerCertificate, hasUserCertificate]);
 
-  const workspaceTabs = useMemo(() => ([
-    {
-      id: 'overview' as const,
-      label: 'Visão geral',
-      description: 'Resumo e atalhos rápidos',
-      badge: `${meiPeriods.length} períodos DAS`
-    },
-    {
-      id: 'das' as const,
-      label: 'Certificado e DAS',
-      description: 'Configuração e geração de guias',
-      badge: dasPendentesCount > 0 ? `${dasPendentesCount} pendências` : 'Sem pendências'
-    },
-    {
-      id: 'nfse' as const,
-      label: 'NFSe',
-      description: 'Emissão e acompanhamento',
-      badge: `${filteredNfseList.length} notas no filtro`
+  const workspaceTabs = useMemo(() => {
+    const tabs: Array<{
+      id: GuidesMeiWorkspace;
+      label: string;
+      description: string;
+      badge: string;
+    }> = [
+      {
+        id: 'overview',
+        label: 'Visão geral',
+        description: 'Resumo e atalhos rápidos',
+        badge: `${meiPeriods.length} períodos DAS`
+      },
+      {
+        id: 'das',
+        label: 'Certificado e DAS',
+        description: 'Configuração e geração de guias',
+        badge: dasPendentesCount > 0 ? `${dasPendentesCount} pendências` : 'Sem pendências'
+      }
+    ];
+
+    if (canViewNfse) {
+      tabs.push({
+        id: 'nfse',
+        label: 'NFSe',
+        description: 'Emissão e acompanhamento',
+        badge: `${filteredNfseList.length} notas no filtro`
+      });
     }
-  ]), [dasPendentesCount, filteredNfseList.length, meiPeriods.length]);
+
+    return tabs;
+  }, [canViewNfse, dasPendentesCount, filteredNfseList.length, meiPeriods.length]);
 
   const handleDownloadClick = async () => {
     if (isDownloadingGuide) return;
@@ -1193,7 +1236,9 @@ export default function GuidesMei() {
             <div>
               <h1 className="admin-hero-title">Meu MEI</h1>
               <p className="admin-hero-subtitle">
-                Gerencie certificado, DAS e emissão de NFSe no mesmo fluxo.
+                {canViewNfse
+                  ? 'Gerencie certificado, DAS e emissão de NFSe no mesmo fluxo.'
+                  : 'Gerencie certificado e DAS no mesmo fluxo.'}
               </p>
             </div>
             <span
@@ -1217,10 +1262,12 @@ export default function GuidesMei() {
               <p className="admin-stat-label">Pendências DAS</p>
               <p className="admin-stat-value">{dasPendentesCount}</p>
             </div>
-            <div className="admin-stat-card">
-              <p className="admin-stat-label">NFSe exibidas</p>
-              <p className="admin-stat-value">{filteredNfseList.length}</p>
-            </div>
+            {canViewNfse ? (
+              <div className="admin-stat-card">
+                <p className="admin-stat-label">NFSe exibidas</p>
+                <p className="admin-stat-value">{filteredNfseList.length}</p>
+              </div>
+            ) : null}
             <div className="admin-stat-card">
               <p className="admin-stat-label">Status do certificado</p>
               <p className="admin-stat-value text-base md:text-lg">{certificateScopeLabel}</p>
@@ -1238,7 +1285,7 @@ export default function GuidesMei() {
             </div>
           </div>
           <div className="admin-toolbar space-y-3">
-            <div className="grid gap-2 md:grid-cols-3">
+            <div className={`grid gap-2 ${canViewNfse ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
               {workspaceTabs.map((tab) => (
                 <button
                   key={tab.id}
@@ -1290,20 +1337,22 @@ export default function GuidesMei() {
                 </div>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveWorkspace('nfse')}
-                className="admin-toolbar text-left transition hover:border-slate-300/80 dark:hover:border-slate-700/80"
-              >
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">NFSe</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Preencha dados essenciais e acompanhe o ciclo das notas emitidas.
-                </p>
-                <div className="mt-3 admin-actions">
-                  <span className="admin-badge-primary">{`${filteredNfseList.length} notas no filtro`}</span>
-                  <span className="admin-badge-neutral">Emissão com PlugNotas</span>
-                </div>
-              </button>
+              {canViewNfse ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveWorkspace('nfse')}
+                  className="admin-toolbar text-left transition hover:border-slate-300/80 dark:hover:border-slate-700/80"
+                >
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">NFSe</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Preencha dados essenciais e acompanhe o ciclo das notas emitidas.
+                  </p>
+                  <div className="mt-3 admin-actions">
+                    <span className="admin-badge-primary">{`${filteredNfseList.length} notas no filtro`}</span>
+                    <span className="admin-badge-neutral">Emissão com PlugNotas</span>
+                  </div>
+                </button>
+              ) : null}
             </div>
           </section>
         ) : null}
@@ -1330,9 +1379,11 @@ export default function GuidesMei() {
             </div>
           )}
 
-          <div className="admin-alert-warning">
-            Atenção: para emissão de notas fiscais, a empresa emitente precisa estar cadastrada com certificado digital A1 válido.
-          </div>
+          {canViewNfse ? (
+            <div className="admin-alert-warning">
+              Atenção: para emissão de notas fiscais, a empresa emitente precisa estar cadastrada com certificado digital A1 válido.
+            </div>
+          ) : null}
 
           {certificateError && (
             <div className="admin-alert-danger">
@@ -1392,138 +1443,140 @@ export default function GuidesMei() {
                 />
               </div>
 
-              <div className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Dados mínimos para emissão de notas fiscais
-                </p>
-                <p className="admin-field-hint mb-2">Campos com * são obrigatórios para a configuração inicial.</p>
-                <div className="grid gap-2 md:grid-cols-2">
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.razaoSocial}
-                    onChange={(event) => updatePlugNotasCompanyForm({ razaoSocial: event.target.value })}
-                    placeholder="Razão social *"
-                  />
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.nomeFantasia}
-                    onChange={(event) => updatePlugNotasCompanyForm({ nomeFantasia: event.target.value })}
-                    placeholder="Nome fantasia (opcional)"
-                  />
-                  <input
-                    className="planner-input-compact"
-                    type="email"
-                    value={plugNotasCompanyForm.email}
-                    onChange={(event) => updatePlugNotasCompanyForm({ email: event.target.value })}
-                    placeholder="Email fiscal (opcional)"
-                  />
-                  <select
-                    className="planner-input-compact"
-                    value={plugNotasCompanyForm.regimeTributario}
-                    onChange={(event) => updatePlugNotasCompanyForm({
-                      regimeTributario: event.target.value as PlugNotasRegimeTributario
-                    })}
-                  >
-                    <option value="1">Regime tributário: Simples Nacional (1)</option>
-                    <option value="2">Regime tributário: Simples excesso sublimite (2)</option>
-                    <option value="3">Regime tributário: Regime normal (3)</option>
-                  </select>
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.inscricaoMunicipal}
-                    onChange={(event) => updatePlugNotasCompanyForm({ inscricaoMunicipal: event.target.value })}
-                    placeholder="Inscrição municipal (opcional)"
-                  />
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.inscricaoEstadual}
-                    onChange={(event) => updatePlugNotasCompanyForm({ inscricaoEstadual: event.target.value })}
-                    placeholder="Inscrição estadual (opcional)"
-                  />
-                </div>
-                <div className="mt-2 grid gap-2 md:grid-cols-4">
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    inputMode="numeric"
-                    value={plugNotasCompanyForm.cep}
-                    onChange={(event) => updatePlugNotasCompanyForm({ cep: event.target.value })}
-                    placeholder="CEP *"
-                  />
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.tipoLogradouro}
-                    onChange={(event) => updatePlugNotasCompanyForm({ tipoLogradouro: event.target.value })}
-                    placeholder="Tipo logradouro"
-                  />
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.logradouro}
-                    onChange={(event) => updatePlugNotasCompanyForm({ logradouro: event.target.value })}
-                    placeholder="Logradouro *"
-                  />
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.numero}
-                    onChange={(event) => updatePlugNotasCompanyForm({ numero: event.target.value })}
-                    placeholder="Número *"
-                  />
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.complemento}
-                    onChange={(event) => updatePlugNotasCompanyForm({ complemento: event.target.value })}
-                    placeholder="Complemento (opcional)"
-                  />
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.bairro}
-                    onChange={(event) => updatePlugNotasCompanyForm({ bairro: event.target.value })}
-                    placeholder="Bairro *"
-                  />
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.codigoCidade}
-                    onChange={(event) => updatePlugNotasCompanyForm({ codigoCidade: event.target.value })}
-                    placeholder="Código IBGE cidade *"
-                  />
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    value={plugNotasCompanyForm.descricaoCidade}
-                    onChange={(event) => updatePlugNotasCompanyForm({ descricaoCidade: event.target.value })}
-                    placeholder="Cidade *"
-                  />
-                </div>
-                <div className="mt-2 grid gap-2 md:grid-cols-[120px_auto]">
-                  <input
-                    className="planner-input-compact"
-                    type="text"
-                    maxLength={2}
-                    value={plugNotasCompanyForm.estado}
-                    onChange={(event) => updatePlugNotasCompanyForm({ estado: event.target.value.toUpperCase() })}
-                    placeholder="UF *"
-                  />
-                  <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+              {canViewNfse ? (
+                <div className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Dados mínimos para emissão de notas fiscais
+                  </p>
+                  <p className="admin-field-hint mb-2">Campos com * são obrigatórios para a configuração inicial.</p>
+                  <div className="grid gap-2 md:grid-cols-2">
                     <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={plugNotasCompanyForm.simplesNacional}
-                      onChange={(event) => updatePlugNotasCompanyForm({ simplesNacional: event.target.checked })}
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.razaoSocial}
+                      onChange={(event) => updatePlugNotasCompanyForm({ razaoSocial: event.target.value })}
+                      placeholder="Razão social *"
                     />
-                    Empresa optante pelo Simples Nacional
-                  </label>
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.nomeFantasia}
+                      onChange={(event) => updatePlugNotasCompanyForm({ nomeFantasia: event.target.value })}
+                      placeholder="Nome fantasia (opcional)"
+                    />
+                    <input
+                      className="planner-input-compact"
+                      type="email"
+                      value={plugNotasCompanyForm.email}
+                      onChange={(event) => updatePlugNotasCompanyForm({ email: event.target.value })}
+                      placeholder="Email fiscal (opcional)"
+                    />
+                    <select
+                      className="planner-input-compact"
+                      value={plugNotasCompanyForm.regimeTributario}
+                      onChange={(event) => updatePlugNotasCompanyForm({
+                        regimeTributario: event.target.value as PlugNotasRegimeTributario
+                      })}
+                    >
+                      <option value="1">Regime tributário: Simples Nacional (1)</option>
+                      <option value="2">Regime tributário: Simples excesso sublimite (2)</option>
+                      <option value="3">Regime tributário: Regime normal (3)</option>
+                    </select>
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.inscricaoMunicipal}
+                      onChange={(event) => updatePlugNotasCompanyForm({ inscricaoMunicipal: event.target.value })}
+                      placeholder="Inscrição municipal (opcional)"
+                    />
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.inscricaoEstadual}
+                      onChange={(event) => updatePlugNotasCompanyForm({ inscricaoEstadual: event.target.value })}
+                      placeholder="Inscrição estadual (opcional)"
+                    />
+                  </div>
+                  <div className="mt-2 grid gap-2 md:grid-cols-4">
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      inputMode="numeric"
+                      value={plugNotasCompanyForm.cep}
+                      onChange={(event) => updatePlugNotasCompanyForm({ cep: event.target.value })}
+                      placeholder="CEP *"
+                    />
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.tipoLogradouro}
+                      onChange={(event) => updatePlugNotasCompanyForm({ tipoLogradouro: event.target.value })}
+                      placeholder="Tipo logradouro"
+                    />
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.logradouro}
+                      onChange={(event) => updatePlugNotasCompanyForm({ logradouro: event.target.value })}
+                      placeholder="Logradouro *"
+                    />
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.numero}
+                      onChange={(event) => updatePlugNotasCompanyForm({ numero: event.target.value })}
+                      placeholder="Número *"
+                    />
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.complemento}
+                      onChange={(event) => updatePlugNotasCompanyForm({ complemento: event.target.value })}
+                      placeholder="Complemento (opcional)"
+                    />
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.bairro}
+                      onChange={(event) => updatePlugNotasCompanyForm({ bairro: event.target.value })}
+                      placeholder="Bairro *"
+                    />
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.codigoCidade}
+                      onChange={(event) => updatePlugNotasCompanyForm({ codigoCidade: event.target.value })}
+                      placeholder="Código IBGE cidade *"
+                    />
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      value={plugNotasCompanyForm.descricaoCidade}
+                      onChange={(event) => updatePlugNotasCompanyForm({ descricaoCidade: event.target.value })}
+                      placeholder="Cidade *"
+                    />
+                  </div>
+                  <div className="mt-2 grid gap-2 md:grid-cols-[120px_auto]">
+                    <input
+                      className="planner-input-compact"
+                      type="text"
+                      maxLength={2}
+                      value={plugNotasCompanyForm.estado}
+                      onChange={(event) => updatePlugNotasCompanyForm({ estado: event.target.value.toUpperCase() })}
+                      placeholder="UF *"
+                    />
+                    <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={plugNotasCompanyForm.simplesNacional}
+                        onChange={(event) => updatePlugNotasCompanyForm({ simplesNacional: event.target.checked })}
+                      />
+                      Empresa optante pelo Simples Nacional
+                    </label>
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <div className="admin-actions">
                 <button
@@ -1531,7 +1584,7 @@ export default function GuidesMei() {
                   onClick={handleCertificateUpload}
                   disabled={isUploadingCert || !certificateFile || !certificatePassword}
                 >
-                  {isUploadingCert ? 'Enviando e configurando...' : 'Enviar certificado'}
+                  {isUploadingCert ? (canViewNfse ? 'Enviando e configurando...' : 'Enviando...') : 'Enviar certificado'}
                 </button>
                 {hasUserCertificate && (
                   <button
@@ -1661,7 +1714,7 @@ export default function GuidesMei() {
           </>
         ) : null}
 
-        {activeWorkspace === 'nfse' ? (
+        {canViewNfse && activeWorkspace === 'nfse' ? (
           <>
             <section className="admin-section-card">
           <div className="admin-section-header">

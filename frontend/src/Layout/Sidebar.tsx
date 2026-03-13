@@ -8,15 +8,15 @@ interface SidebarProps {
 
 export default function Sidebar({ expanded }: SidebarProps) {
   const location = useLocation();
-  const { mei } = useAuthStore();
-  const meiEnabled = mei !== false;
+  const { mei, role } = useAuthStore();
+  const canAccessMeiArea = mei !== false || role === 'superadmin';
   const navItems = [
     { path: '/', label: 'Visão Geral', icon: Home },
     { path: '/transacoes', label: 'Transações', icon: List },
     { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
     { path: '/categorias', label: 'Categorias', icon: Grid3x3 },
     { path: '/agenda', label: 'Agenda', icon: Calendar },
-    ...(meiEnabled ? [{ path: '/guias-mei', label: 'Meu MEI', icon: FileText }] : []),
+    ...(canAccessMeiArea ? [{ path: '/guias-mei', label: 'Meu MEI', icon: FileText }] : []),
     { path: '/settings', label: 'Configurações', icon: Settings },
   ];
 

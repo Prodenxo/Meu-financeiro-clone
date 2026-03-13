@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
 import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -9,10 +9,10 @@ import { AppRoutes } from './App';
 const globalWithActFlag = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
 globalWithActFlag.IS_REACT_ACT_ENVIRONMENT = true;
 
-const { useAuthStoreMock } = vi.hoisted(() => {
+const { useAuthStoreMock, authState } = vi.hoisted(() => {
   const state = {
     user: { id: 'user-1', email: 'user@test.com' },
-    role: 'user',
+    role: 'usuario',
     mei: false,
     sessionRestored: true,
     initAuth: vi.fn()
@@ -25,7 +25,7 @@ const { useAuthStoreMock } = vi.hoisted(() => {
     }
   );
 
-  return { useAuthStoreMock: hook };
+  return { useAuthStoreMock: hook, authState: state };
 });
 
 vi.mock('./store/authStore', () => ({
@@ -63,6 +63,11 @@ vi.mock('./lib/google-auth-flow', () => ({
 }));
 
 describe('AppRoutes mei gate', () => {
+  beforeEach(() => {
+    authState.role = 'usuario';
+    authState.mei = false;
+  });
+
   it('redireciona /guias-mei para / quando mei=false', async () => {
     const container = document.createElement('div');
     const root = createRoot(container);
@@ -80,6 +85,32 @@ describe('AppRoutes mei gate', () => {
 
     expect(container.textContent).toContain('DASHBOARD_PAGE');
     expect(container.textContent).not.toContain('GUIAS_MEI_PAGE');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('permite /guias-mei para superadmin mesmo com mei=false', async () => {
+    authState.role = 'superadmin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={['/guias-mei']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <AppRoutes />
+        </MemoryRouter>
+      );
+    });
+
+    expect(container.textContent).toContain('GUIAS_MEI_PAGE');
+    expect(container.textContent).not.toContain('DASHBOARD_PAGE');
 
     await act(async () => {
       root.unmount();
