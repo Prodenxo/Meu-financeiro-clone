@@ -12,6 +12,73 @@ const normalizeRoleValue = (role) => {
   return normalized;
 };
 
+const getRoleCandidates = (role) => {
+  const normalized = normalizeRoleValue(role);
+  if (!normalized) return [];
+  if (normalized === 'usuario') return ['user', 'usuario'];
+  return [normalized];
+};
+
+const ensureSignupRoleLink = async (adminClient, userId) => {
+  const { data: activeLink, error: activeLinkError } = await adminClient
+    .from('role_x_user_x_empresa')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (activeLinkError) {
+    throw badRequest(activeLinkError.message);
+  }
+
+  if (activeLink?.id) {
+    const { error: updateError } = await adminClient
+      .from('role_x_user_x_empresa')
+      .update({ mei: false })
+      .eq('id', activeLink.id);
+
+    if (updateError) {
+      throw badRequest(updateError.message);
+    }
+    return;
+  }
+
+  const roleFilters = getRoleCandidates(ROLE_DEFAULT)
+    .map((candidate) => `roles.ilike.${candidate}`)
+    .join(',');
+
+  const { data: roleData, error: roleError } = await adminClient
+    .from('roles')
+    .select('id')
+    .or(roleFilters)
+    .limit(1)
+    .maybeSingle();
+
+  if (roleError) {
+    throw badRequest(roleError.message);
+  }
+
+  if (!roleData?.id) {
+    throw badRequest('Role não encontrada');
+  }
+
+  const { error: linkError } = await adminClient
+    .from('role_x_user_x_empresa')
+    .insert({
+      user_id: userId,
+      roles_id: roleData.id,
+      empresas_id: null,
+      status: true,
+      mei: false
+    });
+
+  if (linkError) {
+    throw badRequest(linkError.message);
+  }
+};
+
 const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
   if (!accessToken || !userId) return { role: null, empresaId: null, mei: null };
 
@@ -106,13 +173,14 @@ const getResolvedRoleAndCompany = async ({ accessToken, userId }) => {
   return { role: profileRole, empresaId: linkResult.empresaId || null, mei };
 };
 
-export const signUp = async ({ email, password, phone, displayName }) => {
+export const signUp = async ({ email, password, phone, displayName }, deps = {}) => {
   if (!email || !password) {
     throw badRequest('Email e senha são obrigatórios');
   }
 
+  const createSupabaseClientFn = deps.createSupabaseClientFn || createSupabaseClient;
   const cleanedPhone = phone?.startsWith('+') ? phone.substring(1) : phone;
-  const supabase = createSupabaseClient({ useServiceRole: !!env.SUPABASE_SERVICE_ROLE_KEY });
+  const supabase = createSupabaseClientFn({ useServiceRole: !!env.SUPABASE_SERVICE_ROLE_KEY });
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -131,17 +199,19 @@ export const signUp = async ({ email, password, phone, displayName }) => {
   const userId = data.user?.id;
 
   if (userId && env.SUPABASE_SERVICE_ROLE_KEY) {
-    const adminClient = createSupabaseClient({ useServiceRole: true });
+    const adminClient = createSupabaseClientFn({ useServiceRole: true });
     await adminClient
       .from('profiles')
       .insert({ id: userId, role: ROLE_DEFAULT })
       .select('role')
       .single();
+
+    await ensureSignupRoleLink(adminClient, userId);
   }
 
   if (userId && cleanedPhone) {
     try {
-      const adminClient = createSupabaseClient({ useServiceRole: true });
+      const adminClient = createSupabaseClientFn({ useServiceRole: true });
       await adminClient
         .from('n8n_link')
         .upsert(

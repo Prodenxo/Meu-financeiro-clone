@@ -228,7 +228,8 @@ serve(async (req) => {
             user_id: userId,
             roles_id: roleResult.roleId,
             empresas_id: null,
-            status: true
+            status: true,
+            mei: false
           })
 
         if (linkError) {
