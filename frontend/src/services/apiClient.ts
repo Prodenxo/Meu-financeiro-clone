@@ -29,17 +29,19 @@ if (!API_URL) {
   console.warn('[API Client] VITE_API_URL não está configurada');
 }
 
+const shouldUseProxyInDev = import.meta.env.DEV
+  && (!configuredApiUrl || !isLocalhostUrl(configuredApiUrl));
+
 if (import.meta.env.DEV && configuredApiUrl && !isLocalhostUrl(configuredApiUrl)) {
-  console.warn('[API Client] VITE_API_URL aponta para ambiente remoto em DEV');
+  console.warn('[API Client] VITE_API_URL aponta para ambiente remoto em DEV. Usando proxy local /api.');
 }
 
 class ApiClient {
   baseUrl: string;
 
   constructor() {
-    // Em DEV sem VITE_API_URL: usa origem relativa para o proxy do Vite (/api → backend)
-    const useProxy = import.meta.env.DEV && !configuredApiUrl;
-    const base = useProxy ? '' : (API_URL || '').replace(/\/$/, '');
+    // Em DEV, prioriza o proxy local /api para evitar chamadas ao backend remoto.
+    const base = shouldUseProxyInDev ? '' : (API_URL || '').replace(/\/$/, '');
     this.baseUrl = `${base}/api`;
   }
 
@@ -313,6 +315,13 @@ class ApiClient {
   put<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>(path, {
       method: 'PUT',
+      body: JSON.stringify(body || {})
+    });
+  }
+
+  patch<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: 'PATCH',
       body: JSON.stringify(body || {})
     });
   }

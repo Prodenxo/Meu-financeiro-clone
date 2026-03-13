@@ -1,36 +1,36 @@
-# AGENTS.md - Synkra AIOS (Codex CLI)
+# AGENTS.md - Synkra AIOX (Codex CLI)
 
 Este arquivo define as instrucoes do projeto para o Codex CLI.
 
-<!-- AIOS-MANAGED-START: core -->
+<!-- AIOX-MANAGED-START: core -->
 ## Core Rules
 
-1. Siga a Constitution em `.aios-core/constitution.md`
+1. Siga a Constitution em `.aiox-core/constitution.md`
 2. Priorize `CLI First -> Observability Second -> UI Third`
 3. Trabalhe por stories em `docs/stories/`
 4. Nao invente requisitos fora dos artefatos existentes
-<!-- AIOS-MANAGED-END: core -->
+<!-- AIOX-MANAGED-END: core -->
 
-<!-- AIOS-MANAGED-START: quality -->
+<!-- AIOX-MANAGED-START: quality -->
 ## Quality Gates
 
 - Rode `npm run lint`
 - Rode `npm run typecheck`
 - Rode `npm test`
 - Atualize checklist e file list da story antes de concluir
-<!-- AIOS-MANAGED-END: quality -->
+<!-- AIOX-MANAGED-END: quality -->
 
-<!-- AIOS-MANAGED-START: codebase -->
+<!-- AIOX-MANAGED-START: codebase -->
 ## Project Map
 
-- Core framework: `.aios-core/`
+- Core framework: `.aiox-core/`
 - CLI entrypoints: `bin/`
 - Shared packages: `packages/`
 - Tests: `tests/`
 - Docs: `docs/`
-<!-- AIOS-MANAGED-END: codebase -->
+<!-- AIOX-MANAGED-END: codebase -->
 
-<!-- AIOS-MANAGED-START: commands -->
+<!-- AIOX-MANAGED-START: commands -->
 ## Common Commands
 
 - `npm run sync:ide`
@@ -39,27 +39,27 @@ Este arquivo define as instrucoes do projeto para o Codex CLI.
 - `npm run sync:skills:codex:global` (opcional; neste repo o padrao e local-first)
 - `npm run validate:structure`
 - `npm run validate:agents`
-<!-- AIOS-MANAGED-END: commands -->
+<!-- AIOX-MANAGED-END: commands -->
 
-<!-- AIOS-MANAGED-START: shortcuts -->
+<!-- AIOX-MANAGED-START: shortcuts -->
 ## Agent Shortcuts
 
 Preferencia de ativacao no Codex CLI:
-1. Use `/skills` e selecione `aios-<agent-id>` vindo de `.codex/skills` (ex.: `aios-architect`)
+1. Use `/skills` e selecione `aiox-<agent-id>` vindo de `.codex/skills` (ex.: `aiox-architect`)
 2. Se preferir, use os atalhos abaixo (`@architect`, `/architect`, etc.)
 
-Interprete os atalhos abaixo carregando o arquivo correspondente em `.aios-core/development/agents/` (fallback: `.codex/agents/`), renderize o greeting via `generate-greeting.js` e assuma a persona ate `*exit`:
+Interprete os atalhos abaixo carregando o arquivo correspondente em `.aiox-core/development/agents/` (fallback: `.codex/agents/`), renderize o greeting via `generate-greeting.js` e assuma a persona ate `*exit`:
 
-- `@architect`, `/architect`, `/architect.md` -> `.aios-core/development/agents/architect.md`
-- `@dev`, `/dev`, `/dev.md` -> `.aios-core/development/agents/dev.md`
-- `@qa`, `/qa`, `/qa.md` -> `.aios-core/development/agents/qa.md`
-- `@pm`, `/pm`, `/pm.md` -> `.aios-core/development/agents/pm.md`
-- `@po`, `/po`, `/po.md` -> `.aios-core/development/agents/po.md`
-- `@sm`, `/sm`, `/sm.md` -> `.aios-core/development/agents/sm.md`
-- `@analyst`, `/analyst`, `/analyst.md` -> `.aios-core/development/agents/analyst.md`
-- `@devops`, `/devops`, `/devops.md` -> `.aios-core/development/agents/devops.md`
-- `@data-engineer`, `/data-engineer`, `/data-engineer.md` -> `.aios-core/development/agents/data-engineer.md`
-- `@ux-design-expert`, `/ux-design-expert`, `/ux-design-expert.md` -> `.aios-core/development/agents/ux-design-expert.md`
-- `@squad-creator`, `/squad-creator`, `/squad-creator.md` -> `.aios-core/development/agents/squad-creator.md`
-- `@aios-master`, `/aios-master`, `/aios-master.md` -> `.aios-core/development/agents/aios-master.md`
-<!-- AIOS-MANAGED-END: shortcuts -->
+- `@architect`, `/architect`, `/architect.md` -> `.aiox-core/development/agents/architect.md`
+- `@dev`, `/dev`, `/dev.md` -> `.aiox-core/development/agents/dev.md`
+- `@qa`, `/qa`, `/qa.md` -> `.aiox-core/development/agents/qa.md`
+- `@pm`, `/pm`, `/pm.md` -> `.aiox-core/development/agents/pm.md`
+- `@po`, `/po`, `/po.md` -> `.aiox-core/development/agents/po.md`
+- `@sm`, `/sm`, `/sm.md` -> `.aiox-core/development/agents/sm.md`
+- `@analyst`, `/analyst`, `/analyst.md` -> `.aiox-core/development/agents/analyst.md`
+- `@devops`, `/devops`, `/devops.md` -> `.aiox-core/development/agents/devops.md`
+- `@data-engineer`, `/data-engineer`, `/data-engineer.md` -> `.aiox-core/development/agents/data-engineer.md`
+- `@ux-design-expert`, `/ux-design-expert`, `/ux-design-expert.md` -> `.aiox-core/development/agents/ux-design-expert.md`
+- `@squad-creator`, `/squad-creator`, `/squad-creator.md` -> `.aiox-core/development/agents/squad-creator.md`
+- `@aiox-master`, `/aiox-master`, `/aiox-master.md` -> `.aiox-core/development/agents/aiox-master.md`
+<!-- AIOX-MANAGED-END: shortcuts -->

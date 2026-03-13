@@ -261,24 +261,52 @@ export default function Settings() {
         </div>
 
         {role && (role === 'superadmin' || role === 'admin') && (
-          <div className="planner-card p-4 md:p-6">
-            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Administração</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              Gerencie usuários e permissões da sua empresa.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                onClick={() => navigate('/settings/users')}
-                className="planner-button"
-              >
-                Gerenciar usuários
-              </button>
-              <button
-                onClick={() => navigate('/settings/usuarios-dados')}
-                className="planner-button-secondary"
-              >
-                Dados dos usuários
-              </button>
+          <div className="planner-card p-4 md:p-6 space-y-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-lg md:text-xl font-semibold dark:text-white">Administração</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Gerencie usuários, acessos e visão financeira operacional.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="admin-badge-primary">
+                  {role === 'superadmin' ? 'Acesso global' : 'Acesso por empresa'}
+                </span>
+              </div>
+            </div>
+            <div className="admin-toolbar">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                Escolha um módulo para continuar.
+              </p>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  onClick={() => navigate('/settings/users')}
+                  className="planner-button w-full sm:w-auto justify-center"
+                >
+                  Gerenciar usuários
+                </button>
+                <button
+                  onClick={() => navigate('/settings/usuarios-dados')}
+                  className="planner-button-secondary w-full sm:w-auto justify-center"
+                >
+                  Dados dos usuários
+                </button>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="admin-stat-card">
+                <p className="admin-stat-label">Gestão de acesso</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Criação, edição, bloqueio e redefinição de senha.
+                </p>
+              </div>
+              <div className="admin-stat-card">
+                <p className="admin-stat-label">Visão operacional</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Pendências DAS, saldos, transações e categorias.
+                </p>
+              </div>
             </div>
           </div>
         )}

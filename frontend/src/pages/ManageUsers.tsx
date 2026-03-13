@@ -80,9 +80,9 @@ export default function ManageUsers() {
       const data = await listEmpresas();
       console.log('[ManageUsers] empresas recebidas:', data);
       setEmpresas(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.log('[ManageUsers] erro ao listar empresas:', err);
-      setError(err.message || 'Erro ao listar empresas');
+      setError(getErrorMessage(err, 'Erro ao listar empresas'));
     }
   };
 
@@ -157,6 +157,24 @@ export default function ManageUsers() {
     : sortedEmpresas;
   const selectedEmpresa = empresas.find((empresa) => empresa.id === empresaEditSelectedId) || null;
   const hasSelectedEmpresa = Boolean(selectedEmpresa);
+  const totalUsersCount = baseUsers.length;
+  const activeUsersCount = baseUsers.filter((user) => user.status !== false).length;
+  const blockedUsersCount = baseUsers.filter((user) => user.status === false).length;
+  const adminUsersCount = baseUsers.filter((user) => user.role === 'admin').length;
+
+  const getRoleLabel = (userRole: string) => {
+    if (userRole === 'admin') return 'Admin';
+    if (userRole === 'superadmin') return 'Superadmin';
+    if (userRole === 'outsider') return 'Outsider';
+    return 'Usuário';
+  };
+
+  const getRoleBadgeClass = (userRole: string) => {
+    if (userRole === 'admin') return 'admin-badge-primary';
+    if (userRole === 'superadmin') return 'admin-badge-danger';
+    if (userRole === 'outsider') return 'admin-badge-warning';
+    return 'admin-badge-neutral';
+  };
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -229,6 +247,11 @@ export default function ManageUsers() {
     return numeric;
   };
 
+  const getErrorMessage = (err: unknown, fallback: string) => {
+    if (err instanceof Error && err.message) return err.message;
+    return fallback;
+  };
+
   const handleCreateEmpresa = async () => {
     setLoading(true);
     setError('');
@@ -253,9 +276,10 @@ export default function ManageUsers() {
       setEmpresaMaxMei('');
       setEmpresaMaxNaoMei('');
       await fetchEmpresas();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao criar empresa');
-      toast.error(err.message || 'Erro ao criar empresa');
+    } catch (err: unknown) {
+      const message = getErrorMessage(err, 'Erro ao criar empresa');
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -312,9 +336,10 @@ export default function ManageUsers() {
       setSuccess('Empresa atualizada com sucesso.');
       toast.success('Empresa atualizada com sucesso.');
       await fetchEmpresas();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao atualizar empresa');
-      toast.error(err.message || 'Erro ao atualizar empresa');
+    } catch (err: unknown) {
+      const message = getErrorMessage(err, 'Erro ao atualizar empresa');
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -454,11 +479,11 @@ export default function ManageUsers() {
   if (!canManage) {
     return (
       <>
-        <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
-          <h1 className="text-xl md:text-3xl font-bold dark:text-white">Gerenciar usuários</h1>
-          <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
-            Você não tem permissão para acessar esta página.
-          </p>
+        <div className="admin-page-shell">
+          <section className="admin-hero">
+            <h1 className="admin-hero-title">Gerenciar usuários</h1>
+            <p className="admin-hero-subtitle">Você não tem permissão para acessar esta página.</p>
+          </section>
         </div>
       </>
     );
@@ -466,237 +491,299 @@ export default function ManageUsers() {
 
   return (
     <>
-      <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
-        <h1 className="text-xl md:text-3xl font-bold dark:text-white mb-4 md:mb-6">Gerenciar usuários</h1>
-        <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 mb-4 md:mb-6">
-          Administre usuários por empresa e permissões.
-        </p>
+      <div className="admin-page-shell">
+        <section className="admin-hero">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="admin-hero-title">Gerenciar usuários</h1>
+              <p className="admin-hero-subtitle">Administre usuários por empresa e permissões.</p>
+            </div>
+            <div className="admin-actions">
+              <span className="admin-badge-primary">
+                {role === 'superadmin' ? 'Escopo global' : 'Escopo da empresa'}
+              </span>
+            </div>
+          </div>
+          <div className="admin-stat-grid">
+            <div className="admin-stat-card">
+              <p className="admin-stat-label">Usuários visíveis</p>
+              <p className="admin-stat-value">{totalUsersCount}</p>
+            </div>
+            <div className="admin-stat-card">
+              <p className="admin-stat-label">Ativos</p>
+              <p className="admin-stat-value">{activeUsersCount}</p>
+            </div>
+            <div className="admin-stat-card">
+              <p className="admin-stat-label">Bloqueados</p>
+              <p className="admin-stat-value">{blockedUsersCount}</p>
+            </div>
+            <div className="admin-stat-card">
+              <p className="admin-stat-label">Admins</p>
+              <p className="admin-stat-value">{adminUsersCount}</p>
+            </div>
+          </div>
+        </section>
 
         {error && (
-          <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded">
+          <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
             {error}
           </div>
         )}
 
         {success && (
-          <div className="bg-green-100 dark:bg-green-900 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 px-4 py-3 rounded">
+          <div className="rounded-xl border border-emerald-300/90 bg-emerald-50/90 px-4 py-3 text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300">
             {success}
           </div>
         )}
 
         {role === 'superadmin' ? (
-          <div className="planner-card p-4 md:p-6">
-            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Criar empresa</h2>
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <input
-                  type="text"
-                  value={empresaNome}
-                  onChange={(e) => setEmpresaNome(e.target.value)}
-                  className="planner-input-compact"
-                  placeholder="Nome da empresa"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={empresaMaxMei}
-                  onChange={(e) => setEmpresaMaxMei(e.target.value)}
-                  className="planner-input-compact"
-                  placeholder="Max MEI (0 = sem limite)"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={empresaMaxNaoMei}
-                  onChange={(e) => setEmpresaMaxNaoMei(e.target.value)}
-                  className="planner-input-compact"
-                  placeholder="Max não MEI (0 = sem limite)"
-                />
+          <section className="admin-split-grid">
+            <div className="admin-section-card">
+              <div className="admin-section-header">
+                <div>
+                  <h2 className="admin-section-title">Criar empresa</h2>
+                  <p className="admin-section-subtitle">Cadastre empresas e limites iniciais de capacidade.</p>
+                </div>
               </div>
-              <button
-                onClick={handleCreateEmpresa}
-                disabled={loading || !empresaNome.trim()}
-                className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Salvando...' : 'Criar empresa'}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {role === 'superadmin' ? (
-          <div className="planner-card p-4 md:p-6">
-            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Editar empresas</h2>
-            {empresas.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma empresa cadastrada.</p>
-            ) : (
               <div className="space-y-4">
-                <div className="relative">
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Buscar empresa</label>
-                  <div className="flex items-center gap-2">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Nome da empresa</label>
                     <input
                       type="text"
-                      value={empresaEditQuery}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setEmpresaEditQuery(value);
-                        setEmpresaEditOpen(true);
-                        setEmpresaEditHighlightedIndex(-1);
-                        if (empresaEditSelectedId) {
-                          const selectedLabel = selectedEmpresa ? selectedEmpresa.empresa : '';
-                          if (value.trim().toLowerCase() !== selectedLabel.trim().toLowerCase()) {
-                            setEmpresaEditSelectedId('');
-                            setEmpresaEditNome('');
-                            setEmpresaEditMaxMei('');
-                            setEmpresaEditMaxNaoMei('');
-                          }
-                        }
-                      }}
-                      onFocus={() => setEmpresaEditOpen(true)}
-                      onBlur={() => {
-                        window.setTimeout(() => setEmpresaEditOpen(false), 150);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'ArrowDown') {
-                          event.preventDefault();
+                      value={empresaNome}
+                      onChange={(e) => setEmpresaNome(e.target.value)}
+                      className="planner-input-compact"
+                      placeholder="Nome da empresa"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Max MEI</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={empresaMaxMei}
+                      onChange={(e) => setEmpresaMaxMei(e.target.value)}
+                      className="planner-input-compact"
+                      placeholder="0 = sem limite"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Max não MEI</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={empresaMaxNaoMei}
+                      onChange={(e) => setEmpresaMaxNaoMei(e.target.value)}
+                      className="planner-input-compact"
+                      placeholder="0 = sem limite"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleCreateEmpresa}
+                  disabled={loading || !empresaNome.trim()}
+                  className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? 'Salvando...' : 'Criar empresa'}
+                </button>
+              </div>
+            </div>
+
+            <div className="admin-section-card">
+              <div className="admin-section-header">
+                <div>
+                  <h2 className="admin-section-title">Editar empresas</h2>
+                  <p className="admin-section-subtitle">Selecione uma empresa para ajustar nome e limites.</p>
+                </div>
+              </div>
+              {empresas.length === 0 ? (
+                <div className="admin-empty-state">Nenhuma empresa cadastrada.</div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="admin-toolbar relative">
+                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Buscar empresa</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={empresaEditQuery}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setEmpresaEditQuery(value);
                           setEmpresaEditOpen(true);
-                          setEmpresaEditHighlightedIndex((index) =>
-                            Math.min(index + 1, filteredEmpresas.length - 1)
-                          );
-                          return;
-                        }
-                        if (event.key === 'ArrowUp') {
-                          event.preventDefault();
-                          setEmpresaEditHighlightedIndex((index) => Math.max(index - 1, 0));
-                          return;
-                        }
-                        if (event.key === 'Enter') {
-                          if (empresaEditHighlightedIndex >= 0 && filteredEmpresas[empresaEditHighlightedIndex]) {
-                            selectEmpresaForEdit(filteredEmpresas[empresaEditHighlightedIndex]);
+                          setEmpresaEditHighlightedIndex(-1);
+                          if (empresaEditSelectedId) {
+                            const selectedLabel = selectedEmpresa ? selectedEmpresa.empresa : '';
+                            if (value.trim().toLowerCase() !== selectedLabel.trim().toLowerCase()) {
+                              setEmpresaEditSelectedId('');
+                              setEmpresaEditNome('');
+                              setEmpresaEditMaxMei('');
+                              setEmpresaEditMaxNaoMei('');
+                            }
+                          }
+                        }}
+                        onFocus={() => setEmpresaEditOpen(true)}
+                        onBlur={() => {
+                          window.setTimeout(() => setEmpresaEditOpen(false), 150);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'ArrowDown') {
+                            event.preventDefault();
+                            setEmpresaEditOpen(true);
+                            setEmpresaEditHighlightedIndex((index) =>
+                              Math.min(index + 1, filteredEmpresas.length - 1)
+                            );
                             return;
                           }
-                          if (filteredEmpresas.length === 1) {
-                            selectEmpresaForEdit(filteredEmpresas[0]);
+                          if (event.key === 'ArrowUp') {
+                            event.preventDefault();
+                            setEmpresaEditHighlightedIndex((index) => Math.max(index - 1, 0));
+                            return;
                           }
-                        }
-                        if (event.key === 'Escape') {
-                          setEmpresaEditOpen(false);
-                          setEmpresaEditHighlightedIndex(-1);
-                        }
-                      }}
-                      className="planner-input-compact"
-                      placeholder="Digite para filtrar"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setEmpresaEditOpen((open) => !open)}
-                      className="planner-button-secondary-compact"
-                      aria-label="Alternar lista de empresas"
-                    >
-                      ▾
-                    </button>
+                          if (event.key === 'Enter') {
+                            if (empresaEditHighlightedIndex >= 0 && filteredEmpresas[empresaEditHighlightedIndex]) {
+                              selectEmpresaForEdit(filteredEmpresas[empresaEditHighlightedIndex]);
+                              return;
+                            }
+                            if (filteredEmpresas.length === 1) {
+                              selectEmpresaForEdit(filteredEmpresas[0]);
+                            }
+                          }
+                          if (event.key === 'Escape') {
+                            setEmpresaEditOpen(false);
+                            setEmpresaEditHighlightedIndex(-1);
+                          }
+                        }}
+                        className="planner-input-compact"
+                        placeholder="Digite para filtrar"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEmpresaEditOpen((open) => !open)}
+                        className="planner-button-secondary-compact"
+                        aria-label="Alternar lista de empresas"
+                      >
+                        ▾
+                      </button>
+                    </div>
+                    {empresaEditOpen && (
+                      <div className="admin-dropdown-panel">
+                        {filteredEmpresas.length === 0 ? (
+                          <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
+                            Nenhuma empresa encontrada.
+                          </div>
+                        ) : (
+                          filteredEmpresas.map((empresa, index) => (
+                            <button
+                              key={empresa.id}
+                              type="button"
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                selectEmpresaForEdit(empresa);
+                              }}
+                              className={`admin-dropdown-option ${
+                                empresaEditHighlightedIndex === index ? 'admin-dropdown-option-active' : ''
+                              }`}
+                            >
+                              {empresa.empresa}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {empresaEditOpen && (
-                    <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/80 shadow-soft backdrop-blur">
-                      {filteredEmpresas.length === 0 ? (
-                        <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
-                          Nenhuma empresa encontrada.
+
+                  {!hasSelectedEmpresa ? (
+                    <div className="admin-empty-state">Selecione uma empresa para editar seus dados.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Nome da empresa</label>
+                          <input
+                            type="text"
+                            value={empresaEditNome}
+                            onChange={(e) => setEmpresaEditNome(e.target.value)}
+                            className="planner-input-compact"
+                            placeholder="Nome da empresa"
+                          />
                         </div>
-                      ) : (
-                        filteredEmpresas.map((empresa, index) => (
-                          <button
-                            key={empresa.id}
-                            type="button"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              selectEmpresaForEdit(empresa);
-                            }}
-                            className={`w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 ${
-                              empresaEditHighlightedIndex === index ? 'bg-slate-100/80 dark:bg-slate-800/60' : ''
-                            }`}
-                          >
-                            {empresa.empresa}
-                          </button>
-                        ))
-                      )}
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Max MEI</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={empresaEditMaxMei}
+                            onChange={(e) => setEmpresaEditMaxMei(e.target.value)}
+                            className="planner-input-compact"
+                            placeholder="0 = sem limite"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Max não MEI</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={empresaEditMaxNaoMei}
+                            onChange={(e) => setEmpresaEditMaxNaoMei(e.target.value)}
+                            className="planner-input-compact"
+                            placeholder="0 = sem limite"
+                          />
+                        </div>
+                      </div>
+                      <div className="admin-actions">
+                        <button
+                          onClick={handleUpdateEmpresa}
+                          disabled={loading || !empresaEditNome.trim() || !hasSelectedEmpresa}
+                          className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {loading ? 'Salvando...' : 'Salvar alterações'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {!hasSelectedEmpresa ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Selecione uma empresa para editar seus dados.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <input
-                        type="text"
-                        value={empresaEditNome}
-                        onChange={(e) => setEmpresaEditNome(e.target.value)}
-                        className="planner-input-compact"
-                        placeholder="Nome da empresa"
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={empresaEditMaxMei}
-                        onChange={(e) => setEmpresaEditMaxMei(e.target.value)}
-                        className="planner-input-compact"
-                        placeholder="Max MEI (0 = sem limite)"
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={empresaEditMaxNaoMei}
-                        onChange={(e) => setEmpresaEditMaxNaoMei(e.target.value)}
-                        className="planner-input-compact"
-                        placeholder="Max não MEI (0 = sem limite)"
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={handleUpdateEmpresa}
-                        disabled={loading || !empresaEditNome.trim() || !hasSelectedEmpresa}
-                        className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {loading ? 'Salvando...' : 'Salvar alterações'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          </section>
         ) : null}
 
-        <div className="planner-card p-4 md:p-6">
-          <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Criar usuário</h2>
+        <section className="admin-section-card">
+          <div className="admin-section-header">
+            <div>
+              <h2 className="admin-section-title">Criar usuário</h2>
+              <p className="admin-section-subtitle">Cadastre novos acessos e configure permissões.</p>
+            </div>
+          </div>
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="planner-input-compact"
-                placeholder="Email"
-              />
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="planner-input-compact"
+                  placeholder="email@empresa.com"
+                />
+              </div>
               <div className="relative">
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Senha (opcional)</label>
                 <input
                   type={showCreatePassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="planner-input-compact pr-10"
-                  placeholder="Senha (opcional)"
+                  placeholder="Defina uma senha ou deixe em branco"
                 />
                 <button
                   type="button"
                   onClick={() => setShowCreatePassword((value) => !value)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                  className="admin-icon-button absolute bottom-1.5 right-1.5"
                   aria-label={showCreatePassword ? 'Ocultar senha' : 'Mostrar senha'}
                 >
                   {showCreatePassword ? (
@@ -712,107 +799,119 @@ export default function ManageUsers() {
                   )}
                 </button>
               </div>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className="planner-input-compact"
-                placeholder="Nome de exibição"
-              />
-              <PhoneInput
-                country={'br'}
-                value={phone}
-                onChange={(value) => setPhone(value)}
-                inputStyle={{
-                  width: '100%',
-                  paddingTop: '10px',
-                  paddingBottom: '10px',
-                  paddingLeft: '48px',
-                  paddingRight: '12px',
-                  borderRadius: '0.5rem',
-                  border: '1px solid #4B5563',
-                  fontSize: '0.875rem',
-                  backgroundColor: '#374151',
-                  color: '#F9FAFB',
-                  boxSizing: 'border-box',
-                  outline: 'none'
-                }}
-                buttonStyle={{ border: 'none', background: 'none', paddingLeft: 8 }}
-                placeholder="(11) 99999-9999"
-                enableSearch
-              />
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Nome de exibição</label>
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className="planner-input-compact"
+                  placeholder="Nome de exibição"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Telefone</label>
+                <PhoneInput
+                  country={'br'}
+                  value={phone}
+                  onChange={(value) => setPhone(value)}
+                  inputStyle={{
+                    width: '100%',
+                    paddingTop: '10px',
+                    paddingBottom: '10px',
+                    paddingLeft: '48px',
+                    paddingRight: '12px',
+                    borderRadius: '0.5rem',
+                    border: '1px solid #4B5563',
+                    fontSize: '0.875rem',
+                    backgroundColor: '#374151',
+                    color: '#F9FAFB',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
+                  buttonStyle={{ border: 'none', background: 'none', paddingLeft: 8 }}
+                  placeholder="(11) 99999-9999"
+                  enableSearch
+                />
+              </div>
             </div>
 
             {role === 'superadmin' ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as 'admin' | 'usuario' | 'outsider')}
-                  className="planner-input-compact"
-                >
-                  <option value="admin">Admin</option>
-                  <option value="usuario">User</option>
-                  <option value="outsider">Outsider</option>
-                </select>
-                <div className="relative">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={empresaQuery}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setEmpresaQuery(value);
-                        setEmpresaOpen(true);
-                        const match = empresas.find(
-                          (empresa) => empresa.empresa.toLowerCase() === value.toLowerCase()
-                        );
-                        setTargetEmpresaId(match?.id || '');
-                      }}
-                      onFocus={() => setEmpresaOpen(true)}
+              <div className="admin-toolbar">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Perfil</label>
+                    <select
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value as 'admin' | 'usuario' | 'outsider')}
                       className="planner-input-compact"
-                      placeholder="Empresa"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setEmpresaOpen((open) => !open)}
-                      className="planner-button-secondary-compact"
-                      aria-label="Listar empresas"
                     >
-                      ▾
-                    </button>
+                      <option value="admin">Admin</option>
+                      <option value="usuario">Usuário</option>
+                      <option value="outsider">Outsider</option>
+                    </select>
                   </div>
-                  {empresaOpen && (
-                    <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/80 shadow-soft backdrop-blur">
-                      {(empresas || [])
-                        .filter((empresa) =>
-                          empresa.empresa.toLowerCase().includes(empresaQuery.toLowerCase())
-                        )
-                        .map((empresa) => (
-                          <button
-                            key={empresa.id}
-                            type="button"
-                            onClick={() => {
-                              setEmpresaQuery(empresa.empresa);
-                              setTargetEmpresaId(empresa.id);
-                              setEmpresaOpen(false);
-                            }}
-                            className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60"
-                          >
-                            {empresa.empresa}
-                          </button>
-                        ))}
-                      {empresas.length === 0 && (
-                        <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
-                          Nenhuma empresa encontrada.
-                        </div>
-                      )}
+                  <div className="relative">
+                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Empresa</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={empresaQuery}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setEmpresaQuery(value);
+                          setEmpresaOpen(true);
+                          const match = empresas.find(
+                            (empresa) => empresa.empresa.toLowerCase() === value.toLowerCase()
+                          );
+                          setTargetEmpresaId(match?.id || '');
+                        }}
+                        onFocus={() => setEmpresaOpen(true)}
+                        className="planner-input-compact"
+                        placeholder="Empresa"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEmpresaOpen((open) => !open)}
+                        className="planner-button-secondary-compact"
+                        aria-label="Listar empresas"
+                      >
+                        ▾
+                      </button>
                     </div>
-                  )}
-                  {targetEmpresaId && (
-                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                      Empresa selecionada: {empresaQuery}
-                    </p>
-                  )}
+                    {empresaOpen && (
+                      <div className="admin-dropdown-panel">
+                        {(empresas || [])
+                          .filter((empresa) =>
+                            empresa.empresa.toLowerCase().includes(empresaQuery.toLowerCase())
+                          )
+                          .map((empresa) => (
+                            <button
+                              key={empresa.id}
+                              type="button"
+                              onClick={() => {
+                                setEmpresaQuery(empresa.empresa);
+                                setTargetEmpresaId(empresa.id);
+                                setEmpresaOpen(false);
+                              }}
+                              className="admin-dropdown-option"
+                            >
+                              {empresa.empresa}
+                            </button>
+                          ))}
+                        {empresas.length === 0 && (
+                          <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
+                            Nenhuma empresa encontrada.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {targetEmpresaId && (
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        Empresa selecionada: {empresaQuery}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -820,155 +919,165 @@ export default function ManageUsers() {
             <button
               onClick={handleCreateUser}
               disabled={loading || !email}
-              className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
+              className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? 'Salvando...' : 'Criar usuário'}
             </button>
           </div>
-        </div>
+        </section>
 
-        <div className="planner-card p-4 md:p-6">
-          <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 dark:text-white">Usuários</h2>
+        <section className="admin-section-card">
+          <div className="admin-section-header">
+            <div>
+              <h2 className="admin-section-title">Usuários</h2>
+              <p className="admin-section-subtitle">Pesquise, edite permissões e gerencie acesso rapidamente.</p>
+            </div>
+          </div>
           {loading ? (
             <LoadingOverlay message="Carregando usuários..." />
           ) : fetchError ? (
-            <p className="text-red-500 dark:text-red-400 text-sm">{fetchError}</p>
+            <div className="admin-empty-state border-rose-300/90 text-rose-600 dark:border-rose-800/80 dark:text-rose-400">
+              {fetchError}
+            </div>
           ) : (
-            <div className="space-y-3">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="relative w-full md:max-w-xs">
-                  <input
-                    type="text"
-                    value={userQuery}
-                    onChange={(event) => {
-                      setUserQuery(event.target.value);
-                      setUserDropdownOpen(true);
-                      setHighlightedIndex(-1);
-                    }}
-                    onFocus={() => setUserDropdownOpen(true)}
-                    onBlur={() => {
-                      window.setTimeout(() => setUserDropdownOpen(false), 150);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'ArrowDown') {
-                        event.preventDefault();
+            <div className="space-y-4">
+              <div className="admin-toolbar">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="relative w-full md:max-w-md">
+                    <input
+                      type="text"
+                      value={userQuery}
+                      onChange={(event) => {
+                        setUserQuery(event.target.value);
                         setUserDropdownOpen(true);
-                        setHighlightedIndex((index) => Math.min(index + 1, filteredUsers.length - 1));
-                        return;
-                      }
-                      if (event.key === 'ArrowUp') {
-                        event.preventDefault();
-                        setHighlightedIndex((index) => Math.max(index - 1, 0));
-                        return;
-                      }
-                      if (event.key === 'Enter') {
-                        if (highlightedIndex >= 0 && filteredUsers[highlightedIndex]) {
-                          const user = filteredUsers[highlightedIndex];
-                          setUserQuery(getUserLabel(user));
-                          setUserDropdownOpen(false);
-                          setHighlightedIndex(-1);
-                          setCurrentPage(1);
+                        setHighlightedIndex(-1);
+                      }}
+                      onFocus={() => setUserDropdownOpen(true)}
+                      onBlur={() => {
+                        window.setTimeout(() => setUserDropdownOpen(false), 150);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'ArrowDown') {
+                          event.preventDefault();
+                          setUserDropdownOpen(true);
+                          setHighlightedIndex((index) => Math.min(index + 1, filteredUsers.length - 1));
                           return;
                         }
-                        if (filteredUsers.length === 1) {
-                          const user = filteredUsers[0];
-                          setUserQuery(getUserLabel(user));
+                        if (event.key === 'ArrowUp') {
+                          event.preventDefault();
+                          setHighlightedIndex((index) => Math.max(index - 1, 0));
+                          return;
+                        }
+                        if (event.key === 'Enter') {
+                          if (highlightedIndex >= 0 && filteredUsers[highlightedIndex]) {
+                            const user = filteredUsers[highlightedIndex];
+                            setUserQuery(getUserLabel(user));
+                            setUserDropdownOpen(false);
+                            setHighlightedIndex(-1);
+                            setCurrentPage(1);
+                            return;
+                          }
+                          if (filteredUsers.length === 1) {
+                            const user = filteredUsers[0];
+                            setUserQuery(getUserLabel(user));
+                            setUserDropdownOpen(false);
+                            setHighlightedIndex(-1);
+                            setCurrentPage(1);
+                          }
+                        }
+                        if (event.key === 'Escape') {
                           setUserDropdownOpen(false);
                           setHighlightedIndex(-1);
-                          setCurrentPage(1);
                         }
-                      }
-                      if (event.key === 'Escape') {
-                        setUserDropdownOpen(false);
-                        setHighlightedIndex(-1);
-                      }
-                    }}
-                    className="planner-input-compact"
-                    placeholder="Pesquisar por nome, email ou empresa"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                    {userQuery && (
+                      }}
+                      className="planner-input-compact"
+                      placeholder="Pesquisar por nome, email ou empresa"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                      {userQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserQuery('');
+                            setUserDropdownOpen(false);
+                            setHighlightedIndex(-1);
+                            setCurrentPage(1);
+                          }}
+                          className="admin-icon-button"
+                          aria-label="Limpar filtro"
+                        >
+                          ✕
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => {
-                          setUserQuery('');
-                          setUserDropdownOpen(false);
-                          setHighlightedIndex(-1);
-                          setCurrentPage(1);
-                        }}
-                        className="text-slate-400 hover:text-slate-200"
-                        aria-label="Limpar filtro"
+                        onClick={() => setUserDropdownOpen((open) => !open)}
+                        className="admin-icon-button"
+                        aria-label="Alternar lista de usuários"
                       >
-                        ✕
+                        ▾
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setUserDropdownOpen((open) => !open)}
-                      className="text-slate-400 hover:text-slate-200"
-                      aria-label="Alternar lista de usuários"
-                    >
-                      ▾
-                    </button>
-                  </div>
-                  {userDropdownOpen && (
-                    <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/80 shadow-soft backdrop-blur">
-                      {filteredUsers.length === 0 ? (
-                        <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
-                          Nenhum usuário encontrado.
-                        </div>
-                      ) : (
-                        filteredUsers.map((user, index) => (
-                          <button
-                            key={user.id}
-                            type="button"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              setUserQuery(getUserLabel(user));
-                              setUserDropdownOpen(false);
-                              setHighlightedIndex(-1);
-                              setCurrentPage(1);
-                            }}
-                            className={`w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 ${
-                              highlightedIndex === index ? 'bg-slate-100/80 dark:bg-slate-800/60' : ''
-                            }`}
-                          >
-                            <div className="flex flex-col">
-                              <span className="font-semibold">{getUserLabel(user)}</span>
-                              {user.empresaName ? (
-                                <span className="text-xs text-slate-500 dark:text-slate-400">
-                                  {user.empresaName}
-                                </span>
-                              ) : null}
-                            </div>
-                          </button>
-                        ))
-                      )}
                     </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                  <span>Por página</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setCurrentPage(1);
-                    }}
-                    className="planner-input-compact py-1 px-2 text-xs"
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                  </select>
+                    {userDropdownOpen && (
+                      <div className="admin-dropdown-panel">
+                        {filteredUsers.length === 0 ? (
+                          <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
+                            Nenhum usuário encontrado.
+                          </div>
+                        ) : (
+                          filteredUsers.map((user, index) => (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                setUserQuery(getUserLabel(user));
+                                setUserDropdownOpen(false);
+                                setHighlightedIndex(-1);
+                                setCurrentPage(1);
+                              }}
+                              className={`admin-dropdown-option ${
+                                highlightedIndex === index ? 'admin-dropdown-option-active' : ''
+                              }`}
+                            >
+                              <div className="flex flex-col">
+                                <span className="font-semibold">{getUserLabel(user)}</span>
+                                {user.empresaName ? (
+                                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                                    {user.empresaName}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                    <span>Por página</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="planner-input-compact py-1 px-2 text-xs"
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </div>
                 </div>
               </div>
+
               {filteredUsers.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400 text-sm py-4">
+                <div className="admin-empty-state">
                   {userQuery !== ''
                     ? `Nenhum usuário encontrado para "${userQuery}".`
                     : 'Nenhum usuário cadastrado.'}
-                </p>
+                </div>
               ) : null}
               {pagedUsers.map((user) => {
                 const canEdit =
@@ -981,94 +1090,113 @@ export default function ManageUsers() {
                 return (
                 <div
                   key={user.id}
-                  className="border border-slate-200/70 dark:border-slate-800/70 rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/70 dark:bg-slate-900/50"
+                  className="admin-user-card"
                 >
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-white">{user.displayName || user.email}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{user.email}</p>
-                    {user.phone && (
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Telefone: {user.phone}</p>
-                    )}
-                  </div>
-                  <div className="text-sm text-slate-600 dark:text-slate-300 min-w-[200px]">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-2">
+                      <p className="text-base font-semibold text-slate-900 dark:text-white">
+                        {user.displayName || user.email}
+                      </p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">{user.email}</p>
+                      {user.phone && (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Telefone: {user.phone}</p>
+                      )}
+                      <div className="admin-actions">
+                        <span className={getRoleBadgeClass(user.role)}>{getRoleLabel(user.role)}</span>
+                        <span className={isBlocked ? 'admin-badge-danger' : 'admin-badge-success'}>
+                          {isBlocked ? 'Bloqueado' : 'Ativo'}
+                        </span>
+                        <span className={user.mei === false ? 'admin-badge-warning' : 'admin-badge-primary'}>
+                          {user.mei === false ? 'MEI desativado' : 'MEI ativo'}
+                        </span>
+                        <span className="admin-badge-neutral">
+                          {user.empresaName || user.empresaId || 'Sem empresa'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-full text-sm text-slate-600 dark:text-slate-300 lg:max-w-2xl">
                     {isEditing ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
+                      <div className="space-y-3">
+                        <div className="admin-toolbar">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <input
+                              type="text"
+                              value={lastPasswords[user.id] || ''}
+                              readOnly
+                              className="planner-input-compact"
+                              placeholder="Sem senha em cache"
+                            />
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const value = lastPasswords[user.id];
+                                if (!value) return;
+                                try {
+                                  await navigator.clipboard.writeText(value);
+                                  toast.success('Senha copiada.');
+                                } catch {
+                                  toast.error('Erro ao copiar senha.');
+                                }
+                              }}
+                              disabled={!lastPasswords[user.id]}
+                              className="planner-button-secondary-compact w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Copiar
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
                           <input
                             type="text"
-                            value={lastPasswords[user.id] || ''}
-                            readOnly
+                            value={editDisplayName}
+                            onChange={(e) => setEditDisplayName(e.target.value)}
                             className="planner-input-compact"
-                            placeholder="Sem senha em cache"
+                            placeholder="Nome de exibição"
                           />
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const value = lastPasswords[user.id];
-                              if (!value) return;
-                              try {
-                                await navigator.clipboard.writeText(value);
-                                toast.success('Senha copiada.');
-                              } catch {
-                                toast.error('Erro ao copiar senha.');
-                              }
+                          <PhoneInput
+                            country={'br'}
+                            value={editPhone}
+                            onChange={(value) => setEditPhone(value)}
+                            inputStyle={{
+                              width: '100%',
+                              paddingTop: '10px',
+                              paddingBottom: '10px',
+                              paddingLeft: '48px',
+                              paddingRight: '12px',
+                              borderRadius: '0.5rem',
+                              border: '1px solid #4B5563',
+                              fontSize: '0.875rem',
+                              backgroundColor: '#374151',
+                              color: '#F9FAFB',
+                              boxSizing: 'border-box',
+                              outline: 'none'
                             }}
-                            disabled={!lastPasswords[user.id]}
-                            className="planner-button-secondary-compact disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            Copiar
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          value={editDisplayName}
-                          onChange={(e) => setEditDisplayName(e.target.value)}
-                          className="planner-input-compact"
-                          placeholder="Nome de exibição"
-                        />
-                        <PhoneInput
-                          country={'br'}
-                          value={editPhone}
-                          onChange={(value) => setEditPhone(value)}
-                          inputStyle={{
-                            width: '100%',
-                            paddingTop: '10px',
-                            paddingBottom: '10px',
-                            paddingLeft: '48px',
-                            paddingRight: '12px',
-                            borderRadius: '0.5rem',
-                            border: '1px solid #4B5563',
-                            fontSize: '0.875rem',
-                            backgroundColor: '#374151',
-                            color: '#F9FAFB',
-                            boxSizing: 'border-box',
-                            outline: 'none'
-                          }}
-                          buttonStyle={{ border: 'none', background: 'none', paddingLeft: 8 }}
-                          placeholder="(11) 999999999"
-                          enableSearch
-                        />
-                        <select
-                          value={editRole}
-                          onChange={(e) => setEditRole(e.target.value as 'admin' | 'usuario' | 'outsider')}
-                          disabled={role !== 'superadmin'}
-                          className="planner-input-compact"
-                        >
-                          {role === 'superadmin' && <option value="admin">Admin</option>}
-                          <option value="usuario">User</option>
-                          {role === 'superadmin' && <option value="outsider">Outsider</option>}
-                        </select>
-                        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                          <input
-                            type="checkbox"
-                            checked={editMei}
-                            onChange={(e) => setEditMei(e.target.checked)}
-                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            buttonStyle={{ border: 'none', background: 'none', paddingLeft: 8 }}
+                            placeholder="(11) 999999999"
+                            enableSearch
                           />
-                          MEI habilitado
-                        </label>
+                          <select
+                            value={editRole}
+                            onChange={(e) => setEditRole(e.target.value as 'admin' | 'usuario' | 'outsider')}
+                            disabled={role !== 'superadmin'}
+                            className="planner-input-compact"
+                          >
+                            {role === 'superadmin' && <option value="admin">Admin</option>}
+                            <option value="usuario">Usuário</option>
+                            {role === 'superadmin' && <option value="outsider">Outsider</option>}
+                          </select>
+                          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={editMei}
+                              onChange={(e) => setEditMei(e.target.checked)}
+                              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            MEI habilitado
+                          </label>
+                        </div>
                         {role === 'superadmin' ? (
-                          <div className="relative">
+                          <div className="relative admin-toolbar">
                             <div className="flex items-center gap-2">
                               <input
                                 type="text"
@@ -1096,7 +1224,7 @@ export default function ManageUsers() {
                               </button>
                             </div>
                             {editEmpresaOpen && (
-                              <div className="absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/80 shadow-soft backdrop-blur">
+                              <div className="admin-dropdown-panel">
                                 {(empresas || [])
                                   .filter((empresa) =>
                                     empresa.empresa.toLowerCase().includes(editEmpresaQuery.toLowerCase())
@@ -1110,7 +1238,7 @@ export default function ManageUsers() {
                                         setEditEmpresaId(empresa.id);
                                         setEditEmpresaOpen(false);
                                       }}
-                                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60"
+                                      className="admin-dropdown-option"
                                     >
                                       {empresa.empresa}
                                     </button>
@@ -1126,11 +1254,11 @@ export default function ManageUsers() {
                         ) : (
                           <p>Empresa: {user.empresaName || user.empresaId || '-'}</p>
                         )}
-                        <div className="flex gap-2">
+                        <div className="admin-actions">
                           <button
                             onClick={() => handleUpdateUser(user)}
                             disabled={loading || (role === 'superadmin' && !editEmpresaId)}
-                            className="planner-button disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Salvar
                           </button>
@@ -1138,7 +1266,7 @@ export default function ManageUsers() {
                             <button
                               onClick={() => handleBanUser(user)}
                               disabled={loading}
-                              className="planner-button bg-amber-500 hover:bg-amber-400"
+                              className="planner-button w-full sm:w-auto bg-amber-500 hover:bg-amber-400"
                             >
                               Bloquear
                             </button>
@@ -1147,7 +1275,7 @@ export default function ManageUsers() {
                             <button
                               onClick={() => handleUnbanUser(user)}
                               disabled={loading}
-                              className="planner-button bg-emerald-600 hover:bg-emerald-500"
+                              className="planner-button w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500"
                             >
                               Desbloquear
                             </button>
@@ -1156,7 +1284,7 @@ export default function ManageUsers() {
                             <button
                               onClick={() => handleResetPassword(user)}
                               disabled={loading}
-                              className="planner-button bg-indigo-600 hover:bg-indigo-500"
+                              className="planner-button w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500"
                             >
                               Redefinir senha
                             </button>
@@ -1165,44 +1293,43 @@ export default function ManageUsers() {
                             <button
                               onClick={() => handleDeleteUser(user)}
                               disabled={loading}
-                              className="planner-button bg-rose-600 hover:bg-rose-500"
+                              className="planner-button w-full sm:w-auto bg-rose-600 hover:bg-rose-500"
                             >
                               Excluir
                             </button>
                           )}
                           <button
                             onClick={() => setEditingUserId(null)}
-                            className="planner-button-secondary-compact"
+                            className="planner-button-secondary-compact w-full sm:w-auto"
                           >
                             Cancelar
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <>
-                        <p>Role: {user.role}</p>
+                      <div>
                         <p>Empresa: {user.empresaName || user.empresaId || '-'}</p>
-                        <p>MEI: {user.mei === false ? 'Desativado' : 'Ativo'}</p>
                         {canEdit && (
                           <button
                             onClick={() => startEditUser(user)}
-                            className="mt-2 planner-button"
+                            className="mt-3 planner-button w-full sm:w-auto"
                           >
                             Editar
                           </button>
                         )}
-                      </>
+                      </div>
                     )}
+                    </div>
                   </div>
                 </div>
               );
               })}
-              <div className="flex flex-col items-center justify-between gap-3 pt-2 md:flex-row">
+              <div className="admin-toolbar flex flex-col items-center justify-between gap-3 md:flex-row">
                 <button
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                   disabled={currentPageSafe <= 1}
-                  className="planner-button-secondary-compact disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="planner-button-secondary-compact w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Anterior
                 </button>
@@ -1218,14 +1345,14 @@ export default function ManageUsers() {
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                   disabled={currentPageSafe >= totalPages}
-                  className="planner-button-secondary-compact disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="planner-button-secondary-compact w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Próximo
                 </button>
               </div>
             </div>
           )}
-        </div>
+        </section>
       </div>
     </>
   );

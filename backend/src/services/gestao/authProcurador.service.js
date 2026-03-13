@@ -4,6 +4,11 @@ import { requestWithMtls } from '../../utils/http-mtls.js';
 
 const procuradorTokenCache = new Map();
 const tokenCache = new Map();
+const defaultFetchClient = (...args) => fetch(...args);
+const defaultMtlsClient = (url, options) => requestWithMtls(url, options);
+let fetchClient = defaultFetchClient;
+let mtlsClient = defaultMtlsClient;
+let noMtlsOverrideForTests = null;
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
@@ -21,8 +26,17 @@ const getDocTypeLabel = (numero) => {
   return null;
 };
 
-const isNoMtlsEnabled = () => String(env.SERPRO_OAUTH_TOKEN_NO_MTLS || '').toLowerCase() === 'true';
+const isNoMtlsEnabled = () => {
+  if (typeof noMtlsOverrideForTests === 'boolean') {
+    return noMtlsOverrideForTests;
+  }
+  return String(env.SERPRO_OAUTH_TOKEN_NO_MTLS || '').toLowerCase() === 'true';
+};
 const isAutenticaProcuradorMtlsEnabled = () => String(env.SERPRO_AUTENTICA_PROCURADOR_USE_MTLS || '').toLowerCase() === 'true';
+const OAUTH_CERT_ERROR_PATTERNS = [
+  /certificado\s+digital\s+v[aá]lido/i,
+  /identificar\s+um\s+certificado/i
+];
 
 const loadEnvPfx = () => {
   if (!env.SERPRO_CERT_PFX_BASE64) {
@@ -40,9 +54,9 @@ const getSerproTlsConfig = () => {
 
 const requestWithOptionalMtls = async (url, options, tlsConfig) => {
   if (tlsConfig?.pfx) {
-    return requestWithMtls(url, { ...options, ...tlsConfig });
+    return mtlsClient(url, { ...options, ...tlsConfig });
   }
-  return fetch(url, options);
+  return fetchClient(url, options);
 };
 
 const parseErrorMessage = async (response) => {
@@ -88,42 +102,85 @@ export const getSerproTokens = async ({ forceRefresh = false } = {}) => {
 
   const credentials = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
   const body = new URLSearchParams({ grant_type: 'client_credentials' }).toString();
-  const tlsConfig = isNoMtlsEnabled() ? null : getSerproTlsConfig();
-
-  const response = await requestWithOptionalMtls(env.SERPRO_OAUTH_TOKEN_URL, {
+  const roleTypeHeaders = env.SERPRO_ROLE_TYPE ? { 'Role-Type': env.SERPRO_ROLE_TYPE } : {};
+  const requestOptions = {
     method: 'POST',
     headers: {
       Authorization: `Basic ${credentials}`,
       'Content-Type': 'application/x-www-form-urlencoded',
-      ...(env.SERPRO_ROLE_TYPE ? { 'Role-Type': env.SERPRO_ROLE_TYPE } : {})
+      ...roleTypeHeaders
     },
     body
-  }, tlsConfig);
+  };
+  let host = '';
+  try {
+    host = new URL(env.SERPRO_OAUTH_TOKEN_URL).host;
+  } catch {
+    host = '';
+  }
 
-  if (!response.ok) {
-    let host = '';
-    try {
-      host = new URL(env.SERPRO_OAUTH_TOKEN_URL).host;
-    } catch {
-      host = '';
+  const attemptOauthToken = async (useMtls) => {
+    const tlsConfig = useMtls ? getSerproTlsConfig() : null;
+    const response = await requestWithOptionalMtls(env.SERPRO_OAUTH_TOKEN_URL, requestOptions, tlsConfig);
+    if (response.ok) {
+      return { ok: true, payload: await response.json(), useMtls };
     }
-    const contentType = response.headers.get('content-type') || '';
-    console.warn('[auth-procurador] falha OAuth Serpro', {
+    const message = await parseErrorMessage(response);
+    return {
+      ok: false,
+      useMtls,
       status: response.status,
-      contentType,
+      contentType: response.headers.get('content-type') || '',
+      message
+    };
+  };
+
+  const logOauthFailure = (result, stage) => {
+    console.warn('[auth-procurador] falha OAuth Serpro', {
+      status: result.status,
+      contentType: result.contentType,
       host,
       roleTypeSet: Boolean(env.SERPRO_ROLE_TYPE),
       noMtls: isNoMtlsEnabled(),
+      attemptedMtls: result.useMtls,
+      stage,
       consumerKeyLength: consumerKey.length,
       consumerKeyTrimmed: rawConsumerKey.length !== consumerKey.length,
       consumerSecretLength: consumerSecret.length,
       consumerSecretTrimmed: rawConsumerSecret.length !== consumerSecret.length
     });
-    const message = await parseErrorMessage(response);
-    throw badRequest(message || 'Erro ao autenticar com a Serpro');
+  };
+
+  const primaryUseMtls = !isNoMtlsEnabled();
+  let result = await attemptOauthToken(primaryUseMtls);
+
+  if (!result.ok) {
+    logOauthFailure(result, 'primary');
+    const originalError = badRequest(result.message || 'Erro ao autenticar com a Serpro');
+    const hasCertError = OAUTH_CERT_ERROR_PATTERNS.some((pattern) => pattern.test(String(result.message || '')));
+    const hasPfxForFallback = Boolean(getSerproTlsConfig()?.pfx);
+    const shouldRetryWithMtls = (
+      isNoMtlsEnabled()
+      && !result.useMtls
+      && hasCertError
+      && hasPfxForFallback
+    );
+
+    if (!shouldRetryWithMtls) {
+      throw originalError;
+    }
+
+    console.warn('[auth-procurador] fallback OAuth no-mTLS -> mTLS por erro de certificado');
+    const fallbackResult = await attemptOauthToken(true);
+    if (!fallbackResult.ok) {
+      logOauthFailure(fallbackResult, 'fallback_mtls');
+      // Mantém o erro original do fluxo principal para preservar diagnóstico.
+      throw originalError;
+    }
+    result = fallbackResult;
   }
 
-  const payload = await response.json();
+  const payload = result.payload;
   const accessToken = payload?.access_token || null;
   const jwtToken = payload?.jwt_token || null;
   const expiresIn = Number(payload?.expires_in || 0);
@@ -147,6 +204,20 @@ export const getSerproTokens = async ({ forceRefresh = false } = {}) => {
   });
 
   return { accessToken, jwtToken };
+};
+
+export const __setHttpClientsForTests = ({ fetchFn, mtlsFn, noMtls } = {}) => {
+  fetchClient = typeof fetchFn === 'function' ? fetchFn : defaultFetchClient;
+  mtlsClient = typeof mtlsFn === 'function' ? mtlsFn : defaultMtlsClient;
+  noMtlsOverrideForTests = typeof noMtls === 'boolean' ? noMtls : null;
+};
+
+export const __resetAuthProcuradorStateForTests = () => {
+  tokenCache.clear();
+  procuradorTokenCache.clear();
+  fetchClient = defaultFetchClient;
+  mtlsClient = defaultMtlsClient;
+  noMtlsOverrideForTests = null;
 };
 
 const getAutenticaProcuradorUrl = () => {

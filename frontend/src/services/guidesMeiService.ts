@@ -19,8 +19,9 @@ export interface MeiGuideResponse {
 
 export interface MeiPeriod {
   competencia: string;
-  status: 'pago' | 'a_pagar';
+  status: 'pago' | 'a_pagar' | 'erro';
   guideId?: string | null;
+  errorMessage?: string | null;
 }
 
 export interface MeiCertificateStatus {

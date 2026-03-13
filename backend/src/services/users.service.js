@@ -76,7 +76,9 @@ const normalizeLimitValue = (value) => {
   return numeric;
 };
 
-const resolveMeiValue = (value) => (typeof value === 'boolean' ? value : true);
+const resolveMeiValue = (value, defaultValue = true) => (
+  typeof value === 'boolean' ? value : defaultValue
+);
 
 const isUnlimitedLimit = (value) => value === null || value === 0;
 
@@ -385,8 +387,10 @@ export const updateEmpresa = async (accessToken, empresaId, input) => {
   return { empresa: data };
 };
 
-export const createUser = async (accessToken, input) => {
-  const { role: requesterRole, empresaId: requesterEmpresaId } = await getRequesterContext(accessToken);
+export const createUser = async (accessToken, input, deps = {}) => {
+  const getRequesterContextFn = deps.getRequesterContextFn || getRequesterContext;
+  const createSupabaseClientFn = deps.createSupabaseClientFn || createSupabaseClient;
+  const { role: requesterRole, empresaId: requesterEmpresaId } = await getRequesterContextFn(accessToken);
   if (!ROLE_CREATE_ALLOWED.has(requesterRole)) throw forbidden();
 
   const email = input?.email?.trim();
@@ -417,9 +421,9 @@ export const createUser = async (accessToken, input) => {
     finalEmpresaId = requestedEmpresaId;
   }
 
-  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const adminClient = createSupabaseClientFn({ useServiceRole: true });
 
-  const targetMei = resolveMeiValue(input?.mei);
+  const targetMei = resolveMeiValue(input?.mei, false);
   await ensureEmpresaCapacity(adminClient, { empresaId: finalEmpresaId, mei: targetMei });
 
   const { roleId, role: resolvedRole } = await ensureRoleId(adminClient, finalRole);

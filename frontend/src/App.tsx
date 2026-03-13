@@ -269,9 +269,10 @@ function GoogleOAuthCallback() {
   return null;
 }
 
-function AppRoutes() {
+export function AppRoutes() {
   const { user, role, mei } = useAuthStore();
   const meiEnabled = mei !== false;
+  const canAccessMeiArea = meiEnabled || role === 'superadmin';
 
   return (
     <>
@@ -302,7 +303,7 @@ function AppRoutes() {
                   <Route path="/agenda" element={<Agenda />} />
                   <Route
                     path="/guias-mei"
-                    element={meiEnabled ? <GuidesMei /> : <Navigate to="/" replace />}
+                    element={canAccessMeiArea ? <GuidesMei /> : <Navigate to="/" replace />}
                   />
                   <Route path="/settings" element={<Settings />} />
                   <Route

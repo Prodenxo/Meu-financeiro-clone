@@ -9,12 +9,12 @@ import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { displayName, mei } = useAuthStore();
+  const { displayName, mei, role } = useAuthStore();
   const { isDarkMode } = useThemeStore();
   const location = useLocation();
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [quickLinksOpen, setQuickLinksOpen] = useState(false);
-  const meiEnabled = mei !== false;
+  const canAccessMeiArea = mei !== false || role === 'superadmin';
 
   useEffect(() => {
     setQuickLinksOpen(false);
@@ -51,7 +51,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Link to="/agenda" className="planner-button-secondary-compact">
               Agenda
             </Link>
-            {meiEnabled ? (
+            {canAccessMeiArea ? (
               <Link to="/guias-mei" className="planner-button-secondary-compact">
                 Meu MEI
               </Link>
