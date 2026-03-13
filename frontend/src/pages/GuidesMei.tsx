@@ -182,6 +182,15 @@ const getDefaultPeriod = () => {
 };
 
 const hasRequiredText = (value: unknown) => String(value || '').trim().length > 0;
+const parseDecimalInput = (value: unknown) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : raw;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 type PlugNotasRegimeTributario = '1' | '2' | '3';
 type GuidesMeiWorkspace = 'overview' | 'das' | 'nfse';
 
@@ -296,13 +305,13 @@ const buildPlugNotasEmpresaPayload = ({
     nfse: {
       ativo: true,
       tipoContrato: 0,
-      config: { producao: false }
+      config: { producao: true }
     },
     nfe: {
       ativo: true,
       tipoContrato: 0,
       config: {
-        producao: false,
+        producao: true,
         serie: 1,
         numero: 1
       }
@@ -311,7 +320,7 @@ const buildPlugNotasEmpresaPayload = ({
       ativo: true,
       tipoContrato: 0,
       config: {
-        producao: false,
+        producao: true,
         serie: 1,
         numero: 1
       }
@@ -377,6 +386,15 @@ const getNfseValidationMessage = (
     || !hasRequiredText(servico.valorServico)
   ) {
     return 'Preencha os campos obrigatórios do serviço.';
+  }
+
+  const aliquota = parseDecimalInput(servico.aliquota);
+  if (aliquota === null) {
+    return 'Informe uma alíquota ISS válida.';
+  }
+  const valorServico = parseDecimalInput(servico.valorServico);
+  if (valorServico === null || valorServico <= 0) {
+    return 'Informe um valor de serviço maior que zero.';
   }
 
   return null;

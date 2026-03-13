@@ -24,21 +24,46 @@ const buildHeaders = (accept = 'application/json') => ({
   'x-api-key': env.PLUGNOTAS_API_KEY
 });
 
-const collectErrorMessages = (value) => {
+const RESERVED_ERROR_KEYS = new Set([
+  'field',
+  'campo',
+  'reason',
+  'error',
+  'motivo',
+  'message',
+  'mensagem',
+  'description',
+  'descricao',
+  'details',
+  'detalhes',
+  'errors',
+  'erros',
+  'validationErrors'
+]);
+
+const withFieldContext = (field, text) => {
+  const safeField = String(field || '').trim();
+  const safeText = String(text || '').trim();
+  if (!safeText) return '';
+  return safeField ? `${safeField}: ${safeText}` : safeText;
+};
+
+const collectErrorMessages = (value, fieldContext = '') => {
   if (value === null || value === undefined) return [];
   if (typeof value === 'string') {
-    const text = value.trim();
+    const text = withFieldContext(fieldContext, value);
     return text ? [text] : [];
   }
   if (Array.isArray(value)) {
-    return value.flatMap((item) => collectErrorMessages(item));
+    return value.flatMap((item) => collectErrorMessages(item, fieldContext));
   }
   if (typeof value === 'object') {
     const entries = [];
-    const field = String(value.field || value.campo || '').trim();
+    const field = String(value.field || value.campo || fieldContext || '').trim();
     const reason = String(value.reason || value.error || value.motivo || '').trim();
-    if (field && reason) {
-      entries.push(`${field}: ${reason}`);
+    if (reason) {
+      const text = withFieldContext(field, reason);
+      if (text) entries.push(text);
     }
     entries.push(
       ...collectErrorMessages(value.message),
@@ -51,6 +76,13 @@ const collectErrorMessages = (value) => {
       ...collectErrorMessages(value.erros),
       ...collectErrorMessages(value.validationErrors)
     );
+
+    Object.entries(value).forEach(([key, item]) => {
+      if (RESERVED_ERROR_KEYS.has(key)) return;
+      const nextField = fieldContext ? `${fieldContext}.${key}` : key;
+      entries.push(...collectErrorMessages(item, nextField));
+    });
+
     return entries;
   }
   return [];

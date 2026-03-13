@@ -84,6 +84,8 @@ Registrar pre-condicoes, variaveis de ambiente e orientacoes basicas para operac
 5. Em caso de erro recorrente, coletar logs e payload resumido para diagnostico.
 
 ## Checklist Operacional PlugNotas (Multi-tipo)
+Ambiente ativo neste repositorio: Producao (`https://api.plugnotas.com.br`).
+
 1. Confirmar ambiente de emissao:
    - Sandbox: `https://api.sandbox.plugnotas.com.br` (retorno mockado).
    - Homologacao/Producao: `https://api.plugnotas.com.br`.
