@@ -14,7 +14,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [quickLinksOpen, setQuickLinksOpen] = useState(false);
-  const canAccessMeiArea = mei !== false || role === 'superadmin';
+  const canAccessMeiArea = role === 'superadmin'
+    || role === 'admin'
+    || (role === 'usuario' && mei !== false);
 
   useEffect(() => {
     setQuickLinksOpen(false);

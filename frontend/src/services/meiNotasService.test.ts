@@ -76,33 +76,93 @@ describe('meiNotasService', () => {
 
     await emitirNfe({
       idIntegracao: 'nfe-1',
+      modelo: '55',
+      natureza: 'VENDA',
       emitente: { cpfCnpj: '12345678000199' },
-      destinatario: { cpfCnpj: '12345678901' },
-      itens: [{ codigo: 'A1', descricao: 'Produto A', valor: 10 }]
+      destinatario: { cpfCnpj: '12345678901', razaoSocial: 'Cliente NFe' },
+      itens: [{
+        codigo: 'A1',
+        descricao: 'Produto A',
+        ncm: '22030000',
+        cfop: '5102',
+        unidade: 'UN',
+        quantidade: 1,
+        valorUnitario: 10,
+        tributos: {
+          icms: { cst: '00', aliquota: 18, valor: 1.8 },
+          pis: { cst: '01', aliquota: 1.65, valor: 0.17 },
+          cofins: { cst: '01', aliquota: 7.6, valor: 0.76 }
+        }
+      }]
     });
     await emitirNfce({
       idIntegracao: 'nfce-1',
+      modelo: '65',
+      natureza: 'VENDA',
       emitente: { cpfCnpj: '12345678000199' },
-      destinatario: { cpfCnpj: '12345678901' },
-      itens: [{ codigo: 'B1', descricao: 'Produto B', valor: 20 }]
+      destinatario: { cpfCnpj: '12345678901', razaoSocial: 'Cliente NFCe' },
+      itens: [{
+        codigo: 'B1',
+        descricao: 'Produto B',
+        ncm: '85176272',
+        cfop: '5102',
+        unidade: 'UN',
+        quantidade: 1,
+        valorUnitario: 20,
+        tributos: {
+          icms: { cst: '00', aliquota: 18, valor: 3.6 },
+          pis: { cst: '01', aliquota: 1.65, valor: 0.33 },
+          cofins: { cst: '01', aliquota: 7.6, valor: 1.52 }
+        }
+      }]
     });
 
     expect(mockedApiClient.post).toHaveBeenNthCalledWith(1, '/mei-notas/emitir', {
       documentType: 'NFE',
       payload: {
         idIntegracao: 'nfe-1',
+        modelo: '55',
+        natureza: 'VENDA',
         emitente: { cpfCnpj: '12345678000199' },
-        destinatario: { cpfCnpj: '12345678901' },
-        itens: [{ codigo: 'A1', descricao: 'Produto A', valor: 10 }]
+        destinatario: { cpfCnpj: '12345678901', razaoSocial: 'Cliente NFe' },
+        itens: [{
+          codigo: 'A1',
+          descricao: 'Produto A',
+          ncm: '22030000',
+          cfop: '5102',
+          unidade: 'UN',
+          quantidade: 1,
+          valorUnitario: 10,
+          tributos: {
+            icms: { cst: '00', aliquota: 18, valor: 1.8 },
+            pis: { cst: '01', aliquota: 1.65, valor: 0.17 },
+            cofins: { cst: '01', aliquota: 7.6, valor: 0.76 }
+          }
+        }]
       }
     });
     expect(mockedApiClient.post).toHaveBeenNthCalledWith(2, '/mei-notas/emitir', {
       documentType: 'NFCE',
       payload: {
         idIntegracao: 'nfce-1',
+        modelo: '65',
+        natureza: 'VENDA',
         emitente: { cpfCnpj: '12345678000199' },
-        destinatario: { cpfCnpj: '12345678901' },
-        itens: [{ codigo: 'B1', descricao: 'Produto B', valor: 20 }]
+        destinatario: { cpfCnpj: '12345678901', razaoSocial: 'Cliente NFCe' },
+        itens: [{
+          codigo: 'B1',
+          descricao: 'Produto B',
+          ncm: '85176272',
+          cfop: '5102',
+          unidade: 'UN',
+          quantidade: 1,
+          valorUnitario: 20,
+          tributos: {
+            icms: { cst: '00', aliquota: 18, valor: 3.6 },
+            pis: { cst: '01', aliquota: 1.65, valor: 0.33 },
+            cofins: { cst: '01', aliquota: 7.6, valor: 1.52 }
+          }
+        }]
       }
     });
   });

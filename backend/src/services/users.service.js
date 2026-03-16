@@ -6,6 +6,43 @@ const ROLE_CREATE_ALLOWED = new Set(['superadmin', 'admin']);
 const ROLE_TARGET_ALLOWED = new Set(['admin', 'usuario', 'outsider']);
 const ROLE_UPDATE_ALLOWED_SUPERADMIN = new Set(['admin', 'usuario', 'outsider']);
 const ROLE_DEFAULT = 'usuario';
+const EMPRESA_SELECT_FIELDS = [
+  'id',
+  'empresa',
+  'cnpj',
+  'razao_social',
+  'nome_fantasia',
+  'inscricao_estadual',
+  'regime_tributario',
+  'logradouro',
+  'numero',
+  'complemento',
+  'bairro',
+  'cidade',
+  'estado',
+  'cep',
+  'telefone',
+  'email',
+  'max_mei',
+  'max_usuarios_nao_mei'
+].join(', ');
+const EMPRESA_TEXT_FIELDS = [
+  'empresa',
+  'cnpj',
+  'razao_social',
+  'nome_fantasia',
+  'inscricao_estadual',
+  'regime_tributario',
+  'logradouro',
+  'numero',
+  'complemento',
+  'bairro',
+  'cidade',
+  'estado',
+  'cep',
+  'telefone',
+  'email'
+];
 
 const normalizeRoleValue = (role) => {
   if (!role) return null;
@@ -55,6 +92,28 @@ const ensureRoleId = async (adminClient, role) => {
 const cleanPhone = (phone) => (phone?.startsWith('+') ? phone.substring(1) : phone);
 
 const generatePassword = () => crypto.randomBytes(9).toString('base64').slice(0, 12);
+const normalizeEmpresaText = (value) => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
+};
+const normalizeCnpj = (value) => {
+  const normalized = normalizeEmpresaText(value);
+  if (normalized === undefined) return undefined;
+  if (normalized === null) return null;
+  const digits = normalized.replace(/\D/g, '');
+  return digits || null;
+};
+const resolveEmpresaName = (input) => {
+  const preferred = normalizeEmpresaText(input?.empresa);
+  if (preferred) return preferred;
+  const fromRazao = normalizeEmpresaText(input?.razao_social);
+  if (fromRazao) return fromRazao;
+  const fromFantasia = normalizeEmpresaText(input?.nome_fantasia);
+  if (fromFantasia) return fromFantasia;
+  return null;
+};
 
 const normalizeLimitInput = (value, fieldName) => {
   if (value === undefined || value === null || value === '') return null;
@@ -74,6 +133,42 @@ const normalizeLimitValue = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return null;
   return numeric;
+};
+const buildEmpresaPayload = (input = {}, { requireName = false } = {}) => {
+  const payload = {};
+  for (const field of EMPRESA_TEXT_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(input, field)) continue;
+    payload[field] = field === 'cnpj'
+      ? normalizeCnpj(input[field])
+      : normalizeEmpresaText(input[field]);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, 'max_mei')) {
+    payload.max_mei = normalizeLimitInput(input.max_mei, 'max_mei');
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'max_usuarios_nao_mei')) {
+    payload.max_usuarios_nao_mei = normalizeLimitInput(
+      input.max_usuarios_nao_mei,
+      'max_usuarios_nao_mei'
+    );
+  }
+
+  if (requireName) {
+    payload.empresa = resolveEmpresaName({ ...input, empresa: payload.empresa ?? input?.empresa });
+    if (!payload.empresa) throw badRequest('Empresa e obrigatoria');
+  }
+
+  return payload;
+};
+const getEmpresaRecordById = async (adminClient, empresaId) => {
+  const { data, error } = await adminClient
+    .from('empresas')
+    .select(EMPRESA_SELECT_FIELDS)
+    .eq('id', empresaId)
+    .maybeSingle();
+  if (error) throw badRequest(error.message || 'Erro ao carregar empresa');
+  if (!data?.id) throw badRequest('Empresa nao encontrada');
+  return data;
 };
 
 const resolveMeiValue = (value, defaultValue = true) => (
@@ -322,25 +417,41 @@ export const listEmpresas = async (accessToken) => {
   return { empresas: data || [] };
 };
 
+export const getEmpresa = async (accessToken) => {
+  const { role, empresaId } = await getRequesterContext(accessToken);
+  if (!ROLE_CREATE_ALLOWED.has(role)) throw forbidden();
+  if (!empresaId) throw badRequest('Empresa nao encontrada para o usuario atual');
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const empresa = await getEmpresaRecordById(adminClient, empresaId);
+  return { empresa };
+};
+
+export const getEmpresaById = async (accessToken, empresaId) => {
+  const normalizedEmpresaId = String(empresaId || '').trim();
+  if (!normalizedEmpresaId) throw badRequest('Empresa e obrigatoria');
+
+  const requester = await getRequesterContext(accessToken);
+  if (!ROLE_CREATE_ALLOWED.has(requester.role)) throw forbidden();
+  if (requester.role === 'admin' && requester.empresaId !== normalizedEmpresaId) {
+    throw forbidden('Usuário fora do escopo da empresa');
+  }
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const empresa = await getEmpresaRecordById(adminClient, normalizedEmpresaId);
+  return { empresa };
+};
+
 export const createEmpresa = async (accessToken, input) => {
   const { role } = await getRequesterContext(accessToken);
   if (role !== 'superadmin') throw forbidden();
-
-  const nomeEmpresa = input?.empresa?.trim();
-  if (!nomeEmpresa) throw badRequest('Empresa e obrigatoria');
-
-  const maxMei = normalizeLimitInput(input?.max_mei, 'max_mei');
-  const maxNaoMei = normalizeLimitInput(input?.max_usuarios_nao_mei, 'max_usuarios_nao_mei');
+  const payload = buildEmpresaPayload(input, { requireName: true });
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data, error } = await adminClient
     .from('empresas')
-    .insert({
-      empresa: nomeEmpresa,
-      max_mei: maxMei,
-      max_usuarios_nao_mei: maxNaoMei
-    })
-    .select('id, empresa, max_mei, max_usuarios_nao_mei')
+    .insert(payload)
+    .select(EMPRESA_SELECT_FIELDS)
     .maybeSingle();
 
   if (error) throw badRequest(error.message || 'Erro ao criar empresa');
@@ -352,22 +463,7 @@ export const updateEmpresa = async (accessToken, empresaId, input) => {
   const { role } = await getRequesterContext(accessToken);
   if (role !== 'superadmin') throw forbidden();
   if (!empresaId) throw badRequest('Empresa e obrigatoria');
-
-  const updates = {};
-  if (Object.prototype.hasOwnProperty.call(input || {}, 'empresa')) {
-    const nomeEmpresa = input?.empresa?.trim();
-    if (!nomeEmpresa) throw badRequest('Empresa e obrigatoria');
-    updates.empresa = nomeEmpresa;
-  }
-  if (Object.prototype.hasOwnProperty.call(input || {}, 'max_mei')) {
-    updates.max_mei = normalizeLimitInput(input?.max_mei, 'max_mei');
-  }
-  if (Object.prototype.hasOwnProperty.call(input || {}, 'max_usuarios_nao_mei')) {
-    updates.max_usuarios_nao_mei = normalizeLimitInput(
-      input?.max_usuarios_nao_mei,
-      'max_usuarios_nao_mei'
-    );
-  }
+  const updates = buildEmpresaPayload(input);
 
   if (Object.keys(updates).length === 0) {
     throw badRequest('Nenhum campo informado para atualizar');
@@ -378,7 +474,7 @@ export const updateEmpresa = async (accessToken, empresaId, input) => {
     .from('empresas')
     .update(updates)
     .eq('id', empresaId)
-    .select('id, empresa, max_mei, max_usuarios_nao_mei')
+    .select(EMPRESA_SELECT_FIELDS)
     .maybeSingle();
 
   if (error) throw badRequest(error.message || 'Erro ao atualizar empresa');

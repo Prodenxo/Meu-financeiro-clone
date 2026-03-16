@@ -48,7 +48,7 @@ Deve retornar status `204 No Content` ou `200 OK`.
 Para garantir que a versão mais recente está deployada:
 
 1. Verifique a data do último deploy no Supabase Dashboard
-2. Compare com a data da última modificação do arquivo `backend/supabase/functions/google-calendar/index.ts`
+2. Compare com a data da última modificação do arquivo `supabase/functions/google-calendar/index.ts`
 3. Se o código foi modificado após o último deploy, faça deploy novamente:
 
 ```bash

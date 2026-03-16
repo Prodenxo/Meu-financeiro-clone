@@ -9,7 +9,9 @@ interface SidebarProps {
 export default function Sidebar({ expanded }: SidebarProps) {
   const location = useLocation();
   const { mei, role } = useAuthStore();
-  const canAccessMeiArea = mei !== false || role === 'superadmin';
+  const canAccessMeiArea = role === 'superadmin'
+    || role === 'admin'
+    || (role === 'usuario' && mei !== false);
   const navItems = [
     { path: '/', label: 'Visão Geral', icon: Home },
     { path: '/transacoes', label: 'Transações', icon: List },

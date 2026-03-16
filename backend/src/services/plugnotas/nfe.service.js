@@ -24,11 +24,93 @@ const buildHeaders = (accept = 'application/json') => ({
   'x-api-key': env.PLUGNOTAS_API_KEY
 });
 
+const RESERVED_ERROR_KEYS = new Set([
+  'field',
+  'campo',
+  'reason',
+  'error',
+  'motivo',
+  'message',
+  'mensagem',
+  'description',
+  'descricao',
+  'details',
+  'detalhes',
+  'errors',
+  'erros',
+  'validationErrors'
+]);
+
+const withFieldContext = (field, text) => {
+  const safeField = String(field || '').trim();
+  const safeText = String(text || '').trim();
+  if (!safeText) return '';
+  return safeField ? `${safeField}: ${safeText}` : safeText;
+};
+
+const collectErrorMessages = (value, fieldContext = '') => {
+  if (value === null || value === undefined) return [];
+  if (typeof value === 'string') {
+    const text = withFieldContext(fieldContext, value);
+    return text ? [text] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectErrorMessages(item, fieldContext));
+  }
+  if (typeof value === 'object') {
+    const entries = [];
+    const field = String(value.field || value.campo || fieldContext || '').trim();
+    const reason = String(value.reason || value.error || value.motivo || '').trim();
+    if (reason) {
+      const text = withFieldContext(field, reason);
+      if (text) entries.push(text);
+    }
+    entries.push(
+      ...collectErrorMessages(value.message),
+      ...collectErrorMessages(value.mensagem),
+      ...collectErrorMessages(value.description),
+      ...collectErrorMessages(value.descricao),
+      ...collectErrorMessages(value.details),
+      ...collectErrorMessages(value.detalhes),
+      ...collectErrorMessages(value.errors),
+      ...collectErrorMessages(value.erros),
+      ...collectErrorMessages(value.validationErrors)
+    );
+
+    Object.entries(value).forEach(([key, item]) => {
+      if (RESERVED_ERROR_KEYS.has(key)) return;
+      const nextField = fieldContext ? `${fieldContext}.${key}` : key;
+      entries.push(...collectErrorMessages(item, nextField));
+    });
+
+    return entries;
+  }
+  return [];
+};
+
 const parseErrorMessage = async (response) => {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const payload = await response.json();
-    return payload?.error?.message || payload?.message || payload?.error || response.statusText;
+    const baseMessage = String(
+      payload?.error?.message
+      || payload?.message
+      || (typeof payload?.error === 'string' ? payload.error : '')
+      || response.statusText
+      || ''
+    ).trim();
+    const detailMessages = [
+      ...collectErrorMessages(payload?.error?.details),
+      ...collectErrorMessages(payload?.error?.errors),
+      ...collectErrorMessages(payload?.details),
+      ...collectErrorMessages(payload?.errors),
+      ...collectErrorMessages(payload?.erros)
+    ].filter(Boolean);
+    const details = [...new Set(detailMessages)].join(' | ');
+    if (baseMessage && details && !baseMessage.includes(details)) {
+      return `${baseMessage}: ${details}`;
+    }
+    return baseMessage || details || response.statusText;
   }
   const text = await response.text();
   return text || response.statusText;

@@ -17,14 +17,14 @@
 
 ### 3. Código da Edge Function
 - **Status**: ✅ Verificado
-- **Arquivo**: `backend/supabase/functions/google-calendar/index.ts`
+- **Arquivo**: `supabase/functions/google-calendar/index.ts`
 - **Funcionalidade de Redirecionamento**: ✅ Implementada
 - **Suporte a FRONTEND_URL**: ✅ Configurado
 - **Fallback HTML**: ✅ Implementado
 
 ### 4. Configuração da Edge Function
-- **Arquivo**: `backend/supabase/functions/google-calendar/supabase.functions.config.json`
-- **Auth**: `false` (callback público) ✅
+- **Arquivo**: `supabase/config.toml`
+- **Auth**: gerenciado por configuração oficial do projeto Supabase ✅
 
 ## ✅ Função Deployada
 
@@ -54,7 +54,7 @@
 
 **Comando para Deploy**:
 ```bash
-cd backend
+cd supabase
 supabase functions deploy google-calendar
 ```
 
@@ -109,7 +109,7 @@ Marque cada item conforme verificar:
 Execute o deploy:
 
 ```bash
-cd backend
+cd supabase
 supabase link --project-ref iqcupswgotsuncysagmj
 supabase functions deploy google-calendar
 ```
@@ -153,7 +153,7 @@ cd backend
 
 1. ⚠️ **FAZER NOVO DEPLOY** (código foi modificado após último deploy)
    ```bash
-   cd backend
+   cd supabase
    supabase functions deploy google-calendar
    ```
 

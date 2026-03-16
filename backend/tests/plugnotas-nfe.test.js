@@ -69,3 +69,59 @@ test('nfe service suporta rota de relatório', async () => {
     global.fetch = originalFetch;
   }
 });
+
+test('nfe service preserva detalhes de validação retornados pela API', async () => {
+  const { emitirNfe } = await import('../src/services/plugnotas/nfe.service.js');
+  const originalFetch = global.fetch;
+
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    statusText: 'Bad Request',
+    headers: { get: () => 'application/json' },
+    json: async () => ({
+      message: 'Falha na validação do JSON de NF-e',
+      errors: {
+        'destinatario.cpfCnpj': ['campo obrigatório'],
+        'itens[0].cfop': ['inválido']
+      }
+    })
+  });
+
+  try {
+    await assert.rejects(
+      () => emitirNfe({
+        emitente: { cpfCnpj: '12345678000199' },
+        itens: [{ codigo: 'A1', descricao: 'Produto A', valor: 10 }]
+      }),
+      /Falha na validação do JSON de NF-e: destinatario\.cpfCnpj: campo obrigatório \| itens\[0\]\.cfop: inválido/
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('nfe service envia cancelamento com payload de justificativa', async () => {
+  const { cancelarNfe } = await import('../src/services/plugnotas/nfe.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return createJsonResponse({ message: 'cancelamento solicitado' });
+  };
+
+  try {
+    const result = await cancelarNfe('nfe-123', { reason: 'Cliente desistiu da compra' });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /\/nfe\/nfe-123\/cancelamento$/);
+    assert.equal(calls[0].options.method, 'POST');
+    assert.deepEqual(JSON.parse(calls[0].options.body), {
+      justificativa: 'Cliente desistiu da compra',
+      reason: 'Cliente desistiu da compra'
+    });
+    assert.equal(result.message, 'cancelamento solicitado');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
