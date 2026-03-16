@@ -40,6 +40,9 @@ chmod +x deploy-functions.sh
 Se preferir fazer deploy manualmente:
 
 ```bash
+# 0. Entrar na pasta canônica do Supabase
+cd supabase
+
 # 1. Linkar projeto
 supabase link --project-ref [SEU_PROJECT_REF]
 
@@ -168,7 +171,7 @@ Deve retornar status `204 No Content` para requisições OPTIONS.
 ## Estrutura das Edge Functions
 
 ```
-backend/supabase/functions/
+supabase/functions/
 ├── auth/
 │   ├── index.ts          # Função de autenticação
 │   └── deno.json         # Configuração Deno

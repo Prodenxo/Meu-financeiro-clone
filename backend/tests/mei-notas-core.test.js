@@ -218,6 +218,17 @@ test('mei-notas valida payload mínimo para NFe e NFCe', async () => {
         emitente: { cpfCnpj: '12345678000199' }
       }
     }),
+    /CPF\/CNPJ do destinatário da NF-e é obrigatório/
+  );
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      documentType: 'NFE',
+      payload: {
+        emitente: { cpfCnpj: '12345678000199' },
+        destinatario: { cpfCnpj: '12345678901', razaoSocial: 'Cliente teste' }
+      }
+    }),
     /Itens da NF-e são obrigatórios/
   );
 
@@ -231,5 +242,121 @@ test('mei-notas valida payload mínimo para NFe e NFCe', async () => {
       }
     }),
     /CPF\/CNPJ do destinatário da NFC-e inválido/
+  );
+});
+
+test('mei-notas valida campos fiscais mínimos de item para NFe/NFCe', async () => {
+  const { emitirNota } = await import('../src/services/mei-notas.service.js');
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      documentType: 'NFE',
+      payload: {
+        emitente: { cpfCnpj: '12345678000199' },
+        destinatario: { cpfCnpj: '12345678901', razaoSocial: 'Cliente teste' },
+        itens: [
+          {
+            codigo: 'A1',
+            descricao: 'Produto teste',
+            cfop: '5102',
+            quantidade: 1,
+            valorUnitario: 10,
+            tributos: {
+              icms: { cst: '00', aliquota: 18, valor: 1.8 },
+              pis: { cst: '01' },
+              cofins: { cst: '01' }
+            }
+          }
+        ]
+      }
+    }),
+    /Item 1 da NF-e: NCM deve ter 8 dígitos/
+  );
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      documentType: 'NFCE',
+      payload: {
+        emitente: { cpfCnpj: '12345678000199' },
+        destinatario: { cpfCnpj: '12345678901', razaoSocial: 'Consumidor teste' },
+        itens: [
+          {
+            codigo: 'B1',
+            descricao: 'Produto teste',
+            ncm: '12345678',
+            cfop: '5102',
+            unidade: 'UN',
+            quantidade: 1,
+            valorUnitario: 20,
+            tributos: {
+              icms: { aliquota: 18, valor: 3.6 },
+              pis: { cst: '01' },
+              cofins: { cst: '01' }
+            }
+          }
+        ]
+      }
+    }),
+    /Item 1 da NFC-e: informe CST ou CSOSN do ICMS/
+  );
+});
+
+test('mei-notas valida coerência de modelo por documentType', async () => {
+  const { emitirNota } = await import('../src/services/mei-notas.service.js');
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      documentType: 'NFE',
+      payload: {
+        modelo: '65',
+        emitente: { cpfCnpj: '12345678000199' },
+        destinatario: { cpfCnpj: '12345678901', razaoSocial: 'Cliente teste' },
+        itens: [
+          {
+            codigo: 'A1',
+            descricao: 'Produto teste',
+            ncm: '12345678',
+            cfop: '5102',
+            unidade: 'UN',
+            quantidade: 1,
+            valorUnitario: 10,
+            tributos: {
+              icms: { cst: '00' },
+              pis: { cst: '01' },
+              cofins: { cst: '01' }
+            }
+          }
+        ]
+      }
+    }),
+    /Modelo inválido para NF-e. Informe 55/
+  );
+
+  await assert.rejects(
+    () => emitirNota('user-1', {
+      documentType: 'NFCE',
+      payload: {
+        modelo: '55',
+        emitente: { cpfCnpj: '12345678000199' },
+        destinatario: { cpfCnpj: '12345678901', razaoSocial: 'Consumidor teste' },
+        itens: [
+          {
+            codigo: 'A1',
+            descricao: 'Produto teste',
+            ncm: '12345678',
+            cfop: '5102',
+            unidade: 'UN',
+            quantidade: 1,
+            valorUnitario: 10,
+            tributos: {
+              icms: { cst: '00' },
+              pis: { cst: '01' },
+              cofins: { cst: '01' }
+            }
+          }
+        ]
+      }
+    }),
+    /Modelo inválido para NFC-e. Informe 65/
   );
 });

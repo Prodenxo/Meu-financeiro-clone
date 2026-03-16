@@ -113,6 +113,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const mei = session.mei ?? true;
       console.log('Usuário encontrado:', session.user.email);
       set({ user: session.user, userId, phone, displayName, role, empresaId, mei, sessionRestored: true });
+      await useTransactionStore.getState().fetchTransactions();
     } else {
       console.log('Nenhuma sessão encontrada');
       set({
@@ -156,32 +157,3 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('Nome de exibição atualizado com sucesso');
   },
 }));
-
-// Initialize auth state from session
-getSession().then((session) => {
-  if (session) {
-    const userId = session.user.id;
-    const phone = session.user.user_metadata?.phone || null;
-    const displayName = session.user.user_metadata?.display_name || null;
-    const role = normalizeRole(session.role || null);
-    console.log('[AuthStore] bootstrap session.role:', session.role, 'normalized:', role);
-    const empresaId = session.empresaId || session.user.user_metadata?.empresa_id || null;
-    const mei = session.mei ?? true;
-    useAuthStore.setState({ 
-      user: session.user,
-      userId,
-      phone,
-      displayName,
-      role,
-      empresaId,
-      mei,
-      sessionRestored: true,
-    });
-    // Fetch transactions if there's an active session
-    useTransactionStore.getState().fetchTransactions();
-  } else {
-    useAuthStore.setState({ role: null, empresaId: null, mei: null, sessionRestored: true });
-  }
-}).catch(() => {
-  useAuthStore.setState({ sessionRestored: true });
-});

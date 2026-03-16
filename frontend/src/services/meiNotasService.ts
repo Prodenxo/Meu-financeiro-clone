@@ -2,6 +2,78 @@ import { apiClient } from './apiClient';
 
 export type DocumentType = 'NFSE' | 'NFE' | 'NFCE' | 'CTE';
 
+export interface NfeEmitenteDestinatarioInput {
+  cpfCnpj: string;
+  razaoSocial?: string;
+  email?: string;
+  inscricaoEstadual?: string;
+}
+
+export interface NfeIcmsInput {
+  origem?: string | number;
+  cst?: string;
+  csosn?: string;
+  modalidadeBaseCalculo?: string | number;
+  baseCalculo?: string | number;
+  aliquota?: string | number;
+  valor?: string | number;
+}
+
+export interface NfeIpiInput {
+  cst?: string;
+  codigoEnquadramentoLegal?: string;
+  baseCalculo?: string | number;
+  aliquota?: string | number;
+  valor?: string | number;
+}
+
+export interface NfePisInput {
+  cst?: string;
+  baseCalculo?: string | number;
+  aliquota?: string | number;
+  valor?: string | number;
+}
+
+export interface NfeCofinsInput {
+  cst?: string;
+  baseCalculo?: string | number;
+  aliquota?: string | number;
+  valor?: string | number;
+}
+
+export interface NfeTributosInput {
+  icms?: NfeIcmsInput;
+  ipi?: NfeIpiInput;
+  pis?: NfePisInput;
+  cofins?: NfeCofinsInput;
+}
+
+export interface NfeItemInput {
+  codigo: string;
+  descricao: string;
+  ncm: string;
+  cfop: string;
+  unidade: string;
+  quantidade: string | number;
+  valorUnitario: string | number;
+  valor?: string | number;
+  desconto?: string | number;
+  cest?: string;
+  sku?: string;
+  tributos?: NfeTributosInput;
+}
+
+export interface NfeLikePayloadInput {
+  idIntegracao?: string;
+  modelo?: '55' | '65' | string;
+  natureza?: string;
+  emitente: NfeEmitenteDestinatarioInput;
+  destinatario?: NfeEmitenteDestinatarioInput;
+  itens: NfeItemInput[];
+  informacoesComplementares?: string;
+  config?: Record<string, unknown>;
+}
+
 export interface NfseServicoInput {
   codigo: string;
   discriminacao: string;
@@ -43,7 +115,7 @@ export interface EmitirNfseInput {
 
 export interface EmitirNotaInput extends Partial<EmitirNfseInput> {
   documentType?: DocumentType;
-  payload?: Record<string, unknown>;
+  payload?: Record<string, unknown> | NfeLikePayloadInput;
   emitenteCpfCnpj?: string;
   destinatarioCpfCnpj?: string;
   itens?: Record<string, unknown>[];
@@ -170,14 +242,14 @@ export async function emitirNfse(input: EmitirNfseInput): Promise<NfseRecord> {
   return await emitirNota({ documentType: 'NFSE', ...input });
 }
 
-export async function emitirNfe(payload: Record<string, unknown>): Promise<NfseRecord> {
+export async function emitirNfe(payload: NfeLikePayloadInput): Promise<NfseRecord> {
   return await emitirNota({
     documentType: 'NFE',
     payload
   });
 }
 
-export async function emitirNfce(payload: Record<string, unknown>): Promise<NfseRecord> {
+export async function emitirNfce(payload: NfeLikePayloadInput): Promise<NfseRecord> {
   return await emitirNota({
     documentType: 'NFCE',
     payload

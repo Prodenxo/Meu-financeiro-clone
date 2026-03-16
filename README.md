@@ -1,6 +1,6 @@
 # FINANCAS-PESSOAIS-APP
 
-Monorepo com frontend (Vite + React) e backend (Express), mantendo integrações com Supabase e a pasta `/supabase` intacta.
+Monorepo com frontend (Vite + React), backend (Express) e camada Supabase centralizada em `/supabase`.
 
 ## Estrutura (alto nível)
 ```
@@ -76,6 +76,8 @@ npm run dev
 - `PUT /api/categories`
 - `DELETE /api/categories`
 - `POST /api/users/sync-phone`
+- `GET /api/users/empresas/current`
+- `GET /api/users/empresas/:empresaId`
 - `GET/POST /api/google-calendar/:path`
 
 ## Frontend (Vite + React)
@@ -103,5 +105,5 @@ npm run dev:backend
 ```
 
 ## Observações
-- A pasta `/backend/supabase` e `/supabase` foram preservadas.
+- A fonte canônica de Edge Functions e migrations é `supabase/`.
 - O frontend consome o backend via `VITE_API_URL`, usando a camada `frontend/src/services`.

@@ -16,7 +16,7 @@ const { chromium } = require('@playwright/test');
     step2: { status: 'PENDING', description: 'Fazer login com credenciais' },
     step3: { status: 'PENDING', description: 'Navegar para http://localhost:3000/guias-mei' },
     step4: { status: 'PENDING', description: 'Validar texto do alerta vermelho', expectedText: 'Atenção: para emissão de notas fiscais, a empresa emitente precisa estar cadastrada com certificado digital A1 válido.', actualText: '' },
-    step5: { status: 'PENDING', description: 'Validar outros elementos da página' },
+    step5: { status: 'PENDING', description: 'Validar outros elementos da página (incluindo seletor multi-tipo)' },
     finalUrl: '',
     overallResult: 'PENDING'
   };
@@ -112,16 +112,15 @@ const { chromium } = require('@playwright/test');
     await page.goto(`${BASE_URL}/guias-mei`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(3000);
     
-    // Clicar na aba "NFSe" para exibir o bloco "Emitir NFSe"
-    console.log('Procurando pela aba/botão "NFSe"...');
+    // Clicar na aba "Notas fiscais" para exibir o bloco de emissão
+    console.log('Procurando pela aba/botão "Notas fiscais"...');
     try {
-      // Usar JavaScript para clicar no elemento que contém "NFSe" e tem texto curto (provavelmente uma aba)
+      // Usar JavaScript para clicar no elemento da aba de notas fiscais
       const clicked = await page.evaluate(() => {
         const elements = Array.from(document.querySelectorAll('button, a, div[role="button"], [onclick]'));
         for (const el of elements) {
           const text = el.textContent?.trim() || '';
-          // Procurar por elemento com texto exato "NFSe" ou que comece com "NFSe"
-          if (text === 'NFSe' || (text.startsWith('NFSe') && text.length < 50)) {
+          if (text === 'Notas fiscais' || text === 'NFSe' || (text.startsWith('Notas fiscais') && text.length < 80)) {
             console.log('Clicando em:', text);
             el.click();
             return text;
@@ -131,13 +130,13 @@ const { chromium } = require('@playwright/test');
       });
       
       if (clicked) {
-        console.log('✓ Clicou no elemento "NFSe":', clicked);
+        console.log('✓ Clicou na aba de notas:', clicked);
         await page.waitForTimeout(2000);
       } else {
-        console.log('⚠ Não encontrou elemento clicável com texto "NFSe"');
+        console.log('⚠ Não encontrou elemento clicável com texto de notas fiscais');
       }
     } catch (e) {
-      console.log('Aviso: erro ao clicar na aba NFSe:', e.message);
+      console.log('Aviso: erro ao clicar na aba de notas fiscais:', e.message);
     }
     
     results.step3.status = 'PASS';
@@ -196,7 +195,8 @@ const { chromium } = require('@playwright/test');
     const checks = {
       dadosMinimos: false,
       botaoEnviar: false,
-      semConfiguracaoPlugNotas: false
+      semMarcaPlugNotas: false,
+      seletorTipoDocumento: false
     };
 
     const bodyText = await page.textContent('body');
@@ -224,15 +224,28 @@ const { chromium } = require('@playwright/test');
       console.log('✗ Botão "Enviar certificado" NÃO encontrado');
     }
 
-    // Verificar ausência de "Configuração PlugNotas (Opção B via API)"
-    if (!bodyText.includes('Configuração PlugNotas (Opção B via API)')) {
-      checks.semConfiguracaoPlugNotas = true;
-      console.log('✓ Texto "Configuração PlugNotas (Opção B via API)" NÃO está presente (correto)');
+    // Verificar seletor de tipo de documento (NFSe/NF-e/NFC-e)
+    if (
+      bodyText.includes('Tipo de documento')
+      && bodyText.includes('NFSe')
+      && bodyText.includes('NF-e')
+      && bodyText.includes('NFC-e')
+    ) {
+      checks.seletorTipoDocumento = true;
+      console.log('✓ Seletor multi-tipo de documento encontrado');
     } else {
-      console.log('✗ Texto "Configuração PlugNotas (Opção B via API)" está presente (incorreto)');
+      console.log('✗ Seletor multi-tipo de documento NÃO encontrado');
     }
 
-    if (checks.dadosMinimos && checks.botaoEnviar && checks.semConfiguracaoPlugNotas) {
+    // Verificar ausência da marca "PlugNotas" em textos visíveis
+    if (!bodyText.includes('PlugNotas')) {
+      checks.semMarcaPlugNotas = true;
+      console.log('✓ Não há menções visíveis de "PlugNotas" na página');
+    } else {
+      console.log('✗ Ainda há menções visíveis de "PlugNotas" na página');
+    }
+
+    if (checks.dadosMinimos && checks.botaoEnviar && checks.semMarcaPlugNotas && checks.seletorTipoDocumento) {
       results.step5.status = 'PASS';
     } else {
       results.step5.status = 'FAIL';

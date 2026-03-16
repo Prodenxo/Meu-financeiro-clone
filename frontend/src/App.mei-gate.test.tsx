@@ -116,4 +116,30 @@ describe('AppRoutes mei gate', () => {
       root.unmount();
     });
   });
+
+  it('permite /guias-mei para admin mesmo com mei=false', async () => {
+    authState.role = 'admin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={['/guias-mei']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <AppRoutes />
+        </MemoryRouter>
+      );
+    });
+
+    expect(container.textContent).toContain('GUIAS_MEI_PAGE');
+    expect(container.textContent).not.toContain('DASHBOARD_PAGE');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });

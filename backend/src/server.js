@@ -15,6 +15,24 @@ const allowedOrigins = env.CORS_ORIGIN
   .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 
+/** Permite origens de preview da Vercel (*.vercel.app) além da lista explícita em CORS_ORIGIN. */
+const isVercelPreviewOrigin = (url) => {
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname === 'vercel.app' || hostname.endsWith('.vercel.app');
+  } catch {
+    return false;
+  }
+};
+
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+  const normalized = normalizeOrigin(origin);
+  if (allowedOrigins.includes('*') || allowedOrigins.includes(normalized)) return true;
+  if (isVercelPreviewOrigin(normalized)) return true;
+  return false;
+};
+
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) {
@@ -24,6 +42,9 @@ const corsOptions = {
     const normalizedOrigin = normalizeOrigin(origin);
 
     if (allowedOrigins.includes('*') || allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+    if (isVercelPreviewOrigin(normalizedOrigin)) {
       return callback(null, true);
     }
 
@@ -36,6 +57,20 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 204
 };
+
+/** Responde ao preflight OPTIONS com headers CORS no início do pipeline (evita falha na Vercel). */
+app.use((req, res, next) => {
+  if (req.method !== 'OPTIONS') return next();
+
+  const origin = req.headers.origin;
+  const allowOrigin = origin && isOriginAllowed(origin) ? origin : '*';
+
+  res.setHeader('Access-Control-Allow-Origin', allowOrigin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  return res.status(204).end();
+});
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));

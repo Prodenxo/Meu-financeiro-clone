@@ -1,114 +1,50 @@
-# Backend - Supabase Edge Functions
+# Backend (Express API)
 
-Esta pasta contém o código do backend, especificamente Supabase Edge Functions.
+Esta pasta contém o backend principal em Node + Express.
 
 ## Estrutura
 
-```
+```text
 backend/
-└── supabase/
-    └── functions/        # Edge Functions do Supabase
+├── src/
+│   ├── config/
+│   ├── controllers/
+│   ├── middlewares/
+│   ├── routes/
+│   ├── services/
+│   └── utils/
+├── tests/
+└── package.json
 ```
 
-## Supabase Edge Functions
+## Fonte canônica do Supabase
 
-As Edge Functions são funções serverless executadas no Supabase. Elas permitem executar código no servidor com acesso ao banco de dados e outros serviços.
+- **Edge Functions**: `supabase/functions/` (na raiz do projeto)
+- **Migrations**: `supabase/migrations/` (na raiz do projeto)
 
-### Onde colocar suas Edge Functions?
+O diretório `backend/supabase/functions` foi descontinuado para evitar drift entre cópias.
 
-Coloque suas Edge Functions dentro de `backend/supabase/functions/`.
-
-Por exemplo:
-```
-backend/
-└── supabase/
-    └── functions/
-        ├── google-calendar/     # Edge Function para integração com Google Calendar
-        │   ├── index.ts
-        │   └── deno.json
-        └── outro-servico/
-            ├── index.ts
-            └── deno.json
-```
-
-### Como deployar Edge Functions?
-
-Para fazer deploy de uma Edge Function, você precisa usar a CLI do Supabase:
+## Rodando localmente
 
 ```bash
-# Instalar Supabase CLI (se ainda não tiver)
-npm install -g supabase
+cd backend
+npm install
+npm run dev
+```
 
-# Fazer login no Supabase
-supabase login
+## Testes
 
-# Linkar seu projeto
-supabase link --project-ref seu-project-ref
+```bash
+cd backend
+npm test
+```
 
-# Deploy da Edge Function
+## Deploy de Edge Functions (Supabase)
+
+Use a pasta canônica `supabase/`:
+
+```bash
+cd supabase
+supabase link --project-ref <seu-project-ref>
 supabase functions deploy google-calendar
 ```
-
-### Exemplo de Edge Function
-
-Uma Edge Function básica teria esta estrutura:
-
-```typescript
-// backend/supabase/functions/google-calendar/index.ts
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-serve(async (req) => {
-  try {
-    // Criar cliente Supabase
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    )
-
-    // Obter usuário autenticado
-    const {
-      data: { user },
-    } = await supabaseClient.auth.getUser()
-
-    if (!user) {
-      return new Response(
-        JSON.stringify({ error: 'Não autenticado' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Sua lógica aqui
-    const data = { message: 'Hello from Edge Function!' }
-
-    return new Response(
-      JSON.stringify(data),
-      { headers: { 'Content-Type': 'application/json' } }
-    )
-  } catch (error) {
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    )
-  }
-})
-```
-
-E um `deno.json` para configuração:
-
-```json
-{
-  "imports": {
-    "supabase": "https://esm.sh/@supabase/supabase-js@2"
-  }
-}
-```
-
-## Integração com Frontend
-
-O frontend já está configurado para chamar as Edge Functions através da biblioteca Supabase. As funções de integração estão em `frontend/src/lib/google-calendar.ts` e `frontend/src/lib/google-auth-flow.ts`.

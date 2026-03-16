@@ -4,6 +4,14 @@
 
 set -e
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SUPABASE_WORKDIR="$SCRIPT_DIR/../supabase"
+
+if [ ! -d "$SUPABASE_WORKDIR" ]; then
+    echo "[ERRO] Diretorio canonico do Supabase nao encontrado: $SUPABASE_WORKDIR"
+    exit 1
+fi
+
 echo "========================================"
 echo "Deploy de Edge Functions - Supabase"
 echo "========================================"
@@ -22,7 +30,7 @@ echo "[OK] Supabase CLI encontrado"
 echo ""
 
 # Verificar se está logado
-if ! supabase projects list &> /dev/null; then
+if ! supabase --workdir "$SUPABASE_WORKDIR" projects list &> /dev/null; then
     echo "[AVISO] Você precisa fazer login no Supabase"
     echo "Execute: supabase login"
     echo ""
@@ -52,7 +60,7 @@ fi
 
 echo ""
 echo "Linkando projeto: $PROJECT_REF"
-supabase link --project-ref "$PROJECT_REF"
+supabase --workdir "$SUPABASE_WORKDIR" link --project-ref "$PROJECT_REF"
 if [ $? -ne 0 ]; then
     echo "[ERRO] Falha ao linkar projeto"
     exit 1
@@ -71,7 +79,7 @@ for func in "${FUNCTIONS[@]}"; do
     echo ""
     echo "[DEPLOY] $func"
     echo "----------------------------------------"
-    if supabase functions deploy "$func"; then
+    if supabase --workdir "$SUPABASE_WORKDIR" functions deploy "$func"; then
         echo "[OK] $func deployado com sucesso"
     else
         echo "[ERRO] Falha ao fazer deploy de $func"

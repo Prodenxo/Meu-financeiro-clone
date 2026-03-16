@@ -50,3 +50,61 @@ test('nfce service envia emissão no endpoint correto', async () => {
     global.fetch = originalFetch;
   }
 });
+
+test('nfce service preserva detalhes de validação retornados pela API', async () => {
+  const { emitirNfce } = await import('../src/services/plugnotas/nfce.service.js');
+  const originalFetch = global.fetch;
+
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    statusText: 'Bad Request',
+    headers: { get: () => 'application/json' },
+    json: async () => ({
+      message: 'Falha na validação do JSON de NFC-e',
+      error: {
+        details: [
+          { field: 'emitente.cpfCnpj', reason: 'CNPJ inválido' },
+          { field: 'itens[0].ncm', reason: 'NCM inválido' }
+        ]
+      }
+    })
+  });
+
+  try {
+    await assert.rejects(
+      () => emitirNfce({
+        emitente: { cpfCnpj: '123' },
+        itens: [{ codigo: 'A1', descricao: 'Produto A', valor: 10 }]
+      }),
+      /Falha na validação do JSON de NFC-e: emitente\.cpfCnpj: CNPJ inválido \| itens\[0\]\.ncm: NCM inválido/
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('nfce service envia cancelamento com payload de justificativa', async () => {
+  const { cancelarNfce } = await import('../src/services/plugnotas/nfce.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return createJsonResponse({ message: 'cancelamento solicitado' });
+  };
+
+  try {
+    const result = await cancelarNfce('nfce-123', { reason: 'Cliente desistiu da compra' });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /\/nfce\/nfce-123\/cancelamento$/);
+    assert.equal(calls[0].options.method, 'POST');
+    assert.deepEqual(JSON.parse(calls[0].options.body), {
+      justificativa: 'Cliente desistiu da compra',
+      reason: 'Cliente desistiu da compra'
+    });
+    assert.equal(result.message, 'cancelamento solicitado');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});

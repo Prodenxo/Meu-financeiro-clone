@@ -426,14 +426,90 @@ const validateNfeLikePayload = (payload, { label = 'NF-e' } = {}) => {
   }
 
   const destinatarioDoc = normalizeDoc(payload?.destinatario?.cpfCnpj || '');
-  if (destinatarioDoc && !isValidCpfOrCnpj(destinatarioDoc)) {
+  if (!destinatarioDoc) {
+    throw badRequest(`CPF/CNPJ do destinatário da ${label} é obrigatório`);
+  }
+  if (!isValidCpfOrCnpj(destinatarioDoc)) {
     throw badRequest(`CPF/CNPJ do destinatário da ${label} inválido`);
+  }
+  const destinatarioNome = String(payload?.destinatario?.razaoSocial || '').trim();
+  if (!destinatarioNome) {
+    throw badRequest(`Razão social do destinatário da ${label} é obrigatória`);
   }
 
   const itens = Array.isArray(payload?.itens) ? payload.itens : [];
   if (!itens.length) {
     throw badRequest(`Itens da ${label} são obrigatórios`);
   }
+
+  itens.forEach((item, index) => {
+    const itemPos = index + 1;
+    const codigo = String(item?.codigo || item?.sku || '').trim();
+    if (!codigo) {
+      throw badRequest(`Item ${itemPos} da ${label}: código é obrigatório`);
+    }
+
+    const descricao = String(item?.descricao || '').trim();
+    if (!descricao) {
+      throw badRequest(`Item ${itemPos} da ${label}: descrição é obrigatória`);
+    }
+
+    const ncm = normalizeDoc(item?.ncm || '');
+    if (ncm.length !== 8) {
+      throw badRequest(`Item ${itemPos} da ${label}: NCM deve ter 8 dígitos`);
+    }
+
+    const cfop = normalizeDoc(item?.cfop || '');
+    if (cfop.length !== 4) {
+      throw badRequest(`Item ${itemPos} da ${label}: CFOP deve ter 4 dígitos`);
+    }
+
+    const unidade = String(item?.unidade || item?.unidadeComercial || '').trim();
+    if (!unidade) {
+      throw badRequest(`Item ${itemPos} da ${label}: unidade é obrigatória`);
+    }
+
+    const quantidade = toNumber(item?.quantidade ?? item?.quantidadeComercial);
+    if (quantidade === null || quantidade <= 0) {
+      throw badRequest(`Item ${itemPos} da ${label}: quantidade deve ser maior que zero`);
+    }
+
+    const valorUnitario = toNumber(item?.valorUnitario ?? item?.valor ?? item?.valorUnitarioComercial);
+    if (valorUnitario === null || valorUnitario <= 0) {
+      throw badRequest(`Item ${itemPos} da ${label}: valor unitário deve ser maior que zero`);
+    }
+
+    const tributos = toObject(item?.tributos);
+    const icms = toObject(tributos?.icms);
+    const pis = toObject(tributos?.pis);
+    const cofins = toObject(tributos?.cofins);
+    const hasIcmsCode = String(icms?.cst || '').trim() || String(icms?.csosn || '').trim();
+    if (!hasIcmsCode) {
+      throw badRequest(`Item ${itemPos} da ${label}: informe CST ou CSOSN do ICMS`);
+    }
+    if (!String(pis?.cst || '').trim()) {
+      throw badRequest(`Item ${itemPos} da ${label}: CST do PIS é obrigatório`);
+    }
+    if (!String(cofins?.cst || '').trim()) {
+      throw badRequest(`Item ${itemPos} da ${label}: CST do COFINS é obrigatório`);
+    }
+  });
+};
+
+const normalizeNfeLikeModel = (payload, documentType) => {
+  const expected = documentType === DOCUMENT_TYPE_NFE ? '55' : '65';
+  const label = documentType === DOCUMENT_TYPE_NFE ? 'NF-e' : 'NFC-e';
+  const rawModel = payload?.modelo;
+  const parsedModel = String(rawModel || '').trim();
+  if (!parsedModel) {
+    payload.modelo = expected;
+    return payload;
+  }
+  if (parsedModel !== expected) {
+    throw badRequest(`Modelo inválido para ${label}. Informe ${expected}`);
+  }
+  payload.modelo = expected;
+  return payload;
 };
 
 const buildPayloadByDocumentType = (input, userId, documentType) => {
@@ -453,6 +529,9 @@ const buildPayloadByDocumentType = (input, userId, documentType) => {
   }
 
   if (payloadBase) {
+    if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
+      normalizeNfeLikeModel(payloadBase, documentType);
+    }
     return {
       payload: payloadBase,
       prestadorDoc: normalizeDoc(payloadBase?.emitente?.cpfCnpj || ''),
@@ -476,10 +555,12 @@ const validatePayloadByDocumentType = (payload, documentType) => {
     return;
   }
   if (documentType === DOCUMENT_TYPE_NFE) {
+    normalizeNfeLikeModel(payload, documentType);
     validateNfeLikePayload(payload, { label: 'NF-e' });
     return;
   }
   if (documentType === DOCUMENT_TYPE_NFCE) {
+    normalizeNfeLikeModel(payload, documentType);
     validateNfeLikePayload(payload, { label: 'NFC-e' });
     return;
   }
@@ -799,6 +880,7 @@ export const emitirNota = async (userId, input) => {
   const documentType = resolveInputDocumentType(input);
   const adapter = getAdapterByDocumentType(documentType);
   const { payload, prestadorDoc, tomadorDoc } = buildPayloadByDocumentType(input, userId, documentType);
+  const metadata = sanitizeMetadata(input?.metadata);
 
   if (!payload?.idIntegracao) {
     payload.idIntegracao = `mei-${userId}-${Date.now()}`;
@@ -811,7 +893,6 @@ export const emitirNota = async (userId, input) => {
   const idIntegracao = extractIntegracaoId(response) || payload.idIntegracao;
   const status = extractPlugNotasStatus(response);
   const protocol = extractProtocol(response);
-  const metadata = sanitizeMetadata(input?.metadata);
 
   const created = await insertRecord(userId, {
     plugnotas_id: plugnotasId,

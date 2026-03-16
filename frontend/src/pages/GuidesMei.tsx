@@ -17,12 +17,17 @@ import {
   cadastrarPlugNotasCertificado,
   cadastrarPlugNotasEmpresa,
   cancelarNfse,
+  emitirNfce,
+  emitirNfe,
   emitirNfse,
   listarCatalogoNfseClientes,
   listarCatalogoNfseProdutos,
   listarNfse,
   obterNfse,
   type DocumentType,
+  type NfeLikePayloadInput,
+  type NfeItemInput,
+  type NfeTributosInput,
   type NfseCatalogCliente,
   type NfseCatalogProduto,
   type EmitirNfseInput,
@@ -194,6 +199,64 @@ const parseDecimalInput = (value: unknown) => {
 };
 type PlugNotasRegimeTributario = '1' | '2' | '3';
 type GuidesMeiWorkspace = 'overview' | 'das' | 'nfse';
+type NotaDocumentType = 'NFSE' | 'NFE' | 'NFCE';
+
+type NfeItemForm = {
+  codigo: string;
+  descricao: string;
+  ncm: string;
+  cfop: string;
+  unidade: string;
+  quantidade: string;
+  valorUnitario: string;
+  desconto: string;
+  cest: string;
+  sku: string;
+  tributos: {
+    icms: {
+      origem: string;
+      cst: string;
+      csosn: string;
+      modalidadeBaseCalculo: string;
+      baseCalculo: string;
+      aliquota: string;
+      valor: string;
+    };
+    ipi: {
+      cst: string;
+      codigoEnquadramentoLegal: string;
+      baseCalculo: string;
+      aliquota: string;
+      valor: string;
+    };
+    pis: {
+      cst: string;
+      baseCalculo: string;
+      aliquota: string;
+      valor: string;
+    };
+    cofins: {
+      cst: string;
+      baseCalculo: string;
+      aliquota: string;
+      valor: string;
+    };
+  };
+};
+
+type NfeLikeForm = {
+  idIntegracao: string;
+  natureza: string;
+  emitenteCpfCnpj: string;
+  emitenteRazaoSocial: string;
+  emitenteInscricaoEstadual: string;
+  destinatarioCpfCnpj: string;
+  destinatarioRazaoSocial: string;
+  destinatarioEmail: string;
+  enviarEmail: boolean;
+  informacoesComplementares: string;
+  itens: NfeItemForm[];
+};
 
 type PlugNotasCompanyForm = {
   razaoSocial: string;
@@ -224,6 +287,65 @@ type NfsePrestadorEndereco = {
   estado: string;
   descricaoCidade: string;
 };
+
+const getDefaultNfeTributos = (): NfeItemForm['tributos'] => ({
+  icms: {
+    origem: '',
+    cst: '',
+    csosn: '',
+    modalidadeBaseCalculo: '',
+    baseCalculo: '',
+    aliquota: '',
+    valor: ''
+  },
+  ipi: {
+    cst: '',
+    codigoEnquadramentoLegal: '',
+    baseCalculo: '',
+    aliquota: '',
+    valor: ''
+  },
+  pis: {
+    cst: '',
+    baseCalculo: '',
+    aliquota: '',
+    valor: ''
+  },
+  cofins: {
+    cst: '',
+    baseCalculo: '',
+    aliquota: '',
+    valor: ''
+  }
+});
+
+const getDefaultNfeItem = (): NfeItemForm => ({
+  codigo: '',
+  descricao: '',
+  ncm: '',
+  cfop: '',
+  unidade: 'UN',
+  quantidade: '',
+  valorUnitario: '',
+  desconto: '',
+  cest: '',
+  sku: '',
+  tributos: getDefaultNfeTributos()
+});
+
+const getDefaultNfeLikeForm = (): NfeLikeForm => ({
+  idIntegracao: '',
+  natureza: 'VENDA',
+  emitenteCpfCnpj: '',
+  emitenteRazaoSocial: '',
+  emitenteInscricaoEstadual: '',
+  destinatarioCpfCnpj: '',
+  destinatarioRazaoSocial: '',
+  destinatarioEmail: '',
+  enviarEmail: false,
+  informacoesComplementares: '',
+  itens: [getDefaultNfeItem()]
+});
 
 const resolvePrestadorEndereco = (
   endereco: EmitirNfseInput['prestadorEndereco'],
@@ -259,7 +381,7 @@ const getDefaultPlugNotasCompanyForm = (): PlugNotasCompanyForm => ({
 });
 
 const getPlugNotasCompanyValidationMessage = (form: PlugNotasCompanyForm) => {
-  if (!hasRequiredText(form.razaoSocial)) return 'Informe a razão social da empresa para configurar a PlugNotas.';
+  if (!hasRequiredText(form.razaoSocial)) return 'Informe a razão social da empresa para configurar a integração fiscal.';
   if (!hasRequiredText(form.logradouro)) return 'Informe o logradouro do endereço da empresa.';
   if (!hasRequiredText(form.numero)) return 'Informe o número do endereço da empresa.';
   if (!hasRequiredText(form.bairro)) return 'Informe o bairro do endereço da empresa.';
@@ -401,9 +523,176 @@ const getNfseValidationMessage = (
   return null;
 };
 
+const buildNfeLikeLabel = (documentType: NotaDocumentType) => (
+  documentType === 'NFE' ? 'NF-e' : 'NFC-e'
+);
+
+const isValidCpfOrCnpj = (value: string) => {
+  const digits = normalizeDoc(value);
+  return digits.length === 11 || digits.length === 14;
+};
+
+const toOptionalDecimal = (value: string) => {
+  const parsed = parseDecimalInput(value);
+  return parsed === null ? undefined : parsed;
+};
+
+const getNfeLikeValidationMessage = (form: NfeLikeForm, documentType: NotaDocumentType) => {
+  const label = buildNfeLikeLabel(documentType);
+  const emitenteCpfCnpj = normalizeDoc(form.emitenteCpfCnpj);
+  if (emitenteCpfCnpj.length !== 14) {
+    return `Informe um CNPJ válido do emitente da ${label}.`;
+  }
+
+  if (form.destinatarioCpfCnpj.trim() && !isValidCpfOrCnpj(form.destinatarioCpfCnpj)) {
+    return `CPF/CNPJ do destinatário da ${label} inválido.`;
+  }
+  if (!hasRequiredText(form.destinatarioRazaoSocial)) {
+    return `Informe a razão social do destinatário da ${label}.`;
+  }
+
+  if (!Array.isArray(form.itens) || form.itens.length === 0) {
+    return `Adicione ao menos um item para emitir ${label}.`;
+  }
+
+  for (let index = 0; index < form.itens.length; index += 1) {
+    const item = form.itens[index];
+    const linha = index + 1;
+    if (!hasRequiredText(item.codigo)) return `Item ${linha}: informe o código.`;
+    if (!hasRequiredText(item.descricao)) return `Item ${linha}: informe a descrição.`;
+    if (normalizeDoc(item.ncm).length !== 8) return `Item ${linha}: NCM deve conter 8 dígitos.`;
+    if (!hasRequiredText(item.cfop)) return `Item ${linha}: informe o CFOP.`;
+    if (!hasRequiredText(item.unidade)) return `Item ${linha}: informe a unidade comercial.`;
+    const quantidade = parseDecimalInput(item.quantidade);
+    if (quantidade === null || quantidade <= 0) return `Item ${linha}: quantidade deve ser maior que zero.`;
+    const valorUnitario = parseDecimalInput(item.valorUnitario);
+    if (valorUnitario === null || valorUnitario <= 0) return `Item ${linha}: valor unitário deve ser maior que zero.`;
+
+    const hasIcmsCode = hasRequiredText(item.tributos.icms.cst) || hasRequiredText(item.tributos.icms.csosn);
+    if (!hasIcmsCode) return `Item ${linha}: informe CST ou CSOSN do ICMS.`;
+    if (!hasRequiredText(item.tributos.pis.cst)) return `Item ${linha}: informe CST do PIS.`;
+    if (!hasRequiredText(item.tributos.cofins.cst)) return `Item ${linha}: informe CST do COFINS.`;
+  }
+
+  return null;
+};
+
+const mapNfeTributos = (tributos: NfeItemForm['tributos']): NfeTributosInput => ({
+  icms: {
+    ...(tributos.icms.origem.trim() ? { origem: tributos.icms.origem.trim() } : {}),
+    ...(tributos.icms.cst.trim() ? { cst: tributos.icms.cst.trim() } : {}),
+    ...(tributos.icms.csosn.trim() ? { csosn: tributos.icms.csosn.trim() } : {}),
+    ...(tributos.icms.modalidadeBaseCalculo.trim()
+      ? { modalidadeBaseCalculo: tributos.icms.modalidadeBaseCalculo.trim() }
+      : {}),
+    ...(toOptionalDecimal(tributos.icms.baseCalculo) !== undefined
+      ? { baseCalculo: toOptionalDecimal(tributos.icms.baseCalculo) }
+      : {}),
+    ...(toOptionalDecimal(tributos.icms.aliquota) !== undefined
+      ? { aliquota: toOptionalDecimal(tributos.icms.aliquota) }
+      : {}),
+    ...(toOptionalDecimal(tributos.icms.valor) !== undefined
+      ? { valor: toOptionalDecimal(tributos.icms.valor) }
+      : {})
+  },
+  ...(hasRequiredText(tributos.ipi.cst)
+    || hasRequiredText(tributos.ipi.codigoEnquadramentoLegal)
+    || hasRequiredText(tributos.ipi.baseCalculo)
+    || hasRequiredText(tributos.ipi.aliquota)
+    || hasRequiredText(tributos.ipi.valor)
+    ? {
+        ipi: {
+          ...(tributos.ipi.cst.trim() ? { cst: tributos.ipi.cst.trim() } : {}),
+          ...(tributos.ipi.codigoEnquadramentoLegal.trim()
+            ? { codigoEnquadramentoLegal: tributos.ipi.codigoEnquadramentoLegal.trim() }
+            : {}),
+          ...(toOptionalDecimal(tributos.ipi.baseCalculo) !== undefined
+            ? { baseCalculo: toOptionalDecimal(tributos.ipi.baseCalculo) }
+            : {}),
+          ...(toOptionalDecimal(tributos.ipi.aliquota) !== undefined
+            ? { aliquota: toOptionalDecimal(tributos.ipi.aliquota) }
+            : {}),
+          ...(toOptionalDecimal(tributos.ipi.valor) !== undefined
+            ? { valor: toOptionalDecimal(tributos.ipi.valor) }
+            : {})
+        }
+      }
+    : {}),
+  pis: {
+    ...(tributos.pis.cst.trim() ? { cst: tributos.pis.cst.trim() } : {}),
+    ...(toOptionalDecimal(tributos.pis.baseCalculo) !== undefined
+      ? { baseCalculo: toOptionalDecimal(tributos.pis.baseCalculo) }
+      : {}),
+    ...(toOptionalDecimal(tributos.pis.aliquota) !== undefined
+      ? { aliquota: toOptionalDecimal(tributos.pis.aliquota) }
+      : {}),
+    ...(toOptionalDecimal(tributos.pis.valor) !== undefined
+      ? { valor: toOptionalDecimal(tributos.pis.valor) }
+      : {})
+  },
+  cofins: {
+    ...(tributos.cofins.cst.trim() ? { cst: tributos.cofins.cst.trim() } : {}),
+    ...(toOptionalDecimal(tributos.cofins.baseCalculo) !== undefined
+      ? { baseCalculo: toOptionalDecimal(tributos.cofins.baseCalculo) }
+      : {}),
+    ...(toOptionalDecimal(tributos.cofins.aliquota) !== undefined
+      ? { aliquota: toOptionalDecimal(tributos.cofins.aliquota) }
+      : {}),
+    ...(toOptionalDecimal(tributos.cofins.valor) !== undefined
+      ? { valor: toOptionalDecimal(tributos.cofins.valor) }
+      : {})
+  }
+});
+
+const mapNfeItem = (item: NfeItemForm): NfeItemInput => ({
+  codigo: item.codigo.trim(),
+  descricao: item.descricao.trim(),
+  ncm: normalizeDoc(item.ncm).slice(0, 8),
+  cfop: item.cfop.trim(),
+  unidade: item.unidade.trim() || 'UN',
+  quantidade: parseDecimalInput(item.quantidade) || 0,
+  valorUnitario: parseDecimalInput(item.valorUnitario) || 0,
+  ...(toOptionalDecimal(item.desconto) !== undefined ? { desconto: toOptionalDecimal(item.desconto) } : {}),
+  ...(item.cest.trim() ? { cest: item.cest.trim() } : {}),
+  ...(item.sku.trim() ? { sku: item.sku.trim() } : {}),
+  tributos: mapNfeTributos(item.tributos)
+});
+
+const buildNfeLikePayloadFromForm = (
+  form: NfeLikeForm,
+  documentType: NotaDocumentType
+): NfeLikePayloadInput => ({
+  ...(form.idIntegracao.trim() ? { idIntegracao: form.idIntegracao.trim() } : {}),
+  modelo: documentType === 'NFE' ? '55' : '65',
+  natureza: form.natureza.trim() || 'VENDA',
+  emitente: {
+    cpfCnpj: normalizeDoc(form.emitenteCpfCnpj),
+    ...(form.emitenteRazaoSocial.trim() ? { razaoSocial: form.emitenteRazaoSocial.trim() } : {}),
+    ...(form.emitenteInscricaoEstadual.trim()
+      ? { inscricaoEstadual: form.emitenteInscricaoEstadual.trim() }
+      : {})
+  },
+  destinatario: {
+    ...(normalizeDoc(form.destinatarioCpfCnpj)
+      ? { cpfCnpj: normalizeDoc(form.destinatarioCpfCnpj) }
+      : {}),
+    ...(form.destinatarioRazaoSocial.trim() ? { razaoSocial: form.destinatarioRazaoSocial.trim() } : {}),
+    ...(form.destinatarioEmail.trim() ? { email: form.destinatarioEmail.trim() } : {})
+  },
+  itens: form.itens.map(mapNfeItem),
+  ...(form.informacoesComplementares.trim()
+    ? { informacoesComplementares: form.informacoesComplementares.trim() }
+    : {}),
+  config: {
+    producao: true
+  }
+});
+
 export default function GuidesMei() {
-  const { role } = useAuthStore();
-  const canViewNfse = role === 'superadmin';
+  const { role, mei } = useAuthStore();
+  const canViewNfse = role === 'superadmin'
+    || role === 'admin'
+    || (role === 'usuario' && mei !== false);
   const [contribuinteDoc, setContribuinteDoc] = useState('');
   const [activeWorkspace, setActiveWorkspace] = useState<GuidesMeiWorkspace>('overview');
   const defaultPeriod = useMemo(() => getDefaultPeriod(), []);
@@ -426,6 +715,7 @@ export default function GuidesMei() {
   const [meiPeriodsLoading, setMeiPeriodsLoading] = useState(false);
   const [meiPeriodsError, setMeiPeriodsError] = useState<string | null>(null);
   const hasCertificate = hasUserCertificate;
+  const [notaDocumentType, setNotaDocumentType] = useState<NotaDocumentType>('NFSE');
   const [nfseForm, setNfseForm] = useState<EmitirNfseInput>({
     prestadorCpfCnpj: '',
     prestadorInscricaoMunicipal: '',
@@ -461,6 +751,8 @@ export default function GuidesMei() {
     descricao: '',
     informacoesComplementares: ''
   });
+  const [nfeForm, setNfeForm] = useState<NfeLikeForm>(() => getDefaultNfeLikeForm());
+  const [nfceForm, setNfceForm] = useState<NfeLikeForm>(() => getDefaultNfeLikeForm());
   const [nfseList, setNfseList] = useState<NfseRecord[]>([]);
   const [nfseLoading, setNfseLoading] = useState(false);
   const [nfseSubmitting, setNfseSubmitting] = useState(false);
@@ -481,8 +773,8 @@ export default function GuidesMei() {
   const [plugNotasCompanyForm, setPlugNotasCompanyForm] = useState<PlugNotasCompanyForm>(() => (
     getDefaultPlugNotasCompanyForm()
   ));
-  const nfseValidationMessage = useMemo(
-    () => getNfseValidationMessage(nfseForm, {
+  const nfseValidationMessage = useMemo(() => (
+    getNfseValidationMessage(nfseForm, {
       logradouro: plugNotasCompanyForm.logradouro,
       numero: plugNotasCompanyForm.numero,
       codigoCidade: plugNotasCompanyForm.codigoCidade,
@@ -491,9 +783,21 @@ export default function GuidesMei() {
       bairro: plugNotasCompanyForm.bairro,
       estado: plugNotasCompanyForm.estado,
       descricaoCidade: plugNotasCompanyForm.descricaoCidade
-    }),
-    [nfseForm, plugNotasCompanyForm]
+    })
+  ), [nfseForm, plugNotasCompanyForm]);
+  const nfeValidationMessage = useMemo(
+    () => getNfeLikeValidationMessage(nfeForm, 'NFE'),
+    [nfeForm]
   );
+  const nfceValidationMessage = useMemo(
+    () => getNfeLikeValidationMessage(nfceForm, 'NFCE'),
+    [nfceForm]
+  );
+  const notaValidationMessage = useMemo(() => {
+    if (notaDocumentType === 'NFE') return nfeValidationMessage;
+    if (notaDocumentType === 'NFCE') return nfceValidationMessage;
+    return nfseValidationMessage;
+  }, [nfceValidationMessage, nfeValidationMessage, nfseValidationMessage, notaDocumentType]);
 
   const normalizedContribuinte = useMemo(() => normalizeDoc(contribuinteDoc), [contribuinteDoc]);
   const contribuinteTipo = useMemo(() => getDocType(normalizedContribuinte), [normalizedContribuinte]);
@@ -574,17 +878,17 @@ export default function GuidesMei() {
     setNfseCatalogError(null);
     try {
       const [clientes, produtos] = await Promise.all([
-        listarCatalogoNfseClientes({ limit: 30, documentType: 'NFSE' }),
-        listarCatalogoNfseProdutos({ limit: 30, documentType: 'NFSE' })
+        listarCatalogoNfseClientes({ limit: 30, documentType: notaDocumentType }),
+        listarCatalogoNfseProdutos({ limit: 30, documentType: notaDocumentType })
       ]);
       setNfseCatalogClientes(clientes || []);
       setNfseCatalogProdutos(produtos || []);
     } catch (error) {
-      setNfseCatalogError(error instanceof Error ? error.message : 'Erro ao carregar catálogo de NFSe.');
+      setNfseCatalogError(error instanceof Error ? error.message : 'Erro ao carregar catálogo fiscal.');
     } finally {
       setNfseCatalogLoading(false);
     }
-  }, [canViewNfse]);
+  }, [canViewNfse, notaDocumentType]);
 
   const updateNfseForm = (updates: Partial<EmitirNfseInput>) => {
     setNfseForm((current) => ({ ...current, ...updates }));
@@ -622,6 +926,100 @@ export default function GuidesMei() {
     }));
   };
 
+  const getNfeLikeFormByType = (documentType: NotaDocumentType) => (
+    documentType === 'NFE' ? nfeForm : nfceForm
+  );
+
+  const updateNfeLikeFormByType = (documentType: NotaDocumentType, updates: Partial<NfeLikeForm>) => {
+    if (documentType === 'NFE') {
+      setNfeForm((current) => ({ ...current, ...updates }));
+      return;
+    }
+    setNfceForm((current) => ({ ...current, ...updates }));
+  };
+
+  const updateNfeLikeItemByType = (
+    documentType: NotaDocumentType,
+    index: number,
+    updates: Partial<NfeItemForm>
+  ) => {
+    const apply = (current: NfeLikeForm): NfeLikeForm => ({
+      ...current,
+      itens: current.itens.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, ...updates } : item
+      ))
+    });
+    if (documentType === 'NFE') {
+      setNfeForm(apply);
+      return;
+    }
+    setNfceForm(apply);
+  };
+
+  const updateNfeLikeItemTributosByType = <
+    T extends keyof NfeItemForm['tributos']
+  >(
+    documentType: NotaDocumentType,
+    index: number,
+    tributo: T,
+    updates: Partial<NfeItemForm['tributos'][T]>
+  ) => {
+    const apply = (current: NfeLikeForm): NfeLikeForm => ({
+      ...current,
+      itens: current.itens.map((item, itemIndex) => (
+        itemIndex === index
+          ? {
+              ...item,
+              tributos: {
+                ...item.tributos,
+                [tributo]: {
+                  ...item.tributos[tributo],
+                  ...updates
+                }
+              }
+            }
+          : item
+      ))
+    });
+    if (documentType === 'NFE') {
+      setNfeForm(apply);
+      return;
+    }
+    setNfceForm(apply);
+  };
+
+  const addNfeLikeItemByType = (documentType: NotaDocumentType) => {
+    const apply = (current: NfeLikeForm): NfeLikeForm => ({
+      ...current,
+      itens: [...current.itens, getDefaultNfeItem()]
+    });
+    if (documentType === 'NFE') {
+      setNfeForm(apply);
+      return;
+    }
+    setNfceForm(apply);
+  };
+
+  const removeNfeLikeItemByType = (documentType: NotaDocumentType, index: number) => {
+    const apply = (current: NfeLikeForm): NfeLikeForm => {
+      if (current.itens.length <= 1) {
+        return {
+          ...current,
+          itens: [getDefaultNfeItem()]
+        };
+      }
+      return {
+        ...current,
+        itens: current.itens.filter((_, itemIndex) => itemIndex !== index)
+      };
+    };
+    if (documentType === 'NFE') {
+      setNfeForm(apply);
+      return;
+    }
+    setNfceForm(apply);
+  };
+
   const updatePlugNotasCompanyForm = (updates: Partial<PlugNotasCompanyForm>) => {
     setPlugNotasCompanyForm((current) => ({
       ...current,
@@ -634,10 +1032,18 @@ export default function GuidesMei() {
     if (!id) return;
     const selected = nfseCatalogClientes.find((item) => item.id === id);
     if (!selected) return;
-    updateNfseForm({
-      tomadorCpfCnpj: selected.documento ? formatDocument(selected.documento) : '',
-      tomadorRazaoSocial: selected.nome || '',
-      tomadorEmail: selected.email || ''
+    if (notaDocumentType === 'NFSE') {
+      updateNfseForm({
+        tomadorCpfCnpj: selected.documento ? formatDocument(selected.documento) : '',
+        tomadorRazaoSocial: selected.nome || '',
+        tomadorEmail: selected.email || ''
+      });
+      return;
+    }
+    updateNfeLikeFormByType(notaDocumentType, {
+      destinatarioCpfCnpj: selected.documento ? formatDocument(selected.documento) : '',
+      destinatarioRazaoSocial: selected.nome || '',
+      destinatarioEmail: selected.email || ''
     });
   };
 
@@ -646,12 +1052,25 @@ export default function GuidesMei() {
     if (!id) return;
     const selected = nfseCatalogProdutos.find((item) => item.id === id);
     if (!selected) return;
-    updateNfseServico({
+    if (notaDocumentType === 'NFSE') {
+      updateNfseServico({
+        codigo: selected.codigo || '',
+        cnae: selected.cnae || '',
+        discriminacao: selected.discriminacao || '',
+        aliquota: selected.aliquota ?? '',
+        valorServico: selected.valor_sugerido ?? ''
+      });
+      return;
+    }
+    const cnaeDigits = normalizeDoc(selected.cnae || '');
+    const ncm = cnaeDigits.length === 8 ? cnaeDigits : '';
+    const cfop = cnaeDigits.length === 4 ? cnaeDigits : '';
+    updateNfeLikeItemByType(notaDocumentType, 0, {
       codigo: selected.codigo || '',
-      cnae: selected.cnae || '',
-      discriminacao: selected.discriminacao || '',
-      aliquota: selected.aliquota ?? '',
-      valorServico: selected.valor_sugerido ?? ''
+      descricao: selected.discriminacao || '',
+      ncm,
+      cfop,
+      valorUnitario: selected.valor_sugerido ? String(selected.valor_sugerido) : ''
     });
   };
 
@@ -693,6 +1112,12 @@ export default function GuidesMei() {
   }, [loadNfseCatalog]);
 
   useEffect(() => {
+    setSelectedCatalogClienteId('');
+    setSelectedCatalogProdutoId('');
+    setNfseCatalogError(null);
+  }, [notaDocumentType]);
+
+  useEffect(() => {
     if (!canViewNfse && activeWorkspace === 'nfse') {
       setActiveWorkspace('overview');
     }
@@ -700,10 +1125,21 @@ export default function GuidesMei() {
 
   useEffect(() => {
     if (!normalizedContribuinte) return;
+    const formatted = formatDocument(normalizedContribuinte);
     setNfseForm((current) => (
       current.prestadorCpfCnpj
         ? current
-        : { ...current, prestadorCpfCnpj: formatDocument(normalizedContribuinte) }
+        : { ...current, prestadorCpfCnpj: formatted }
+    ));
+    setNfeForm((current) => (
+      current.emitenteCpfCnpj
+        ? current
+        : { ...current, emitenteCpfCnpj: formatted }
+    ));
+    setNfceForm((current) => (
+      current.emitenteCpfCnpj
+        ? current
+        : { ...current, emitenteCpfCnpj: formatted }
     ));
   }, [normalizedContribuinte]);
 
@@ -789,7 +1225,7 @@ export default function GuidesMei() {
         || contribuinteDoc
       );
       if (cnpj.length !== 14) {
-        throw new Error('Não foi possível identificar um CNPJ válido para configurar a empresa na PlugNotas.');
+        throw new Error('Não foi possível identificar um CNPJ válido para configurar a empresa no sistema de emissão fiscal.');
       }
 
       const certificateResponse = await cadastrarPlugNotasCertificado({
@@ -803,7 +1239,7 @@ export default function GuidesMei() {
       });
       const certificateId = String(certificateResponse.id || '').trim();
       if (!certificateId) {
-        throw new Error('A PlugNotas não retornou o ID do certificado.');
+        throw new Error('O sistema de emissão fiscal não retornou o ID do certificado.');
       }
 
       const companyPayload = buildPlugNotasEmpresaPayload({
@@ -835,21 +1271,39 @@ export default function GuidesMei() {
           descricaoCidade: plugNotasCompanyForm.descricaoCidade
         })
       });
+      updateNfeLikeFormByType('NFE', {
+        emitenteCpfCnpj: formattedCnpj,
+        ...(plugNotasCompanyForm.razaoSocial.trim()
+          ? { emitenteRazaoSocial: plugNotasCompanyForm.razaoSocial.trim() }
+          : {}),
+        ...(plugNotasCompanyForm.inscricaoEstadual.trim()
+          ? { emitenteInscricaoEstadual: plugNotasCompanyForm.inscricaoEstadual.trim() }
+          : {})
+      });
+      updateNfeLikeFormByType('NFCE', {
+        emitenteCpfCnpj: formattedCnpj,
+        ...(plugNotasCompanyForm.razaoSocial.trim()
+          ? { emitenteRazaoSocial: plugNotasCompanyForm.razaoSocial.trim() }
+          : {}),
+        ...(plugNotasCompanyForm.inscricaoEstadual.trim()
+          ? { emitenteInscricaoEstadual: plugNotasCompanyForm.inscricaoEstadual.trim() }
+          : {})
+      });
 
       setCertificateFile(null);
       setCertificatePassword('');
       setCertificateSuccess(
         [
-          'Certificado enviado no MEI e configurado na PlugNotas.',
+          'Certificado enviado no MEI e configurado no sistema de emissão fiscal.',
           certificateResponse.message || null,
-          companyResponse.message || 'Empresa configurada na PlugNotas com sucesso.'
+          companyResponse.message || 'Empresa configurada no sistema de emissão fiscal com sucesso.'
         ].filter(Boolean).join(' ')
       );
     } catch (error) {
       const fallbackMessage = error instanceof Error ? error.message : 'Erro ao enviar certificado.';
       setCertificateError(
         uploadedToMei
-          ? `Certificado enviado no MEI, mas falhou a configuração automática da PlugNotas: ${fallbackMessage}`
+          ? `Certificado enviado no MEI, mas falhou a configuração automática da integração fiscal: ${fallbackMessage}`
           : fallbackMessage
       );
     } finally {
@@ -911,97 +1365,110 @@ export default function GuidesMei() {
     setNfseError(null);
     setNfseSuccess(null);
 
-    if (nfseValidationMessage) {
-      setNfseError(nfseValidationMessage);
+    if (notaValidationMessage) {
+      setNfseError(notaValidationMessage);
       return;
-    }
-
-    const prestadorCpfCnpj = normalizeDoc(nfseForm.prestadorCpfCnpj);
-    const tomadorCpfCnpj = normalizeDoc(nfseForm.tomadorCpfCnpj || '');
-    const servico = nfseForm.servico;
-    const prestadorEndereco = resolvePrestadorEndereco(nfseForm.prestadorEndereco, {
-      logradouro: plugNotasCompanyForm.logradouro,
-      numero: plugNotasCompanyForm.numero,
-      codigoCidade: plugNotasCompanyForm.codigoCidade,
-      cep: plugNotasCompanyForm.cep,
-      complemento: plugNotasCompanyForm.complemento,
-      bairro: plugNotasCompanyForm.bairro,
-      estado: plugNotasCompanyForm.estado,
-      descricaoCidade: plugNotasCompanyForm.descricaoCidade
-    });
-
-    const payload: EmitirNfseInput = {
-      prestadorCpfCnpj,
-      servico: {
-        codigo: servico.codigo.trim(),
-        cnae: servico.cnae.trim(),
-        discriminacao: servico.discriminacao.trim(),
-        aliquota: servico.aliquota,
-        valorServico: servico.valorServico
-      },
-      prestadorEndereco: {
-        logradouro: prestadorEndereco.logradouro,
-        numero: prestadorEndereco.numero,
-        codigoCidade: prestadorEndereco.codigoCidade,
-        cep: prestadorEndereco.cep,
-        ...(prestadorEndereco.complemento ? { complemento: prestadorEndereco.complemento } : {}),
-        ...(prestadorEndereco.bairro ? { bairro: prestadorEndereco.bairro } : {}),
-        ...(prestadorEndereco.estado ? { estado: prestadorEndereco.estado } : {}),
-        ...(prestadorEndereco.descricaoCidade ? { descricaoCidade: prestadorEndereco.descricaoCidade } : {})
-      },
-      enviarEmail: Boolean(nfseForm.enviarEmail)
-    };
-
-    if (nfseForm.prestadorInscricaoMunicipal?.trim()) {
-      payload.prestadorInscricaoMunicipal = nfseForm.prestadorInscricaoMunicipal.trim();
-    }
-    if (nfseForm.prestadorRazaoSocial?.trim()) {
-      payload.prestadorRazaoSocial = nfseForm.prestadorRazaoSocial.trim();
-    }
-    if (nfseForm.prestadorEmail?.trim()) {
-      payload.prestadorEmail = nfseForm.prestadorEmail.trim();
-    }
-    if (tomadorCpfCnpj) {
-      payload.tomadorCpfCnpj = tomadorCpfCnpj;
-    }
-    if (nfseForm.tomadorRazaoSocial?.trim()) {
-      payload.tomadorRazaoSocial = nfseForm.tomadorRazaoSocial.trim();
-    }
-    if (nfseForm.tomadorEmail?.trim()) {
-      payload.tomadorEmail = nfseForm.tomadorEmail.trim();
-    }
-    if (nfseForm.idIntegracao?.trim()) {
-      payload.idIntegracao = nfseForm.idIntegracao.trim();
-    }
-    if (nfseForm.descricao?.trim()) {
-      payload.descricao = nfseForm.descricao.trim();
-    }
-    if (nfseForm.informacoesComplementares?.trim()) {
-      payload.informacoesComplementares = nfseForm.informacoesComplementares.trim();
-    }
-
-    const cidade = nfseForm.cidadePrestacao || {};
-    if (cidade.codigo || cidade.descricao || cidade.estado) {
-      payload.cidadePrestacao = {
-        ...(cidade.codigo ? { codigo: cidade.codigo.trim() } : {}),
-        ...(cidade.descricao ? { descricao: cidade.descricao.trim() } : {}),
-        ...(cidade.estado ? { estado: cidade.estado.trim() } : {})
-      };
     }
 
     setNfseSubmitting(true);
     try {
-      const created = await emitirNfse(payload);
+      let created: NfseRecord;
+      if (notaDocumentType === 'NFSE') {
+        const prestadorCpfCnpj = normalizeDoc(nfseForm.prestadorCpfCnpj);
+        const tomadorCpfCnpj = normalizeDoc(nfseForm.tomadorCpfCnpj || '');
+        const servico = nfseForm.servico;
+        const prestadorEndereco = resolvePrestadorEndereco(nfseForm.prestadorEndereco, {
+          logradouro: plugNotasCompanyForm.logradouro,
+          numero: plugNotasCompanyForm.numero,
+          codigoCidade: plugNotasCompanyForm.codigoCidade,
+          cep: plugNotasCompanyForm.cep,
+          complemento: plugNotasCompanyForm.complemento,
+          bairro: plugNotasCompanyForm.bairro,
+          estado: plugNotasCompanyForm.estado,
+          descricaoCidade: plugNotasCompanyForm.descricaoCidade
+        });
+
+        const payload: EmitirNfseInput = {
+          prestadorCpfCnpj,
+          servico: {
+            codigo: servico.codigo.trim(),
+            cnae: servico.cnae.trim(),
+            discriminacao: servico.discriminacao.trim(),
+            aliquota: servico.aliquota,
+            valorServico: servico.valorServico
+          },
+          prestadorEndereco: {
+            logradouro: prestadorEndereco.logradouro,
+            numero: prestadorEndereco.numero,
+            codigoCidade: prestadorEndereco.codigoCidade,
+            cep: prestadorEndereco.cep,
+            ...(prestadorEndereco.complemento ? { complemento: prestadorEndereco.complemento } : {}),
+            ...(prestadorEndereco.bairro ? { bairro: prestadorEndereco.bairro } : {}),
+            ...(prestadorEndereco.estado ? { estado: prestadorEndereco.estado } : {}),
+            ...(prestadorEndereco.descricaoCidade ? { descricaoCidade: prestadorEndereco.descricaoCidade } : {})
+          },
+          enviarEmail: Boolean(nfseForm.enviarEmail)
+        };
+
+        if (nfseForm.prestadorInscricaoMunicipal?.trim()) {
+          payload.prestadorInscricaoMunicipal = nfseForm.prestadorInscricaoMunicipal.trim();
+        }
+        if (nfseForm.prestadorRazaoSocial?.trim()) {
+          payload.prestadorRazaoSocial = nfseForm.prestadorRazaoSocial.trim();
+        }
+        if (nfseForm.prestadorEmail?.trim()) {
+          payload.prestadorEmail = nfseForm.prestadorEmail.trim();
+        }
+        if (tomadorCpfCnpj) {
+          payload.tomadorCpfCnpj = tomadorCpfCnpj;
+        }
+        if (nfseForm.tomadorRazaoSocial?.trim()) {
+          payload.tomadorRazaoSocial = nfseForm.tomadorRazaoSocial.trim();
+        }
+        if (nfseForm.tomadorEmail?.trim()) {
+          payload.tomadorEmail = nfseForm.tomadorEmail.trim();
+        }
+        if (nfseForm.idIntegracao?.trim()) {
+          payload.idIntegracao = nfseForm.idIntegracao.trim();
+        }
+        if (nfseForm.descricao?.trim()) {
+          payload.descricao = nfseForm.descricao.trim();
+        }
+        if (nfseForm.informacoesComplementares?.trim()) {
+          payload.informacoesComplementares = nfseForm.informacoesComplementares.trim();
+        }
+
+        const cidade = nfseForm.cidadePrestacao || {};
+        if (cidade.codigo || cidade.descricao || cidade.estado) {
+          payload.cidadePrestacao = {
+            ...(cidade.codigo ? { codigo: cidade.codigo.trim() } : {}),
+            ...(cidade.descricao ? { descricao: cidade.descricao.trim() } : {}),
+            ...(cidade.estado ? { estado: cidade.estado.trim() } : {})
+          };
+        }
+        created = await emitirNfse(payload);
+      } else {
+        const nfeLikeForm = getNfeLikeFormByType(notaDocumentType);
+        const payload = buildNfeLikePayloadFromForm(nfeLikeForm, notaDocumentType);
+        created = notaDocumentType === 'NFE'
+          ? await emitirNfe(payload)
+          : await emitirNfce(payload);
+      }
+      const docLabel = notaDocumentType === 'NFE'
+        ? 'NF-e'
+        : notaDocumentType === 'NFCE'
+          ? 'NFC-e'
+          : 'NFSe';
       setNfseSuccess(
         created?.protocol
-          ? `NFSe enviada. Protocolo ${created.protocol}.`
-          : 'NFSe enviada. Acompanhe o status na lista.'
+          ? `${docLabel} enviada. Protocolo ${created.protocol}.`
+          : `${docLabel} enviada. Acompanhe o status na lista.`
       );
       await Promise.all([loadNfseList(), loadNfseCatalog()]);
       setSelectedCatalogClienteId('');
       setSelectedCatalogProdutoId('');
     } catch (error) {
-      setNfseError(error instanceof Error ? error.message : 'Erro ao emitir NFSe.');
+      setNfseError(error instanceof Error ? error.message : 'Erro ao emitir nota fiscal.');
     } finally {
       setNfseSubmitting(false);
     }
@@ -1085,7 +1552,7 @@ export default function GuidesMei() {
   const handleCancelNfse = async (record: NfseRecord) => {
     const actionKey = `${record.id}:cancel`;
     if (isNfseActionLoading(actionKey)) return;
-    if (!window.confirm('Deseja solicitar o cancelamento desta NFSe?')) return;
+    if (!window.confirm('Deseja solicitar o cancelamento desta nota fiscal?')) return;
 
     const reason = window.prompt('Motivo do cancelamento (opcional):', '') || '';
     startNfseAction(actionKey);
@@ -1098,7 +1565,7 @@ export default function GuidesMei() {
       setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
       setNfseSuccess('Solicitação de cancelamento processada.');
     } catch (error) {
-      setNfseError(error instanceof Error ? error.message : 'Erro ao cancelar NFSe.');
+      setNfseError(error instanceof Error ? error.message : 'Erro ao cancelar nota fiscal.');
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1116,9 +1583,9 @@ export default function GuidesMei() {
     try {
       const updated = await arquivarNfse(record.id, { archived: !isArchived });
       setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
-      setNfseSuccess(!isArchived ? 'NFSe arquivada com sucesso.' : 'NFSe desarquivada com sucesso.');
+      setNfseSuccess(!isArchived ? 'Nota fiscal arquivada com sucesso.' : 'Nota fiscal desarquivada com sucesso.');
     } catch (error) {
-      setNfseError(error instanceof Error ? error.message : 'Erro ao atualizar arquivamento da NFSe.');
+      setNfseError(error instanceof Error ? error.message : 'Erro ao atualizar arquivamento da nota fiscal.');
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1196,7 +1663,7 @@ export default function GuidesMei() {
     if (canViewNfse) {
       tabs.push({
         id: 'nfse',
-        label: 'NFSe',
+        label: 'Notas fiscais',
         description: 'Emissão e acompanhamento',
         badge: `${filteredNfseList.length} notas no filtro`
       });
@@ -1228,6 +1695,14 @@ export default function GuidesMei() {
     }
   };
 
+  const isNfeLikeDocument = notaDocumentType === 'NFE' || notaDocumentType === 'NFCE';
+  const notaDocumentTypeLabel = notaDocumentType === 'NFE'
+    ? 'NF-e'
+    : notaDocumentType === 'NFCE'
+      ? 'NFC-e'
+      : 'NFSe';
+  const activeNfeLikeForm = isNfeLikeDocument ? getNfeLikeFormByType(notaDocumentType) : null;
+
   return (
     <>
       <div className="admin-page-shell">
@@ -1237,7 +1712,7 @@ export default function GuidesMei() {
               <h1 className="admin-hero-title">Meu MEI</h1>
               <p className="admin-hero-subtitle">
                 {canViewNfse
-                  ? 'Gerencie certificado, DAS e emissão de NFSe no mesmo fluxo.'
+                  ? 'Gerencie certificado, DAS e emissão de notas fiscais no mesmo fluxo.'
                   : 'Gerencie certificado e DAS no mesmo fluxo.'}
               </p>
             </div>
@@ -1264,7 +1739,7 @@ export default function GuidesMei() {
             </div>
             {canViewNfse ? (
               <div className="admin-stat-card">
-                <p className="admin-stat-label">NFSe exibidas</p>
+                <p className="admin-stat-label">Notas exibidas</p>
                 <p className="admin-stat-value">{filteredNfseList.length}</p>
               </div>
             ) : null}
@@ -1343,13 +1818,13 @@ export default function GuidesMei() {
                   onClick={() => setActiveWorkspace('nfse')}
                   className="admin-toolbar text-left transition hover:border-slate-300/80 dark:hover:border-slate-700/80"
                 >
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">NFSe</p>
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Notas fiscais</p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     Preencha dados essenciais e acompanhe o ciclo das notas emitidas.
                   </p>
                   <div className="mt-3 admin-actions">
                     <span className="admin-badge-primary">{`${filteredNfseList.length} notas no filtro`}</span>
-                    <span className="admin-badge-neutral">Emissão com PlugNotas</span>
+                    <span className="admin-badge-neutral">Emissão com integração fiscal</span>
                   </div>
                 </button>
               ) : null}
@@ -1719,9 +2194,9 @@ export default function GuidesMei() {
             <section className="admin-section-card">
           <div className="admin-section-header">
             <div>
-              <h2 className="admin-section-title">Emitir NFSe</h2>
+              <h2 className="admin-section-title">{`Emitir ${notaDocumentTypeLabel}`}</h2>
               <p className="admin-section-subtitle">
-                Preencha os dados essenciais para emissão via PlugNotas.
+                Preencha os dados fiscais para emissão pelo sistema integrado.
               </p>
             </div>
           </div>
@@ -1730,11 +2205,28 @@ export default function GuidesMei() {
             Atenção: para emissão de notas fiscais, a empresa emitente precisa estar cadastrada com certificado digital A1 válido.
           </div>
           <p className="admin-field-hint">
-            Campos obrigatórios: CNPJ e endereço mínimo do prestador, CPF/CNPJ e razão social do tomador, código do
-            serviço, CNAE, alíquota, valor e discriminação.
+            {notaDocumentType === 'NFSE'
+              ? 'Campos obrigatórios: CNPJ e endereço mínimo do prestador, CPF/CNPJ e razão social do tomador, código do serviço, CNAE, alíquota, valor e discriminação.'
+              : 'Campos obrigatórios: emitente, destinatário, item com NCM/CFOP, quantidade, valor unitário e tributação mínima (ICMS/PIS/COFINS).'}
           </p>
 
           <div className="admin-toolbar space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                  Tipo de documento
+                </label>
+                <select
+                  className="planner-input-compact w-full"
+                  value={notaDocumentType}
+                  onChange={(event) => setNotaDocumentType(event.target.value as NotaDocumentType)}
+                >
+                  <option value="NFSE">NFSe</option>
+                  <option value="NFE">NF-e</option>
+                  <option value="NFCE">NFC-e</option>
+                </select>
+              </div>
+            </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
@@ -1755,14 +2247,14 @@ export default function GuidesMei() {
               </div>
               <div>
                 <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
-                  Serviço salvo (atalho)
+                  {notaDocumentType === 'NFSE' ? 'Serviço salvo (atalho)' : 'Item salvo (atalho)'}
                 </label>
                 <select
                   className="planner-input-compact w-full"
                   value={selectedCatalogProdutoId}
                   onChange={(event) => handleSelectCatalogProduto(event.target.value)}
                 >
-                  <option value="">Selecionar serviço...</option>
+                  <option value="">{notaDocumentType === 'NFSE' ? 'Selecionar serviço...' : 'Selecionar item...'}</option>
                   {nfseCatalogProdutos.map((item) => (
                     <option key={item.id} value={item.id}>
                       {buildProdutoCatalogLabel(item)}
@@ -1774,7 +2266,7 @@ export default function GuidesMei() {
 
             {nfseCatalogLoading ? (
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Atualizando catálogo de clientes e serviços...
+                Atualizando catálogo fiscal...
               </p>
             ) : null}
           </div>
@@ -1785,6 +2277,8 @@ export default function GuidesMei() {
             </div>
           )}
 
+          {notaDocumentType === 'NFSE' ? (
+            <>
           <div className="admin-toolbar grid gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
@@ -1897,7 +2391,7 @@ export default function GuidesMei() {
             </div>
             <div className="md:col-span-2">
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Dica: se você já configurou a empresa na PlugNotas, os dados salvos serão usados como fallback no envio.
+                Dica: se você já configurou a empresa no sistema fiscal, os dados salvos serão usados como fallback no envio.
               </p>
             </div>
             <div>
@@ -2069,19 +2563,389 @@ export default function GuidesMei() {
               Enviar email ao tomador (se configurado)
             </label>
           </div>
+            </>
+          ) : (
+            <div className="admin-toolbar space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    CNPJ do emitente
+                    <span className="admin-required-mark">*</span>
+                  </label>
+                  <input
+                    className="planner-input-compact w-full"
+                    type="text"
+                    inputMode="numeric"
+                    value={activeNfeLikeForm?.emitenteCpfCnpj || ''}
+                    onChange={(event) => updateNfeLikeFormByType(notaDocumentType, {
+                      emitenteCpfCnpj: formatDocument(event.target.value)
+                    })}
+                    placeholder="00.000.000/0001-00"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Razão social do emitente
+                  </label>
+                  <input
+                    className="planner-input-compact w-full"
+                    type="text"
+                    value={activeNfeLikeForm?.emitenteRazaoSocial || ''}
+                    onChange={(event) => updateNfeLikeFormByType(notaDocumentType, {
+                      emitenteRazaoSocial: event.target.value
+                    })}
+                    placeholder="Razão social"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Inscrição estadual do emitente
+                  </label>
+                  <input
+                    className="planner-input-compact w-full"
+                    type="text"
+                    value={activeNfeLikeForm?.emitenteInscricaoEstadual || ''}
+                    onChange={(event) => updateNfeLikeFormByType(notaDocumentType, {
+                      emitenteInscricaoEstadual: event.target.value
+                    })}
+                    placeholder="Inscrição estadual"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    CPF/CNPJ do destinatário
+                    <span className="admin-required-mark">*</span>
+                  </label>
+                  <input
+                    className="planner-input-compact w-full"
+                    type="text"
+                    inputMode="numeric"
+                    value={activeNfeLikeForm?.destinatarioCpfCnpj || ''}
+                    onChange={(event) => updateNfeLikeFormByType(notaDocumentType, {
+                      destinatarioCpfCnpj: formatDocument(event.target.value)
+                    })}
+                    placeholder="000.000.000-00"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Razão social do destinatário
+                    <span className="admin-required-mark">*</span>
+                  </label>
+                  <input
+                    className="planner-input-compact w-full"
+                    type="text"
+                    value={activeNfeLikeForm?.destinatarioRazaoSocial || ''}
+                    onChange={(event) => updateNfeLikeFormByType(notaDocumentType, {
+                      destinatarioRazaoSocial: event.target.value
+                    })}
+                    placeholder="Razão social"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Email do destinatário
+                  </label>
+                  <input
+                    className="planner-input-compact w-full"
+                    type="email"
+                    value={activeNfeLikeForm?.destinatarioEmail || ''}
+                    onChange={(event) => updateNfeLikeFormByType(notaDocumentType, {
+                      destinatarioEmail: event.target.value
+                    })}
+                    placeholder="email@destinatario.com"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Natureza da operação
+                  </label>
+                  <input
+                    className="planner-input-compact w-full"
+                    type="text"
+                    value={activeNfeLikeForm?.natureza || ''}
+                    onChange={(event) => updateNfeLikeFormByType(notaDocumentType, {
+                      natureza: event.target.value
+                    })}
+                    placeholder="VENDA"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    ID de integração
+                  </label>
+                  <input
+                    className="planner-input-compact w-full"
+                    type="text"
+                    value={activeNfeLikeForm?.idIntegracao || ''}
+                    onChange={(event) => updateNfeLikeFormByType(notaDocumentType, {
+                      idIntegracao: event.target.value
+                    })}
+                    placeholder={`${notaDocumentType}-20260316-0001`}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                  Informações complementares
+                </label>
+                <textarea
+                  className="planner-input-compact w-full min-h-[90px]"
+                  value={activeNfeLikeForm?.informacoesComplementares || ''}
+                  onChange={(event) => updateNfeLikeFormByType(notaDocumentType, {
+                    informacoesComplementares: event.target.value
+                  })}
+                  placeholder="Informações complementares fiscais"
+                />
+              </div>
+              <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                <input
+                  id="nfe-like-enviar-email"
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={Boolean(activeNfeLikeForm?.enviarEmail)}
+                  onChange={(event) => updateNfeLikeFormByType(notaDocumentType, {
+                    enviarEmail: event.target.checked
+                  })}
+                />
+                Enviar email ao destinatário (se configurado)
+              </label>
+
+              <div className="admin-toolbar space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-slate-700 dark:text-gray-200">Itens e tributação</h3>
+                  <button
+                    type="button"
+                    className="planner-button-secondary-compact"
+                    onClick={() => addNfeLikeItemByType(notaDocumentType)}
+                  >
+                    Adicionar item
+                  </button>
+                </div>
+                {(activeNfeLikeForm?.itens || []).map((item, itemIndex) => (
+                  <div key={`${notaDocumentType}-item-${itemIndex}`} className="rounded-xl border border-slate-200/70 p-3 dark:border-slate-700/70">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        {`Item ${itemIndex + 1}`}
+                      </p>
+                      <button
+                        type="button"
+                        className="planner-button-secondary-compact"
+                        onClick={() => removeNfeLikeItemByType(notaDocumentType, itemIndex)}
+                      >
+                        Remover item
+                      </button>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-3">
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.codigo}
+                        onChange={(event) => updateNfeLikeItemByType(notaDocumentType, itemIndex, {
+                          codigo: event.target.value
+                        })}
+                        placeholder="Código *"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.ncm}
+                        onChange={(event) => updateNfeLikeItemByType(notaDocumentType, itemIndex, {
+                          ncm: normalizeDoc(event.target.value).slice(0, 8)
+                        })}
+                        placeholder="NCM (8 dígitos) *"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.cfop}
+                        onChange={(event) => updateNfeLikeItemByType(notaDocumentType, itemIndex, {
+                          cfop: normalizeDoc(event.target.value).slice(0, 4)
+                        })}
+                        placeholder="CFOP *"
+                      />
+                      <input
+                        className="planner-input-compact md:col-span-3"
+                        type="text"
+                        value={item.descricao}
+                        onChange={(event) => updateNfeLikeItemByType(notaDocumentType, itemIndex, {
+                          descricao: event.target.value
+                        })}
+                        placeholder="Descrição *"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.unidade}
+                        onChange={(event) => updateNfeLikeItemByType(notaDocumentType, itemIndex, {
+                          unidade: event.target.value
+                        })}
+                        placeholder="Unidade *"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        inputMode="decimal"
+                        value={item.quantidade}
+                        onChange={(event) => updateNfeLikeItemByType(notaDocumentType, itemIndex, {
+                          quantidade: event.target.value
+                        })}
+                        placeholder="Quantidade *"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        inputMode="decimal"
+                        value={item.valorUnitario}
+                        onChange={(event) => updateNfeLikeItemByType(notaDocumentType, itemIndex, {
+                          valorUnitario: event.target.value
+                        })}
+                        placeholder="Valor unitário *"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        inputMode="decimal"
+                        value={item.desconto}
+                        onChange={(event) => updateNfeLikeItemByType(notaDocumentType, itemIndex, {
+                          desconto: event.target.value
+                        })}
+                        placeholder="Desconto (opcional)"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.cest}
+                        onChange={(event) => updateNfeLikeItemByType(notaDocumentType, itemIndex, {
+                          cest: event.target.value
+                        })}
+                        placeholder="CEST (opcional)"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.sku}
+                        onChange={(event) => updateNfeLikeItemByType(notaDocumentType, itemIndex, {
+                          sku: event.target.value
+                        })}
+                        placeholder="SKU (opcional)"
+                      />
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.tributos.icms.cst}
+                        onChange={(event) => updateNfeLikeItemTributosByType(notaDocumentType, itemIndex, 'icms', {
+                          cst: event.target.value
+                        })}
+                        placeholder="ICMS CST"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.tributos.icms.csosn}
+                        onChange={(event) => updateNfeLikeItemTributosByType(notaDocumentType, itemIndex, 'icms', {
+                          csosn: event.target.value
+                        })}
+                        placeholder="ICMS CSOSN"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        inputMode="decimal"
+                        value={item.tributos.icms.aliquota}
+                        onChange={(event) => updateNfeLikeItemTributosByType(notaDocumentType, itemIndex, 'icms', {
+                          aliquota: event.target.value
+                        })}
+                        placeholder="ICMS alíquota (%)"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        inputMode="decimal"
+                        value={item.tributos.icms.valor}
+                        onChange={(event) => updateNfeLikeItemTributosByType(notaDocumentType, itemIndex, 'icms', {
+                          valor: event.target.value
+                        })}
+                        placeholder="ICMS valor"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.tributos.pis.cst}
+                        onChange={(event) => updateNfeLikeItemTributosByType(notaDocumentType, itemIndex, 'pis', {
+                          cst: event.target.value
+                        })}
+                        placeholder="PIS CST *"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        inputMode="decimal"
+                        value={item.tributos.pis.aliquota}
+                        onChange={(event) => updateNfeLikeItemTributosByType(notaDocumentType, itemIndex, 'pis', {
+                          aliquota: event.target.value
+                        })}
+                        placeholder="PIS alíquota (%)"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.tributos.cofins.cst}
+                        onChange={(event) => updateNfeLikeItemTributosByType(notaDocumentType, itemIndex, 'cofins', {
+                          cst: event.target.value
+                        })}
+                        placeholder="COFINS CST *"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        inputMode="decimal"
+                        value={item.tributos.cofins.aliquota}
+                        onChange={(event) => updateNfeLikeItemTributosByType(notaDocumentType, itemIndex, 'cofins', {
+                          aliquota: event.target.value
+                        })}
+                        placeholder="COFINS alíquota (%)"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        value={item.tributos.ipi.cst}
+                        onChange={(event) => updateNfeLikeItemTributosByType(notaDocumentType, itemIndex, 'ipi', {
+                          cst: event.target.value
+                        })}
+                        placeholder="IPI CST (opcional)"
+                      />
+                      <input
+                        className="planner-input-compact"
+                        type="text"
+                        inputMode="decimal"
+                        value={item.tributos.ipi.aliquota}
+                        onChange={(event) => updateNfeLikeItemTributosByType(notaDocumentType, itemIndex, 'ipi', {
+                          aliquota: event.target.value
+                        })}
+                        placeholder="IPI alíquota (%)"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="admin-actions">
             <button
               className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
               onClick={handleEmitNfse}
-              disabled={nfseSubmitting || Boolean(nfseValidationMessage)}
+              disabled={nfseSubmitting || Boolean(notaValidationMessage)}
             >
-              {nfseSubmitting ? 'Enviando...' : 'Emitir NFSe'}
+              {nfseSubmitting ? 'Enviando...' : `Emitir ${notaDocumentTypeLabel}`}
             </button>
           </div>
 
-          {nfseValidationMessage && (
-            <div className="admin-alert-warning">{nfseValidationMessage}</div>
+          {notaValidationMessage && (
+            <div className="admin-alert-warning">{notaValidationMessage}</div>
           )}
 
           {nfseError && (
@@ -2233,7 +3097,7 @@ export default function GuidesMei() {
                         onClick={() => handleCancelNfse(item)}
                         disabled={rowBusy || statusKey === 'cancelado' || statusKey === 'cancelamento_pendente'}
                       >
-                        {isNfseActionLoading(`${item.id}:cancel`) ? 'Cancelando...' : 'Cancelar NFSe'}
+                        {isNfseActionLoading(`${item.id}:cancel`) ? 'Cancelando...' : 'Cancelar nota'}
                       </button>
                       <button
                         className="planner-button-secondary-compact w-full"

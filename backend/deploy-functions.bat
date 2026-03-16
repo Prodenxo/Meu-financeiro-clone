@@ -20,8 +20,14 @@ if %ERRORLEVEL% NEQ 0 (
 echo [OK] Supabase CLI encontrado
 echo.
 
+set SUPABASE_WORKDIR=%~dp0..\supabase
+if not exist "%SUPABASE_WORKDIR%" (
+    echo [ERRO] Diretorio canonico do Supabase nao encontrado: %SUPABASE_WORKDIR%
+    exit /b 1
+)
+
 REM Verificar se está logado
-supabase projects list >nul 2>&1
+supabase --workdir "%SUPABASE_WORKDIR%" projects list >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [AVISO] Voce precisa fazer login no Supabase
     echo Execute: supabase login
@@ -53,7 +59,7 @@ if "%PROJECT_REF%"=="" (
 
 echo.
 echo Linkando projeto: %PROJECT_REF%
-supabase link --project-ref %PROJECT_REF%
+supabase --workdir "%SUPABASE_WORKDIR%" link --project-ref %PROJECT_REF%
 if %ERRORLEVEL% NEQ 0 (
     echo [ERRO] Falha ao linkar projeto
     exit /b 1
@@ -72,7 +78,7 @@ for %%f in (%FUNCTIONS%) do (
     echo.
     echo [DEPLOY] %%f
     echo ----------------------------------------
-    supabase functions deploy %%f
+    supabase --workdir "%SUPABASE_WORKDIR%" functions deploy %%f
     if %ERRORLEVEL% NEQ 0 (
         echo [ERRO] Falha ao fazer deploy de %%f
     ) else (
