@@ -84,12 +84,12 @@ Registrar pre-condicoes, variaveis de ambiente e orientacoes basicas para operac
 5. Em caso de erro recorrente, coletar logs e payload resumido para diagnostico.
 
 ## Checklist Operacional PlugNotas (Multi-tipo)
-Ambiente ativo neste repositorio: Producao (`https://api.plugnotas.com.br`).
+Ambiente ativo neste repositório: **Produção** (`https://api.plugnotas.com.br`).
 
 1. Confirmar ambiente de emissao:
    - Sandbox: `https://api.sandbox.plugnotas.com.br` (retorno mockado).
    - Homologacao/Producao: `https://api.plugnotas.com.br`.
-2. Confirmar token correto do ambiente (`x-api-key`), sem misturar sandbox e producao.
+2. Confirmar token correto do ambiente (`x-api-key`): em sandbox use sempre a chave de API do sandbox (PLUGNOTAS_API_KEY); nao misturar sandbox e producao.
 3. Confirmar cadastro de empresa/certificado A1 (`.pfx/.p12`) no ambiente usado.
 4. Confirmar `config.producao` no cadastro da empresa:
    - `false` para homologacao.
