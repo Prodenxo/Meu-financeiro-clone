@@ -87,3 +87,55 @@ test('nfse service preserva detalhes quando API retorna mapa de erros por campo'
     global.fetch = originalFetch;
   }
 });
+
+test('nfse service inclui detalhes quando API retorna errors como array de objetos com message', async () => {
+  const { emitirNfse } = await import('../src/services/plugnotas/nfse.service.js');
+  const originalFetch = global.fetch;
+
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    statusText: 'Bad Request',
+    headers: { get: () => 'application/json' },
+    json: async () => ({
+      message: 'Falha na validação do JSON de NFSe',
+      errors: [
+        { field: 'servico.discriminacao', message: 'não pode ficar em branco' }
+      ]
+    })
+  });
+
+  try {
+    await assert.rejects(
+      () => emitirNfse({ idIntegracao: 'nfse-teste' }),
+      /servico\.discriminacao: não pode ficar em branco/
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('nfse service inclui detalhes quando API retorna errors como array de strings', async () => {
+  const { emitirNfse } = await import('../src/services/plugnotas/nfse.service.js');
+  const originalFetch = global.fetch;
+
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    statusText: 'Bad Request',
+    headers: { get: () => 'application/json' },
+    json: async () => ({
+      message: 'Falha na validação do JSON de NFSe',
+      errors: ['Campo X é obrigatório', 'Campo Y inválido']
+    })
+  });
+
+  try {
+    await assert.rejects(
+      () => emitirNfse({ idIntegracao: 'nfse-teste' }),
+      /Campo X é obrigatório.*Campo Y inválido|Campo Y inválido.*Campo X é obrigatório/
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});

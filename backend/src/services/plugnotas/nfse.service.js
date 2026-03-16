@@ -60,7 +60,9 @@ const collectErrorMessages = (value, fieldContext = '') => {
   if (typeof value === 'object') {
     const entries = [];
     const field = String(value.field || value.campo || fieldContext || '').trim();
-    const reason = String(value.reason || value.error || value.motivo || '').trim();
+    const reason = String(
+      value.reason || value.error || value.motivo || value.message || value.mensagem || ''
+    ).trim();
     if (reason) {
       const text = withFieldContext(field, reason);
       if (text) entries.push(text);
@@ -88,32 +90,67 @@ const collectErrorMessages = (value, fieldContext = '') => {
   return [];
 };
 
+const buildErrorMessageFromBody = (payload, statusText = '') => {
+  if (payload === null || payload === undefined) return statusText;
+  if (typeof payload === 'string') return payload || statusText;
+  const baseMessage = String(
+    payload?.error?.message
+    || payload?.message
+    || payload?.mensagem
+    || payload?.descricao
+    || (typeof payload?.error === 'string' ? payload.error : '')
+    || statusText
+    || ''
+  ).trim();
+  const detailMessages = [
+    ...collectErrorMessages(payload?.error?.details),
+    ...collectErrorMessages(payload?.error?.errors),
+    ...collectErrorMessages(payload?.error?.validationErrors),
+    ...collectErrorMessages(payload?.error?.data?.fields),
+    ...collectErrorMessages(payload?.details),
+    ...collectErrorMessages(payload?.errors),
+    ...collectErrorMessages(payload?.erros)
+  ].filter(Boolean);
+  const details = [...new Set(detailMessages)].join(' | ');
+  if (baseMessage && details && !baseMessage.includes(details)) {
+    return `${baseMessage}: ${details}`;
+  }
+  return baseMessage || details || statusText;
+};
+
 const parseErrorMessage = async (response) => {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const payload = await response.json();
-    const baseMessage = String(
-      payload?.error?.message
-      || payload?.message
-      || (typeof payload?.error === 'string' ? payload.error : '')
-      || response.statusText
-      || ''
-    ).trim();
-    const detailMessages = [
-      ...collectErrorMessages(payload?.error?.details),
-      ...collectErrorMessages(payload?.error?.errors),
-      ...collectErrorMessages(payload?.details),
-      ...collectErrorMessages(payload?.errors),
-      ...collectErrorMessages(payload?.erros)
-    ].filter(Boolean);
-    const details = [...new Set(detailMessages)].join(' | ');
-    if (baseMessage && details && !baseMessage.includes(details)) {
-      return `${baseMessage}: ${details}`;
-    }
-    return baseMessage || details || response.statusText;
+    return buildErrorMessageFromBody(payload, response.statusText);
   }
   const text = await response.text();
   return text || response.statusText;
+};
+
+const maskDoc = (value) => {
+  if (value === null || value === undefined || typeof value !== 'string') return value;
+  const digits = value.replace(/\D/g, '');
+  if (digits.length < 4) return '***';
+  return `${digits.slice(0, 2)}***${digits.slice(-2)}`;
+};
+
+const redactPayload = (obj) => {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) return obj.map(redactPayload);
+  if (typeof obj !== 'object') return obj;
+  const out = {};
+  for (const [key, val] of Object.entries(obj)) {
+    const k = key.toLowerCase();
+    if (k === 'cpfcnpj' || k === 'cpf_cnpj') {
+      out[key] = maskDoc(val);
+    } else if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+      out[key] = redactPayload(val);
+    } else {
+      out[key] = val;
+    }
+  }
+  return out;
 };
 
 const requestJson = async (method, path, body) => {
@@ -131,7 +168,20 @@ const requestJson = async (method, path, body) => {
     });
 
     if (!response.ok) {
-      const message = await parseErrorMessage(response);
+      const contentType = response.headers.get('content-type') || '';
+      let responseBody;
+      if (contentType.includes('application/json')) {
+        responseBody = await response.json();
+      } else {
+        responseBody = await response.text();
+      }
+      const message = buildErrorMessageFromBody(responseBody, response.statusText);
+      if (response.status === 400) {
+        console.error('[PlugNotas NFSe] 400 response:', JSON.stringify(responseBody));
+        if (body !== undefined && body !== null) {
+          console.error('[PlugNotas NFSe] 400 request payload (redacted):', JSON.stringify(redactPayload(body)));
+        }
+      }
       if (response.status === 401) throw unauthorized(message || 'Token PlugNotas inválido');
       if (response.status === 403) throw forbidden(message || 'Acesso negado pela PlugNotas');
       throw badRequest(message || 'Erro na API PlugNotas');

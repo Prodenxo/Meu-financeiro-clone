@@ -158,6 +158,12 @@ const collectResponseCandidates = (response) => {
   const list = [response];
   if (Array.isArray(response.documents)) list.push(...response.documents);
   if (Array.isArray(response.documentos)) list.push(...response.documentos);
+  if (response.data !== undefined && response.data !== null) {
+    if (Array.isArray(response.data)) list.push(...response.data);
+    else if (typeof response.data === 'object') list.push(response.data);
+  }
+  if (response.nfse && typeof response.nfse === 'object') list.push(response.nfse);
+  if (response.documento && typeof response.documento === 'object') list.push(response.documento);
   return list;
 };
 
@@ -227,6 +233,11 @@ const buildServicoFromInput = (input) => {
   });
 };
 
+const estadoToUf = (estado) => {
+  const s = estado ? String(estado).trim().toUpperCase() : '';
+  return s.length >= 2 ? s.slice(0, 2) : s || null;
+};
+
 const buildPrestadorEnderecoFromInput = (input) => {
   const enderecoInput = (
     input?.prestadorEndereco
@@ -242,15 +253,25 @@ const buildPrestadorEnderecoFromInput = (input) => {
         )
   );
 
+  const estadoNorm = enderecoInput?.estado ? String(enderecoInput.estado).trim().toUpperCase() : null;
+  const uf = estadoToUf(estadoNorm || enderecoInput?.uf);
+  const cepRaw = enderecoInput?.cep ? normalizeDoc(enderecoInput.cep).slice(0, 8) : null;
+  const codigoCidadeRaw = enderecoInput?.codigoCidade;
+  const codigoCidade =
+    codigoCidadeRaw !== undefined && codigoCidadeRaw !== null && codigoCidadeRaw !== ''
+      ? String(codigoCidadeRaw).trim()
+      : null;
+
   return prune({
     ...enderecoInput,
     logradouro: enderecoInput?.logradouro || null,
     numero: enderecoInput?.numero || null,
-    codigoCidade: enderecoInput?.codigoCidade || null,
-    cep: enderecoInput?.cep ? normalizeDoc(enderecoInput.cep).slice(0, 8) : null,
+    codigoCidade: codigoCidade,
+    cep: cepRaw ? String(cepRaw) : null,
     complemento: enderecoInput?.complemento || null,
     bairro: enderecoInput?.bairro || null,
-    estado: enderecoInput?.estado ? String(enderecoInput.estado).trim().toUpperCase() : null,
+    estado: estadoNorm,
+    uf: uf,
     descricaoCidade: enderecoInput?.descricaoCidade || null
   });
 };
@@ -848,12 +869,12 @@ const extractPlugNotasStatus = (response) => {
   );
 };
 
-const extractPlugNotasId = (response) => {
+export const extractPlugNotasId = (response) => {
   const candidates = collectResponseCandidates(response);
   return pickCandidateValue(candidates, (candidate) => candidate?.id);
 };
 
-const extractIntegracaoId = (response) => {
+export const extractIntegracaoId = (response) => {
   const candidates = collectResponseCandidates(response);
   return pickCandidateValue(candidates, (candidate) => candidate?.idIntegracao);
 };
@@ -893,6 +914,18 @@ export const emitirNota = async (userId, input) => {
   const idIntegracao = extractIntegracaoId(response) || payload.idIntegracao;
   const status = extractPlugNotasStatus(response);
   const protocol = extractProtocol(response);
+
+  if (process.env.PLUGNOTAS_DEBUG === 'true') {
+    const hasData = response && typeof response === 'object' && 'data' in response;
+    const dataIsArray = hasData && Array.isArray(response.data);
+    console.log('[mei-notas] emissão resposta', {
+      responseIsArray: Array.isArray(response),
+      hasData,
+      dataIsArray,
+      plugnotasId: plugnotasId ? 'presente' : 'ausente',
+      idIntegracao: idIntegracao ? 'presente' : 'ausente'
+    });
+  }
 
   const created = await insertRecord(userId, {
     plugnotas_id: plugnotasId,

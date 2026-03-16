@@ -301,6 +301,19 @@ test('mei-notas valida campos fiscais mínimos de item para NFe/NFCe', async () 
   );
 });
 
+test('mei-notas extrai plugnotas_id e idIntegracao de resposta com data array', async () => {
+  const { extractPlugNotasId, extractIntegracaoId } = await import('../src/services/mei-notas.service.js');
+  const response = { data: [{ id: 'id-123', idIntegracao: 'int-1' }] };
+  assert.equal(extractPlugNotasId(response), 'id-123');
+  assert.equal(extractIntegracaoId(response), 'int-1');
+});
+
+test('mei-notas extrai plugnotas_id de resposta com data objeto único', async () => {
+  const { extractPlugNotasId } = await import('../src/services/mei-notas.service.js');
+  const response = { data: { id: 'id-456' } };
+  assert.equal(extractPlugNotasId(response), 'id-456');
+});
+
 test('mei-notas valida coerência de modelo por documentType', async () => {
   const { emitirNota } = await import('../src/services/mei-notas.service.js');
 
