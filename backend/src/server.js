@@ -15,6 +15,16 @@ const allowedOrigins = env.CORS_ORIGIN
   .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 
+/** Permite origens de preview da Vercel (*.vercel.app) além da lista explícita em CORS_ORIGIN. */
+const isVercelPreviewOrigin = (url) => {
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname === 'vercel.app' || hostname.endsWith('.vercel.app');
+  } catch {
+    return false;
+  }
+};
+
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) {
@@ -24,6 +34,9 @@ const corsOptions = {
     const normalizedOrigin = normalizeOrigin(origin);
 
     if (allowedOrigins.includes('*') || allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+    if (isVercelPreviewOrigin(normalizedOrigin)) {
       return callback(null, true);
     }
 

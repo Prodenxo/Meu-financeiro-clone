@@ -16,11 +16,14 @@ export default function Login() {
     try {
       await signIn(email, password);
       navigate('/');
-    } catch (err: any) {
-      const msg = err?.message ?? '';
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err ?? '');
       if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
+        const isVercelPreview = typeof window !== 'undefined' && /\.vercel\.app$/.test(window.location?.hostname ?? '');
         setError(
-          'Não foi possível conectar ao servidor. Verifique se o backend está rodando (na pasta backend: npm run dev) e se a URL da API está correta.'
+          isVercelPreview
+            ? 'Não foi possível conectar ao servidor. Em preview na Vercel, confira se VITE_API_URL está definida (Production e Preview) e se o backend permite a origem em CORS.'
+            : 'Não foi possível conectar ao servidor. Verifique se o backend está rodando (na pasta backend: npm run dev) e se a URL da API está correta.'
         );
       } else if (msg.includes('405') || /method not allowed/i.test(msg)) {
         setError(

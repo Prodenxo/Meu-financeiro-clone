@@ -22,13 +22,13 @@ Para que a recuperação de senha funcione corretamente, você precisa configura
 
 📖 **Documentação completa**: Veja `CONFIGURACAO_SUPABASE.md`
 
-### 2. Vercel (Frontend - produção)
+### 2. Vercel (Frontend - produção e preview)
 
-**No projeto do frontend (Vercel)** configure as variáveis:
-- `VITE_API_URL=https://meu-financeiro-backend.vercel.app`
+**No projeto do frontend (Vercel)** configure as variáveis para **Production** e **Preview**:
+- `VITE_API_URL=https://meu-financeiro-backend.vercel.app` (ou a URL real do backend)
 - `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` conforme o Supabase
 
-**Por quê?**: o frontend usa `VITE_API_URL` para decidir qual backend chamar em produção.
+**Por quê?**: o frontend usa `VITE_API_URL` no build para saber qual backend chamar; sem isso em Preview, o login em deploys de preview pode falhar. O backend já aceita origens `*.vercel.app` (incluindo previews).
 
 ### 3. Render.com (se ainda estiver em uso)
 
