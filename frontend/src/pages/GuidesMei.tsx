@@ -381,7 +381,7 @@ const getDefaultPlugNotasCompanyForm = (): PlugNotasCompanyForm => ({
 });
 
 const getPlugNotasCompanyValidationMessage = (form: PlugNotasCompanyForm) => {
-  if (!hasRequiredText(form.razaoSocial)) return 'Informe a razão social da empresa para configurar a PlugNotas.';
+  if (!hasRequiredText(form.razaoSocial)) return 'Informe a razão social da empresa para configurar a integração fiscal.';
   if (!hasRequiredText(form.logradouro)) return 'Informe o logradouro do endereço da empresa.';
   if (!hasRequiredText(form.numero)) return 'Informe o número do endereço da empresa.';
   if (!hasRequiredText(form.bairro)) return 'Informe o bairro do endereço da empresa.';
@@ -1225,7 +1225,7 @@ export default function GuidesMei() {
         || contribuinteDoc
       );
       if (cnpj.length !== 14) {
-        throw new Error('Não foi possível identificar um CNPJ válido para configurar a empresa na PlugNotas.');
+        throw new Error('Não foi possível identificar um CNPJ válido para configurar a empresa no sistema de emissão fiscal.');
       }
 
       const certificateResponse = await cadastrarPlugNotasCertificado({
@@ -1239,7 +1239,7 @@ export default function GuidesMei() {
       });
       const certificateId = String(certificateResponse.id || '').trim();
       if (!certificateId) {
-        throw new Error('A PlugNotas não retornou o ID do certificado.');
+        throw new Error('O sistema de emissão fiscal não retornou o ID do certificado.');
       }
 
       const companyPayload = buildPlugNotasEmpresaPayload({
@@ -1294,16 +1294,16 @@ export default function GuidesMei() {
       setCertificatePassword('');
       setCertificateSuccess(
         [
-          'Certificado enviado no MEI e configurado na PlugNotas.',
+          'Certificado enviado no MEI e configurado no sistema de emissão fiscal.',
           certificateResponse.message || null,
-          companyResponse.message || 'Empresa configurada na PlugNotas com sucesso.'
+          companyResponse.message || 'Empresa configurada no sistema de emissão fiscal com sucesso.'
         ].filter(Boolean).join(' ')
       );
     } catch (error) {
       const fallbackMessage = error instanceof Error ? error.message : 'Erro ao enviar certificado.';
       setCertificateError(
         uploadedToMei
-          ? `Certificado enviado no MEI, mas falhou a configuração automática da PlugNotas: ${fallbackMessage}`
+          ? `Certificado enviado no MEI, mas falhou a configuração automática da integração fiscal: ${fallbackMessage}`
           : fallbackMessage
       );
     } finally {
@@ -1824,7 +1824,7 @@ export default function GuidesMei() {
                   </p>
                   <div className="mt-3 admin-actions">
                     <span className="admin-badge-primary">{`${filteredNfseList.length} notas no filtro`}</span>
-                    <span className="admin-badge-neutral">Emissão com PlugNotas</span>
+                    <span className="admin-badge-neutral">Emissão com integração fiscal</span>
                   </div>
                 </button>
               ) : null}
@@ -2196,7 +2196,7 @@ export default function GuidesMei() {
             <div>
               <h2 className="admin-section-title">{`Emitir ${notaDocumentTypeLabel}`}</h2>
               <p className="admin-section-subtitle">
-                Preencha os dados fiscais para emissão via PlugNotas.
+                Preencha os dados fiscais para emissão pelo sistema integrado.
               </p>
             </div>
           </div>
@@ -2391,7 +2391,7 @@ export default function GuidesMei() {
             </div>
             <div className="md:col-span-2">
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Dica: se você já configurou a empresa na PlugNotas, os dados salvos serão usados como fallback no envio.
+                Dica: se você já configurou a empresa no sistema fiscal, os dados salvos serão usados como fallback no envio.
               </p>
             </div>
             <div>

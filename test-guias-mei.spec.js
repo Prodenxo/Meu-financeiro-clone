@@ -195,7 +195,7 @@ const { chromium } = require('@playwright/test');
     const checks = {
       dadosMinimos: false,
       botaoEnviar: false,
-      semConfiguracaoPlugNotas: false,
+      semMarcaPlugNotas: false,
       seletorTipoDocumento: false
     };
 
@@ -237,15 +237,15 @@ const { chromium } = require('@playwright/test');
       console.log('✗ Seletor multi-tipo de documento NÃO encontrado');
     }
 
-    // Verificar ausência de "Configuração PlugNotas (Opção B via API)"
-    if (!bodyText.includes('Configuração PlugNotas (Opção B via API)')) {
-      checks.semConfiguracaoPlugNotas = true;
-      console.log('✓ Texto "Configuração PlugNotas (Opção B via API)" NÃO está presente (correto)');
+    // Verificar ausência da marca "PlugNotas" em textos visíveis
+    if (!bodyText.includes('PlugNotas')) {
+      checks.semMarcaPlugNotas = true;
+      console.log('✓ Não há menções visíveis de "PlugNotas" na página');
     } else {
-      console.log('✗ Texto "Configuração PlugNotas (Opção B via API)" está presente (incorreto)');
+      console.log('✗ Ainda há menções visíveis de "PlugNotas" na página');
     }
 
-    if (checks.dadosMinimos && checks.botaoEnviar && checks.semConfiguracaoPlugNotas && checks.seletorTipoDocumento) {
+    if (checks.dadosMinimos && checks.botaoEnviar && checks.semMarcaPlugNotas && checks.seletorTipoDocumento) {
       results.step5.status = 'PASS';
     } else {
       results.step5.status = 'FAIL';
