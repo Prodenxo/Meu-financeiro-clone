@@ -24,10 +24,19 @@ const DEFAULT_CORS_ORIGINS = process.env.NODE_ENV === 'development'
   ? DEFAULT_DEV_CORS_ORIGINS
   : [DEFAULT_PROD_CORS_ORIGIN, ...DEFAULT_DEV_CORS_ORIGINS];
 
+/** Origens típicas do Expo Web para o app mobile em desenvolvimento no navegador. */
+const EXPO_WEB_ORIGINS = ['http://localhost:8081', 'http://localhost:19006'];
+
+const normalizeOrigin = (s) => (s || '').trim().replace(/\/$/, '');
+const baseOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(normalizeOrigin)
+  : DEFAULT_CORS_ORIGINS;
+const mergedCorsOrigin = [...new Set([...baseOrigins, ...EXPO_WEB_ORIGINS])].filter(Boolean).join(',');
+
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || '3333',
-  CORS_ORIGIN: process.env.CORS_ORIGIN || DEFAULT_CORS_ORIGINS.join(','),
+  CORS_ORIGIN: mergedCorsOrigin,
   SUPABASE_URL: required('SUPABASE_URL'),
   SUPABASE_ANON_KEY: required('SUPABASE_ANON_KEY'),
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
