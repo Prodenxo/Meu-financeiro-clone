@@ -18,6 +18,7 @@ router.post('/validate', requireAuth, requireMeiEnabled, controller.validateGuid
 router.get('/periods', requireAuth, requireMeiEnabled, controller.listPeriods);
 router.get('/periods-by-cnpj', requireAuth, requireMeiEnabled, controller.listPeriodsByCnpj);
 router.get('/parcelamentos', requireAuth, requireMeiEnabled, controller.getParcelamentos);
+router.get('/parcelamentos/:numero/pdf', requireAuth, requireMeiEnabled, controller.getParcelamentoPdf);
 router.get('/:id/download', requireAuth, requireMeiEnabled, controller.downloadGuide);
 
 export default router;

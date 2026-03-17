@@ -40,10 +40,13 @@ export interface ParcelamentoItem {
   dataPedido?: string;
   situacao?: string;
   dataSituacao?: string;
+  modalidade?: string;
 }
 
 export interface ParcelamentosResponse {
   parcelamentos: ParcelamentoItem[];
+  modalidadesConsultadas?: number;
+  resumoPorModalidade?: Record<string, number>;
 }
 
 export async function fetchParcelamentos(
@@ -126,4 +129,24 @@ export async function validateMeiGuide(
     cnpj,
     periodoApuracao
   });
+}
+
+export async function downloadParcelamentoPdf(
+  numero: string,
+  cnpj?: string,
+  modalidade?: string,
+  contribuinte?: { numero: string; tipo: number }
+): Promise<{ blob: Blob; filename: string | null }> {
+  const params: Record<string, string> = {};
+  if (cnpj) params.cnpj = cnpj;
+  if (modalidade) params.modalidade = modalidade;
+  if (contribuinte) {
+    params.contribuinteNumero = contribuinte.numero;
+    params.contribuinteTipo = String(contribuinte.tipo);
+  }
+  const query = new URLSearchParams(params);
+  return await apiClient.requestBlob(
+    `/mei-guide/parcelamentos/${encodeURIComponent(numero)}/pdf?${query.toString()}`,
+    { method: 'GET' }
+  );
 }

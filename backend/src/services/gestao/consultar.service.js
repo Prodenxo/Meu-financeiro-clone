@@ -44,7 +44,14 @@ const parseDados = (payload) => {
   }
 };
 
-const SERVICOS_SEM_DADOS = new Set(['PEDIDOSPARC163', 'PEDIDOSPARC203', 'PEDIDOSPARC213']);
+const SERVICOS_SEM_DADOS = new Set([
+  'PEDIDOSPARC163',
+  'PEDIDOSPARC173',
+  'PEDIDOSPARC193',
+  'PEDIDOSPARC203',
+  'PEDIDOSPARC213',
+  'PEDIDOSPARC233'
+]);
 
 /** Extrai mensagem de erro do corpo da resposta da SERPRO (mensagens, message, error). */
 const extractSerproErrorMessage = (rawBody, statusText) => {

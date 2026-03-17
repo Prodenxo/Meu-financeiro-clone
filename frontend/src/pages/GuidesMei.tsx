@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   downloadMeiGuide,
+  downloadParcelamentoPdf,
   fetchMeiCertificateStatus,
   fetchMeiPeriods,
   fetchMeiPeriodsByCnpj,
@@ -766,9 +767,12 @@ export default function GuidesMei() {
   const [nfseCatalogClientes, setNfseCatalogClientes] = useState<NfseCatalogCliente[]>([]);
   const [nfseCatalogProdutos, setNfseCatalogProdutos] = useState<NfseCatalogProduto[]>([]);
   const [parcelamentosList, setParcelamentosList] = useState<ParcelamentoItem[]>([]);
+  const [parcelamentosResumo, setParcelamentosResumo] = useState<{ modalidadesConsultadas?: number; resumoPorModalidade?: Record<string, number> }>({});
   const [parcelamentosLoading, setParcelamentosLoading] = useState(false);
   const [parcelamentosError, setParcelamentosError] = useState<string | null>(null);
   const [parcelamentosSearchDone, setParcelamentosSearchDone] = useState(false);
+  const [parcelamentoPdfLoadingNumero, setParcelamentoPdfLoadingNumero] = useState<string | null>(null);
+  const [parcelamentoPdfError, setParcelamentoPdfError] = useState<string | null>(null);
   const [selectedCatalogClienteId, setSelectedCatalogClienteId] = useState('');
   const [selectedCatalogProdutoId, setSelectedCatalogProdutoId] = useState('');
   const [nfseStatusFilter, setNfseStatusFilter] = useState('all');
@@ -1151,6 +1155,8 @@ export default function GuidesMei() {
 
   useEffect(() => {
     setParcelamentosSearchDone(false);
+    setParcelamentosResumo({});
+    setParcelamentoPdfError(null);
   }, [contribuinteDoc]);
 
   useEffect(() => {
@@ -3186,7 +3192,7 @@ export default function GuidesMei() {
               <div>
                 <h2 className="admin-section-title">Parcelamentos</h2>
                 <p className="admin-section-subtitle">
-                  Consulte os pedidos de parcelamento do MEI via SERPRO (PARCMEI-ESP).
+                  Consulte os pedidos de parcelamento (MEI e Simples Nacional) via SERPRO — todas as modalidades disponíveis.
                 </p>
               </div>
             </div>
@@ -3207,6 +3213,7 @@ export default function GuidesMei() {
                   type="button"
                   onClick={async () => {
                     setParcelamentosError(null);
+                    setParcelamentoPdfError(null);
                     setParcelamentosLoading(true);
                     try {
                       const cnpj = normalizedContribuinte || undefined;
@@ -3215,10 +3222,15 @@ export default function GuidesMei() {
                         : undefined;
                       const res = await fetchParcelamentos(cnpj, contribuinte);
                       setParcelamentosList(res.parcelamentos ?? []);
+                      setParcelamentosResumo({
+                        modalidadesConsultadas: res.modalidadesConsultadas,
+                        resumoPorModalidade: res.resumoPorModalidade
+                      });
                     } catch (e) {
                       const msg = e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : null);
                       setParcelamentosError(msg || 'Erro ao buscar parcelamentos.');
                       setParcelamentosList([]);
+                      setParcelamentosResumo({});
                     } finally {
                       setParcelamentosLoading(false);
                       setParcelamentosSearchDone(true);
@@ -3231,41 +3243,96 @@ export default function GuidesMei() {
                 </button>
               </div>
             </div>
+            {parcelamentoPdfError && (
+              <div className="admin-alert-danger mt-3">
+                {parcelamentoPdfError}
+              </div>
+            )}
             {parcelamentosError && (
               <div className="admin-alert-danger mt-3">
                 {parcelamentosError}
               </div>
             )}
             {parcelamentosList.length > 0 ? (
-              <div className="mt-4 overflow-x-auto">
+              <div className="mt-4">
+                <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+                  Foram consultadas {parcelamentosResumo.modalidadesConsultadas ?? 6} modalidades (Simples Nacional e MEI). Encontrados {parcelamentosList.length} parcelamento{parcelamentosList.length !== 1 ? 's' : ''}.
+                  {parcelamentosResumo.resumoPorModalidade && Object.keys(parcelamentosResumo.resumoPorModalidade).length > 0 && (
+                    <span className="ml-1">
+                      {' '}
+                      Por modalidade: {Object.entries(parcelamentosResumo.resumoPorModalidade)
+                        .map(([mod, count]) => `${mod}: ${count}`)
+                        .join(', ')}.
+                    </span>
+                  )}
+                </p>
+                <div className="overflow-x-auto">
                 <table className="admin-table w-full">
                   <thead className="admin-table-head">
                     <tr>
+                      <th className="admin-table-cell">Modalidade</th>
                       <th className="admin-table-cell">Número</th>
                       <th className="admin-table-cell">Data do pedido</th>
                       <th className="admin-table-cell">Situação</th>
                       <th className="admin-table-cell">Data da situação</th>
+                      <th className="admin-table-cell">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {parcelamentosList.map((p, idx) => (
-                      <tr key={p.numero ?? idx} className="admin-table-row">
-                        <td className="admin-table-cell">{p.numero ?? '—'}</td>
-                        <td className="admin-table-cell">
-                          {p.dataPedido
-                            ? `${p.dataPedido.slice(6, 8)}/${p.dataPedido.slice(4, 6)}/${p.dataPedido.slice(0, 4)}`
-                            : '—'}
-                        </td>
-                        <td className="admin-table-cell">{p.situacao ?? '—'}</td>
-                        <td className="admin-table-cell">
-                          {p.dataSituacao
-                            ? `${p.dataSituacao.slice(6, 8)}/${p.dataSituacao.slice(4, 6)}/${p.dataSituacao.slice(0, 4)}`
-                            : '—'}
-                        </td>
-                      </tr>
-                    ))}
+                    {parcelamentosList.map((p, idx) => {
+                      const contribuinteParcel = normalizedContribuinte && contribuinteTipo != null
+                        ? { numero: normalizedContribuinte, tipo: contribuinteTipo }
+                        : undefined;
+                      const isLoadingPdf = parcelamentoPdfLoadingNumero === (p.numero ?? '');
+                      return (
+                        <tr key={`${p.modalidade ?? ''}-${p.numero ?? idx}`} className="admin-table-row">
+                          <td className="admin-table-cell">{p.modalidade ?? '—'}</td>
+                          <td className="admin-table-cell">{p.numero ?? '—'}</td>
+                          <td className="admin-table-cell">
+                            {p.dataPedido
+                              ? `${p.dataPedido.slice(6, 8)}/${p.dataPedido.slice(4, 6)}/${p.dataPedido.slice(0, 4)}`
+                              : '—'}
+                          </td>
+                          <td className="admin-table-cell">{p.situacao ?? '—'}</td>
+                          <td className="admin-table-cell">
+                            {p.dataSituacao
+                              ? `${p.dataSituacao.slice(6, 8)}/${p.dataSituacao.slice(4, 6)}/${p.dataSituacao.slice(0, 4)}`
+                              : '—'}
+                          </td>
+                          <td className="admin-table-cell">
+                            <button
+                              type="button"
+                              disabled={isLoadingPdf || !p.numero}
+                              className="planner-button-primary-compact text-sm"
+                              onClick={async () => {
+                                if (!p.numero) return;
+                                setParcelamentoPdfError(null);
+                                setParcelamentoPdfLoadingNumero(p.numero);
+                                try {
+                                  const { blob, filename } = await downloadParcelamentoPdf(
+                                    p.numero,
+                                    normalizedContribuinte || undefined,
+                                    p.modalidade,
+                                    contribuinteParcel
+                                  );
+                                  triggerFileDownload(blob, filename || `parcelamento-${p.numero}.pdf`);
+                                } catch (e) {
+                                  const msg = e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : null);
+                                  setParcelamentoPdfError(msg || 'PDF não disponível para este parcelamento.');
+                                } finally {
+                                  setParcelamentoPdfLoadingNumero(null);
+                                }
+                              }}
+                            >
+                              {isLoadingPdf ? 'Baixando...' : 'Baixar PDF'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+                </div>
               </div>
             ) : !parcelamentosLoading && !parcelamentosError ? (
               parcelamentosSearchDone ? (
