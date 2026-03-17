@@ -118,3 +118,19 @@ export const listPeriodsByCnpj = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const getParcelamentos = async (req, res, next) => {
+  try {
+    const contribuinte = req.query?.contribuinteNumero ? {
+      numero: req.query.contribuinteNumero,
+      tipo: req.query.contribuinteTipo
+    } : null;
+    const data = await meiGuideService.listParcelamentos(req.user.id, {
+      cnpj: req.query?.cnpj,
+      contribuinte
+    });
+    return sendSuccess(res, data, 'Parcelamentos MEI listados');
+  } catch (error) {
+    return next(error);
+  }
+};

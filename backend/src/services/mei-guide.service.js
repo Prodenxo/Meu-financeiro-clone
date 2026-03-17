@@ -323,7 +323,6 @@ const tokenCache = new Map();
 const procuradorTokenCache = new Map();
 const certInfoCache = new Map();
 const userCertCache = new Map();
-const USER_CERT_TTL_MS = 2 * 60 * 60 * 1000;
 
 const getUserCacheKey = (userId) => `user:${userId}`;
 
@@ -332,20 +331,13 @@ const getUserCert = (userId) => {
   const cacheKey = getUserCacheKey(userId);
   const cached = userCertCache.get(cacheKey);
   if (!cached) return null;
-  if (cached.expiresAt && cached.expiresAt <= Date.now()) {
-    userCertCache.delete(cacheKey);
-    return null;
-  }
   return { ...cached, cacheKey };
 };
 
 const setUserCert = (userId, cert) => {
   if (!userId || !cert?.pfx) return null;
   const cacheKey = getUserCacheKey(userId);
-  userCertCache.set(cacheKey, {
-    ...cert,
-    expiresAt: Date.now() + USER_CERT_TTL_MS
-  });
+  userCertCache.set(cacheKey, { ...cert });
   return cacheKey;
 };
 
@@ -1434,6 +1426,52 @@ export const listPeriodsByCnpj = async (userId, payload) => {
     cnpj: cnpjNumerico,
     useCertificate: false
   });
+};
+
+/** idSistema/idServico para consulta de pedidos de parcelamento MEI (PARCMEI-ESP). */
+const PARCELAMENTO_MEI_SISTEMA = 'PARCMEI_ESP';
+const PARCELAMENTO_MEI_SERVICO = 'PEDIDOSPARC213';
+
+const normalizeParcelamentoItem = (item) => {
+  if (!item || typeof item !== 'object') return null;
+  const numero = item.numero ?? item.numeroParcelamento ?? item.numero_parcelamento;
+  const dataPedido = item.dataPedido ?? item.data_pedido ?? item.dataPedidoPedido;
+  const situacao = item.situacao ?? item.situacaoParcelamento;
+  const dataSituacao = item.dataSituacao ?? item.data_situacao ?? item.dataSituacaoParcelamento;
+  return {
+    numero: numero != null ? String(numero) : undefined,
+    dataPedido: dataPedido != null ? String(dataPedido) : undefined,
+    situacao: situacao != null ? String(situacao) : undefined,
+    dataSituacao: dataSituacao != null ? String(dataSituacao) : undefined
+  };
+};
+
+export const listParcelamentos = async (userId, payload) => {
+  ensureConfigured();
+  const { cnpj, contribuinte } = payload || {};
+  const docFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
+  if (!docFromRequest) {
+    await ensureClientCertificate(userId);
+  }
+  const contrib = resolveContribuinte(userId, contribuinte, cnpj);
+  const contribNumero = normalizeDoc(contrib.numero);
+  const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || contrib.numero);
+  const autorPedidoNumero = contribNumero;
+
+  const result = await consultarServico({
+    contratanteNumero,
+    autorPedidoNumero,
+    contribuinteNumero: contribNumero,
+    idSistema: PARCELAMENTO_MEI_SISTEMA,
+    idServico: PARCELAMENTO_MEI_SERVICO,
+    dados: {}
+  });
+
+  const raw = result?.dados;
+  const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.lista) ? raw.lista : (raw && raw.parcelamentos ? raw.parcelamentos : []));
+  const parcelamentos = list.map(normalizeParcelamentoItem).filter(Boolean);
+
+  return { parcelamentos };
 };
 
 export const validateGuide = async (userId, payload) => {

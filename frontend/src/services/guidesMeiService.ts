@@ -35,6 +35,31 @@ export interface MeiValidationResult {
   message?: string | null;
 }
 
+export interface ParcelamentoItem {
+  numero?: string;
+  dataPedido?: string;
+  situacao?: string;
+  dataSituacao?: string;
+}
+
+export interface ParcelamentosResponse {
+  parcelamentos: ParcelamentoItem[];
+}
+
+export async function fetchParcelamentos(
+  cnpj?: string,
+  contribuinte?: { numero: string; tipo: number }
+): Promise<ParcelamentosResponse> {
+  const params: Record<string, string> = {};
+  if (cnpj) params.cnpj = cnpj;
+  if (contribuinte) {
+    params.contribuinteNumero = contribuinte.numero;
+    params.contribuinteTipo = String(contribuinte.tipo);
+  }
+  const query = new URLSearchParams(params);
+  return await apiClient.get<ParcelamentosResponse>(`/mei-guide/parcelamentos?${query.toString()}`);
+}
+
 export async function createMeiGuide(input: CreateMeiGuideInput): Promise<MeiGuideResponse> {
   return await apiClient.post<MeiGuideResponse>('/mei-guide', input);
 }

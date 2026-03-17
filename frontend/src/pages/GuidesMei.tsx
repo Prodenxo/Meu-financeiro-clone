@@ -4,10 +4,12 @@ import {
   fetchMeiCertificateStatus,
   fetchMeiPeriods,
   fetchMeiPeriodsByCnpj,
+  fetchParcelamentos,
   removeMeiCertificate,
   uploadMeiCertificate,
   validateMeiGuide,
-  type MeiPeriod
+  type MeiPeriod,
+  type ParcelamentoItem
 } from '../services/guidesMeiService';
 import {
   arquivarNfse,
@@ -198,7 +200,7 @@ const parseDecimalInput = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 type PlugNotasRegimeTributario = '1' | '2' | '3';
-type GuidesMeiWorkspace = 'overview' | 'das' | 'nfse';
+type GuidesMeiWorkspace = 'overview' | 'das' | 'nfse' | 'parcelamentos';
 type NotaDocumentType = 'NFSE' | 'NFE' | 'NFCE';
 
 type NfeItemForm = {
@@ -763,6 +765,9 @@ export default function GuidesMei() {
   const [nfseCatalogError, setNfseCatalogError] = useState<string | null>(null);
   const [nfseCatalogClientes, setNfseCatalogClientes] = useState<NfseCatalogCliente[]>([]);
   const [nfseCatalogProdutos, setNfseCatalogProdutos] = useState<NfseCatalogProduto[]>([]);
+  const [parcelamentosList, setParcelamentosList] = useState<ParcelamentoItem[]>([]);
+  const [parcelamentosLoading, setParcelamentosLoading] = useState(false);
+  const [parcelamentosError, setParcelamentosError] = useState<string | null>(null);
   const [selectedCatalogClienteId, setSelectedCatalogClienteId] = useState('');
   const [selectedCatalogProdutoId, setSelectedCatalogProdutoId] = useState('');
   const [nfseStatusFilter, setNfseStatusFilter] = useState('all');
@@ -1669,8 +1674,15 @@ export default function GuidesMei() {
       });
     }
 
+    tabs.push({
+      id: 'parcelamentos',
+      label: 'Parcelamentos',
+      description: 'Consulta de pedidos de parcelamento',
+      badge: parcelamentosList.length > 0 ? `${parcelamentosList.length} pedidos` : 'Consulta SERPRO'
+    });
+
     return tabs;
-  }, [canViewNfse, dasPendentesCount, filteredNfseList.length, meiPeriods.length]);
+  }, [canViewNfse, dasPendentesCount, filteredNfseList.length, meiPeriods.length, parcelamentosList.length]);
 
   const handleDownloadClick = async () => {
     if (isDownloadingGuide) return;
@@ -1760,7 +1772,7 @@ export default function GuidesMei() {
             </div>
           </div>
           <div className="admin-toolbar space-y-3">
-            <div className={`grid gap-2 ${canViewNfse ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+            <div className={`grid gap-2 ${canViewNfse ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
               {workspaceTabs.map((tab) => (
                 <button
                   key={tab.id}
@@ -1828,6 +1840,22 @@ export default function GuidesMei() {
                   </div>
                 </button>
               ) : null}
+
+              <button
+                type="button"
+                onClick={() => setActiveWorkspace('parcelamentos')}
+                className="admin-toolbar text-left transition hover:border-slate-300/80 dark:hover:border-slate-700/80"
+              >
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Parcelamentos</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Consulte pedidos de parcelamento do MEI via SERPRO.
+                </p>
+                <div className="mt-3 admin-actions">
+                  <span className="admin-badge-neutral">
+                    {parcelamentosList.length > 0 ? `${parcelamentosList.length} pedidos` : 'Consulta SERPRO'}
+                  </span>
+                </div>
+              </button>
             </div>
           </section>
         ) : null}
@@ -1835,6 +1863,15 @@ export default function GuidesMei() {
         {activeWorkspace === 'das' ? (
           <>
             <section className="admin-section-card">
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={() => setActiveWorkspace('overview')}
+              className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 underline"
+            >
+              Voltar ao Meu MEI
+            </button>
+          </div>
           <div className="admin-section-header">
             <div>
               <h2 className="admin-section-title">Certificado digital</h2>
@@ -1843,7 +1880,7 @@ export default function GuidesMei() {
 
           {hasUserCertificate && (
             <div className="admin-alert-success">
-              Certificado em uso. Ele expira após algumas horas ou ao reiniciar o servidor.
+              Certificado em uso. Ele permanece ativo até você removê-lo ou o servidor ser reiniciado.
             </div>
           )}
 
@@ -2192,6 +2229,15 @@ export default function GuidesMei() {
         {canViewNfse && activeWorkspace === 'nfse' ? (
           <>
             <section className="admin-section-card">
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={() => setActiveWorkspace('overview')}
+              className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 underline"
+            >
+              Voltar ao Meu MEI
+            </button>
+          </div>
           <div className="admin-section-header">
             <div>
               <h2 className="admin-section-title">{`Emitir ${notaDocumentTypeLabel}`}</h2>
@@ -3118,6 +3164,109 @@ export default function GuidesMei() {
           )}
         </section>
           </>
+        ) : null}
+
+        {activeWorkspace === 'parcelamentos' ? (
+          <section className="admin-section-card">
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={() => setActiveWorkspace('overview')}
+                className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 underline"
+              >
+                Voltar ao Meu MEI
+              </button>
+            </div>
+            <div className="admin-section-header">
+              <div>
+                <h2 className="admin-section-title">Parcelamentos</h2>
+                <p className="admin-section-subtitle">
+                  Consulte os pedidos de parcelamento do MEI via SERPRO (PARCMEI-ESP).
+                </p>
+              </div>
+            </div>
+            <div className="admin-toolbar grid gap-3 lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">CNPJ do MEI</label>
+                <input
+                  className="planner-input-compact w-full"
+                  type="text"
+                  inputMode="numeric"
+                  value={contribuinteDoc}
+                  onChange={(e) => setContribuinteDoc(formatDocument(e.target.value))}
+                  placeholder="00.000.000/0001-00"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setParcelamentosError(null);
+                    setParcelamentosLoading(true);
+                    try {
+                      const cnpj = normalizedContribuinte || undefined;
+                      const contribuinte = cnpj && contribuinteTipo != null
+                        ? { numero: cnpj, tipo: contribuinteTipo }
+                        : undefined;
+                      const res = await fetchParcelamentos(cnpj, contribuinte);
+                      setParcelamentosList(res.parcelamentos ?? []);
+                    } catch (e) {
+                      const msg = e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : null);
+                      setParcelamentosError(msg || 'Erro ao buscar parcelamentos.');
+                      setParcelamentosList([]);
+                    } finally {
+                      setParcelamentosLoading(false);
+                    }
+                  }}
+                  disabled={parcelamentosLoading || (normalizedContribuinte.length !== 14 && !hasUserCertificate)}
+                  className="planner-button-primary-compact"
+                >
+                  {parcelamentosLoading ? 'Buscando...' : 'Buscar parcelamentos'}
+                </button>
+              </div>
+            </div>
+            {parcelamentosError && (
+              <div className="admin-alert-danger mt-3">
+                {parcelamentosError}
+              </div>
+            )}
+            {parcelamentosList.length > 0 ? (
+              <div className="mt-4 overflow-x-auto">
+                <table className="admin-table w-full">
+                  <thead className="admin-table-head">
+                    <tr>
+                      <th className="admin-table-cell">Número</th>
+                      <th className="admin-table-cell">Data do pedido</th>
+                      <th className="admin-table-cell">Situação</th>
+                      <th className="admin-table-cell">Data da situação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parcelamentosList.map((p, idx) => (
+                      <tr key={p.numero ?? idx} className="admin-table-row">
+                        <td className="admin-table-cell">{p.numero ?? '—'}</td>
+                        <td className="admin-table-cell">
+                          {p.dataPedido
+                            ? `${p.dataPedido.slice(6, 8)}/${p.dataPedido.slice(4, 6)}/${p.dataPedido.slice(0, 4)}`
+                            : '—'}
+                        </td>
+                        <td className="admin-table-cell">{p.situacao ?? '—'}</td>
+                        <td className="admin-table-cell">
+                          {p.dataSituacao
+                            ? `${p.dataSituacao.slice(6, 8)}/${p.dataSituacao.slice(4, 6)}/${p.dataSituacao.slice(0, 4)}`
+                            : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : !parcelamentosLoading && !parcelamentosError ? (
+              <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+                Informe o CNPJ do MEI e clique em Buscar parcelamentos para consultar.
+              </p>
+            ) : null}
+          </section>
         ) : null}
       </div>
     </>
