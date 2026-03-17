@@ -1428,9 +1428,9 @@ export const listPeriodsByCnpj = async (userId, payload) => {
   });
 };
 
-/** idSistema/idServico para consulta de pedidos de parcelamento MEI (PARCMEI-ESP). */
-const PARCELAMENTO_MEI_SISTEMA = 'PARCMEI_ESP';
-const PARCELAMENTO_MEI_SERVICO = 'PEDIDOSPARC213';
+/** idSistema/idServico para consulta de pedidos de parcelamento MEI (PARCMEI Ordinário). Conforme doc SERPRO Integra Contador - Consultar Pedidos de Parcelamento. */
+const PARCELAMENTO_MEI_SISTEMA = 'PARCMEI';
+const PARCELAMENTO_MEI_SERVICO = 'PEDIDOSPARC203';
 
 const normalizeParcelamentoItem = (item) => {
   if (!item || typeof item !== 'object') return null;

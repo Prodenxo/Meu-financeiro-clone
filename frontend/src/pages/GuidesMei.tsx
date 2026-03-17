@@ -768,6 +768,7 @@ export default function GuidesMei() {
   const [parcelamentosList, setParcelamentosList] = useState<ParcelamentoItem[]>([]);
   const [parcelamentosLoading, setParcelamentosLoading] = useState(false);
   const [parcelamentosError, setParcelamentosError] = useState<string | null>(null);
+  const [parcelamentosSearchDone, setParcelamentosSearchDone] = useState(false);
   const [selectedCatalogClienteId, setSelectedCatalogClienteId] = useState('');
   const [selectedCatalogProdutoId, setSelectedCatalogProdutoId] = useState('');
   const [nfseStatusFilter, setNfseStatusFilter] = useState('all');
@@ -1147,6 +1148,10 @@ export default function GuidesMei() {
         : { ...current, emitenteCpfCnpj: formatted }
     ));
   }, [normalizedContribuinte]);
+
+  useEffect(() => {
+    setParcelamentosSearchDone(false);
+  }, [contribuinteDoc]);
 
   useEffect(() => {
     setPlugNotasCompanyForm((current) => {
@@ -3216,6 +3221,7 @@ export default function GuidesMei() {
                       setParcelamentosList([]);
                     } finally {
                       setParcelamentosLoading(false);
+                      setParcelamentosSearchDone(true);
                     }
                   }}
                   disabled={parcelamentosLoading || (normalizedContribuinte.length !== 14 && !hasUserCertificate)}
@@ -3262,9 +3268,15 @@ export default function GuidesMei() {
                 </table>
               </div>
             ) : !parcelamentosLoading && !parcelamentosError ? (
-              <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-                Informe o CNPJ do MEI e clique em Buscar parcelamentos para consultar.
-              </p>
+              parcelamentosSearchDone ? (
+                <div className="admin-empty-state mt-4">
+                  Nenhum parcelamento encontrado para este CNPJ.
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+                  Informe o CNPJ do MEI e clique em Buscar parcelamentos para consultar.
+                </p>
+              )
             ) : null}
           </section>
         ) : null}
