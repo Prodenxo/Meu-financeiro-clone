@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { getSession } from '../services/authService';
 import { apiClient } from '../services/apiClient';
+import AuthLayout, { AuthLayoutBackToLogin } from '../components/AuthLayout';
+import ButtonSpinner from '../components/ButtonSpinner';
 
 interface RecoverySession {
   access_token: string;
@@ -159,60 +161,45 @@ export default function ResetPassword() {
 
   if (checkingSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
-        <div className="planner-card px-10 py-12">
-          <p className="text-slate-600 dark:text-slate-300">Verificando link...</p>
-        </div>
-      </div>
+      <AuthLayout title="Redefinir senha" showIllustration={false} maxWidth="md">
+        <p className="text-slate-600 dark:text-slate-300">Verificando link...</p>
+      </AuthLayout>
     );
   }
 
   if (!isValidSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
-        <div className="flex flex-col justify-center planner-card w-full max-w-md px-10 py-12">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 text-center">Link inválido</h2>
-            <p className="text-slate-600 dark:text-slate-300 text-center mt-2">
-              O link de recuperação é inválido ou expirou
-            </p>
+      <AuthLayout
+        title="Link inválido"
+        subtitle="O link de recuperação é inválido ou expirou"
+        showIllustration={false}
+        maxWidth="md"
+        footer={<AuthLayoutBackToLogin />}
+      >
+        {error && (
+          <div className="admin-alert admin-alert-danger px-4 py-3 rounded mb-4">
+            {error}
           </div>
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 dark:bg-red-950 dark:border-red-900 dark:text-red-200 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
-          )}
-          <button
-            onClick={() => navigate('/forgot-password')}
-            className="w-full planner-button"
-          >
-            Solicitar novo link
-          </button>
-          <div className="mt-4 text-center">
-            <button
-              onClick={() => navigate('/login')}
-              className="text-sm text-blue-700 dark:text-blue-300 hover:underline"
-            >
-              Voltar para o login
-            </button>
-          </div>
-        </div>
-      </div>
+        )}
+        <button
+          onClick={() => navigate('/forgot-password')}
+          className="w-full planner-button"
+        >
+          Solicitar novo link
+        </button>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
-      {/* Formulário */}
-      <div className="flex flex-col justify-center planner-card w-full max-w-md px-10 py-12">
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 text-center">Redefinir senha</h2>
-          <p className="text-slate-600 dark:text-slate-300 text-center mt-2">
-            Digite sua nova senha abaixo
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
+    <AuthLayout
+      title="Redefinir senha"
+      subtitle="Digite sua nova senha abaixo"
+      showIllustration={false}
+      maxWidth="md"
+      footer={<AuthLayoutBackToLogin />}
+    >
+      <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Nova Senha</label>
             <div className="relative">
@@ -280,7 +267,7 @@ export default function ResetPassword() {
           </div>
 
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 dark:bg-red-950 dark:border-red-900 dark:text-red-200 px-4 py-3 rounded">
+            <div className="admin-alert admin-alert-danger px-4 py-3 rounded">
               {error}
             </div>
           )}
@@ -288,21 +275,18 @@ export default function ResetPassword() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full planner-button disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full planner-button disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
           >
-            {loading ? 'Redefinindo...' : 'Redefinir senha'}
+            {loading ? (
+              <>
+                <ButtonSpinner size={18} />
+                Redefinindo...
+              </>
+            ) : (
+              'Redefinir senha'
+            )}
           </button>
         </form>
-
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => navigate('/login')}
-            className="text-sm text-blue-700 dark:text-blue-300 hover:underline"
-          >
-            Voltar para o login
-          </button>
-        </div>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }

@@ -4,8 +4,12 @@ import { useTransactionStore } from '../store/transactionStore';
 import { useAuthStore } from '../store/authStore';
 import { fetchCategoriesByType } from '../services/categoryService';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Download, PlusCircle, Filter } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { AlertTriangle, Download, PlusCircle, Filter, List } from 'lucide-react';
+import { toast } from '../lib/toast';
+import PageShell from '../components/PageShell';
+import PageTitle from '../components/PageTitle';
+import EmptyState from '../components/EmptyState';
+import ButtonSpinner from '../components/ButtonSpinner';
 
 const meses = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -564,21 +568,47 @@ function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, load
   error?: string | null,
   loading?: boolean
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open || !transacao) return;
+    const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
+      'button[type="button"]:not([disabled]), [href], input, select, textarea, button:not([disabled])'
+    );
+    firstFocusable?.focus();
+  }, [open, transacao]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    if (open) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [open, onClose]);
+
   if (!open || !transacao) return null;
   const tipoLabel = transacao.tipo === 'saida' ? 'saída' : transacao.tipo;
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
       onClick={onClose}
+      role="presentation"
     >
       <div
-        className="planner-card p-8 w-full max-w-md relative"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="excluir-transacao-title"
+        className="planner-card p-8 w-full max-w-md relative focus-ring"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.key === 'Escape' && onClose()}
       >
         <button
           type="button"
           aria-label="Fechar modal"
-          className="absolute top-3 right-3 text-gray-400 dark:text-gray-300"
+          className="absolute top-3 right-3 text-gray-400 dark:text-gray-300 focus-ring rounded"
           onClick={onClose}
         >
           ×
@@ -588,7 +618,7 @@ function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, load
             <AlertTriangle size={20} />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-red-600 dark:text-red-400">Confirmar Exclusão</h2>
+            <h2 id="excluir-transacao-title" className="text-xl font-bold text-red-600 dark:text-red-400">Confirmar Exclusão</h2>
           </div>
         </div>
         {error ? (
@@ -620,11 +650,18 @@ function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, load
         </div>
         <div className="flex gap-3">
           <button
-            className="flex-1 planner-button bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 planner-button bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
             disabled={!!loading}
             onClick={() => onDelete(transacao.id)}
           >
-            {loading ? 'Excluindo...' : 'Sim, excluir'}
+            {loading ? (
+              <>
+                <ButtonSpinner size={18} />
+                Excluindo...
+              </>
+            ) : (
+              'Sim, excluir'
+            )}
           </button>
           <button
             type="button"
@@ -1101,10 +1138,12 @@ export default function Transactions() {
         error={deleteError}
         loading={deletingTransaction}
       />
-      
+
+      <PageShell>
+      <PageTitle>Transações</PageTitle>
+
       {/* Header e busca - Mobile */}
       <div className="mb-4 md:mb-6">
-        <h2 className="text-xl md:text-2xl font-bold mb-1 dark:text-white">Transações</h2>
         <div className="relative mb-4">
           <input
             type="text"
@@ -1438,9 +1477,21 @@ export default function Transactions() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              Nenhuma transação encontrada
-            </div>
+            <EmptyState
+              icon={List}
+              title="Nenhuma transação encontrada"
+              description="Adicione sua primeira transação para acompanhar receitas e despesas."
+              action={
+                <button
+                  type="button"
+                  className="planner-button inline-flex items-center gap-2"
+                  onClick={() => { setSaveError(null); setModalOpen(true); }}
+                >
+                  <PlusCircle size={18} />
+                  Nova transação
+                </button>
+              }
+            />
           )}
         </div>
       </div>
@@ -1450,11 +1501,13 @@ export default function Transactions() {
         className="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-blue-600 text-white rounded-full shadow-soft flex items-center justify-center z-40 hover:bg-blue-500 transition"
         onClick={() => { setSaveError(null); setModalOpen(true); }}
         title="Nova Transação"
+        aria-label="Nova transação"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
       </button>
+      </PageShell>
     </>
   );
 }
