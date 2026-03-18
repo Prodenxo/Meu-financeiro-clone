@@ -11,7 +11,8 @@ import {
   saveCertificateDocument,
   loadCertificate,
   deleteCertificate,
-  getCertificateDocument
+  getCertificateDocument,
+  getCertificateValidity
 } from './mei-certificate-store.js';
 import {
   isCompetenciaPaid,
@@ -191,6 +192,16 @@ const extractDocFromSubjectAltName = (cert) => {
   return extractByOid(SAN_OID_CNPJ, 14) || extractByOid(SAN_OID_CPF, 11);
 };
 
+const toIsoOrNull = (value) => {
+  if (value == null) return null;
+  try {
+    const d = value instanceof Date ? value : new Date(value);
+    return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+  } catch {
+    return null;
+  }
+};
+
 const extractCertInfo = (cert) => {
   const subjectAttrs = cert.subject?.attributes || [];
   const subjectValues = subjectAttrs
@@ -205,6 +216,10 @@ const extractCertInfo = (cert) => {
   const doc = cnpjFromSan || cnCnpj || cnpjFromSubject[0] || null;
   const docSource = cnpjFromSan ? 'san' : (cnCnpj ? 'cn' : (cnpjFromSubject[0] ? 'subject' : null));
 
+  const validity = cert.validity;
+  const validFrom = validity ? toIsoOrNull(validity.notBefore) : null;
+  const validTo = validity ? toIsoOrNull(validity.notAfter) : null;
+
   return {
     doc,
     docSource,
@@ -212,7 +227,9 @@ const extractCertInfo = (cert) => {
     cnpjFromSubject,
     cnpjFromCN: cnCnpj,
     subject: subjectAttrs,
-    serialNumber: cert.serialNumber
+    serialNumber: cert.serialNumber,
+    validFrom,
+    validTo
   };
 };
 
@@ -1078,7 +1095,9 @@ export const uploadCertificate = async (userId, payload) => {
         pfxBase64: file.buffer.toString('base64'),
         passphraseEnc,
         passphraseIv,
-        certDocument
+        certDocument,
+        certValidFrom: certInfo?.validFrom ?? null,
+        certValidTo: certInfo?.validTo ?? null
       });
     } catch (err) {
       throw badRequest(err?.message || 'Falha ao salvar certificado');
@@ -1110,18 +1129,34 @@ export const removeCertificate = async (userId) => {
 
 export const getCertificateStatus = async (userId) => {
   await ensureUserCertLoaded(userId);
-  const hasCert = Boolean(getUserCert(userId));
+  const userCert = getUserCert(userId);
+  const hasCert = Boolean(userCert);
   const docFromCache = getUserCertDocument(userId);
   let docFromDb = null;
+  let certValidFromDb = null;
+  let certValidToDb = null;
   try {
     docFromDb = await getCertificateDocument(userId);
   } catch {
     docFromDb = null;
   }
+  try {
+    const meta = await getCertificateValidity(userId);
+    if (meta) {
+      certValidFromDb = meta.certValidFrom ?? null;
+      certValidToDb = meta.certValidTo ?? null;
+    }
+  } catch {
+    // Colunas cert_valid_* podem não existir antes da migration
+  }
+  const certValidFrom = userCert?.certInfo?.validFrom ?? certValidFromDb ?? null;
+  const certValidTo = userCert?.certInfo?.validTo ?? certValidToDb ?? null;
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
-    documento: docFromCache || docFromDb || null
+    documento: docFromCache || docFromDb || null,
+    certValidFrom: certValidFrom || null,
+    certValidTo: certValidTo || null
   };
 };
 

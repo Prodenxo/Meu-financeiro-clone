@@ -28,6 +28,8 @@ export interface MeiCertificateStatus {
   hasUserCertificate: boolean;
   hasEnvCertificate: boolean;
   documento?: string | null;
+  certValidFrom?: string | null;
+  certValidTo?: string | null;
 }
 
 export interface MeiValidationResult {

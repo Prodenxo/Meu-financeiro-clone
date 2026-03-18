@@ -709,6 +709,8 @@ export default function GuidesMei() {
   const [isRemovingCert, setIsRemovingCert] = useState(false);
   const [hasUserCertificate, setHasUserCertificate] = useState(false);
   const [hasServerCertificate, setHasServerCertificate] = useState(false);
+  const [certValidFrom, setCertValidFrom] = useState<string | null>(null);
+  const [certValidTo, setCertValidTo] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [validationSuccess, setValidationSuccess] = useState<string | null>(null);
@@ -824,10 +826,14 @@ export default function GuidesMei() {
       const status = await fetchMeiCertificateStatus();
       setHasUserCertificate(Boolean(status.hasUserCertificate));
       setHasServerCertificate(Boolean(status.hasEnvCertificate));
+      setCertValidFrom(status.certValidFrom ?? null);
+      setCertValidTo(status.certValidTo ?? null);
       applyDocumento(status.documento);
     } catch {
       setHasUserCertificate(false);
       setHasServerCertificate(false);
+      setCertValidFrom(null);
+      setCertValidTo(null);
     }
   }, [applyDocumento]);
 
@@ -1769,6 +1775,15 @@ export default function GuidesMei() {
             <div className="admin-stat-card">
               <p className="admin-stat-label">Status do certificado</p>
               <p className="admin-stat-value text-base md:text-lg">{certificateScopeLabel}</p>
+              {hasUserCertificate && (certValidFrom || certValidTo) && (
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {certValidFrom && certValidTo
+                    ? `Válido de ${new Date(certValidFrom).toLocaleDateString('pt-BR')} até ${new Date(certValidTo).toLocaleDateString('pt-BR')}`
+                    : certValidTo
+                      ? `Válido até ${new Date(certValidTo).toLocaleDateString('pt-BR')}`
+                      : null}
+                </p>
+              )}
             </div>
           </div>
         </section>

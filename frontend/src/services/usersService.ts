@@ -19,6 +19,7 @@ export interface ManagedUser {
   empresaName?: string | null;
   status?: boolean | null;
   mei?: boolean | null;
+  expiresAt?: string | null;
 }
 
 export interface EmpresaOption {
@@ -66,7 +67,14 @@ export async function updateEmpresaLimits(empresaId: string, input: EmpresaUpdat
 
 export async function updateUser(
   userId: string,
-  input: { role?: string; empresaId?: string; displayName?: string; phone?: string; mei?: boolean }
+  input: {
+    role?: string;
+    empresaId?: string;
+    displayName?: string;
+    phone?: string;
+    mei?: boolean;
+    expiresAt?: string | null;
+  }
 ) {
   const sanitizedRole = sanitizeUserRole(input.role);
   const payload = {
@@ -136,6 +144,7 @@ export async function createUser(input: {
   phone?: string;
   role?: 'admin' | 'usuario' | 'outsider';
   empresaId?: string;
+  expiresAt?: string | null;
 }) {
   const sanitizedRole = sanitizeUserRole(input.role);
   const payload = {

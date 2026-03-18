@@ -45,6 +45,7 @@ export default function ManageUsers() {
   const [editDisplayName, setEditDisplayName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editMei, setEditMei] = useState(true);
+  const [editExpiresAt, setEditExpiresAt] = useState('');
   const [lastPasswords, setLastPasswords] = useState<Record<string, string>>({});
   const [userQuery, setUserQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -358,6 +359,7 @@ export default function ManageUsers() {
     setEditDisplayName(user.displayName || '');
     setEditPhone(user.phone || '');
     setEditMei(user.mei !== false);
+    setEditExpiresAt(user.expiresAt ? user.expiresAt.slice(0, 10) : '');
   };
 
   const handleUpdateUser = async (user: ManagedUser) => {
@@ -366,7 +368,7 @@ export default function ManageUsers() {
     setSuccess('');
 
     try {
-      const payload =
+      const basePayload =
         role === 'superadmin'
           ? {
               role: editRole,
@@ -376,11 +378,15 @@ export default function ManageUsers() {
               mei: editMei
             }
           : {
-              role: 'usuario',
+              role: 'usuario' as const,
               displayName: editDisplayName || undefined,
               phone: editPhone || undefined,
               mei: editMei
             };
+      const payload =
+        editRole === 'usuario'
+          ? { ...basePayload, expiresAt: editExpiresAt ? new Date(editExpiresAt + 'T12:00:00.000Z').toISOString() : null }
+          : basePayload;
       await updateUser(user.id, payload);
       setSuccess('Usuário atualizado com sucesso.');
       toast.success('Usuário atualizado com sucesso.');
@@ -1112,6 +1118,19 @@ export default function ManageUsers() {
                         <span className="admin-badge-neutral">
                           {user.empresaName || user.empresaId || 'Sem empresa'}
                         </span>
+                        {user.role === 'usuario' && user.expiresAt && (
+                          <span
+                            className={
+                              new Date(user.expiresAt) < new Date()
+                                ? 'admin-badge-danger'
+                                : 'admin-badge-warning'
+                            }
+                          >
+                            {new Date(user.expiresAt) < new Date()
+                              ? 'Expirado'
+                              : `Expira em ${new Date(user.expiresAt).toLocaleDateString('pt-BR')}`}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="w-full text-sm text-slate-600 dark:text-slate-300 lg:max-w-2xl">
@@ -1195,6 +1214,23 @@ export default function ManageUsers() {
                             MEI habilitado
                           </label>
                         </div>
+                        {editRole === 'usuario' && (
+                          <div>
+                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">
+                              Data de validade
+                            </label>
+                            <input
+                              type="date"
+                              value={editExpiresAt}
+                              onChange={(e) => setEditExpiresAt(e.target.value)}
+                              className="planner-input-compact w-full max-w-xs"
+                              placeholder="Opcional"
+                            />
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              Opcional. Deixe em branco para acesso sem data de expiração.
+                            </p>
+                          </div>
+                        )}
                         {role === 'superadmin' ? (
                           <div className="relative admin-toolbar">
                             <div className="flex items-center gap-2">

@@ -127,7 +127,7 @@ const ensureUserNotBlocked = async ({ accessToken, userId }) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData } = await adminClient
     .from('role_x_user_x_empresa')
-    .select('status')
+    .select('id, status, expires_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -135,6 +135,16 @@ const ensureUserNotBlocked = async ({ accessToken, userId }) => {
 
   if (linkData?.status === false) {
     throw forbidden('Seu perfil está bloqueado');
+  }
+
+  if (linkData?.expires_at && new Date(linkData.expires_at) < new Date()) {
+    if (linkData?.id) {
+      await adminClient
+        .from('role_x_user_x_empresa')
+        .update({ status: false })
+        .eq('id', linkData.id);
+    }
+    throw forbidden('Seu acesso expirou');
   }
 };
 
