@@ -127,7 +127,7 @@ const ensureUserNotBlocked = async ({ accessToken, userId }) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData } = await adminClient
     .from('role_x_user_x_empresa')
-    .select('status')
+    .select('id, status, expires_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -135,6 +135,16 @@ const ensureUserNotBlocked = async ({ accessToken, userId }) => {
 
   if (linkData?.status === false) {
     throw forbidden('Seu perfil está bloqueado');
+  }
+
+  if (linkData?.expires_at && new Date(linkData.expires_at) < new Date()) {
+    if (linkData?.id) {
+      await adminClient
+        .from('role_x_user_x_empresa')
+        .update({ status: false })
+        .eq('id', linkData.id);
+    }
+    throw forbidden('Seu acesso expirou');
   }
 };
 
@@ -231,81 +241,91 @@ export const signUp = async ({ email, password, phone, displayName }, deps = {})
   };
 };
 
+const isHttpError = (err) => err && typeof err.status === 'number';
+
 export const signIn = async ({ email, password }) => {
   if (!email || !password) {
     throw badRequest('Email e senha são obrigatórios');
   }
 
-  const supabase = createSupabaseClient();
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password
-  });
+  try {
+    const supabase = createSupabaseClient();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
 
-  if (error) {
-    const rawMessage = String(error.message || '');
-    const normalized = rawMessage.toLowerCase();
+    if (error) {
+      const rawMessage = String(error.message || '');
+      const normalized = rawMessage.toLowerCase();
 
+      if (env.NODE_ENV !== 'production') {
+        console.warn('[Auth] signIn error', {
+          message: rawMessage,
+          status: error.status,
+          name: error.name
+        });
+      }
+
+      if (
+        normalized.includes('invalid login credentials')
+        || normalized.includes('invalid credentials')
+        || normalized.includes('invalid email or password')
+      ) {
+        throw unauthorized('Email ou senha inválidos');
+      }
+
+      if (normalized.includes('email not confirmed') || normalized.includes('email not verified')) {
+        throw forbidden('Email não confirmado. Verifique sua caixa de entrada.');
+      }
+
+      if (normalized.includes('user not found')) {
+        throw unauthorized('Usuário não encontrado');
+      }
+
+      if (
+        normalized.includes('fetch failed')
+        || normalized.includes('network')
+        || normalized.includes('enotfound')
+        || normalized.includes('timeout')
+      ) {
+        throw serviceUnavailable('Falha de comunicação com o Supabase Auth. Tente novamente mais tarde.');
+      }
+
+      if (error.status === 429) {
+        throw badRequest('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
+      }
+
+      throw unauthorized(rawMessage || 'Falha ao autenticar');
+    }
+
+    await ensureUserNotBlocked({
+      accessToken: data.session?.access_token ?? null,
+      userId: data.user?.id ?? ''
+    });
+
+    const { role, empresaId, mei } = await getResolvedRoleAndCompany({
+      accessToken: data.session?.access_token ?? null,
+      userId: data.user?.id ?? ''
+    });
+
+    return {
+      user: data.user,
+      userId: data.user?.id || null,
+      phone: data.user?.user_metadata?.phone || null,
+      displayName: data.user?.user_metadata?.display_name || null,
+      role,
+      empresaId,
+      mei,
+      session: data.session
+    };
+  } catch (err) {
+    if (isHttpError(err)) throw err;
     if (env.NODE_ENV !== 'production') {
-      console.warn('[Auth] signIn error', {
-        message: rawMessage,
-        status: error.status,
-        name: error.name
-      });
+      console.error('[Auth] signIn unexpected error', err);
     }
-
-    if (
-      normalized.includes('invalid login credentials')
-      || normalized.includes('invalid credentials')
-      || normalized.includes('invalid email or password')
-    ) {
-      throw unauthorized('Email ou senha inválidos');
-    }
-
-    if (normalized.includes('email not confirmed') || normalized.includes('email not verified')) {
-      throw forbidden('Email não confirmado. Verifique sua caixa de entrada.');
-    }
-
-    if (normalized.includes('user not found')) {
-      throw unauthorized('Usuário não encontrado');
-    }
-
-    if (
-      normalized.includes('fetch failed')
-      || normalized.includes('network')
-      || normalized.includes('enotfound')
-      || normalized.includes('timeout')
-    ) {
-      throw serviceUnavailable('Falha de comunicação com o Supabase Auth. Tente novamente mais tarde.');
-    }
-
-    if (error.status === 429) {
-      throw badRequest('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
-    }
-
-    throw unauthorized(rawMessage || 'Falha ao autenticar');
+    throw serviceUnavailable('Falha ao conectar com o serviço de autenticação. Tente novamente.');
   }
-
-  await ensureUserNotBlocked({
-    accessToken: data.session?.access_token ?? null,
-    userId: data.user?.id ?? ''
-  });
-
-  const { role, empresaId, mei } = await getResolvedRoleAndCompany({
-    accessToken: data.session?.access_token ?? null,
-    userId: data.user?.id ?? ''
-  });
-
-  return {
-    user: data.user,
-    userId: data.user?.id || null,
-    phone: data.user?.user_metadata?.phone || null,
-    displayName: data.user?.user_metadata?.display_name || null,
-    role,
-    empresaId,
-    mei,
-    session: data.session
-  };
 };
 
 export const signOut = async (accessToken) => {

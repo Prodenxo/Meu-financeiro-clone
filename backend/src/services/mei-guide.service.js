@@ -11,7 +11,8 @@ import {
   saveCertificateDocument,
   loadCertificate,
   deleteCertificate,
-  getCertificateDocument
+  getCertificateDocument,
+  getCertificateValidity
 } from './mei-certificate-store.js';
 import {
   isCompetenciaPaid,
@@ -19,6 +20,7 @@ import {
   markCompetenciaAsPaid,
   periodoApuracaoToCompetencia
 } from './mei-period-status.service.js';
+import * as parcelamentoPdfService from './mei-guide-parcelamento-pdf.service.js';
 
 const require = createRequire(import.meta.url);
 const { SignedXml } = require('xml-crypto');
@@ -190,6 +192,16 @@ const extractDocFromSubjectAltName = (cert) => {
   return extractByOid(SAN_OID_CNPJ, 14) || extractByOid(SAN_OID_CPF, 11);
 };
 
+const toIsoOrNull = (value) => {
+  if (value == null) return null;
+  try {
+    const d = value instanceof Date ? value : new Date(value);
+    return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+  } catch {
+    return null;
+  }
+};
+
 const extractCertInfo = (cert) => {
   const subjectAttrs = cert.subject?.attributes || [];
   const subjectValues = subjectAttrs
@@ -204,6 +216,10 @@ const extractCertInfo = (cert) => {
   const doc = cnpjFromSan || cnCnpj || cnpjFromSubject[0] || null;
   const docSource = cnpjFromSan ? 'san' : (cnCnpj ? 'cn' : (cnpjFromSubject[0] ? 'subject' : null));
 
+  const validity = cert.validity;
+  const validFrom = validity ? toIsoOrNull(validity.notBefore) : null;
+  const validTo = validity ? toIsoOrNull(validity.notAfter) : null;
+
   return {
     doc,
     docSource,
@@ -211,7 +227,9 @@ const extractCertInfo = (cert) => {
     cnpjFromSubject,
     cnpjFromCN: cnCnpj,
     subject: subjectAttrs,
-    serialNumber: cert.serialNumber
+    serialNumber: cert.serialNumber,
+    validFrom,
+    validTo
   };
 };
 
@@ -323,7 +341,6 @@ const tokenCache = new Map();
 const procuradorTokenCache = new Map();
 const certInfoCache = new Map();
 const userCertCache = new Map();
-const USER_CERT_TTL_MS = 2 * 60 * 60 * 1000;
 
 const getUserCacheKey = (userId) => `user:${userId}`;
 
@@ -332,20 +349,13 @@ const getUserCert = (userId) => {
   const cacheKey = getUserCacheKey(userId);
   const cached = userCertCache.get(cacheKey);
   if (!cached) return null;
-  if (cached.expiresAt && cached.expiresAt <= Date.now()) {
-    userCertCache.delete(cacheKey);
-    return null;
-  }
   return { ...cached, cacheKey };
 };
 
 const setUserCert = (userId, cert) => {
   if (!userId || !cert?.pfx) return null;
   const cacheKey = getUserCacheKey(userId);
-  userCertCache.set(cacheKey, {
-    ...cert,
-    expiresAt: Date.now() + USER_CERT_TTL_MS
-  });
+  userCertCache.set(cacheKey, { ...cert });
   return cacheKey;
 };
 
@@ -1085,7 +1095,9 @@ export const uploadCertificate = async (userId, payload) => {
         pfxBase64: file.buffer.toString('base64'),
         passphraseEnc,
         passphraseIv,
-        certDocument
+        certDocument,
+        certValidFrom: certInfo?.validFrom ?? null,
+        certValidTo: certInfo?.validTo ?? null
       });
     } catch (err) {
       throw badRequest(err?.message || 'Falha ao salvar certificado');
@@ -1117,18 +1129,34 @@ export const removeCertificate = async (userId) => {
 
 export const getCertificateStatus = async (userId) => {
   await ensureUserCertLoaded(userId);
-  const hasCert = Boolean(getUserCert(userId));
+  const userCert = getUserCert(userId);
+  const hasCert = Boolean(userCert);
   const docFromCache = getUserCertDocument(userId);
   let docFromDb = null;
+  let certValidFromDb = null;
+  let certValidToDb = null;
   try {
     docFromDb = await getCertificateDocument(userId);
   } catch {
     docFromDb = null;
   }
+  try {
+    const meta = await getCertificateValidity(userId);
+    if (meta) {
+      certValidFromDb = meta.certValidFrom ?? null;
+      certValidToDb = meta.certValidTo ?? null;
+    }
+  } catch {
+    // Colunas cert_valid_* podem não existir antes da migration
+  }
+  const certValidFrom = userCert?.certInfo?.validFrom ?? certValidFromDb ?? null;
+  const certValidTo = userCert?.certInfo?.validTo ?? certValidToDb ?? null;
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
-    documento: docFromCache || docFromDb || null
+    documento: docFromCache || docFromDb || null,
+    certValidFrom: certValidFrom || null,
+    certValidTo: certValidTo || null
   };
 };
 
@@ -1434,6 +1462,262 @@ export const listPeriodsByCnpj = async (userId, payload) => {
     cnpj: cnpjNumerico,
     useCertificate: false
   });
+};
+
+/** Modalidades do Integra Parcelamento SERPRO com serviço "Consultar Pedidos". Doc: apicenter.estaleiro.serpro.gov.br Integra Contador. */
+const PARCELAMENTO_MODALIDADES = [
+  { idSistema: 'PARCSN', idServico: 'PEDIDOSPARC163', modalidade: 'Simples Nacional (Ordinário)' },
+  { idSistema: 'PARCSN-ESP', idServico: 'PEDIDOSPARC173', modalidade: 'Simples Nacional (Especial)' },
+  { idSistema: 'RELPSN', idServico: 'PEDIDOSPARC193', modalidade: 'Reescalonamento Simples Nacional' },
+  { idSistema: 'PARCMEI', idServico: 'PEDIDOSPARC203', modalidade: 'MEI (Ordinário)' },
+  { idSistema: 'PARCMEI-ESP', idServico: 'PEDIDOSPARC213', modalidade: 'MEI (Especial)' },
+  { idSistema: 'RELPMEI', idServico: 'PEDIDOSPARC233', modalidade: 'Reescalonamento MEI' }
+];
+
+/**
+ * Mapeamento para obter PDF por parcelamento: Consultar Parcelamento (numero -> detalhes com periodoApuracao)
+ * e Emitir DAS (parcelaParaEmitir AAAAMM -> docArrecadacaoPdfB64). Doc SERPRO Integra Parcelamento.
+ * Só modalidades com ambos configurados tentam fetch+store em background.
+ */
+const PARCELAMENTO_PDF_SERPRO = {
+  'PARCSN': { consultar: { idSistema: 'PARCSN', idServico: 'OBTERPARC224' }, emitir: null },
+  'PARCSN-ESP': { consultar: { idSistema: 'PARCSN-ESP', idServico: 'OBTERPARC224' }, emitir: { idSistema: 'PARCSN-ESP', idServico: 'GERARDAS171' } },
+  'RELPSN': { consultar: { idSistema: 'RELPSN', idServico: 'OBTERPARC224' }, emitir: null },
+  'PARCMEI': { consultar: { idSistema: 'PARCMEI', idServico: 'OBTERPARC224' }, emitir: null },
+  'PARCMEI-ESP': { consultar: { idSistema: 'PARCMEI-ESP', idServico: 'OBTERPARC224' }, emitir: { idSistema: 'PARCMEI-ESP', idServico: 'GERARDAS211' } },
+  'RELPMEI': { consultar: { idSistema: 'RELPMEI', idServico: 'OBTERPARC224' }, emitir: null }
+};
+
+const MODALIDADE_TO_IDSISTEMA = Object.fromEntries(
+  PARCELAMENTO_MODALIDADES.map((m) => [m.modalidade, m.idSistema])
+);
+
+const normalizeParcelamentoItem = (item, modalidade) => {
+  if (!item || typeof item !== 'object') return null;
+  const numero = item.numero ?? item.numeroParcelamento ?? item.numero_parcelamento;
+  const dataPedido = item.dataPedido ?? item.data_pedido ?? item.dataPedidoPedido;
+  const situacao = item.situacao ?? item.situacaoParcelamento;
+  const dataSituacao = item.dataSituacao ?? item.data_situacao ?? item.dataSituacaoParcelamento;
+  return {
+    numero: numero != null ? String(numero) : undefined,
+    dataPedido: dataPedido != null ? String(dataPedido) : undefined,
+    situacao: situacao != null ? String(situacao) : undefined,
+    dataSituacao: dataSituacao != null ? String(dataSituacao) : undefined,
+    modalidade: modalidade || undefined
+  };
+};
+
+/** Extrai o primeiro período AAAAMM da resposta de Consultar Parcelamento (detalhesConsolidacao ou demonstrativoPagamentos). */
+function extractFirstPeriodoApuracao(dados) {
+  if (!dados || typeof dados !== 'object') return null;
+  const parcelamento = dados.parcelamento ?? dados;
+  const detalhes = parcelamento.consolidacaoOriginal?.detalhesConsolidacao ?? parcelamento.detalhesConsolidacao;
+  if (Array.isArray(detalhes) && detalhes.length > 0) {
+    const first = detalhes[0];
+    const periodo = first.periodoApuracao ?? first.periodo_apuracao;
+    if (periodo != null) return Number(periodo) || null;
+  }
+  const demonstrativo = parcelamento.demonstrativoPagamentos ?? parcelamento.demonstrativo_pagamentos;
+  if (Array.isArray(demonstrativo) && demonstrativo.length > 0) {
+    const first = demonstrativo[0];
+    const mes = first.mesDaParcela ?? first.mes_da_parcela;
+    if (mes != null) return Number(mes) || null;
+  }
+  if (Array.isArray(parcelamento.consolidacoesRestanteDivida) && parcelamento.consolidacoesRestanteDivida.length > 0) {
+    const det = parcelamento.consolidacoesRestanteDivida[0].detalhesConsolidacao;
+    if (Array.isArray(det) && det.length > 0) {
+      const periodo = det[0].periodoApuracao ?? det[0].periodo_apuracao;
+      if (periodo != null) return Number(periodo) || null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Tenta obter PDF do parcelamento via SERPRO (Consultar Parcelamento -> Emitir DAS) e persistir em parcelamento_pdfs.
+ * Falhas são apenas logadas; não propaga exceção.
+ */
+async function tryFetchAndStoreParcelamentoPdf({
+  userId,
+  numero,
+  modalidade,
+  contribNumero,
+  contratanteNumero,
+  autorNumero
+}) {
+  const idSistema = MODALIDADE_TO_IDSISTEMA[modalidade];
+  const config = idSistema ? PARCELAMENTO_PDF_SERPRO[idSistema] : null;
+  if (!config?.consultar || !config.emitir) return;
+
+  try {
+    const consultResult = await consultarServico({
+      contratanteNumero,
+      autorPedidoNumero: autorNumero,
+      contribuinteNumero: contribNumero,
+      idSistema: config.consultar.idSistema,
+      idServico: config.consultar.idServico,
+      dados: { numeroParcelamento: Number(numero) || numero }
+    });
+    const parcelaAaaamm = extractFirstPeriodoApuracao(consultResult?.dados);
+    if (!parcelaAaaamm) {
+      if (env.NODE_ENV !== 'production') {
+        console.warn('[mei-guide] parcelamento PDF: sem periodoApuracao para numero=', numero, 'modalidade=', modalidade);
+      }
+      return;
+    }
+
+    const emitResult = await emitirServico({
+      contratanteNumero,
+      autorPedidoNumero: autorNumero,
+      contribuinteNumero: contribNumero,
+      idSistema: config.emitir.idSistema,
+      idServico: config.emitir.idServico,
+      dados: { parcelaParaEmitir: parcelaAaaamm }
+    });
+    const pdfBase64 = emitResult?.dados?.docArrecadacaoPdfB64 ?? emitResult?.dados?.doc_arrecadacao_pdf_b64;
+    if (!pdfBase64) {
+      if (env.NODE_ENV !== 'production') {
+        console.warn('[mei-guide] parcelamento PDF: emissão sem docArrecadacaoPdfB64 para numero=', numero);
+      }
+      return;
+    }
+
+    await parcelamentoPdfService.upsertParcelamentoPdf({
+      userId,
+      contribuinteNumero: contribNumero,
+      numeroParcelamento: String(numero).trim(),
+      modalidade: modalidade || null,
+      pdfBase64
+    });
+    if (env.NODE_ENV !== 'production') {
+      console.info('[mei-guide] parcelamento PDF salvo: numero=', numero);
+    }
+  } catch (err) {
+    if (env.NODE_ENV !== 'production') {
+      console.warn('[mei-guide] tryFetchAndStoreParcelamentoPdf falhou:', numero, modalidade, err?.message || err);
+    }
+  }
+}
+
+export const listParcelamentos = async (userId, payload) => {
+  ensureConfigured();
+  const { cnpj, contribuinte } = payload || {};
+  const docFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
+  if (!docFromRequest) {
+    await ensureClientCertificate(userId);
+  }
+  const contrib = resolveContribuinte(userId, contribuinte, cnpj);
+  const contribNumero = normalizeDoc(contrib.numero);
+  const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || contrib.numero);
+  const autorPedidoNumero = contribNumero;
+
+  const baseParams = {
+    contratanteNumero,
+    autorPedidoNumero,
+    contribuinteNumero: contribNumero,
+    dados: {}
+  };
+
+  const results = await Promise.allSettled(
+    PARCELAMENTO_MODALIDADES.map(({ idSistema, idServico, modalidade }) =>
+      consultarServico({ ...baseParams, idSistema, idServico }).then((result) => ({
+        modalidade,
+        dados: result?.dados
+      }))
+    )
+  );
+
+  const parcelamentos = [];
+  for (let i = 0; i < results.length; i++) {
+    const settled = results[i];
+    const { modalidade } = PARCELAMENTO_MODALIDADES[i];
+    if (settled.status === 'rejected') {
+      if (env.NODE_ENV !== 'production') {
+        console.warn('[mei-guide] parcelamentos modalidade falhou:', modalidade, settled.reason?.message);
+      }
+      continue;
+    }
+    const raw = settled.value?.dados;
+    const list = Array.isArray(raw)
+      ? raw
+      : (raw && Array.isArray(raw.lista) ? raw.lista : (raw && raw.parcelamentos ? raw.parcelamentos : []));
+    for (const item of list) {
+      const normalized = normalizeParcelamentoItem(item, modalidade);
+      if (normalized) parcelamentos.push(normalized);
+    }
+  }
+
+  const resumoPorModalidade = {};
+  for (const p of parcelamentos) {
+    const m = p.modalidade || 'Outros';
+    resumoPorModalidade[m] = (resumoPorModalidade[m] || 0) + 1;
+  }
+
+  // Dispara em background a tentativa de obter e salvar PDF de cada parcelamento (não bloqueia a resposta).
+  if (parcelamentos.length > 0) {
+    Promise.allSettled(
+      parcelamentos.map((p) =>
+        tryFetchAndStoreParcelamentoPdf({
+          userId,
+          numero: p.numero,
+          modalidade: p.modalidade,
+          contribNumero,
+          contratanteNumero,
+          autorNumero: autorPedidoNumero
+        })
+      )
+    ).catch(() => {});
+  }
+
+  return {
+    parcelamentos,
+    modalidadesConsultadas: PARCELAMENTO_MODALIDADES.length,
+    resumoPorModalidade
+  };
+};
+
+export const getOrDownloadParcelamentoPdf = async (userId, payload) => {
+  ensureConfigured();
+  const { numero, cnpj, modalidade, contribuinte } = payload || {};
+  if (!numero || String(numero).trim() === '') {
+    throw badRequest('Número do parcelamento é obrigatório');
+  }
+  const docFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
+  if (!docFromRequest) {
+    await ensureClientCertificate(userId);
+  }
+  const contrib = resolveContribuinte(userId, contribuinte, cnpj);
+  const contribNumero = normalizeDoc(contrib.numero);
+  const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || contrib.numero);
+  const autorNumero = contribNumero;
+
+  let data = await parcelamentoPdfService.getParcelamentoPdf({
+    userId,
+    numeroParcelamento: String(numero).trim()
+  });
+
+  if (!data?.pdf_base64 && modalidade) {
+    await tryFetchAndStoreParcelamentoPdf({
+      userId,
+      numero: String(numero).trim(),
+      modalidade,
+      contribNumero,
+      contratanteNumero,
+      autorNumero
+    });
+    data = await parcelamentoPdfService.getParcelamentoPdf({
+      userId,
+      numeroParcelamento: String(numero).trim()
+    });
+  }
+
+  if (data?.pdf_base64) {
+    const buffer = Buffer.from(data.pdf_base64, 'base64');
+    const filename = `parcelamento-${String(numero).trim()}.pdf`;
+    return { buffer, contentType: 'application/pdf', filename };
+  }
+
+  throw notFound('PDF não disponível para este parcelamento');
 };
 
 export const validateGuide = async (userId, payload) => {

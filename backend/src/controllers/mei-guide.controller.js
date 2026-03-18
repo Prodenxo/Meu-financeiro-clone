@@ -118,3 +118,40 @@ export const listPeriodsByCnpj = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const getParcelamentos = async (req, res, next) => {
+  try {
+    const contribuinte = req.query?.contribuinteNumero ? {
+      numero: req.query.contribuinteNumero,
+      tipo: req.query.contribuinteTipo
+    } : null;
+    const data = await meiGuideService.listParcelamentos(req.user.id, {
+      cnpj: req.query?.cnpj,
+      contribuinte
+    });
+    return sendSuccess(res, data, 'Parcelamentos MEI listados');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getParcelamentoPdf = async (req, res, next) => {
+  try {
+    const { numero } = req.params || {};
+    const contribuinte = req.query?.contribuinteNumero ? {
+      numero: req.query.contribuinteNumero,
+      tipo: req.query.contribuinteTipo
+    } : null;
+    const file = await meiGuideService.getOrDownloadParcelamentoPdf(req.user.id, {
+      numero,
+      cnpj: req.query?.cnpj,
+      modalidade: req.query?.modalidade,
+      contribuinte
+    });
+    res.setHeader('Content-Type', file.contentType || 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    return res.send(file.buffer);
+  } catch (error) {
+    return next(error);
+  }
+};

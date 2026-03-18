@@ -1,6 +1,7 @@
 import { apiClient } from './apiClient';
 import type { Transaction } from './transactionService';
 import type { Category, CategoryBudgetSummary, CategoryBudgetYearly } from './categoryService';
+import type { EmitirNotaInput, NfseRecord } from './meiNotasService';
 
 export interface AdminBalance {
   balance: number;
@@ -41,6 +42,8 @@ export interface AdminMeiCertificateStatus {
   hasUserCertificate: boolean;
   hasEnvCertificate: boolean;
   documento?: string | null;
+  certValidFrom?: string | null;
+  certValidTo?: string | null;
 }
 
 export interface AdminMeiPeriod {
@@ -53,6 +56,36 @@ export interface AdminMeiPeriod {
 export interface AdminMeiWhatsappResult {
   sent: boolean;
   webhook?: { status?: number; body?: unknown };
+}
+
+export interface AdminParcelamentoItem {
+  numero?: string;
+  dataPedido?: string;
+  situacao?: string;
+  dataSituacao?: string;
+  modalidade?: string;
+}
+
+export interface AdminParcelamentosResponse {
+  parcelamentos: AdminParcelamentoItem[];
+  resumoPorModalidade?: Record<string, number>;
+  modalidadesConsultadas?: number;
+}
+
+export interface AdminMeiNfseItem {
+  id: string;
+  user_id: string;
+  document_type: string;
+  provider?: string;
+  status: string | null;
+  plugnotas_id: string | null;
+  id_integracao: string | null;
+  protocol: string | null;
+  pdf_url: string | null;
+  xml_url: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
 }
 
 const normalizeTipoFromApi = (tipo: Transaction['tipo']): Transaction['tipo'] => {
@@ -172,4 +205,49 @@ export async function sendAdminMeiGuideWhatsapp(
   payload: { periodoApuracao: string; competencia?: string; cnpj?: string }
 ): Promise<AdminMeiWhatsappResult> {
   return apiClient.post<AdminMeiWhatsappResult>(`/admin/mei-guide/${userId}/send-whatsapp`, payload);
+}
+
+export async function fetchAdminUserParcelamentos(
+  userId: string,
+  cnpj?: string
+): Promise<AdminParcelamentosResponse> {
+  const params = new URLSearchParams();
+  if (cnpj) params.set('cnpj', cnpj.replace(/\D/g, ''));
+  const query = params.toString();
+  return apiClient.get<AdminParcelamentosResponse>(
+    `/admin/mei-guide/${userId}/parcelamentos${query ? `?${query}` : ''}`
+  );
+}
+
+export async function downloadAdminUserParcelamentoPdf(
+  userId: string,
+  numero: string,
+  options?: { cnpj?: string; modalidade?: string }
+): Promise<{ blob: Blob; filename: string | null }> {
+  const params = new URLSearchParams();
+  if (options?.cnpj) params.set('cnpj', options.cnpj.replace(/\D/g, ''));
+  if (options?.modalidade) params.set('modalidade', options.modalidade);
+  const query = params.toString();
+  return apiClient.requestBlob(
+    `/admin/mei-guide/${userId}/parcelamentos/${encodeURIComponent(numero)}/pdf${query ? `?${query}` : ''}`,
+    { method: 'GET' }
+  );
+}
+
+export async function fetchAdminUserMeiNfse(
+  userId: string,
+  options?: { limit?: number; documentType?: string; includeArchived?: boolean }
+): Promise<AdminMeiNfseItem[]> {
+  const params = new URLSearchParams();
+  if (options?.limit != null) params.set('limit', String(options.limit));
+  if (options?.documentType) params.set('documentType', options.documentType);
+  if (options?.includeArchived === false) params.set('includeArchived', 'false');
+  const query = params.toString();
+  return apiClient.get<AdminMeiNfseItem[]>(
+    `/admin/users/${userId}/mei-nfse${query ? `?${query}` : ''}`
+  );
+}
+
+export async function emitirNotaAsAdmin(userId: string, payload: EmitirNotaInput): Promise<NfseRecord> {
+  return apiClient.post<NfseRecord>(`/admin/users/${userId}/mei-nfse/emitir`, payload);
 }

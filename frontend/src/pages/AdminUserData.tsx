@@ -5,6 +5,8 @@ import { hasRole } from '../lib/roles';
 import { listUsers, type ManagedUser } from '../services/usersService';
 import {
   downloadAdminMeiGuide,
+  downloadAdminUserParcelamentoPdf,
+  emitirNotaAsAdmin,
   fetchAdminDasStatus,
   fetchAdminMeiCertificateStatus,
   fetchAdminMeiPeriods,
@@ -12,13 +14,18 @@ import {
   fetchAdminUserBalance,
   fetchAdminUserBudgetSummary,
   fetchAdminUserCategories,
+  fetchAdminUserMeiNfse,
+  fetchAdminUserParcelamentos,
   fetchAdminUserTransactions,
   sendAdminMeiGuideWhatsapp,
   type AdminBalance,
   type AdminDasPendingSummary,
   type AdminDasStatusFilters,
   type AdminMeiCertificateStatus,
-  type AdminMeiPeriod
+  type AdminMeiNfseItem,
+  type AdminMeiPeriod,
+  type AdminParcelamentoItem,
+  type AdminParcelamentosResponse
 } from '../services/adminUserDataService';
 import type { Transaction } from '../services/transactionService';
 import type { Category, CategoryBudgetSummary } from '../services/categoryService';
@@ -181,6 +188,29 @@ export default function AdminUserData() {
   const [meiDownloading, setMeiDownloading] = useState(false);
   const [meiSending, setMeiSending] = useState(false);
   const [meiStatusLoading, setMeiStatusLoading] = useState(false);
+  const [parcelamentosData, setParcelamentosData] = useState<AdminParcelamentosResponse | null>(null);
+  const [parcelamentosLoading, setParcelamentosLoading] = useState(false);
+  const [parcelamentosError, setParcelamentosError] = useState<string | null>(null);
+  const [meiNfseList, setMeiNfseList] = useState<AdminMeiNfseItem[]>([]);
+  const [meiNfseLoading, setMeiNfseLoading] = useState(false);
+  const [meiNfseError, setMeiNfseError] = useState<string | null>(null);
+  const [parcelamentoPdfLoadingNumero, setParcelamentoPdfLoadingNumero] = useState<string | null>(null);
+  const [parcelamentoPdfError, setParcelamentoPdfError] = useState<string | null>(null);
+  const [showEmitirNotaModal, setShowEmitirNotaModal] = useState(false);
+  const [emitirNotaSubmitting, setEmitirNotaSubmitting] = useState(false);
+  const [emitirNotaError, setEmitirNotaError] = useState<string | null>(null);
+  const [emitirNotaSuccess, setEmitirNotaSuccess] = useState<string | null>(null);
+  const [emitirNotaForm, setEmitirNotaForm] = useState({
+    documentType: 'NFSE' as const,
+    tomadorCpfCnpj: '',
+    tomadorRazaoSocial: '',
+    tomadorEmail: '',
+    servicoDiscriminacao: '',
+    servicoValorServico: '',
+    servicoCodigo: '1',
+    servicoCnae: '6201501',
+    servicoAliquota: '0'
+  });
   const autoDownloadKeysRef = useRef<Set<string>>(new Set());
   const autoDownloadingRef = useRef(false);
 
@@ -392,6 +422,11 @@ export default function AdminUserData() {
     setMeiPeriodsError(null);
     setMeiActionError(null);
     setMeiActionSuccess(null);
+    setParcelamentosData(null);
+    setParcelamentosError(null);
+    setParcelamentoPdfError(null);
+    setMeiNfseList([]);
+    setMeiNfseError(null);
   }, []);
 
   const triggerAutoDownload = useCallback(async (userId: string, periods: AdminMeiPeriod[]) => {
@@ -554,6 +589,35 @@ export default function AdminUserData() {
     }
     void loadMeiPeriods(selectedUserId);
   }, [selectedUserId, canLoadMeiPeriods, loadMeiPeriods]);
+
+  useEffect(() => {
+    if (!selectedUserId) return;
+    setMeiNfseLoading(true);
+    setMeiNfseError(null);
+    fetchAdminUserMeiNfse(selectedUserId)
+      .then((data) => setMeiNfseList(data || []))
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Erro ao carregar notas fiscais';
+        setMeiNfseError(message);
+        setMeiNfseList([]);
+      })
+      .finally(() => setMeiNfseLoading(false));
+  }, [selectedUserId]);
+
+  useEffect(() => {
+    if (!selectedUserId || !canLoadMeiPeriods) return;
+    setParcelamentosLoading(true);
+    setParcelamentosError(null);
+    const cnpjParam = normalizedMeiCnpj.length === 14 ? normalizedMeiCnpj : undefined;
+    fetchAdminUserParcelamentos(selectedUserId, cnpjParam)
+      .then((data) => setParcelamentosData(data || null))
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Erro ao carregar parcelamentos';
+        setParcelamentosError(message);
+        setParcelamentosData(null);
+      })
+      .finally(() => setParcelamentosLoading(false));
+  }, [selectedUserId, canLoadMeiPeriods, normalizedMeiCnpj]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -1046,6 +1110,16 @@ export default function AdminUserData() {
                         !meiCertificateStatus?.hasEnvCertificate && (
                           <span className="admin-badge-warning">Sem certificado disponível</span>
                         )}
+                      {meiCertificateStatus?.hasUserCertificate &&
+                        (meiCertificateStatus?.certValidFrom || meiCertificateStatus?.certValidTo) && (
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            {meiCertificateStatus.certValidFrom && meiCertificateStatus.certValidTo
+                              ? `Válido de ${new Date(meiCertificateStatus.certValidFrom).toLocaleDateString('pt-BR')} até ${new Date(meiCertificateStatus.certValidTo).toLocaleDateString('pt-BR')}`
+                              : meiCertificateStatus.certValidTo
+                                ? `Válido até ${new Date(meiCertificateStatus.certValidTo).toLocaleDateString('pt-BR')}`
+                                : null}
+                          </p>
+                        )}
                     </div>
                   )}
                 </div>
@@ -1150,6 +1224,336 @@ export default function AdminUserData() {
                 )}
               </div>
             </div>
+
+            <div className="admin-section-card">
+              <div className="admin-section-header">
+                <div>
+                  <h2 className="admin-section-title">Parcelamentos</h2>
+                  <p className="admin-section-subtitle">
+                    Parcelamentos do MEI/Simples Nacional consultados no SERPRO para o usuário selecionado.
+                  </p>
+                </div>
+              </div>
+              {parcelamentosError && (
+                <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+                  {parcelamentosError}
+                </div>
+              )}
+              {parcelamentoPdfError && (
+                <div className="rounded-xl border border-amber-300/90 bg-amber-50/90 px-4 py-3 text-amber-700 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-300">
+                  {parcelamentoPdfError}
+                </div>
+              )}
+              {!canLoadMeiPeriods ? (
+                <div className="admin-empty-state">Informe o CNPJ do MEI ou use o certificado do cliente para consultar parcelamentos.</div>
+              ) : parcelamentosLoading ? (
+                <div className="admin-empty-state">Carregando parcelamentos...</div>
+              ) : !parcelamentosData?.parcelamentos?.length ? (
+                <div className="admin-empty-state">Nenhum parcelamento encontrado.</div>
+              ) : (
+                <div className="admin-table-shell">
+                  <div className="admin-table-wrap">
+                    <table className="admin-table">
+                      <thead className="admin-table-head">
+                        <tr>
+                          <th className="admin-table-cell">Número</th>
+                          <th className="admin-table-cell">Modalidade</th>
+                          <th className="admin-table-cell">Situação</th>
+                          <th className="admin-table-cell">Data pedido</th>
+                          <th className="admin-table-cell">Data situação</th>
+                          <th className="admin-table-cell">PDF</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parcelamentosData.parcelamentos.map((p: AdminParcelamentoItem, index: number) => (
+                          <tr key={`${p.numero ?? index}-${p.modalidade ?? ''}`} className="admin-table-row">
+                            <td className="admin-table-cell">{p.numero ?? '-'}</td>
+                            <td className="admin-table-cell">{p.modalidade ?? '-'}</td>
+                            <td className="admin-table-cell">{p.situacao ?? '-'}</td>
+                            <td className="admin-table-cell">{p.dataPedido ? formatDate(p.dataPedido) : '-'}</td>
+                            <td className="admin-table-cell">{p.dataSituacao ? formatDate(p.dataSituacao) : '-'}</td>
+                            <td className="admin-table-cell">
+                              {p.numero ? (
+                                <button
+                                  type="button"
+                                  disabled={parcelamentoPdfLoadingNumero === (p.numero ?? '')}
+                                  onClick={async () => {
+                                    setParcelamentoPdfError(null);
+                                    setParcelamentoPdfLoadingNumero(p.numero ?? '');
+                                    try {
+                                      const { blob, filename } = await downloadAdminUserParcelamentoPdf(
+                                        selectedUserId,
+                                        p.numero!,
+                                        {
+                                          cnpj: normalizedMeiCnpj.length === 14 ? normalizedMeiCnpj : undefined,
+                                          modalidade: p.modalidade
+                                        }
+                                      );
+                                      triggerFileDownload(blob, filename || `parcelamento-${p.numero}.pdf`);
+                                    } catch (err) {
+                                      const msg = err instanceof Error ? err.message : 'PDF não disponível para este parcelamento.';
+                                      setParcelamentoPdfError(msg);
+                                    } finally {
+                                      setParcelamentoPdfLoadingNumero(null);
+                                    }
+                                  }}
+                                  className="planner-button-secondary-compact text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {parcelamentoPdfLoadingNumero === (p.numero ?? '') ? 'Baixando...' : 'Baixar'}
+                                </button>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="admin-section-card">
+              <div className="admin-section-header">
+                <div>
+                  <h2 className="admin-section-title">Notas fiscais (NFSe / NF-e / NFC-e)</h2>
+                  <p className="admin-section-subtitle">
+                    Emissões e cancelamentos de notas do usuário. Status indica criação, cancelamento ou erro.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEmitirNotaModal(true);
+                    setEmitirNotaError(null);
+                    setEmitirNotaSuccess(null);
+                    setEmitirNotaForm({
+                      documentType: 'NFSE',
+                      tomadorCpfCnpj: '',
+                      tomadorRazaoSocial: '',
+                      tomadorEmail: '',
+                      servicoDiscriminacao: '',
+                      servicoValorServico: '',
+                      servicoCodigo: '1',
+                      servicoCnae: '6201501',
+                      servicoAliquota: '0'
+                    });
+                  }}
+                  className="planner-button w-full sm:w-auto"
+                >
+                  Emitir nota fiscal
+                </button>
+              </div>
+              {meiNfseError && (
+                <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+                  {meiNfseError}
+                </div>
+              )}
+              {meiNfseLoading ? (
+                <div className="admin-empty-state">Carregando notas fiscais...</div>
+              ) : meiNfseList.length === 0 ? (
+                <div className="admin-empty-state">Nenhuma nota fiscal encontrada.</div>
+              ) : (
+                <div className="admin-table-shell">
+                  <div className="admin-table-wrap">
+                    <table className="admin-table">
+                      <thead className="admin-table-head">
+                        <tr>
+                          <th className="admin-table-cell">Data criação</th>
+                          <th className="admin-table-cell">Tipo</th>
+                          <th className="admin-table-cell">Status</th>
+                          <th className="admin-table-cell">Protocolo / ID</th>
+                          <th className="admin-table-cell">PDF / XML</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {meiNfseList.map((n) => (
+                          <tr key={n.id} className="admin-table-row">
+                            <td className="admin-table-cell">{formatDate(n.created_at)}</td>
+                            <td className="admin-table-cell">{n.document_type ?? '-'}</td>
+                            <td className="admin-table-cell">
+                              <span className={`admin-badge ${
+                                n.status === 'cancelado' ? 'admin-badge-danger' :
+                                n.status === 'emitido' || n.status === 'autorizado' ? 'admin-badge-success' :
+                                'admin-badge-warning'
+                              }`}>
+                                {n.status ?? '—'}
+                              </span>
+                            </td>
+                            <td className="admin-table-cell">{n.protocol || n.id_integracao || n.plugnotas_id || '-'}</td>
+                            <td className="admin-table-cell">
+                              {n.pdf_url ? (
+                                <a href={n.pdf_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">PDF</a>
+                              ) : null}
+                              {n.pdf_url && n.xml_url ? ' · ' : null}
+                              {n.xml_url ? (
+                                <a href={n.xml_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">XML</a>
+                              ) : null}
+                              {!n.pdf_url && !n.xml_url ? '-' : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {showEmitirNotaModal && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="emitir-nota-modal-title"
+              >
+                <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                  <h2 id="emitir-nota-modal-title" className="text-lg font-semibold dark:text-white">
+                    Emitir nota fiscal (NFSe)
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Emissão em nome do usuário selecionado. Preencha tomador e serviço.
+                  </p>
+                  {emitirNotaError && (
+                    <div className="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+                      {emitirNotaError}
+                    </div>
+                  )}
+                  {emitirNotaSuccess && (
+                    <div className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                      {emitirNotaSuccess}
+                    </div>
+                  )}
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        CPF/CNPJ do tomador
+                      </label>
+                      <input
+                        type="text"
+                        value={emitirNotaForm.tomadorCpfCnpj}
+                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, tomadorCpfCnpj: formatDocument(e.target.value) }))}
+                        placeholder="00.000.000/0001-00 ou 000.000.000-00"
+                        className="planner-input-compact w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Razão social do tomador
+                      </label>
+                      <input
+                        type="text"
+                        value={emitirNotaForm.tomadorRazaoSocial}
+                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, tomadorRazaoSocial: e.target.value }))}
+                        placeholder="Nome ou razão social"
+                        className="planner-input-compact w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        E-mail do tomador (opcional)
+                      </label>
+                      <input
+                        type="email"
+                        value={emitirNotaForm.tomadorEmail}
+                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, tomadorEmail: e.target.value }))}
+                        placeholder="email@exemplo.com"
+                        className="planner-input-compact w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Descrição do serviço
+                      </label>
+                      <input
+                        type="text"
+                        value={emitirNotaForm.servicoDiscriminacao}
+                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, servicoDiscriminacao: e.target.value }))}
+                        placeholder="Ex.: Desenvolvimento de software"
+                        className="planner-input-compact w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Valor do serviço (R$)
+                      </label>
+                      <input
+                        type="text"
+                        value={emitirNotaForm.servicoValorServico}
+                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, servicoValorServico: e.target.value.replace(',', '.') }))}
+                        placeholder="0,00"
+                        className="planner-input-compact w-full"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-6 flex gap-3 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowEmitirNotaModal(false);
+                        setEmitirNotaError(null);
+                        setEmitirNotaSuccess(null);
+                      }}
+                      disabled={emitirNotaSubmitting}
+                      className="planner-button-secondary-compact disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={emitirNotaSubmitting || !emitirNotaForm.tomadorCpfCnpj.trim() || !emitirNotaForm.tomadorRazaoSocial.trim() || !emitirNotaForm.servicoDiscriminacao.trim() || !emitirNotaForm.servicoValorServico.trim()}
+                      onClick={async () => {
+                        setEmitirNotaError(null);
+                        setEmitirNotaSuccess(null);
+                        const doc = normalizeDoc(emitirNotaForm.tomadorCpfCnpj);
+                        if (doc.length !== 11 && doc.length !== 14) {
+                          setEmitirNotaError('CPF deve ter 11 dígitos ou CNPJ 14 dígitos.');
+                          return;
+                        }
+                        const valor = Number(String(emitirNotaForm.servicoValorServico).replace(',', '.'));
+                        if (Number.isNaN(valor) || valor <= 0) {
+                          setEmitirNotaError('Valor do serviço deve ser um número positivo.');
+                          return;
+                        }
+                        setEmitirNotaSubmitting(true);
+                        try {
+                          const prestadorCpfCnpj = meiCertificateStatus?.documento ? String(meiCertificateStatus.documento).replace(/\D/g, '') : undefined;
+                          await emitirNotaAsAdmin(selectedUserId, {
+                            documentType: 'NFSE',
+                            ...(prestadorCpfCnpj ? { prestadorCpfCnpj } : {}),
+                            tomadorCpfCnpj: doc,
+                            tomadorRazaoSocial: emitirNotaForm.tomadorRazaoSocial.trim(),
+                            ...(emitirNotaForm.tomadorEmail.trim() ? { tomadorEmail: emitirNotaForm.tomadorEmail.trim() } : {}),
+                            servico: {
+                              codigo: emitirNotaForm.servicoCodigo,
+                              discriminacao: emitirNotaForm.servicoDiscriminacao.trim(),
+                              cnae: emitirNotaForm.servicoCnae,
+                              aliquota: emitirNotaForm.servicoAliquota,
+                              valorServico: String(valor)
+                            }
+                          });
+                          setEmitirNotaSuccess('Nota enviada para emissão.');
+                          const list = await fetchAdminUserMeiNfse(selectedUserId);
+                          setMeiNfseList(list || []);
+                          setTimeout(() => {
+                            setShowEmitirNotaModal(false);
+                            setEmitirNotaSuccess(null);
+                          }, 1500);
+                        } catch (err) {
+                          setEmitirNotaError(err instanceof Error ? err.message : 'Erro ao enviar nota para emissão.');
+                        } finally {
+                          setEmitirNotaSubmitting(false);
+                        }
+                      }}
+                      className="planner-button disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {emitirNotaSubmitting ? 'Enviando...' : 'Emitir'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3">
               <div className="planner-card overflow-hidden">

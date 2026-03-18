@@ -28,11 +28,41 @@ export interface MeiCertificateStatus {
   hasUserCertificate: boolean;
   hasEnvCertificate: boolean;
   documento?: string | null;
+  certValidFrom?: string | null;
+  certValidTo?: string | null;
 }
 
 export interface MeiValidationResult {
   valid: boolean;
   message?: string | null;
+}
+
+export interface ParcelamentoItem {
+  numero?: string;
+  dataPedido?: string;
+  situacao?: string;
+  dataSituacao?: string;
+  modalidade?: string;
+}
+
+export interface ParcelamentosResponse {
+  parcelamentos: ParcelamentoItem[];
+  modalidadesConsultadas?: number;
+  resumoPorModalidade?: Record<string, number>;
+}
+
+export async function fetchParcelamentos(
+  cnpj?: string,
+  contribuinte?: { numero: string; tipo: number }
+): Promise<ParcelamentosResponse> {
+  const params: Record<string, string> = {};
+  if (cnpj) params.cnpj = cnpj;
+  if (contribuinte) {
+    params.contribuinteNumero = contribuinte.numero;
+    params.contribuinteTipo = String(contribuinte.tipo);
+  }
+  const query = new URLSearchParams(params);
+  return await apiClient.get<ParcelamentosResponse>(`/mei-guide/parcelamentos?${query.toString()}`);
 }
 
 export async function createMeiGuide(input: CreateMeiGuideInput): Promise<MeiGuideResponse> {
@@ -101,4 +131,24 @@ export async function validateMeiGuide(
     cnpj,
     periodoApuracao
   });
+}
+
+export async function downloadParcelamentoPdf(
+  numero: string,
+  cnpj?: string,
+  modalidade?: string,
+  contribuinte?: { numero: string; tipo: number }
+): Promise<{ blob: Blob; filename: string | null }> {
+  const params: Record<string, string> = {};
+  if (cnpj) params.cnpj = cnpj;
+  if (modalidade) params.modalidade = modalidade;
+  if (contribuinte) {
+    params.contribuinteNumero = contribuinte.numero;
+    params.contribuinteTipo = String(contribuinte.tipo);
+  }
+  const query = new URLSearchParams(params);
+  return await apiClient.requestBlob(
+    `/mei-guide/parcelamentos/${encodeURIComponent(numero)}/pdf?${query.toString()}`,
+    { method: 'GET' }
+  );
 }

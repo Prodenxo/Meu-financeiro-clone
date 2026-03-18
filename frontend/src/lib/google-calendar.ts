@@ -133,3 +133,33 @@ export async function createEventFromTransaction(transaction: {
 
   return await createCalendarEvent(event);
 }
+
+const CERT_EXPIRATION_EVENT_SUMMARY = 'Vencimento do certificado digital';
+
+/**
+ * Cria um evento de dia inteiro no Google Calendar na data de vencimento do certificado digital.
+ */
+export async function createCertificateExpirationEvent(
+  certValidTo: string
+): Promise<{ success: boolean; eventId?: string; error?: string }> {
+  const d = new Date(certValidTo);
+  if (!Number.isFinite(d.getTime())) {
+    return { success: false, error: 'Data de validade do certificado inválida' };
+  }
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const event: GoogleCalendarEvent = {
+    summary: CERT_EXPIRATION_EVENT_SUMMARY,
+    description: 'Data de vencimento do certificado digital (MEI).',
+    start: {
+      date: dateStr,
+      timeZone: 'America/Sao_Paulo',
+    },
+    end: {
+      date: dateStr,
+      timeZone: 'America/Sao_Paulo',
+    },
+  };
+  return await createCalendarEvent(event);
+}
+
+export { CERT_EXPIRATION_EVENT_SUMMARY };

@@ -32,7 +32,9 @@ test('admin controller retorna status de certificado MEI', async () => {
       userId,
       hasUserCertificate: true,
       hasEnvCertificate: false,
-      documento: '12345678000199'
+      documento: '12345678000199',
+      certValidFrom: '2024-01-01T00:00:00.000Z',
+      certValidTo: '2025-12-31T23:59:59.000Z'
     })
   };
   adminController.__setUsersServiceForTests(usersMock);
@@ -51,6 +53,8 @@ test('admin controller retorna status de certificado MEI', async () => {
     assert.equal(nextError, null);
     assert.equal(res.payload?.success, true);
     assert.equal(res.payload?.data?.documento, '12345678000199');
+    assert.equal(res.payload?.data?.certValidFrom, '2024-01-01T00:00:00.000Z');
+    assert.equal(res.payload?.data?.certValidTo, '2025-12-31T23:59:59.000Z');
   } finally {
     adminController.__setUsersServiceForTests();
     adminController.__setMeiGuideServiceForTests();

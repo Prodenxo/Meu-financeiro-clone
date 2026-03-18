@@ -978,6 +978,37 @@ export const listarNotas = async (
   return data || [];
 };
 
+/**
+ * Lista notas fiscais do usuário por userId (uso admin). Usa service role.
+ * @param {string} userId - ID do usuário alvo
+ * @param {{ limit?: number, documentType?: string, includeArchived?: boolean }} [options]
+ * @returns {Promise<Array>}
+ */
+export const listNotasByUserId = async (userId, options = {}) => {
+  const {
+    limit = 100,
+    documentType,
+    includeArchived = true
+  } = options;
+  const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 200);
+  const dbClient = getDb();
+  let query = dbClient
+    .from(TABLE)
+    .select('id, user_id, document_type, provider, status, plugnotas_id, id_integracao, protocol, pdf_url, xml_url, created_at, updated_at, archived_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(safeLimit);
+  if (documentType) {
+    query = query.eq('document_type', normalizeDocumentType(documentType));
+  }
+  if (!includeArchived) {
+    query = query.is('archived_at', null);
+  }
+  const { data, error } = await query;
+  if (error) throw badRequest(error.message);
+  return data || [];
+};
+
 export const listarRelatorioNfe = async (_userId, filters = {}) => {
   return await relatorioNfe(filters);
 };

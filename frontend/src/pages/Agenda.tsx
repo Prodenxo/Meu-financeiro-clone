@@ -1,10 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale/pt-BR';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { checkGoogleAuth, listCalendarEvents } from '../lib/google-calendar';
+import {
+  checkGoogleAuth,
+  listCalendarEvents,
+  createCertificateExpirationEvent,
+  CERT_EXPIRATION_EVENT_SUMMARY,
+} from '../lib/google-calendar';
 import { useTransactionStore } from '../store/transactionStore';
+import { fetchMeiCertificateStatus } from '../services/guidesMeiService';
+import type { MeiCertificateStatus } from '../services/guidesMeiService';
 
 const locales = {
   'pt-BR': ptBR,
@@ -42,7 +49,55 @@ export default function Agenda() {
   const [isGoogleAuthorized, setIsGoogleAuthorized] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [meiCertificateStatus, setMeiCertificateStatus] = useState<MeiCertificateStatus | null>(null);
+  const syncedCertValidToRef = useRef<string | null>(null);
   const { transactions } = useTransactionStore();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMeiCertificateStatus()
+      .then((data) => { if (!cancelled) setMeiCertificateStatus(data); })
+      .catch(() => { if (!cancelled) setMeiCertificateStatus(null); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const certValidTo = meiCertificateStatus?.certValidTo ?? null;
+    if (
+      !meiCertificateStatus?.hasUserCertificate ||
+      !certValidTo ||
+      !isGoogleAuthorized
+    ) {
+      return;
+    }
+    if (syncedCertValidToRef.current === certValidTo) {
+      return;
+    }
+    syncedCertValidToRef.current = certValidTo;
+    const d = new Date(certValidTo);
+    if (!Number.isFinite(d.getTime())) return;
+    const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+    const timeMin = startOfDay.toISOString();
+    const timeMax = endOfDay.toISOString();
+    listCalendarEvents({ timeMin, timeMax })
+      .then(({ events: dayEvents, error }) => {
+        if (error) return;
+        const alreadyExists = (dayEvents ?? []).some(
+          (e) => (e.summary ?? '').trim() === CERT_EXPIRATION_EVENT_SUMMARY
+        );
+        if (alreadyExists) return;
+        return createCertificateExpirationEvent(certValidTo);
+      })
+      .then((result) => {
+        if (result && !result.success && result.error) {
+          console.warn('[Agenda] Não foi possível criar evento de vencimento do certificado no Google:', result.error);
+        }
+      })
+      .catch((err) => {
+        console.warn('[Agenda] Sync evento vencimento certificado no Google:', err);
+      });
+  }, [meiCertificateStatus?.hasUserCertificate, meiCertificateStatus?.certValidTo, isGoogleAuthorized]);
 
   useEffect(() => {
     checkAuthStatus();
@@ -72,8 +127,22 @@ export default function Agenda() {
           source: 'transaction',
         };
       });
-    setEvents([...transactionEvents, ...googleEvents]);
-  }, [transactions, googleEvents]);
+    const certEvents: typeof transactionEvents = [];
+    if (meiCertificateStatus?.hasUserCertificate && meiCertificateStatus?.certValidTo) {
+      const certDate = new Date(meiCertificateStatus.certValidTo);
+      if (Number.isFinite(certDate.getTime())) {
+        const start = new Date(certDate.getFullYear(), certDate.getMonth(), certDate.getDate());
+        certEvents.push({
+          title: 'Vencimento do certificado digital',
+          start,
+          end: new Date(start),
+          allDay: true,
+          source: 'certificate',
+        });
+      }
+    }
+    setEvents([...transactionEvents, ...googleEvents, ...certEvents]);
+  }, [transactions, googleEvents, meiCertificateStatus]);
 
   useEffect(() => {
     if (!isGoogleAuthorized) {
@@ -196,6 +265,20 @@ export default function Agenda() {
           </>
         )}
 
+        {meiCertificateStatus?.hasUserCertificate && meiCertificateStatus?.certValidTo && (
+          <div className="bg-slate-100 dark:bg-slate-800/60 p-3 rounded-xl mb-4 md:mb-8 border border-slate-200/60 dark:border-slate-700/60">
+            <p className="text-sm md:text-base text-slate-700 dark:text-slate-300">
+              Certificado digital válido até{' '}
+              {new Date(meiCertificateStatus.certValidTo).toLocaleDateString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+              })}
+              .
+            </p>
+          </div>
+        )}
+
         <div className="planner-card p-4 md:p-6 flex-grow">
           <Calendar
             localizer={localizer}
@@ -209,7 +292,9 @@ export default function Agenda() {
             eventPropGetter={(event) => {
               let backgroundColor: string;
 
-              if (event.source === 'google') {
+              if (event.source === 'certificate') {
+                backgroundColor = '#D97706';
+              } else if (event.source === 'google') {
                 backgroundColor = '#2563EB';
               } else if (event.tipo === 'entrada') {
                 // Entradas: verde escuro para recebido, verde claro/amarelo para a_receber
@@ -240,11 +325,13 @@ export default function Agenda() {
                     <div
                       className="w-3 h-3 rounded-full"
                       style={{ 
-                        backgroundColor: event.source === 'google'
-                          ? '#2563EB'
-                          : (event.tipo === 'entrada' 
-                            ? (event.status === 'recebido' ? '#10B981' : '#84CC16')
-                            : (event.status === 'pago' ? '#DC2626' : '#F97316'))
+                        backgroundColor: event.source === 'certificate'
+                          ? '#D97706'
+                          : event.source === 'google'
+                            ? '#2563EB'
+                            : (event.tipo === 'entrada' 
+                              ? (event.status === 'recebido' ? '#10B981' : '#84CC16')
+                              : (event.status === 'pago' ? '#DC2626' : '#F97316'))
                       }}
                     />
                   </div>

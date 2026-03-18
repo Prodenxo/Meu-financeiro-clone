@@ -10,10 +10,14 @@ router.get('/users/:userId/categories', requireAuth, requireAdmin, controller.li
 router.get('/users/:userId/budgets/summary', requireAuth, requireAdmin, controller.listUserBudgetsSummary);
 router.get('/users/:userId/budgets/yearly', requireAuth, requireAdmin, controller.listUserBudgetsYearly);
 router.get('/users/:userId/balance', requireAuth, requireAdmin, controller.getUserBalance);
+router.get('/users/:userId/mei-nfse', requireAuth, requireAdmin, controller.listAdminUserMeiNfse);
+router.post('/users/:userId/mei-nfse/emitir', requireAuth, requireAdmin, controller.emitirNotaAsAdmin);
 router.get('/das/status', requireAuth, requireAdmin, controller.listDasStatus);
 router.get('/das/pending', requireAuth, requireAdmin, controller.listPendingDas);
 router.post('/das/reprocess', requireAuth, requireAdmin, controller.reprocessDas);
 router.get('/mei-guide/:userId/certificate/status', requireAuth, requireAdmin, controller.getAdminMeiCertificateStatus);
+router.get('/mei-guide/:userId/parcelamentos', requireAuth, requireAdmin, controller.listAdminUserParcelamentos);
+router.get('/mei-guide/:userId/parcelamentos/:numero/pdf', requireAuth, requireAdmin, controller.downloadAdminUserParcelamentoPdf);
 router.get('/mei-guide/:userId/periods', requireAuth, requireAdmin, controller.listAdminMeiPeriods);
 router.get('/mei-guide/:userId/periods-by-cnpj', requireAuth, requireAdmin, controller.listAdminMeiPeriodsByCnpj);
 router.get('/mei-guide/:userId/download/:periodoApuracao', requireAuth, requireAdmin, controller.downloadAdminMeiGuide);

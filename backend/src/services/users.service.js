@@ -243,7 +243,7 @@ export const getRequesterContext = async (accessToken) => {
   const linkClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await linkClient
     .from('role_x_user_x_empresa')
-    .select('empresas_id, roles_id, status, mei')
+    .select('id, empresas_id, roles_id, status, mei, expires_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -256,6 +256,15 @@ export const getRequesterContext = async (accessToken) => {
   if (linkData?.roles_id) {
     if (linkData?.status === false) {
       throw forbidden('Seu perfil está bloqueado');
+    }
+    if (linkData?.expires_at && new Date(linkData.expires_at) < new Date()) {
+      if (linkData?.id) {
+        await linkClient
+          .from('role_x_user_x_empresa')
+          .update({ status: false })
+          .eq('id', linkData.id);
+      }
+      throw forbidden('Seu acesso expirou');
     }
     const { data: roleData, error: roleError } = await linkClient
       .from('roles')
@@ -299,7 +308,7 @@ export const listUsers = async (accessToken) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   let query = adminClient
     .from('role_x_user_x_empresa')
-    .select('user_id, empresas_id, roles_id, status, mei');
+    .select('user_id, empresas_id, roles_id, status, mei, expires_at');
 
   if (role === 'admin') {
     if (!empresaId) throw forbidden();
@@ -358,7 +367,8 @@ export const listUsers = async (accessToken) => {
           empresaId: link.empresas_id || null,
           empresaName: empresaMap.get(link.empresas_id)?.empresa || null,
           status: link.status ?? true,
-          mei: typeof link.mei === 'boolean' ? link.mei : true
+          mei: typeof link.mei === 'boolean' ? link.mei : true,
+          expiresAt: link.expires_at ? new Date(link.expires_at).toISOString() : null
         };
       })
       .filter(Boolean)
@@ -543,6 +553,10 @@ export const createUser = async (accessToken, input, deps = {}) => {
     throw badRequest(createError?.message || 'Erro ao criar usuário');
   }
 
+  const expiresAtInsert =
+    finalRole === 'usuario' && input?.expiresAt
+      ? new Date(input.expiresAt).toISOString()
+      : null;
   const { error: linkError } = await adminClient
     .from('role_x_user_x_empresa')
     .insert({
@@ -550,7 +564,8 @@ export const createUser = async (accessToken, input, deps = {}) => {
       roles_id: roleId,
       empresas_id: finalEmpresaId,
       status: true,
-      mei: targetMei
+      mei: targetMei,
+      ...(expiresAtInsert ? { expires_at: expiresAtInsert } : {})
     });
 
   if (linkError) throw badRequest(linkError.message);
@@ -584,6 +599,12 @@ export const updateUser = async (accessToken, userId, input) => {
   const requestedDisplayName = input?.displayName?.trim();
   const requestedPhone = cleanPhone(input?.phone?.trim());
   const requestedMei = typeof input?.mei === 'boolean' ? input.mei : undefined;
+  const requestedExpiresAt =
+    input?.expiresAt === undefined
+      ? undefined
+      : input.expiresAt
+        ? new Date(input.expiresAt).toISOString()
+        : null;
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await adminClient
@@ -740,13 +761,20 @@ export const updateUser = async (accessToken, userId, input) => {
     finalRole = resolvedRole;
   }
 
+  const updatePayload = {
+    roles_id: roleId,
+    empresas_id: finalEmpresaId,
+    ...(requestedMei !== undefined ? { mei: requestedMei } : {})
+  };
+  if (targetRole === 'usuario' && requestedExpiresAt !== undefined) {
+    updatePayload.expires_at = requestedExpiresAt;
+  }
+  if (finalRole !== 'usuario') {
+    updatePayload.expires_at = null;
+  }
   const { error: updateError } = await adminClient
     .from('role_x_user_x_empresa')
-    .update({
-      roles_id: roleId,
-      empresas_id: finalEmpresaId,
-      ...(requestedMei !== undefined ? { mei: requestedMei } : {})
-    })
+    .update(updatePayload)
     .eq('id', linkRecord.id);
 
   if (updateError) throw badRequest(updateError.message);

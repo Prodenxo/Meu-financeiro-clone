@@ -44,7 +44,34 @@ const parseDados = (payload) => {
   }
 };
 
-const SERVICOS_SEM_DADOS = new Set(['PEDIDOSPARC163', 'PEDIDOSPARC203']);
+const SERVICOS_SEM_DADOS = new Set([
+  'PEDIDOSPARC163',
+  'PEDIDOSPARC173',
+  'PEDIDOSPARC193',
+  'PEDIDOSPARC203',
+  'PEDIDOSPARC213',
+  'PEDIDOSPARC233'
+]);
+
+/** Extrai mensagem de erro do corpo da resposta da SERPRO (mensagens, message, error). */
+const extractSerproErrorMessage = (rawBody, statusText) => {
+  if (rawBody == null) return statusText || 'Falha ao consultar serviço';
+  if (typeof rawBody === 'string') return rawBody.trim() || statusText || 'Falha ao consultar serviço';
+  let mensagemSerpro = '';
+  const m = rawBody.mensagens;
+  if (Array.isArray(m) && m.length > 0) {
+    mensagemSerpro = m
+      .map((item) => (typeof item === 'string' ? item : (item?.texto ?? item?.mensagem ?? item?.descricao ?? '')))
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+  } else if (typeof m === 'string') {
+    mensagemSerpro = (m || '').trim();
+  }
+  return rawBody.message || rawBody.error || mensagemSerpro || statusText || 'Falha ao consultar serviço';
+};
+
+const MENSAGEM_GENERICA_400 = 'Não foi possível consultar o serviço. Verifique o CNPJ e tente novamente.';
 
 const buildSerproHeaders = async ({
   forceRefresh = false,
@@ -148,9 +175,7 @@ export const consultarServico = async ({
     const rawBody = contentType.includes('application/json')
       ? await response.json()
       : await response.text();
-    const message = typeof rawBody === 'string'
-      ? rawBody
-      : (rawBody?.message || rawBody?.error || response.statusText);
+    const message = extractSerproErrorMessage(rawBody, response.statusText);
     return { response, message, rawBody };
   };
 
@@ -181,7 +206,14 @@ export const consultarServico = async ({
         bodyJson: typeof rawBody === 'object' ? JSON.stringify(rawBody) : null
       });
     }
-    throw badRequest(result.message || 'Falha ao consultar serviço');
+    let finalMessage = result.message || 'Falha ao consultar serviço';
+    const isGeneric =
+      /^Bad Request$/i.test(finalMessage) ||
+      (result.response.status === 400 && finalMessage === (result.response.statusText || ''));
+    if (isGeneric) {
+      finalMessage = MENSAGEM_GENERICA_400;
+    }
+    throw badRequest(finalMessage);
   }
 
   const payload = await result.response.json();

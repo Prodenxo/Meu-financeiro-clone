@@ -4,6 +4,7 @@ import * as usersService from '../services/users.service.js';
 import * as meiDasService from '../services/mei-das.service.js';
 import * as meiGuideService from '../services/mei-guide.service.js';
 import * as meiGuideDasBase64Service from '../services/mei-guide-das-base64.service.js';
+import * as meiNotasService from '../services/mei-notas.service.js';
 import * as n8nWhatsappService from '../services/n8n-whatsapp.service.js';
 import { badRequest, forbidden } from '../utils/errors.js';
 import { sendSuccess } from '../utils/response.js';
@@ -232,6 +233,89 @@ export const downloadAdminMeiGuide = async (req, res, next) => {
     });
     res.setHeader('Content-Type', file.contentType || 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${file.filename || 'guia-mei.pdf'}"`);
+    return res.send(file.buffer);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listAdminUserMeiNfse = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    const limit = req.query?.limit ? Number(req.query.limit) : undefined;
+    const documentType = req.query?.documentType || undefined;
+    const includeArchived = req.query?.includeArchived !== 'false';
+    const data = await meiNotasService.listNotasByUserId(userId, {
+      limit,
+      documentType,
+      includeArchived
+    });
+    return sendSuccess(res, data, 'Notas fiscais do usuário listadas');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const emitirNotaAsAdmin = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    const data = await meiNotasService.emitirNota(userId, req.body);
+    return sendSuccess(res, data, 'Nota fiscal enviada para emissão');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listAdminUserParcelamentos = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    const contribuinte = req.query?.contribuinteNumero
+      ? {
+          numero: req.query.contribuinteNumero,
+          tipo: req.query.contribuinteTipo
+        }
+      : null;
+    let cnpj = req.query?.cnpj || null;
+    if (!cnpj) {
+      try {
+        const certStatus = await meiGuideServiceRef.getCertificateStatus(userId);
+        if (certStatus?.documento) cnpj = certStatus.documento;
+      } catch (_) {
+        // ignorar; listParcelamentos pode falhar sem CNPJ/certificado
+      }
+    }
+    const data = await meiGuideServiceRef.listParcelamentos(userId, {
+      cnpj,
+      contribuinte
+    });
+    return sendSuccess(res, data, 'Parcelamentos do usuário listados');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const downloadAdminUserParcelamentoPdf = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    const numero = req.params.numero;
+    await ensureCanViewUser(req.accessToken, userId);
+    const contribuinte = req.query?.contribuinteNumero
+      ? {
+          numero: req.query.contribuinteNumero,
+          tipo: req.query.contribuinteTipo
+        }
+      : null;
+    const file = await meiGuideServiceRef.getOrDownloadParcelamentoPdf(userId, {
+      numero,
+      cnpj: req.query?.cnpj || undefined,
+      modalidade: req.query?.modalidade || undefined,
+      contribuinte
+    });
+    res.setHeader('Content-Type', file.contentType || 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename || `parcelamento-${numero}.pdf`}"`);
     return res.send(file.buffer);
   } catch (error) {
     return next(error);

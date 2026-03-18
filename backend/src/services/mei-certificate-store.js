@@ -69,8 +69,16 @@ const getSupabase = () => {
 
 /**
  * Salva ou atualiza o certificado do usuário (upsert por user_id).
+ * @param {object} opts - certValidFrom e certValidTo em ISO string (opcional).
  */
-export const saveCertificate = async (userId, { pfxBase64, passphraseEnc, passphraseIv, certDocument }) => {
+export const saveCertificate = async (userId, {
+  pfxBase64,
+  passphraseEnc,
+  passphraseIv,
+  certDocument,
+  certValidFrom = null,
+  certValidTo = null
+}) => {
   if (!userId) throw badRequest('Usuário não identificado');
   const supabase = getSupabase();
   const row = {
@@ -79,6 +87,8 @@ export const saveCertificate = async (userId, { pfxBase64, passphraseEnc, passph
     passphrase_enc: passphraseEnc,
     passphrase_iv: passphraseIv,
     cert_document: certDocument || null,
+    cert_valid_from: certValidFrom || null,
+    cert_valid_to: certValidTo || null,
     updated_at: new Date().toISOString()
   };
   const { error } = await supabase
@@ -135,7 +145,7 @@ export const loadCertificate = async (userId) => {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from(TABLE)
-    .select('pfx_base64, passphrase_enc, passphrase_iv, cert_document')
+    .select('pfx_base64, passphrase_enc, passphrase_iv, cert_document, cert_valid_from, cert_valid_to')
     .eq('user_id', userId)
     .maybeSingle();
   if (error || !data) return null;
@@ -146,7 +156,9 @@ export const loadCertificate = async (userId) => {
     pfxBase64: data.pfx_base64,
     passphraseEnc: data.passphrase_enc,
     passphraseIv: data.passphrase_iv,
-    certDocument: data.cert_document ?? null
+    certDocument: data.cert_document ?? null,
+    certValidFrom: data.cert_valid_from ?? null,
+    certValidTo: data.cert_valid_to ?? null
   };
 };
 
@@ -185,4 +197,23 @@ export const getCertificateDocument = async (userId) => {
     .eq('user_id', userId)
     .maybeSingle();
   return data?.cert_document ?? null;
+};
+
+/**
+ * Retorna apenas as datas de validade do certificado persistido (sem carregar o blob).
+ * @returns {{ certValidFrom: string | null, certValidTo: string | null } | null}
+ */
+export const getCertificateValidity = async (userId) => {
+  if (!userId) return null;
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('cert_valid_from, cert_valid_to')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    certValidFrom: data.cert_valid_from ?? null,
+    certValidTo: data.cert_valid_to ?? null
+  };
 };

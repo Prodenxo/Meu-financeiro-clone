@@ -24,9 +24,10 @@ Se o frontend em **meu-financeiro-frontend-teste.vercel.app** ainda mostra erro 
   - Para NFSe (PlugNotas) em produção:
     - `PLUGNOTAS_API_KEY` – token de produção da API PlugNotas. Para atualizar via CLI após `npx vercel login`, execute na pasta backend: `.\scripts\vercel-atualizar-plugnotas-api-key.ps1` (o script lê o valor de `backend/.env` ou usa o padrão).
     - `PLUGNOTAS_API_BASE_URL` – use `https://api.plugnotas.com.br` para produção (opcional se o backend já usar esse padrão).
-  - Opcional para CORS (o código já aceita `*.vercel.app`):
-    - `CORS_ORIGIN` – se quiser restringir, inclua por exemplo:  
+  - Opcional para CORS (o código já aceita `*.vercel.app` e **sempre** inclui origens Expo Web `http://localhost:8081`, `http://localhost:19006` via `src/config/env.js`):
+    - **`CORS_ORIGIN`** – variável **única** que o backend lê para CORS. Lista de origens separadas por vírgula. Exemplo:  
       `https://meu-financeiro-frontend.vercel.app,https://meu-financeiro-frontend-teste.vercel.app`
+    - **Não use `EXPO_WEB_ORIGINS`** – o backend **não lê** essa variável; é apenas um nome de constante no código. Para o app Expo Web em `localhost:8081` funcionar, use `CORS_ORIGIN` (ou faça redeploy do código atual, que já faz merge com 8081/19006).
     - `FRONTEND_URL` – usado como fallback para CORS quando `CORS_ORIGIN` não está definido.
 
 - Se `SUPABASE_URL` ou `SUPABASE_ANON_KEY` estiverem faltando, o backend pode falhar ao carregar e as respostas (incluindo OPTIONS) podem vir sem os headers CORS.
@@ -38,6 +39,8 @@ Se o frontend em **meu-financeiro-frontend-teste.vercel.app** ainda mostra erro 
   - As alterações precisam estar no repositório (commit/push).
   - O projeto na Vercel deve ter sido deployado **depois** desse commit (deploy automático por push ou “Redeploy” em **Deployments**).
 - Em **Deployments**, abra o deploy ativo e confira se o commit é o esperado e se o status é “Ready”.
+
+- **Expo Web (localhost:8081):** Se o app mobile no navegador ainda recebe CORS, use **CORS_ORIGIN** na Vercel (não EXPO_WEB_ORIGINS) e faça **Redeploy** após alterar variáveis ou após subir o código com o merge em `env.js`.
 
 ## 5. Teste rápido do backend
 
@@ -70,7 +73,7 @@ Não é possível “entrar na Vercel” por aqui; use o dashboard em vercel.com
 
 Foi criado um script que faz pelo terminal: link do projeto, listagem de env, adição de `CORS_ORIGIN` (se faltar), redeploy e teste OPTIONS.
 
-1. **Faça login na Vercel (uma vez):** no terminal: `npx vercel login` e conclua o fluxo no navegador.
+1. **Faça login na Vercel (uma vez):** no terminal: `npx vercel login` e conclua o fluxo no navegador. (Sem login, `npx vercel --prod` falha com "The specified token is not valid".)
 2. **Execute o script** a partir da pasta **backend**: `.\scripts\vercel-conferir-e-corrigir.ps1`  
    O script verifica o login, vincula o projeto (se precisar), lista as variáveis, adiciona `CORS_ORIGIN` para Production e Preview se não existir, faz deploy de produção e testa o OPTIONS. Na primeira vez em `vercel link`, escolha o time e o projeto **meu-financeiro-backend-bk**.
 3. **Root Directory** continua só pelo dashboard: Settings > General > Root Directory = **backend**.
