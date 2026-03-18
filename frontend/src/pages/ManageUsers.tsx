@@ -3,7 +3,7 @@ import Fuse from 'fuse.js';
 import LoadingOverlay from '../components/LoadingOverlay';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
 import { banUser, createEmpresaLimits, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateEmpresaLimits, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';

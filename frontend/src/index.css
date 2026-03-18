@@ -2,6 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens (2A) – primary = blue, surfaces for light/dark */
+:root {
+  --color-primary: 59 130 246; /* blue-500 */
+  --color-primary-hover: 96 165 250; /* blue-400 */
+  --color-surface: 248 250 252; /* slate-50 */
+  --color-surface-border: 226 232 240; /* slate-200 */
+  --color-surface-muted: 241 245 249; /* slate-100 */
+  --color-text: 15 23 42; /* slate-900 */
+  --color-text-muted: 100 116 139; /* slate-500 */
+  --surface-800: 30 41 59; /* slate-800 */
+  --surface-900: 15 23 42; /* slate-950 */
+}
+
+.dark {
+  --color-primary: 96 165 250; /* blue-400 */
+  --color-primary-hover: 147 197 253; /* blue-300 */
+  --color-surface: 15 23 42; /* slate-950 */
+  --color-surface-border: 51 65 85; /* slate-700 */
+  --color-surface-muted: 30 41 59; /* slate-800 */
+  --color-text: 241 245 249; /* slate-100 */
+  --color-text-muted: 148 163 184; /* slate-400 */
+  /* 7A: tokens para componentes externos (rbc, inputs) */
+  --dark-border: 75 85 99; /* slate-600 #4B5563 */
+  --dark-bg-cell: 31 41 55; /* slate-800 #1F2937 */
+  --dark-bg-today: 55 65 81; /* slate-700 #374151 */
+  --dark-bg-off: 17 24 39; /* slate-900 #111827 */
+  --dark-muted: 107 114 128; /* gray-500 #6B7280 */
+  --dark-primary: 37 99 235; /* blue-600 #2563EB */
+  --dark-danger: 239 68 68; /* red-500 #EF4444 */
+}
+
 @layer base {
   html {
     @apply font-sans antialiased;
@@ -13,6 +44,14 @@
 
   .dark body {
     @apply bg-slate-950 text-slate-100;
+  }
+
+  /* 5A: Anel de foco visível para acessibilidade */
+  .focus-ring:focus-visible,
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible {
+    @apply outline-none ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-slate-950;
   }
 }
 
@@ -230,133 +269,132 @@
   }
 }
 
-/* Estilos para react-big-calendar no modo escuro */
+/* Estilos para react-big-calendar no modo escuro (7A: variáveis CSS) */
 .dark .rbc-calendar {
-  color: #F9FAFB;
+  color: rgb(var(--color-text));
 }
 
 .dark .rbc-header {
-  border-bottom: 1px solid #4B5563;
-  color: #F9FAFB;
+  border-bottom: 1px solid rgb(var(--dark-border));
+  color: rgb(var(--color-text));
 }
 
 .dark .rbc-day-bg {
-  border-color: #4B5563 !important;
-  background-color: #1F2937 !important;
+  border-color: rgb(var(--dark-border)) !important;
+  background-color: rgb(var(--dark-bg-cell)) !important;
 }
 
 .dark .rbc-today {
-  background-color: #374151 !important;
+  background-color: rgb(var(--dark-bg-today)) !important;
 }
 
 .dark .rbc-off-range-bg {
-  background-color: #111827 !important;
+  background-color: rgb(var(--dark-bg-off)) !important;
 }
 
 .dark .rbc-off-range {
-  color: #6B7280 !important;
+  color: rgb(var(--dark-muted)) !important;
 }
 
 .dark .rbc-toolbar {
-  color: #F9FAFB !important;
+  color: rgb(var(--color-text)) !important;
 }
 
 .dark .rbc-toolbar button {
-  background-color: #374151 !important;
-  color: #F9FAFB !important;
-  border-color: #4B5563 !important;
+  background-color: rgb(var(--dark-bg-today)) !important;
+  color: rgb(var(--color-text)) !important;
+  border-color: rgb(var(--dark-border)) !important;
 }
 
 .dark .rbc-toolbar button:hover,
 .dark .rbc-toolbar button:focus {
-  background-color: #4B5563 !important;
+  background-color: rgb(var(--dark-border)) !important;
 }
 
 .dark .rbc-toolbar button.rbc-active {
-  background-color: #2563EB !important;
-  border-color: #2563EB !important;
+  background-color: rgb(var(--dark-primary)) !important;
+  border-color: rgb(var(--dark-primary)) !important;
   color: white !important;
 }
 
 .dark .rbc-month-view {
-  border-color: #4B5563;
+  border-color: rgb(var(--dark-border));
 }
 
 .dark .rbc-time-view {
-  border-color: #4B5563;
+  border-color: rgb(var(--dark-border));
 }
 
 .dark .rbc-time-content {
-  border-top: 1px solid #4B5563;
+  border-top: 1px solid rgb(var(--dark-border));
 }
 
 .dark .rbc-time-header-content {
-  border-left: 1px solid #4B5563;
+  border-left: 1px solid rgb(var(--dark-border));
 }
 
 .dark .rbc-time-slot {
-  border-top: 1px solid #4B5563;
+  border-top: 1px solid rgb(var(--dark-border));
 }
 
 .dark .rbc-day-slot .rbc-time-slot {
-  border-top: 1px solid #4B5563;
+  border-top: 1px solid rgb(var(--dark-border));
 }
 
 .dark .rbc-time-header-gutter {
-  border-right: 1px solid #4B5563;
+  border-right: 1px solid rgb(var(--dark-border));
 }
 
 .dark .rbc-agenda-view table.rbc-agenda-table {
-  border-color: #4B5563;
+  border-color: rgb(var(--dark-border));
 }
 
 .dark .rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
-  border-color: #4B5563;
-  color: #F9FAFB;
+  border-color: rgb(var(--dark-border));
+  color: rgb(var(--color-text));
 }
 
 .dark .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
-  border-color: #4B5563;
-  color: #F9FAFB;
+  border-color: rgb(var(--dark-border));
+  color: rgb(var(--color-text));
 }
 
 .dark .rbc-agenda-date-cell,
 .dark .rbc-agenda-time-cell {
-  color: #F9FAFB;
+  color: rgb(var(--color-text));
 }
 
 .dark .rbc-selected-cell {
-  background-color: #2563EB;
+  background-color: rgb(var(--dark-primary));
 }
 
 .dark .rbc-show-more {
-  background-color: #374151;
-  color: #F9FAFB;
-  border-color: #4B5563;
+  background-color: rgb(var(--dark-bg-today));
+  color: rgb(var(--color-text));
+  border-color: rgb(var(--dark-border));
 }
 
 .dark .rbc-show-more:hover {
-  background-color: #4B5563;
+  background-color: rgb(var(--dark-border));
 }
 
 .dark .rbc-current-time-indicator {
-  background-color: #EF4444;
+  background-color: rgb(var(--dark-danger));
 }
 
-/* Estilos adicionais para garantir elementos escuros no modo escuro */
+/* Estilos adicionais para garantir elementos escuros no modo escuro (7A) */
 .dark input[type="date"],
 .dark input[type="text"] {
-  background-color: #374151 !important;
-  color: #F9FAFB !important;
-  border-color: #4B5563 !important;
+  background-color: rgb(var(--dark-bg-today)) !important;
+  color: rgb(var(--color-text)) !important;
+  border-color: rgb(var(--dark-border)) !important;
 }
 
 .dark input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1);
 }
 
-/* Garantir que inputs de busca sejam escuros */
 .dark input[type="text"]::placeholder {
-  color: #9CA3AF !important;
+  color: rgb(var(--color-text-muted)) !important;
 }
 

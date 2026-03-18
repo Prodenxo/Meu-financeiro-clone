@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Wallet } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import {
   fetchCategories,
@@ -9,7 +10,11 @@ import {
   type Category,
   type CategoryBudgetSummary,
 } from '../services/categoryService';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
+import PageShell from '../components/PageShell';
+import PageTitle from '../components/PageTitle';
+import EmptyState from '../components/EmptyState';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const meses = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -218,14 +223,11 @@ export default function Orcamentos() {
   };
 
   return (
-    <>
+    <PageShell>
+      <PageTitle subtitle="Acompanhe seu planejamento financeiro e compare com o realizado.">
+        Orçamento Mensal
+      </PageTitle>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold dark:text-white">Orçamento Mensal</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Acompanhe seu planejamento financeiro e compare com o realizado.
-          </p>
-        </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
           <select
             className="planner-input py-2 text-sm w-40"
@@ -300,7 +302,32 @@ export default function Orcamentos() {
         </div>
 
         {loading ? (
-          <div className="text-sm text-slate-500 dark:text-slate-400">Carregando dados...</div>
+          <LoadingOverlay message="Carregando orçamentos..." />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={Wallet}
+            title="Nenhum orçamento neste mês"
+            description="Adicione um orçamento por categoria ou duplique o mês anterior para começar."
+            action={
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  className="planner-button"
+                  onClick={() => setAddBudgetOpen(true)}
+                >
+                  Novo orçamento
+                </button>
+                <button
+                  type="button"
+                  className="planner-button-secondary"
+                  onClick={handleDuplicateMonth}
+                  disabled={duplicating}
+                >
+                  {duplicating ? 'Duplicando...' : 'Duplicar mês anterior'}
+                </button>
+              </div>
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -366,13 +393,6 @@ export default function Orcamentos() {
                     </td>
                   </tr>
                 ))}
-                {rows.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="py-6 text-center text-slate-400">
-                      Nenhuma categoria encontrada.
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
@@ -433,6 +453,6 @@ export default function Orcamentos() {
           </div>
         </div>
       )}
-    </>
+    </PageShell>
   );
 }

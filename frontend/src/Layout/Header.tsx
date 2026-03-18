@@ -29,7 +29,7 @@ export default function Header({ userName, sidebarExpanded, onToggleSidebar }: H
       {/* Mobile: Título e saudação */}
       <div className="flex flex-col md:hidden w-full">
         <span className={`font-bold text-lg tracking-wide ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-          Finanças Pessoais
+          Meu Financeiro
         </span>
         <span className={`text-sm mt-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-500'}`}>
           Olá, {userName || 'Usuário'}

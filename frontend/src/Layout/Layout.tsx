@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Grid3X3, X } from 'lucide-react';
 import Header from './Header';
 import Sidebar from './Sidebar';
+import Footer from './Footer';
 import BottomNavigation from '../components/BottomNavigation';
 import UpdatesPanel from '../components/UpdatesPanel';
 import { useAuthStore } from '../store/authStore';
@@ -44,6 +45,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       >
         {children}
       </main>
+      <Footer />
       <div className="fixed bottom-20 left-4 z-40 md:hidden">
         {quickLinksOpen && (
           <div className="mb-2 planner-card p-2 flex flex-col gap-2">

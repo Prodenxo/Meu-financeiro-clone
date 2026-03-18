@@ -12,6 +12,8 @@ import {
 import { useTransactionStore } from '../store/transactionStore';
 import { fetchMeiCertificateStatus } from '../services/guidesMeiService';
 import type { MeiCertificateStatus } from '../services/guidesMeiService';
+import PageShell from '../components/PageShell';
+import PageTitle from '../components/PageTitle';
 
 const locales = {
   'pt-BR': ptBR,
@@ -212,13 +214,9 @@ export default function Agenda() {
   };
 
   return (
-    <>
-      <div className="p-4 md:p-6 h-full flex flex-col">
-        <h1 className="text-xl md:text-3xl font-bold mb-4 dark:text-white">Agenda</h1>
-        <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 mb-4">
-          Visualize seus pagamentos futuros e eventos
-        </p>
-        
+    <PageShell>
+      <PageTitle subtitle="Visualize seus pagamentos futuros e eventos">Agenda</PageTitle>
+      <div className="h-full flex flex-col">
         {checkingAuth ? (
           <div className="planner-card p-4 md:p-6 mb-4 md:mb-8">
             <p className="text-slate-600 dark:text-slate-400">Verificando autenticação...</p>
@@ -341,6 +339,6 @@ export default function Agenda() {
           </div>
         )}
       </div>
-    </>
+    </PageShell>
   );
 }

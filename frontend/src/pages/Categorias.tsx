@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Grid3x3 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import {
   fetchCategories,
@@ -8,6 +9,10 @@ import {
   fetchCategoryBudgetsSummary,
   type Category,
 } from '../services/categoryService';
+import PageShell from '../components/PageShell';
+import PageTitle from '../components/PageTitle';
+import EmptyState from '../components/EmptyState';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 function CategoriaModal({ open, onClose, onSave, categoria }: { open: boolean, onClose: () => void, onSave: (cat: { nome: string, tipo: string }) => void, categoria?: Category | null }) {
   const [nome, setNome] = useState('');
@@ -251,12 +256,12 @@ export default function Categorias() {
           </div>
         </div>
       )}
-      
-      <h1 className="text-xl md:text-2xl font-bold mb-2 mt-2 dark:text-white">Categorias</h1>
-      <p className="text-sm md:text-base text-slate-500 dark:text-gray-400 mb-4 md:mb-6">
-        A IA já identifica categorias automaticamente. Você pode personalizar também.
-      </p>
-      
+
+      <PageShell>
+      <PageTitle subtitle="A IA já identifica categorias automaticamente. Você pode personalizar também.">
+        Categorias
+      </PageTitle>
+
       <div className="flex flex-col md:flex-row md:items-center gap-3 mb-6">
         <div className="flex-1">
           <input
@@ -284,7 +289,24 @@ export default function Categorias() {
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {loading ? (
-          <div className="dark:text-gray-200">Carregando categorias...</div>
+          <LoadingOverlay message="Carregando categorias..." />
+        ) : categoriasFiltradas.length === 0 ? (
+          <div className="lg:col-span-2">
+            <EmptyState
+              icon={Grid3x3}
+              title="Nenhuma categoria encontrada"
+              description="Crie categorias para organizar suas entradas e saídas."
+              action={
+              <button
+                type="button"
+                className="planner-button"
+                onClick={() => { setEditingCategoria(null); setModalOpen(true); }}
+              >
+                Criar categoria
+              </button>
+            }
+            />
+          </div>
         ) : (
           <>
             {categoriasFiltradas.map(cat => (
@@ -326,12 +348,10 @@ export default function Categorias() {
                 </div>
               </div>
             ))}
-            {categoriasFiltradas.length === 0 && (
-              <div className="dark:text-gray-200">Nenhuma categoria encontrada.</div>
-            )}
           </>
         )}
       </div>
+      </PageShell>
     </>
   );
 } 
