@@ -6,6 +6,7 @@ import usersRoutes from './users.routes.js';
 import googleCalendarRoutes from './googleCalendar.routes.js';
 import meiGuideRoutes from './mei-guide.routes.js';
 import meiNotasRoutes from './mei-notas.routes.js';
+import recorrenciasRoutes from './recorrencias.routes.js';
 import adminRoutes from './admin.routes.js';
 import healthRoutes from './health.routes.js';
 
@@ -21,5 +22,6 @@ router.use('/google-calendar', googleCalendarRoutes);
 router.use('/mei-guide', meiGuideRoutes);
 router.use('/mei-notas', meiNotasRoutes);
 router.use('/notas', meiNotasRoutes);
+router.use('/recorrencias', recorrenciasRoutes);
 
 export default router;

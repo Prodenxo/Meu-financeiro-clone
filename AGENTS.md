@@ -25,8 +25,8 @@ Este arquivo define as instrucoes do projeto para o Codex CLI.
 
 - Core framework: `.aiox-core/`
 - CLI entrypoints: `bin/`
-- Shared packages: `packages/`
-- Tests: `tests/`
+- App workspaces: `frontend/` (Vite + React), `backend/` (Express)
+- Tests: `frontend/` (Vitest), `backend/tests/` (Node test runner)
 - Docs: `docs/`
 <!-- AIOX-MANAGED-END: codebase -->
 
