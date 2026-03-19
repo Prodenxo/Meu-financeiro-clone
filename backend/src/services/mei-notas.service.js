@@ -1281,6 +1281,8 @@ export const processarWebhook = async (payload) => {
     updates.document_type = documentType;
   }
 
+  // FR-01: Processamento determinístico — no máximo um registro atualizado por evento.
+  // Em caso de duplicidade de identificador, falha explícita e auditável.
   const resolveSingleRecordByField = async (field, value) => {
     if (!value) return null;
     let query = dbClient

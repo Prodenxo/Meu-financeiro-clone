@@ -50,18 +50,25 @@ const info = (message) => {
   console.log(`[INFO] ${message}`);
 };
 
+const supabaseBin = resolve(repoRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'supabase.cmd' : 'supabase');
+
 const runSupabase = (cmdArgs, { capture = false } = {}) => {
   const runArgs = ['--workdir', supabaseDir, ...cmdArgs];
-  const result = spawnSync('supabase', runArgs, {
-    encoding: 'utf8',
-    stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit'
-  });
+  const opts = { encoding: 'utf8', stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit', cwd: repoRoot };
+  let result = spawnSync('supabase', runArgs, opts);
+
+  if (result.error && result.error.code === 'ENOENT' && existsSync(supabaseBin)) {
+    result = spawnSync(supabaseBin, runArgs, { ...opts, shell: true });
+  }
+  if (result.error && result.error.code === 'ENOENT') {
+    result = spawnSync('npx', ['supabase', ...runArgs], opts);
+  }
 
   if (result.error) {
     if (result.error.code === 'ENOENT') {
       fail(
         'Supabase CLI nao encontrada.',
-        'Instale com: npm i -g supabase\nOu veja: https://github.com/supabase/cli/releases'
+        'Instale com: npm install supabase --save-dev\nOu veja: https://github.com/supabase/cli/releases'
       );
     }
     fail('Falha ao executar Supabase CLI.', String(result.error.message || result.error));

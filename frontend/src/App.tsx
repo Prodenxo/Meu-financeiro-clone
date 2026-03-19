@@ -13,6 +13,7 @@ import Transactions from './pages/Transactions';
 import Orcamentos from './pages/Orcamentos';
 import Categorias from './pages/Categorias';
 import Agenda from './pages/Agenda';
+import Recorrencias from './pages/Recorrencias';
 import Settings from './pages/Settings';
 import ManageUsers from './pages/ManageUsers';
 import AdminUserData from './pages/AdminUserData';
@@ -134,6 +135,7 @@ export function AppRoutes() {
                   <Route path="/orcamentos" element={<Orcamentos />} />
                   <Route path="/categorias" element={<Categorias />} />
                   <Route path="/agenda" element={<Agenda />} />
+                  <Route path="/recorrencias" element={<Recorrencias />} />
                   <Route
                     path="/guias-mei"
                     element={canAccessMeiArea ? <GuidesMei /> : <Navigate to="/" replace />}

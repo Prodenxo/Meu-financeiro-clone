@@ -25,6 +25,11 @@ Monorepo com frontend (Vite + React), backend (Express) e camada Supabase centra
 README.md
 ```
 
+## Variáveis de ambiente
+
+- **Nunca commite `.env`.** Use `backend/.env.example` e `frontend/.env.example` como referência; copie para `.env` em cada pasta e preencha com valores reais.
+- Arquivos `.env` estão no `.gitignore`; em caso de exposição acidental, rode a rotação de segredos conforme política do projeto.
+
 ## Backend (Express)
 ### Variáveis de ambiente (`backend/.env`)
 ```

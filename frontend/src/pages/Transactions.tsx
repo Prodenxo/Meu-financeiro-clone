@@ -4,12 +4,16 @@ import { useTransactionStore } from '../store/transactionStore';
 import { useAuthStore } from '../store/authStore';
 import { fetchCategoriesByType } from '../services/categoryService';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Download, PlusCircle, Filter, List } from 'lucide-react';
+import { AlertTriangle, Download, PlusCircle, Filter, List, Repeat, Pencil, Trash2, ChevronDown } from 'lucide-react';
 import { toast } from '../lib/toast';
 import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
 import EmptyState from '../components/EmptyState';
 import ButtonSpinner from '../components/ButtonSpinner';
+import RecorrenciaModal from '../components/RecorrenciaModal';
+import RecorrenciaDeleteModal from '../components/RecorrenciaDeleteModal';
+import { useRecorrenciaStore } from '../store/recorrenciaStore';
+import type { Recorrencia, CreateRecorrenciaInput, UpdateRecorrenciaInput } from '../services/recorrenciaService';
 
 const meses = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -677,8 +681,18 @@ function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, load
   );
 }
 
+const formatValorRec = (v: number) =>
+  Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export default function Transactions() {
   const { transactions, deleteTransaction, addTransaction, updateTransaction, fetchTransactions } = useTransactionStore();
+  const {
+    recorrencias,
+    fetchRecorrencias,
+    addRecorrencia,
+    updateRecorrencia,
+    removeRecorrencia,
+  } = useRecorrenciaStore();
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState('Esse mês');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -719,6 +733,10 @@ export default function Transactions() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, [fetchTransactions, isRefreshing]);
+
+  useEffect(() => {
+    void fetchRecorrencias();
+  }, [fetchRecorrencias]);
 
   useEffect(() => {
     if (dateRange.start && dateRange.end) {
@@ -925,6 +943,54 @@ export default function Transactions() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const [recModalOpen, setRecModalOpen] = useState(false);
+  const [recEditing, setRecEditing] = useState<Recorrencia | null>(null);
+  const [recSaving, setRecSaving] = useState(false);
+  const [recSaveError, setRecSaveError] = useState<string | null>(null);
+  const [recDeleteModalOpen, setRecDeleteModalOpen] = useState(false);
+  const [recDeleting, setRecDeleting] = useState<Recorrencia | null>(null);
+  const [recDeletingInProgress, setRecDeletingInProgress] = useState(false);
+
+  const [recMenu, setRecMenu] = useState<{ open: boolean; source: 'desktop' | 'mobile' | null }>({
+    open: false,
+    source: null,
+  });
+  const recMenuDesktopRef = useRef<HTMLDivElement>(null);
+  const recMenuMobileRef = useRef<HTMLDivElement>(null);
+
+  const closeRecMenu = () => setRecMenu({ open: false, source: null });
+
+  const toggleRecMenu = (source: 'desktop' | 'mobile') => {
+    setRecMenu((m) => {
+      if (m.open && m.source === source) return { open: false, source: null };
+      return { open: true, source };
+    });
+  };
+
+  useEffect(() => {
+    if (!recMenu.open) return;
+    const handler = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node;
+      if (recMenuDesktopRef.current?.contains(t) || recMenuMobileRef.current?.contains(t)) return;
+      closeRecMenu();
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
+  }, [recMenu.open]);
+
+  useEffect(() => {
+    if (!recMenu.open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeRecMenu();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [recMenu.open]);
+
   const handleSaveTransacao = async (transacao: { tipo: 'entrada' | 'saída', valor: number, classificacao: string, data: string, status: string, obs?: string }) => {
     console.log('[Transactions] Iniciando salvamento de transação:', {
       tipo: transacao.tipo,
@@ -1051,6 +1117,175 @@ export default function Transactions() {
     toast.success('Transação excluída com sucesso.');
   };
 
+  const handleSaveRecorrencia = async (payload: CreateRecorrenciaInput | UpdateRecorrenciaInput) => {
+    setRecSaveError(null);
+    setRecSaving(true);
+    try {
+      if (recEditing) {
+        const result = await updateRecorrencia(recEditing.id, payload as UpdateRecorrenciaInput);
+        if (result.error) {
+          setRecSaveError(result.error);
+          return;
+        }
+        toast.success('Recorrência atualizada.');
+      } else {
+        const result = await addRecorrencia(payload as CreateRecorrenciaInput);
+        if (result.error) {
+          setRecSaveError(result.error);
+          return;
+        }
+        toast.success('Recorrência criada. O lançamento será gerado no dia marcado de cada mês.');
+      }
+      setRecModalOpen(false);
+      setRecEditing(null);
+    } finally {
+      setRecSaving(false);
+    }
+  };
+
+  const handleConfirmDeleteRecorrencia = async () => {
+    if (!recDeleting) return;
+    setRecDeletingInProgress(true);
+    try {
+      const result = await removeRecorrencia(recDeleting.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success('Recorrência removida.');
+      setRecDeleteModalOpen(false);
+      setRecDeleting(null);
+    } finally {
+      setRecDeletingInProgress(false);
+    }
+  };
+
+  const tipoLabelRec = (t: string) => (t === 'entrada' ? 'Entrada' : 'Saída');
+
+  const openNewRecorrenciaFromMenu = () => {
+    setRecEditing(null);
+    setRecSaveError(null);
+    setRecModalOpen(true);
+    closeRecMenu();
+  };
+
+  const renderRecorrenciasPanel = (variant: 'desktop' | 'mobile') => (
+    <div
+      role="dialog"
+      aria-label="Modelos recorrentes"
+      className={
+        variant === 'desktop'
+          ? 'absolute right-0 top-full z-50 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-slate-200/70 bg-white shadow-soft dark:border-slate-800/70 dark:bg-slate-900'
+          : 'absolute left-0 right-0 top-full z-50 mt-2 rounded-xl border border-slate-200/70 bg-white shadow-soft dark:border-slate-800/70 dark:bg-slate-900'
+      }
+    >
+      <div className="max-h-[min(70vh,28rem)] overflow-y-auto p-4">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold text-slate-800 dark:text-white">
+              Modelos recorrentes
+              {recorrencias.length > 0 ? (
+                <span className="ml-1.5 font-normal text-slate-500 dark:text-slate-400">({recorrencias.length})</span>
+              ) : null}
+            </h4>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Receitas ou despesas que entram todo mês no dia escolhido (ex.: dia 5, R$ 50).
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="planner-button mb-4 inline-flex w-full items-center justify-center gap-2 sm:w-auto"
+          onClick={openNewRecorrenciaFromMenu}
+        >
+          <Repeat size={18} />
+          Nova recorrência
+        </button>
+        {!recorrencias.length ? (
+          <div
+            className="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center dark:border-slate-700 dark:bg-slate-900/40"
+            role="region"
+            aria-label="Nenhum modelo recorrente"
+          >
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300">
+              <Repeat size={24} aria-hidden />
+            </div>
+            <p className="text-sm font-semibold text-slate-800 dark:text-white">Nenhum modelo recorrente</p>
+            <p className="mx-auto mt-1.5 max-w-sm text-xs text-slate-500 dark:text-slate-400">
+              Crie um modelo para gerar lançamentos automaticamente (Netflix, aluguel, etc.).
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {recorrencias.map((r) => {
+              const isEntrada = r.tipo === 'entrada';
+              const tipoRing = isEntrada
+                ? 'ring-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                : 'ring-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300';
+              const bar = isEntrada ? 'bg-emerald-500' : 'bg-rose-500';
+              return (
+                <li
+                  key={r.id}
+                  className="planner-card-muted relative flex flex-wrap items-center justify-between gap-2 overflow-hidden rounded-lg border border-slate-200/70 p-3 pl-4 dark:border-slate-700/70"
+                >
+                  <span className={`absolute left-0 top-0 bottom-0 w-1 ${bar}`} aria-hidden title={tipoLabelRec(r.tipo)} />
+                  <div className="flex min-w-0 items-center gap-2 pl-0 sm:pl-1">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-2 ${tipoRing}`}
+                      aria-hidden
+                    >
+                      <Repeat size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium dark:text-white">{r.classificacao}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Todo dia <span className="font-medium text-slate-700 dark:text-slate-300">{r.dia_do_mes}</span>
+                        {' · '}
+                        <span className={isEntrada ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                          {tipoLabelRec(r.tipo)}
+                        </span>
+                        {' · '}
+                        R$ {formatValorRec(r.valor)}
+                        {!r.ativo && ' · Inativa'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label="Editar recorrência"
+                      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline focus-visible:ring-2 focus-visible:ring-blue-500"
+                      onClick={() => {
+                        setRecEditing(r);
+                        setRecSaveError(null);
+                        setRecModalOpen(true);
+                        closeRecMenu();
+                      }}
+                    >
+                      <Pencil size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Excluir recorrência"
+                      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 focus-visible:outline focus-visible:ring-2 focus-visible:ring-red-500"
+                      onClick={() => {
+                        setRecDeleting(r);
+                        setRecDeleteModalOpen(true);
+                        closeRecMenu();
+                      }}
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+
   const exportToExcel = () => {
     // Preparar dados formatados para Excel
     const dadosFormatados = filtered.map((t) => {
@@ -1137,6 +1372,26 @@ export default function Transactions() {
         onDelete={handleConfirmDeleteTransacao}
         error={deleteError}
         loading={deletingTransaction}
+      />
+
+      <RecorrenciaModal
+        open={recModalOpen}
+        onClose={() => {
+          setRecModalOpen(false);
+          setRecEditing(null);
+          setRecSaveError(null);
+        }}
+        onSave={handleSaveRecorrencia}
+        recorrencia={recEditing}
+        saving={recSaving}
+        error={recSaveError}
+      />
+      <RecorrenciaDeleteModal
+        open={recDeleteModalOpen}
+        recorrencia={recDeleting}
+        onClose={() => setRecDeleteModalOpen(false)}
+        onConfirm={handleConfirmDeleteRecorrencia}
+        loading={recDeletingInProgress}
       />
 
       <PageShell>
@@ -1255,11 +1510,12 @@ export default function Transactions() {
 
       <div className="planner-card p-4 md:p-6 relative">
         {/* Filtro por tipo (Normal / Receita / Despesas) */}
-        <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Tipo
           </span>
-          <div className="flex gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => setTipoFiltro('normal')}
@@ -1289,6 +1545,25 @@ export default function Transactions() {
             >
               Despesas
             </button>
+            </div>
+            <div className="relative ml-auto shrink-0 md:hidden" ref={recMenuMobileRef}>
+              <button
+                type="button"
+                className="planner-button-secondary inline-flex items-center gap-1.5 px-3 py-2 text-sm"
+                aria-expanded={recMenu.open && recMenu.source === 'mobile'}
+                aria-haspopup="dialog"
+                onClick={() => toggleRecMenu('mobile')}
+              >
+                <Repeat size={16} />
+                Recorrências
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform ${recMenu.open && recMenu.source === 'mobile' ? 'rotate-180' : ''}`}
+                  aria-hidden
+                />
+              </button>
+              {recMenu.open && recMenu.source === 'mobile' && renderRecorrenciasPanel('mobile')}
+            </div>
           </div>
         </div>
 
@@ -1301,6 +1576,24 @@ export default function Transactions() {
             <Download size={18} />
             Exportar Excel
           </button>
+          <div className="relative" ref={recMenuDesktopRef}>
+            <button
+              type="button"
+              className="planner-button-secondary flex items-center gap-2"
+              aria-expanded={recMenu.open && recMenu.source === 'desktop'}
+              aria-haspopup="dialog"
+              onClick={() => toggleRecMenu('desktop')}
+            >
+              <Repeat size={18} />
+              Recorrências
+              <ChevronDown
+                size={16}
+                className={`transition-transform ${recMenu.open && recMenu.source === 'desktop' ? 'rotate-180' : ''}`}
+                aria-hidden
+              />
+            </button>
+            {recMenu.open && recMenu.source === 'desktop' && renderRecorrenciasPanel('desktop')}
+          </div>
           <button
             className="planner-button"
             onClick={() => { setSaveError(null); setModalOpen(true); }}
