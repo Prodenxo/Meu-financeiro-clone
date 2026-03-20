@@ -36,6 +36,21 @@ Registrar pre-condicoes, variaveis de ambiente e orientacoes basicas para operac
 - `POST /api/mei-notas/webhook`
 - `GET /api/mei-notas/relatorio/nfe`
 
+### Catálogo de clientes e produtos (após emissão)
+
+Após uma emissão bem-sucedida via PlugNotas, o backend grava o registro da nota em `mei_nfse` e em seguida tenta **upsert** no catálogo local (Supabase), para atalhos no formulário da Guia MEI (`GuidesMei.tsx`):
+
+| Tipo (`documentType`) | Cliente (origem no payload) | Itens (origem) |
+| --- | --- | --- |
+| **NFSE** | `tomador` | `servico[]` |
+| **NFE** / **NFCE** | `destinatario` | `itens[]` |
+
+- **Tabelas:** `mei_nfse_clientes`, `mei_nfse_produtos`.
+- **Chave de deduplicação:** `user_id`, `document_type`, `dedupe_key` (ver `upsertClienteCatalogo` / `upsertProdutosCatalogo` em `backend/src/services/mei-notas.service.js`).
+- **Ordem:** o catálogo só é atualizado depois da resposta do PlugNotas e do `insert` em `mei_nfse`; se a emissão falhar antes, o catálogo não é gravado por esse fluxo.
+- **Falha no catálogo:** o upsert está em `try/catch`; erro no Supabase gera apenas `console.warn` e **não** reverte a nota já persistida.
+- **Leitura:** `GET /api/mei-notas/catalogo/clientes` e `GET /api/mei-notas/catalogo/produtos` (parâmetro opcional `documentType` para filtrar por NFSE, NFE ou NFCE).
+
 ### Fluxo Guia MEI
 - `POST /api/mei-guide`
 - `GET /api/mei-guide/:periodo/download`

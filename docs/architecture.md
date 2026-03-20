@@ -151,6 +151,12 @@ O foco e evoluir a plataforma sem reescrever o sistema, aplicando mudancas em et
 - Reforcar restricoes de unicidade para identificadores de correlacao.
 - Validar indice e consulta por id primario nas operacoes de mutacao por webhook.
 
+### Tabelas `mei_nfse_clientes` e `mei_nfse_produtos`
+
+- Catálogo por usuário para reutilizar tomador/destinatário e itens/serviços em novas emissões (NFSE, NFE, NFCE).
+- Populadas após `emitirNota` em `mei-notas.service.js` (`upsertClienteCatalogo`, `upsertProdutosCatalogo`), com `document_type` alinhado ao tipo da nota.
+- Consulta listada nos endpoints `GET /api/mei-notas/catalogo/clientes` e `GET /api/mei-notas/catalogo/produtos`.
+
 ## Estrategia de API
 
 ### Contratos preservados
