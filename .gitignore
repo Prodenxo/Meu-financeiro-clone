@@ -6,6 +6,8 @@ backend/.env
 frontend/.env
 *.key
 *.pem
+# Nunca commitar payloads de teste com credenciais
+body.json
 
 # Dependencies (AIOX)
 node_modules/

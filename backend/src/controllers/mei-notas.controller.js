@@ -1,8 +1,10 @@
 import { env } from '../config/env.js';
 import * as meiNotasService from '../services/mei-notas.service.js';
 import {
+  atualizarEmpresaPlugNotas,
   cadastrarCertificadoPlugNotas,
-  cadastrarEmpresaPlugNotas
+  cadastrarEmpresaPlugNotas,
+  consultarEmpresaPlugNotas
 } from '../services/plugnotas/empresa.service.js';
 import { unauthorized } from '../utils/errors.js';
 import { sendSuccess } from '../utils/response.js';
@@ -87,14 +89,16 @@ export const cadastrarPlugNotasCertificado = async (req, res, next) => {
     const file = req.file;
     const senha = String(req.body?.senha || '').trim();
     const email = String(req.body?.email || '').trim();
+    const cpfCnpj = String(req.body?.cpfCnpj || req.body?.cnpj || '').trim();
     const data = await cadastrarCertificadoPlugNotas({
       fileBuffer: file?.buffer,
       fileName: file?.originalname,
       mimeType: file?.mimetype,
       password: senha,
-      ...(email ? { email } : {})
+      ...(email ? { email } : {}),
+      ...(cpfCnpj ? { cpfCnpj } : {})
     });
-    return sendSuccess(res, data, 'Certificado cadastrado na PlugNotas');
+    return sendSuccess(res, data, 'Certificado cadastrado no serviço de emissão fiscal');
   } catch (error) {
     return next(error);
   }
@@ -106,7 +110,29 @@ export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
       ? req.body.payload
       : req.body;
     const data = await cadastrarEmpresaPlugNotas(payload);
-    return sendSuccess(res, data, 'Empresa configurada na PlugNotas');
+    return sendSuccess(res, data, 'Empresa configurada no serviço de emissão fiscal');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const consultarPlugNotasEmpresa = async (req, res, next) => {
+  try {
+    const cpfCnpj = String(req.query?.cpfCnpj || req.query?.cnpj || '').trim();
+    const data = await consultarEmpresaPlugNotas(cpfCnpj);
+    return sendSuccess(res, data, 'Empresa consultada no serviço de emissão fiscal');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const atualizarPlugNotasEmpresa = async (req, res, next) => {
+  try {
+    const payload = req.body?.payload && typeof req.body.payload === 'object'
+      ? req.body.payload
+      : req.body;
+    const data = await atualizarEmpresaPlugNotas(payload);
+    return sendSuccess(res, data, 'Empresa atualizada no serviço de emissão fiscal');
   } catch (error) {
     return next(error);
   }

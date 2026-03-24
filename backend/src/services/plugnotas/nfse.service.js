@@ -1,14 +1,14 @@
 import { env } from '../../config/env.js';
-import { badRequest, forbidden, notFound, unauthorized } from '../../utils/errors.js';
-
-const normalizeBaseUrl = (value) => String(value || '').replace(/\/$/, '');
+import { HttpError, badRequest } from '../../utils/errors.js';
+import { resolvePlugnotasRequestJsonError } from './plugnotas-emit-400-log.js';
+import { getPlugnotasRootUrl } from './root-url.js';
 
 const ensureConfigured = () => {
   if (!env.PLUGNOTAS_API_BASE_URL) {
-    throw badRequest('PlugNotas não configurado');
+    throw badRequest('Serviço de emissão fiscal não configurado');
   }
   if (!env.PLUGNOTAS_API_KEY) {
-    throw badRequest('Token da PlugNotas não configurado');
+    throw badRequest('Token do serviço de emissão fiscal não configurado');
   }
 };
 
@@ -24,140 +24,15 @@ const buildHeaders = (accept = 'application/json') => ({
   'x-api-key': env.PLUGNOTAS_API_KEY
 });
 
-const RESERVED_ERROR_KEYS = new Set([
-  'field',
-  'campo',
-  'reason',
-  'error',
-  'motivo',
-  'message',
-  'mensagem',
-  'description',
-  'descricao',
-  'details',
-  'detalhes',
-  'errors',
-  'erros',
-  'validationErrors'
-]);
-
-const withFieldContext = (field, text) => {
-  const safeField = String(field || '').trim();
-  const safeText = String(text || '').trim();
-  if (!safeText) return '';
-  return safeField ? `${safeField}: ${safeText}` : safeText;
-};
-
-const collectErrorMessages = (value, fieldContext = '') => {
-  if (value === null || value === undefined) return [];
-  if (typeof value === 'string') {
-    const text = withFieldContext(fieldContext, value);
-    return text ? [text] : [];
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => collectErrorMessages(item, fieldContext));
-  }
-  if (typeof value === 'object') {
-    const entries = [];
-    const field = String(value.field || value.campo || fieldContext || '').trim();
-    const reason = String(
-      value.reason || value.error || value.motivo || value.message || value.mensagem || ''
-    ).trim();
-    if (reason) {
-      const text = withFieldContext(field, reason);
-      if (text) entries.push(text);
-    }
-    entries.push(
-      ...collectErrorMessages(value.message),
-      ...collectErrorMessages(value.mensagem),
-      ...collectErrorMessages(value.description),
-      ...collectErrorMessages(value.descricao),
-      ...collectErrorMessages(value.details),
-      ...collectErrorMessages(value.detalhes),
-      ...collectErrorMessages(value.errors),
-      ...collectErrorMessages(value.erros),
-      ...collectErrorMessages(value.validationErrors)
-    );
-
-    Object.entries(value).forEach(([key, item]) => {
-      if (RESERVED_ERROR_KEYS.has(key)) return;
-      const nextField = fieldContext ? `${fieldContext}.${key}` : key;
-      entries.push(...collectErrorMessages(item, nextField));
-    });
-
-    return entries;
-  }
-  return [];
-};
-
-const buildErrorMessageFromBody = (payload, statusText = '') => {
-  if (payload === null || payload === undefined) return statusText;
-  if (typeof payload === 'string') return payload || statusText;
-  const baseMessage = String(
-    payload?.error?.message
-    || payload?.message
-    || payload?.mensagem
-    || payload?.descricao
-    || (typeof payload?.error === 'string' ? payload.error : '')
-    || statusText
-    || ''
-  ).trim();
-  const detailMessages = [
-    ...collectErrorMessages(payload?.error?.details),
-    ...collectErrorMessages(payload?.error?.errors),
-    ...collectErrorMessages(payload?.error?.validationErrors),
-    ...collectErrorMessages(payload?.error?.data?.fields),
-    ...collectErrorMessages(payload?.details),
-    ...collectErrorMessages(payload?.errors),
-    ...collectErrorMessages(payload?.erros)
-  ].filter(Boolean);
-  const details = [...new Set(detailMessages)].join(' | ');
-  if (baseMessage && details && !baseMessage.includes(details)) {
-    return `${baseMessage}: ${details}`;
-  }
-  return baseMessage || details || statusText;
-};
-
-const parseErrorMessage = async (response) => {
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    const payload = await response.json();
-    return buildErrorMessageFromBody(payload, response.statusText);
-  }
-  const text = await response.text();
-  return text || response.statusText;
-};
-
-const maskDoc = (value) => {
-  if (value === null || value === undefined || typeof value !== 'string') return value;
-  const digits = value.replace(/\D/g, '');
-  if (digits.length < 4) return '***';
-  return `${digits.slice(0, 2)}***${digits.slice(-2)}`;
-};
-
-const redactPayload = (obj) => {
-  if (obj === null || obj === undefined) return obj;
-  if (Array.isArray(obj)) return obj.map(redactPayload);
-  if (typeof obj !== 'object') return obj;
-  const out = {};
-  for (const [key, val] of Object.entries(obj)) {
-    const k = key.toLowerCase();
-    if (k === 'cpfcnpj' || k === 'cpf_cnpj') {
-      out[key] = maskDoc(val);
-    } else if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
-      out[key] = redactPayload(val);
-    } else {
-      out[key] = val;
-    }
-  }
-  return out;
-};
+const plugnotasRequestErrors = (method, path) => ({
+  plugnotasRequest: { method, path }
+});
 
 const requestJson = async (method, path, body) => {
   ensureConfigured();
   const timeoutMs = Number(env.PLUGNOTAS_TIMEOUT_MS || 15000);
   const { controller, timeout } = withTimeout(timeoutMs);
-  const baseUrl = normalizeBaseUrl(env.PLUGNOTAS_API_BASE_URL);
+  const baseUrl = getPlugnotasRootUrl();
 
   try {
     const response = await fetch(`${baseUrl}${path}`, {
@@ -168,23 +43,22 @@ const requestJson = async (method, path, body) => {
     });
 
     if (!response.ok) {
-      const contentType = response.headers.get('content-type') || '';
-      let responseBody;
-      if (contentType.includes('application/json')) {
-        responseBody = await response.json();
-      } else {
-        responseBody = await response.text();
+      const message = await resolvePlugnotasRequestJsonError(response, { kind: 'NFSe', body });
+      if (response.status === 401) {
+        throw new HttpError(
+          401,
+          message || 'Token do serviço de emissão fiscal inválido',
+          plugnotasRequestErrors(method, path)
+        );
       }
-      const message = buildErrorMessageFromBody(responseBody, response.statusText);
-      if (response.status === 400) {
-        console.error('[PlugNotas NFSe] 400 response:', JSON.stringify(responseBody));
-        if (body !== undefined && body !== null) {
-          console.error('[PlugNotas NFSe] 400 request payload (redacted):', JSON.stringify(redactPayload(body)));
-        }
+      if (response.status === 403) {
+        throw new HttpError(
+          403,
+          message || 'Acesso negado pelo serviço de emissão fiscal',
+          plugnotasRequestErrors(method, path)
+        );
       }
-      if (response.status === 401) throw unauthorized(message || 'Token PlugNotas inválido');
-      if (response.status === 403) throw forbidden(message || 'Acesso negado pela PlugNotas');
-      throw badRequest(message || 'Erro na API PlugNotas');
+      throw badRequest(message || 'Erro no serviço de emissão fiscal', plugnotasRequestErrors(method, path));
     }
 
     return await response.json();
@@ -197,7 +71,7 @@ const requestDownload = async (path, accept, notFoundMessage) => {
   ensureConfigured();
   const timeoutMs = Number(env.PLUGNOTAS_TIMEOUT_MS || 15000);
   const { controller, timeout } = withTimeout(timeoutMs);
-  const baseUrl = normalizeBaseUrl(env.PLUGNOTAS_API_BASE_URL);
+  const baseUrl = getPlugnotasRootUrl();
 
   try {
     const response = await fetch(`${baseUrl}${path}`, {
@@ -207,17 +81,37 @@ const requestDownload = async (path, accept, notFoundMessage) => {
     });
 
     if (!response.ok) {
-      const message = await parseErrorMessage(response);
-      if (response.status === 401) throw unauthorized(message || 'Token PlugNotas inválido');
-      if (response.status === 403) throw forbidden(message || 'Acesso negado pela PlugNotas');
-      if (response.status === 404) throw notFound(message || notFoundMessage);
-      throw badRequest(message || 'Erro ao baixar arquivo da PlugNotas');
+      const message = await resolvePlugnotasRequestJsonError(response, { kind: 'NFSe', body: undefined });
+      if (response.status === 401) {
+        throw new HttpError(
+          401,
+          message || 'Token do serviço de emissão fiscal inválido',
+          plugnotasRequestErrors('GET', path)
+        );
+      }
+      if (response.status === 403) {
+        throw new HttpError(
+          403,
+          message || 'Acesso negado pelo serviço de emissão fiscal',
+          plugnotasRequestErrors('GET', path)
+        );
+      }
+      if (response.status === 404) {
+        throw new HttpError(404, message || notFoundMessage, plugnotasRequestErrors('GET', path));
+      }
+      throw badRequest(
+        message || 'Erro ao baixar arquivo do serviço de emissão fiscal',
+        plugnotasRequestErrors('GET', path)
+      );
     }
 
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
       const payload = await response.json();
-      throw badRequest(payload?.message || payload?.error?.message || 'Erro ao baixar arquivo da PlugNotas');
+      throw badRequest(
+        payload?.message || payload?.error?.message || 'Erro ao baixar arquivo do serviço de emissão fiscal',
+        plugnotasRequestErrors('GET', path)
+      );
     }
 
     const arrayBuffer = await response.arrayBuffer();

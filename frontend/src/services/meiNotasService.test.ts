@@ -8,8 +8,10 @@ import {
   emitirNfse,
   emitirNfe,
   emitirNfce,
-  cadastrarPlugNotasCertificado,
-  cadastrarPlugNotasEmpresa,
+  atualizarEmpresaEmissaoNf,
+  cadastrarCertificadoEmissaoNf,
+  cadastrarEmpresaEmissaoNf,
+  consultarEmpresaEmissaoNf,
   cancelarNota,
   cancelarNfse,
   listarCatalogoNfseClientes,
@@ -57,7 +59,6 @@ describe('meiNotasService', () => {
         codigo: '1.02',
         discriminacao: 'Servico de teste',
         cnae: '6201500',
-        aliquota: 2,
         valorServico: 100
       }
     };
@@ -339,7 +340,7 @@ describe('meiNotasService', () => {
     expect(result).toEqual(response);
   });
 
-  it('cadastra certificado PlugNotas por multipart/form-data', async () => {
+  it('cadastra certificado do emissor por multipart/form-data', async () => {
     const response = {
       id: 'cert-1',
       message: 'Cadastro efetuado com sucesso',
@@ -348,18 +349,18 @@ describe('meiNotasService', () => {
     mockedApiClient.postForm.mockResolvedValueOnce(response);
     const arquivo = new File(['dummy'], 'certificado.pfx', { type: 'application/x-pkcs12' });
 
-    const result = await cadastrarPlugNotasCertificado({
+    const result = await cadastrarCertificadoEmissaoNf({
       arquivo,
       senha: '123456',
       email: 'fiscal@empresa.com.br'
     });
 
     expect(mockedApiClient.postForm).toHaveBeenCalledTimes(1);
-    expect(mockedApiClient.postForm.mock.calls[0][0]).toBe('/mei-notas/setup/plugnotas/certificado');
+    expect(mockedApiClient.postForm.mock.calls[0][0]).toBe('/mei-notas/setup/emissao-fiscal/certificado');
     expect(result).toEqual(response);
   });
 
-  it('cadastra empresa PlugNotas no endpoint dedicado', async () => {
+  it('cadastra empresa no endpoint de emissão fiscal', async () => {
     const response = {
       cnpj: '17422651000172',
       message: 'Cadastro efetuado com sucesso',
@@ -372,9 +373,37 @@ describe('meiNotasService', () => {
       razaoSocial: 'Empresa Teste LTDA'
     };
 
-    const result = await cadastrarPlugNotasEmpresa(payload);
+    const result = await cadastrarEmpresaEmissaoNf(payload);
 
-    expect(mockedApiClient.post).toHaveBeenCalledWith('/mei-notas/setup/plugnotas/empresa', { payload });
+    expect(mockedApiClient.post).toHaveBeenCalledWith('/mei-notas/setup/emissao-fiscal/empresa', { payload });
+    expect(result).toEqual(response);
+  });
+
+  it('consulta empresa no emissor com query cpfCnpj normalizado', async () => {
+    const response = { message: 'OK', data: { razaoSocial: 'ACME' } };
+    mockedApiClient.get.mockResolvedValueOnce(response);
+
+    const result = await consultarEmpresaEmissaoNf('17.422.651/0001-72');
+
+    expect(mockedApiClient.get).toHaveBeenCalledWith(
+      '/mei-notas/setup/emissao-fiscal/empresa?cpfCnpj=17422651000172'
+    );
+    expect(result).toEqual(response);
+  });
+
+  it('atualiza empresa via PATCH sem certificado no corpo do cliente', async () => {
+    const response = {
+      cnpj: '17422651000172',
+      message: 'Atualizado',
+      operation: 'updated' as const,
+      raw: {}
+    };
+    mockedApiClient.patch.mockResolvedValueOnce(response);
+    const payload = { cpfCnpj: '17422651000172', razaoSocial: 'X' };
+
+    const result = await atualizarEmpresaEmissaoNf(payload);
+
+    expect(mockedApiClient.patch).toHaveBeenCalledWith('/mei-notas/setup/emissao-fiscal/empresa', { payload });
     expect(result).toEqual(response);
   });
 });

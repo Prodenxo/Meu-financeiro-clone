@@ -78,7 +78,8 @@ export interface NfseServicoInput {
   codigo: string;
   discriminacao: string;
   cnae: string;
-  aliquota: string | number;
+  /** Não usar para MEI no Simples Nacional — o backend não repassa alíquota ISS. */
+  aliquota?: string | number;
   valorServico: string | number;
 }
 
@@ -195,23 +196,29 @@ export interface ListarNotasInput {
   documentType?: DocumentType;
 }
 
-export interface CadastrarPlugNotasCertificadoInput {
+export interface CadastrarEmissaoNfCertificadoInput {
   arquivo: File;
   senha: string;
   email?: string;
+  /** CNPJ (14 dígitos) ajuda o backend a obter o ID do certificado quando o Plugnotas responde 409. */
+  cpfCnpj?: string;
 }
 
-export interface CadastrarPlugNotasCertificadoResponse {
+export interface CadastrarEmissaoNfCertificadoResponse {
   id: string | null;
   message: string | null;
   raw: Record<string, unknown>;
 }
 
-export interface CadastrarPlugNotasEmpresaResponse {
+export interface CadastrarEmissaoNfEmpresaResponse {
   cnpj: string | null;
   message: string | null;
+  operation?: 'created' | 'updated' | 'existing';
   raw: Record<string, unknown>;
 }
+
+/** Resposta bruta do provedor na consulta GET empresa (formato pode variar). */
+export type ConsultarEmissaoNfEmpresaResponse = Record<string, unknown>;
 
 const buildCatalogSuffix = (options: ListarCatalogoNfseInput = {}) => {
   const query = new URLSearchParams({
@@ -233,6 +240,8 @@ const buildListSuffix = (options: ListarNotasInput = {}) => {
   const text = query.toString();
   return text ? `?${text}` : '';
 };
+
+const normalizeCnpjDigits = (value: string) => String(value || '').replace(/\D/g, '');
 
 export async function emitirNota(input: EmitirNotaInput): Promise<NfseRecord> {
   return await apiClient.post<NfseRecord>('/mei-notas/emitir', input);
@@ -256,26 +265,49 @@ export async function emitirNfce(payload: NfeLikePayloadInput): Promise<NfseReco
   });
 }
 
-export async function cadastrarPlugNotasCertificado(
-  input: CadastrarPlugNotasCertificadoInput
-): Promise<CadastrarPlugNotasCertificadoResponse> {
+export async function cadastrarCertificadoEmissaoNf(
+  input: CadastrarEmissaoNfCertificadoInput
+): Promise<CadastrarEmissaoNfCertificadoResponse> {
   const formData = new FormData();
   formData.append('arquivo', input.arquivo);
   formData.append('senha', input.senha);
   if (input.email?.trim()) {
     formData.append('email', input.email.trim());
   }
-  return await apiClient.postForm<CadastrarPlugNotasCertificadoResponse>(
-    '/mei-notas/setup/plugnotas/certificado',
+  const cnpjDigits = normalizeCnpjDigits(input.cpfCnpj || '');
+  if (cnpjDigits.length === 14) {
+    formData.append('cpfCnpj', cnpjDigits);
+  }
+  return await apiClient.postForm<CadastrarEmissaoNfCertificadoResponse>(
+    '/mei-notas/setup/emissao-fiscal/certificado',
     formData
   );
 }
 
-export async function cadastrarPlugNotasEmpresa(
+export async function cadastrarEmpresaEmissaoNf(
   payload: Record<string, unknown>
-): Promise<CadastrarPlugNotasEmpresaResponse> {
-  return await apiClient.post<CadastrarPlugNotasEmpresaResponse>(
-    '/mei-notas/setup/plugnotas/empresa',
+): Promise<CadastrarEmissaoNfEmpresaResponse> {
+  return await apiClient.post<CadastrarEmissaoNfEmpresaResponse>(
+    '/mei-notas/setup/emissao-fiscal/empresa',
+    { payload }
+  );
+}
+
+export async function consultarEmpresaEmissaoNf(
+  cpfCnpj: string
+): Promise<ConsultarEmissaoNfEmpresaResponse> {
+  const digits = normalizeCnpjDigits(cpfCnpj);
+  const query = new URLSearchParams({ cpfCnpj: digits });
+  return await apiClient.get<ConsultarEmissaoNfEmpresaResponse>(
+    `/mei-notas/setup/emissao-fiscal/empresa?${query.toString()}`
+  );
+}
+
+export async function atualizarEmpresaEmissaoNf(
+  payload: Record<string, unknown>
+): Promise<CadastrarEmissaoNfEmpresaResponse> {
+  return await apiClient.patch<CadastrarEmissaoNfEmpresaResponse>(
+    '/mei-notas/setup/emissao-fiscal/empresa',
     { payload }
   );
 }

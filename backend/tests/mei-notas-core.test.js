@@ -10,7 +10,7 @@ test('mei-notas valida payload de emissao antes de integrar', async () => {
   await assert.rejects(
     () => emitirNota('user-1', {
       servico: {
-        codigo: '1.01',
+        codigo: '010101',
         cnae: '6201500',
         discriminacao: 'Servico teste',
         aliquota: 2,
@@ -28,7 +28,7 @@ test('mei-notas normaliza payload.servico objeto unico antes da validacao', asyn
     () => emitirNota('user-1', {
       payload: {
         servico: {
-          codigo: '1.01',
+          codigo: '010101',
           cnae: '6201500',
           discriminacao: 'Servico teste',
           aliquota: 2,
@@ -54,7 +54,7 @@ test('mei-notas rejeita tomador com documento invalido', async () => {
       },
       tomadorCpfCnpj: '12345',
       servico: {
-        codigo: '1.01',
+        codigo: '010101',
         cnae: '6201500',
         discriminacao: 'Servico teste',
         aliquota: 2,
@@ -79,7 +79,7 @@ test('mei-notas exige documento do tomador na emissao NFSe', async () => {
       },
       tomadorRazaoSocial: 'Cliente teste',
       servico: {
-        codigo: '1.01',
+        codigo: '010101',
         cnae: '6201500',
         discriminacao: 'Servico teste',
         aliquota: 2,
@@ -104,7 +104,7 @@ test('mei-notas exige razao social do tomador na emissao NFSe', async () => {
       },
       tomadorCpfCnpj: '12345678901',
       servico: {
-        codigo: '1.01',
+        codigo: '010101',
         cnae: '6201500',
         discriminacao: 'Servico teste',
         aliquota: 2,
@@ -124,7 +124,7 @@ test('mei-notas exige endereco minimo do prestador na emissao NFSe', async () =>
       tomadorCpfCnpj: '12345678901',
       tomadorRazaoSocial: 'Cliente teste',
       servico: {
-        codigo: '1.01',
+        codigo: '010101',
         cnae: '6201500',
         discriminacao: 'Servico teste',
         aliquota: 2,
@@ -150,7 +150,7 @@ test('mei-notas valida endereco do prestador e segue para regras do servico', as
       tomadorCpfCnpj: '12345678901',
       tomadorRazaoSocial: 'Cliente teste',
       servico: {
-        codigo: '1.01',
+        codigo: '010101',
         cnae: '',
         discriminacao: '',
         aliquota: 2,

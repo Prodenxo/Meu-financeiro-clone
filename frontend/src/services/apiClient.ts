@@ -1,3 +1,6 @@
+import { buildApiErrorMessage } from '../utils/buildApiErrorMessage';
+import { apiClientErrorFromPayload } from '../utils/apiClientError';
+
 const isLocalhostUrl = (value?: string) => {
   if (!value) return false;
   try {
@@ -132,6 +135,7 @@ class ApiClient {
         headers,
         error
       });
+      // Erros aqui vêm do `fetch` antes de `Response`; para classificar rede vs HTTP, use `isFetchConnectivityFailure` (utils).
       throw error;
     }
 
@@ -164,7 +168,7 @@ class ApiClient {
         headers,
         body: payload
       });
-      throw new Error(payload?.message || 'Erro na requisição');
+      throw apiClientErrorFromPayload(payload, buildApiErrorMessage);
     }
 
     return payload?.data as T;
@@ -196,6 +200,7 @@ class ApiClient {
         headers,
         error
       });
+      // Idem `request`: falha pré-Response → `isFetchConnectivityFailure` quando necessário na UI.
       throw error;
     }
 
@@ -228,7 +233,7 @@ class ApiClient {
         headers,
         body: payload
       });
-      throw new Error(payload?.message || 'Erro na requisição');
+      throw apiClientErrorFromPayload(payload, buildApiErrorMessage);
     }
 
     return payload?.data as T;
@@ -267,6 +272,7 @@ class ApiClient {
         headers,
         error
       });
+      // Idem: `fetch` threw → util `isFetchConnectivityFailure`.
       throw error;
     }
 
@@ -276,7 +282,22 @@ class ApiClient {
 
       if (contentType.includes('application/json')) {
         const payload = await response.json();
-        errorMessage = payload?.message || response.statusText;
+        if (payload && typeof payload === 'object' && payload.success === false) {
+          this.logRequestFailure({
+            url,
+            method,
+            status: response.status,
+            statusText: response.statusText,
+            contentType,
+            headers,
+            body: payload
+          });
+          throw apiClientErrorFromPayload(
+            payload as { message?: string; errors?: unknown },
+            buildApiErrorMessage
+          );
+        }
+        errorMessage = buildApiErrorMessage(payload) || response.statusText;
       } else {
         const text = await response.text();
         errorMessage = text || response.statusText;
@@ -342,3 +363,13 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+
+/**
+ * URL para `GET /health` na raiz do backend (rota fora de `/api`).
+ * Em DEV com proxy Vite (base da API = `/api`), retorna `/health` para o proxy dedicado em `vite.config.ts`.
+ * Caso contrário, usa o mesmo host resolvido que a API (`API_URL`).
+ */
+export function getBackendHealthCheckUrl(): string {
+  const origin = shouldUseProxyInDev ? '' : (API_URL || '').replace(/\/$/, '');
+  return origin ? `${origin}/health` : '/health';
+}

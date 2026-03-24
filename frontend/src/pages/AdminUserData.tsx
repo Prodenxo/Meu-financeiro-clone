@@ -28,7 +28,10 @@ import {
   type AdminParcelamentosResponse
 } from '../services/adminUserDataService';
 import type { Transaction } from '../services/transactionService';
+import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import type { Category, CategoryBudgetSummary } from '../services/categoryService';
+import { EmissaoFiscalErrorAlertModal } from '../components/FiscalIntegrationErrorAlert';
+import { formatPlugnotasIntegrationError } from '../utils/plugnotasIntegrationErrorMessage';
 
 const formatCurrency = (value: number) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -207,9 +210,8 @@ export default function AdminUserData() {
     tomadorEmail: '',
     servicoDiscriminacao: '',
     servicoValorServico: '',
-    servicoCodigo: '1',
-    servicoCnae: '6201501',
-    servicoAliquota: '0'
+    servicoCodigo: '010101',
+    servicoCnae: '6201501'
   });
   const autoDownloadKeysRef = useRef<Set<string>>(new Set());
   const autoDownloadingRef = useRef(false);
@@ -1317,9 +1319,10 @@ export default function AdminUserData() {
             <div className="admin-section-card">
               <div className="admin-section-header">
                 <div>
-                  <h2 className="admin-section-title">Notas fiscais (NFSe / NF-e / NFC-e)</h2>
+                  <h2 className="admin-section-title">Notas fiscais (Plugnotas)</h2>
                   <p className="admin-section-subtitle">
-                    Emissões e cancelamentos de notas do usuário. Status indica criação, cancelamento ou erro.
+                    A lista pode trazer NFSe, NF-e ou NFC-e conforme o histórico no emissor; o envio por este painel é
+                    apenas NFSe. Status indica criação, cancelamento ou erro.
                   </p>
                 </div>
                 <button
@@ -1335,14 +1338,13 @@ export default function AdminUserData() {
                       tomadorEmail: '',
                       servicoDiscriminacao: '',
                       servicoValorServico: '',
-                      servicoCodigo: '1',
-                      servicoCnae: '6201501',
-                      servicoAliquota: '0'
+                      servicoCodigo: '010101',
+                      servicoCnae: '6201501'
                     });
                   }}
                   className="planner-button w-full sm:w-auto"
                 >
-                  Emitir nota fiscal
+                  Emitir NFSe
                 </button>
               </div>
               {meiNfseError && (
@@ -1410,16 +1412,15 @@ export default function AdminUserData() {
               >
                 <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
                   <h2 id="emitir-nota-modal-title" className="text-lg font-semibold dark:text-white">
-                    Emitir nota fiscal (NFSe)
+                    Emitir NFSe
                   </h2>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Emissão em nome do usuário selecionado. Preencha tomador e serviço.
+                    Emissão em nome do usuário selecionado (NFSe). Preencha tomador e serviço.
+                    Rejeições após o envio refletem o retorno do provedor de emissão fiscal (Plugnotas).
                   </p>
-                  {emitirNotaError && (
-                    <div className="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
-                      {emitirNotaError}
-                    </div>
-                  )}
+                  {emitirNotaError ? (
+                    <EmissaoFiscalErrorAlertModal documentTypeLabel="NFSe" message={emitirNotaError} />
+                  ) : null}
                   {emitirNotaSuccess && (
                     <div className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
                       {emitirNotaSuccess}
@@ -1464,6 +1465,18 @@ export default function AdminUserData() {
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Código do serviço (NFSe)
+                      </label>
+                      <input
+                        type="text"
+                        value={emitirNotaForm.servicoCodigo}
+                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, servicoCodigo: e.target.value }))}
+                        placeholder="Mín. 6 caracteres alfanum. sem máscara (ex.: 01.02.03)"
+                        className="planner-input-compact w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
                         Descrição do serviço
                       </label>
                       <input
@@ -1502,13 +1515,30 @@ export default function AdminUserData() {
                     </button>
                     <button
                       type="button"
-                      disabled={emitirNotaSubmitting || !emitirNotaForm.tomadorCpfCnpj.trim() || !emitirNotaForm.tomadorRazaoSocial.trim() || !emitirNotaForm.servicoDiscriminacao.trim() || !emitirNotaForm.servicoValorServico.trim()}
+                      disabled={
+                        emitirNotaSubmitting
+                        || !emitirNotaForm.tomadorCpfCnpj.trim()
+                        || !emitirNotaForm.tomadorRazaoSocial.trim()
+                        || !emitirNotaForm.servicoCodigo.trim()
+                        || !emitirNotaForm.servicoDiscriminacao.trim()
+                        || !emitirNotaForm.servicoValorServico.trim()
+                        || Boolean(getNfseServicoCodigoValidationError(emitirNotaForm.servicoCodigo))
+                      }
                       onClick={async () => {
                         setEmitirNotaError(null);
                         setEmitirNotaSuccess(null);
                         const doc = normalizeDoc(emitirNotaForm.tomadorCpfCnpj);
                         if (doc.length !== 11 && doc.length !== 14) {
                           setEmitirNotaError('CPF deve ter 11 dígitos ou CNPJ 14 dígitos.');
+                          return;
+                        }
+                        if (!emitirNotaForm.servicoCodigo.trim()) {
+                          setEmitirNotaError('Informe o código do serviço.');
+                          return;
+                        }
+                        const codigoServicoErro = getNfseServicoCodigoValidationError(emitirNotaForm.servicoCodigo);
+                        if (codigoServicoErro) {
+                          setEmitirNotaError(codigoServicoErro);
                           return;
                         }
                         const valor = Number(String(emitirNotaForm.servicoValorServico).replace(',', '.'));
@@ -1529,7 +1559,6 @@ export default function AdminUserData() {
                               codigo: emitirNotaForm.servicoCodigo,
                               discriminacao: emitirNotaForm.servicoDiscriminacao.trim(),
                               cnae: emitirNotaForm.servicoCnae,
-                              aliquota: emitirNotaForm.servicoAliquota,
                               valorServico: String(valor)
                             }
                           });
@@ -1541,7 +1570,11 @@ export default function AdminUserData() {
                             setEmitirNotaSuccess(null);
                           }, 1500);
                         } catch (err) {
-                          setEmitirNotaError(err instanceof Error ? err.message : 'Erro ao enviar nota para emissão.');
+                          setEmitirNotaError(
+                            formatPlugnotasIntegrationError(
+                              err instanceof Error ? err.message : 'Erro ao enviar nota para emissão.'
+                            )
+                          );
                         } finally {
                           setEmitirNotaSubmitting(false);
                         }

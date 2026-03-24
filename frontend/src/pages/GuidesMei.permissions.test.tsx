@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -47,13 +48,13 @@ vi.mock('../services/guidesMeiService', () => ({
 vi.mock('../services/meiNotasService', () => ({
   arquivarNfse: vi.fn(async () => ({})),
   atualizarNfse: vi.fn(async () => ({})),
+  atualizarEmpresaEmissaoNf: vi.fn(async () => ({ cnpj: '12345678000190', message: 'ok', raw: {} })),
   baixarNfsePdf: vi.fn(async () => ({ blob: new Blob(), filename: 'nota.pdf' })),
   baixarNfseXml: vi.fn(async () => ({ blob: new Blob(), filename: 'nota.xml' })),
-  cadastrarPlugNotasCertificado: vi.fn(async () => ({ id: 'cert-1', message: 'ok' })),
-  cadastrarPlugNotasEmpresa: vi.fn(async () => ({ cnpj: '12345678000190', message: 'ok' })),
+  cadastrarCertificadoEmissaoNf: vi.fn(async () => ({ id: 'cert-1', message: 'ok' })),
+  cadastrarEmpresaEmissaoNf: vi.fn(async () => ({ cnpj: '12345678000190', message: 'ok' })),
+  consultarEmpresaEmissaoNf: vi.fn(async () => ({ message: 'ok', data: {} })),
   cancelarNfse: vi.fn(async () => ({})),
-  emitirNfce: vi.fn(async () => ({ id: 'nfce-1', protocol: 'P-2' })),
-  emitirNfe: vi.fn(async () => ({ id: 'nfe-1', protocol: 'P-3' })),
   emitirNfse: vi.fn(async () => ({ id: 'nfse-1', protocol: 'P-1' })),
   listarCatalogoNfseClientes: vi.fn(async () => []),
   listarCatalogoNfseProdutos: vi.fn(async () => []),
@@ -98,7 +99,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     expect(container.textContent).toContain('Notas exibidas');
-    expect(container.textContent).toContain('Notas fiscais');
+    expect(container.textContent).toContain('NFS-e');
 
     await act(async () => {
       root.unmount();
@@ -117,7 +118,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     expect(container.textContent).toContain('Notas exibidas');
-    expect(container.textContent).toContain('Notas fiscais');
+    expect(container.textContent).toContain('NFS-e');
 
     await act(async () => {
       root.unmount();
@@ -136,7 +137,36 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     expect(container.textContent).toContain('Notas exibidas');
-    expect(container.textContent).toContain('Notas fiscais');
+    expect(container.textContent).toContain('NFS-e');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('workspace fiscal não expõe NF-e/NFC-e nem tipo de documento (US-MEI-NFS-03)', async () => {
+    authState.role = 'superadmin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    const notasTab = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('NFS-e')
+    );
+    expect(notasTab).toBeTruthy();
+    await act(async () => {
+      notasTab!.click();
+    });
+
+    expect(container.textContent).not.toContain('Tipo de documento');
+    expect(container.querySelector('option[value="NFE"]')).toBeNull();
+    expect(container.querySelector('option[value="NFCE"]')).toBeNull();
+    expect(container.textContent).not.toContain('CNPJ do emitente');
 
     await act(async () => {
       root.unmount();
