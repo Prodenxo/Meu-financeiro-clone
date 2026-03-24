@@ -13,6 +13,16 @@ const upload = multer({
 router.post('/webhook', controller.webhook);
 router.post('/emitir', requireAuth, requireMeiEnabled, controller.emitir);
 router.post(
+  '/setup/emissao-fiscal/certificado',
+  requireAuth,
+  requireMeiEnabled,
+  upload.single('arquivo'),
+  controller.cadastrarPlugNotasCertificado
+);
+router.post('/setup/emissao-fiscal/empresa', requireAuth, requireMeiEnabled, controller.cadastrarPlugNotasEmpresa);
+router.get('/setup/emissao-fiscal/empresa', requireAuth, requireMeiEnabled, controller.consultarPlugNotasEmpresa);
+router.patch('/setup/emissao-fiscal/empresa', requireAuth, requireMeiEnabled, controller.atualizarPlugNotasEmpresa);
+router.post(
   '/setup/plugnotas/certificado',
   requireAuth,
   requireMeiEnabled,
@@ -20,6 +30,8 @@ router.post(
   controller.cadastrarPlugNotasCertificado
 );
 router.post('/setup/plugnotas/empresa', requireAuth, requireMeiEnabled, controller.cadastrarPlugNotasEmpresa);
+router.get('/setup/plugnotas/empresa', requireAuth, requireMeiEnabled, controller.consultarPlugNotasEmpresa);
+router.patch('/setup/plugnotas/empresa', requireAuth, requireMeiEnabled, controller.atualizarPlugNotasEmpresa);
 router.get('/', requireAuth, requireMeiEnabled, controller.listar);
 router.get('/relatorio/nfe', requireAuth, requireMeiEnabled, controller.relatorioNfe);
 router.get('/catalogo/clientes', requireAuth, requireMeiEnabled, controller.listarCatalogoClientes);

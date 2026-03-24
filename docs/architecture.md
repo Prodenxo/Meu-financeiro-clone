@@ -15,7 +15,7 @@ O foco e evoluir a plataforma sem reescrever o sistema, aplicando mudancas em et
 - **Frontend:** React + Vite (`frontend/src`), consumo via `apiClient`.
 - **Backend:** Express (`backend/src`) com middlewares de auth/erro e rotas por dominio.
 - **Dados:** Supabase (`@supabase/supabase-js`), incluindo tabela `mei_nfse`.
-- **Integracoes externas:** PlugNotas (NFSe), Serpro (MEI), Google Calendar (proxy para Edge Function).
+- **Integracoes externas:** provedor de NFSe/NFe/NFCe (adaptador no backend), Serpro (MEI), Google Calendar (proxy para Edge Function).
 - **Build/Release:** scripts raiz para `dev`, `lint` e `build`; ausencia de `typecheck` e `test` na raiz.
 
 ## Drivers Arquiteturais
@@ -69,7 +69,7 @@ O foco e evoluir a plataforma sem reescrever o sistema, aplicando mudancas em et
   - Reforco de unicidade para identificadores operacionais de webhook.
 
 - **Camada de Integracao Externa**
-  - PlugNotas/Serpro acessados apenas pelo backend.
+  - Provedor fiscal e Serpro acessados apenas pelo backend.
   - Erros traduzidos para mensagens acionaveis sem vazar detalhes sensiveis.
 
 ## Decisoes Arquiteturais
@@ -105,6 +105,22 @@ O foco e evoluir a plataforma sem reescrever o sistema, aplicando mudancas em et
 - **Decisao:** padronizar scripts `lint`, `typecheck`, `test`, `build` na raiz.
 - **Motivo:** release confiavel e mensuravel.
 - **Trade-off:** curto prazo com possiveis falhas devido a legado.
+
+### ADR-06 - Cadastro Plugnotas (empresa): NFC-e com QR Code v1 no payload padrao
+
+- **Decisao:** no fluxo Meu-financeiro que monta o JSON de **cadastro/atualizacao de empresa** para o Plugnotas (`POST/PATCH` empresa no provedor), a estrategia de produto vigente e **NFC-e com `nfce.config.versaoQrCode = 1`** no payload gerado pela aplicacao, **sem** obrigatoriedade de `nfce.config.sefaz` nesta fase.
+- **Motivo:** o schema do Plugnotas associa **`sefaz` obrigatório** ao cenario em que **`versaoQrCode` e 2**; manter v1 evita bloqueio de integracao sem modelagem UX/backend de `sefaz` validada na doc oficial.
+- **Fonte de requisitos:** `docs/prd/PRD-cadastro-empresa-plugnotas-nfce-qrcode-sefaz.md` (secao **Decisão de produto**); contrato API: [documentacao Plugnotas](https://docs.plugnotas.com.br/) (Empresa / NFC-e).
+- **Trade-off:** se o provedor ou a SEFAZ passar a exigir QR v2 de forma inequivoca, sera necessario incremento (payload + possivel UI) para `nfce.config.sefaz` conforme especificacao atualizada.
+- **Escopo Guia MEI apenas NFS-e:** para cadastro/atualizacao de empresa nesse produto, a decisao acima foi **substituida** por **`nfe`/`nfce` inativos sem `config`** (ver **ADR-07**). ADR-06 permanece como referencia historica e para fluxos que ainda modelem NFC-e ativa com QR v1.
+
+### ADR-07 - Guia MEI apenas NFS-e: payload empresa Plugnotas (FR-A01)
+
+- **Decisao:** no escopo **Guia MEI / apenas NFS-e**, o JSON de empresa para o Plugnotas usa `nfe` e `nfce` **inativos** (`ativo: false`, `tipoContrato: 0`) **sem** objeto `config`, e politica de `inscricaoEstadual` documentada no ADR dedicado.
+- **Detalhamento normativo:** [`docs/adr/ADR-plugnotas-empresa-payload-apenas-nfse.md`](adr/ADR-plugnotas-empresa-payload-apenas-nfse.md).
+- **Implementacao:** `backend/src/services/plugnotas/empresa.service.js`, `frontend/src/utils/nfEmissionCompany.ts` (payload alinhado), constante compartilhada por convencao em `plugnotas-mei-empresa-policy.js` + export no frontend.
+- **Rastreio:** US-MEI-NFS-01 em `docs/stories/epic-guia-mei-apenas-nfse-prd.md`.
+- **NFS-e Nacional (cadastro empresa):** [`docs/adr/ADR-plugnotas-nfse-nacional-empresa-spike.md`](adr/ADR-plugnotas-nfse-nacional-empresa-spike.md) — spike NAT-01 + **campo implementado** `nfse.nacional` (NAT-02); validação na API real em sandbox/produção permanece recomendada (**NFR-N04**, **FR-NA02** risco residual).
 
 ## Mudancas Estruturais por Dominio
 

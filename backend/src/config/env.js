@@ -82,8 +82,19 @@ export const env = {
   MEI_API_TIMEOUT_MS: process.env.MEI_API_TIMEOUT_MS || '15000',
   MEI_CERT_ENCRYPTION_KEY: process.env.MEI_CERT_ENCRYPTION_KEY || '',
   PLUGNOTAS_API_BASE_URL: process.env.PLUGNOTAS_API_BASE_URL || '',
+  /** Prefixo opcional antes do path (ex.: `/api`). Ver docs Plugnotas e docs/operacao-mei-nfse.md. */
+  PLUGNOTAS_API_PATH_PREFIX: process.env.PLUGNOTAS_API_PATH_PREFIX || '',
   PLUGNOTAS_API_KEY: process.env.PLUGNOTAS_API_KEY || '',
+  /** `true`: logs extras de diagnóstico Plugnotas (ex.: payload redigido em 400 de cadastro empresa). Ver `docs/operacao-mei-nfse.md`. */
+  PLUGNOTAS_DEBUG: process.env.PLUGNOTAS_DEBUG || '',
+  /**
+   * Diagnóstico da cadeia GET após POST /certificado 409 (`resolverCertificadoIdAposConflito409`): off | error | warn | info | debug.
+   * Padrão `warn`. Use `off` se o volume de linhas `[plugnotas] certificado 409 resolve` incomodar.
+   */
+  PLUGNOTAS_CERT_409_RESOLVE_LOG_LEVEL: process.env.PLUGNOTAS_CERT_409_RESOLVE_LOG_LEVEL || 'warn',
   PLUGNOTAS_TIMEOUT_MS: process.env.PLUGNOTAS_TIMEOUT_MS || '15000',
+  /** Nível de log para diagnóstico HTTP 400 em emissão (requestJson): `error` (padrão) ou `warn`. */
+  PLUGNOTAS_EMIT_400_LOG_LEVEL: process.env.PLUGNOTAS_EMIT_400_LOG_LEVEL || 'error',
   PLUGNOTAS_WEBHOOK_TOKEN: requiredInProduction('PLUGNOTAS_WEBHOOK_TOKEN'),
   PLUGNOTAS_WEBHOOK_REQUIRE_TOKEN: process.env.PLUGNOTAS_WEBHOOK_REQUIRE_TOKEN
     || (process.env.NODE_ENV === 'development' ? 'false' : 'true'),

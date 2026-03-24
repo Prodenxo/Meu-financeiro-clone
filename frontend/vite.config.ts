@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { dirname, join, resolve } from 'path';
+import { fileURLToPath } from 'url';
+
+const __viteDirname = dirname(fileURLToPath(import.meta.url));
 
 // Rotas críticas que precisam de arquivos HTML físicos
 const criticalRoutes = [
@@ -73,9 +76,17 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    fs: {
+      allow: [resolve(__viteDirname, '..')]
+    },
     proxy: {
       // Em desenvolvimento, /api vai para o backend (evita CORS e 405 por preflight)
       '/api': {
+        target: 'http://localhost:3333',
+        changeOrigin: true,
+      },
+      // GET /health na raiz do Express (fora de /api) — mesmo host que o proxy de API (US-CONN-MEI-04)
+      '/health': {
         target: 'http://localhost:3333',
         changeOrigin: true,
       },

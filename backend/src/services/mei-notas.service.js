@@ -34,6 +34,7 @@ import {
   downloadNfceXmlPorIntegracao,
   emitirNfce
 } from './plugnotas/nfce.service.js';
+import { isPlugnotasDebugExplicitlyEnabled } from './plugnotas/plugnotas-debug-env.js';
 
 const TABLE = 'mei_nfse';
 const CLIENTS_TABLE = 'mei_nfse_clientes';
@@ -41,6 +42,43 @@ const PRODUCTS_TABLE = 'mei_nfse_produtos';
 const DOCUMENT_TYPE_NFSE = 'NFSE';
 const DOCUMENT_TYPE_NFE = 'NFE';
 const DOCUMENT_TYPE_NFCE = 'NFCE';
+
+/**
+ * Tamanho mínimo do código de serviço NFSe após normalização "sem máscara" (Plugnotas).
+ * @see docs/prd/PRD-nfse-servico-codigo-validacao-minima.md
+ */
+export const NFSE_SERVICO_CODIGO_MIN_LENGTH = 6;
+
+/**
+ * Produz o valor usado para medir comprimento do código de serviço NFSe: apenas caracteres
+ * alfanuméricos ASCII (remove pontos, traços, espaços e demais símbolos de máscara).
+ * Deve permanecer alinhado ao frontend (Story 6.6).
+ * @see docs/prd/PRD-nfse-servico-codigo-validacao-minima.md
+ */
+export const normalizeNfseServicoCodigoForLength = (raw) => (
+  String(raw ?? '').replace(/[^0-9A-Za-z]/g, '')
+);
+
+/**
+ * Garante que cada `servico[].codigo` preenchido tenha comprimento normalizado >= mínimo.
+ * @throws {HttpError} 400 se algum código violar a regra
+ */
+export const assertNfseServicoCodigosMinLength = (payload) => {
+  const servicos = Array.isArray(payload?.servico) ? payload.servico : [];
+  servicos.forEach((item, index) => {
+    const codigoRaw = item?.codigo;
+    if (codigoRaw === undefined || codigoRaw === null) return;
+    const trimmed = String(codigoRaw).trim();
+    if (!trimmed) return;
+    const normalized = normalizeNfseServicoCodigoForLength(trimmed);
+    if (normalized.length < NFSE_SERVICO_CODIGO_MIN_LENGTH) {
+      const pos = index + 1;
+      throw badRequest(
+        `Código do serviço (NFSe) deve ter pelo menos ${NFSE_SERVICO_CODIGO_MIN_LENGTH} caracteres alfanuméricos após remover máscaras (serviço ${pos}). Informe o código válido conforme o município ou a lista de serviços.`
+      );
+    }
+  });
+};
 const SUPPORTED_DOCUMENT_TYPES = new Set(['NFSE', 'NFE', 'NFCE', 'CTE']);
 const PROVIDER_PLUGNOTAS = 'plugnotas';
 const EDITABLE_STATUSES = new Set(['processando', 'rejeitado', 'interrompido']);
@@ -209,23 +247,21 @@ const prune = (value) => {
 
 const buildServicoFromInput = (input) => {
   if (!input || typeof input !== 'object') return null;
-  const iss = input.iss || {};
+  const issSource = input.iss && typeof input.iss === 'object' ? { ...input.iss } : {};
+  delete issSource.aliquota;
   const valor = input.valor || {};
   const codigo = input.codigo || input.codigoServico || null;
   const discriminacao = input.discriminacao || input.descricaoServico || null;
   const cnae = input.cnae || null;
-  const aliquota = input.aliquota ?? iss.aliquota;
   const valorServico = input.valorServico ?? valor.servico;
 
+  // MEI optante pelo Simples Nacional: não informar alíquota ISS no JSON (regra fiscal / prefeitura).
   return prune({
     id: input.id || null,
     codigo,
     discriminacao,
     cnae,
-    iss: prune({
-      ...iss,
-      ...(aliquota !== undefined ? { aliquota: toNumber(aliquota) } : {})
-    }),
+    iss: prune(issSource),
     valor: prune({
       ...valor,
       ...(valorServico !== undefined ? { servico: toNumber(valorServico) } : {})
@@ -419,14 +455,12 @@ const validatePayload = (payload) => {
 
   const hasValidService = servicos.some((item) => {
     if (item?.id) return true;
-    const aliquota = toNumber(item?.iss?.aliquota);
     const valorServico = toNumber(item?.valor?.servico);
 
     return Boolean(
       item?.codigo
       && item?.discriminacao
       && item?.cnae
-      && aliquota !== null
       && valorServico !== null
       && valorServico > 0
     );
@@ -435,6 +469,8 @@ const validatePayload = (payload) => {
   if (!hasValidService) {
     throw badRequest('Serviço da NFSe está incompleto');
   }
+
+  assertNfseServicoCodigosMinLength(payload);
 };
 
 const validateNfeLikePayload = (payload, { label = 'NF-e' } = {}) => {
@@ -915,7 +951,7 @@ export const emitirNota = async (userId, input) => {
   const status = extractPlugNotasStatus(response);
   const protocol = extractProtocol(response);
 
-  if (process.env.PLUGNOTAS_DEBUG === 'true') {
+  if (isPlugnotasDebugExplicitlyEnabled()) {
     const hasData = response && typeof response === 'object' && 'data' in response;
     const dataIsArray = hasData && Array.isArray(response.data);
     console.log('[mei-notas] emissão resposta', {

@@ -10,6 +10,7 @@
     "build": "cd frontend && npm run build && cd .. && node scripts/copy-dist-to-root.js",
     "preview": "cd frontend && npm run preview",
     "lint": "npm run lint --workspaces --if-present",
+    "lint:backend": "npm run lint -w backend",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "sync:ide": "node .aios-core/infrastructure/scripts/ide-sync/index.js sync",

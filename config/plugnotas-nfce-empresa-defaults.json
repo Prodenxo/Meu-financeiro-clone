@@ -1,0 +1,12 @@
+{
+  "nfceConfigQrV1": {
+    "producao": true,
+    "serie": 1,
+    "numero": 1,
+    "versaoQrCode": 1
+  },
+  "nfceBlockCadastro": {
+    "ativo": true,
+    "tipoContrato": 0
+  }
+}

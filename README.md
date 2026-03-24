@@ -59,8 +59,14 @@ npm install
 npm run dev
 ```
 
+**Smoke test (saúde):** com o backend no ar na porta configurada (padrão `3333`), use `GET http://localhost:3333/health` — resposta esperada `{"status":"ok"}`. Esta rota está na **raiz** do `Express`, não sob `/api`. Para a Guia MEI e erros *Failed to fetch* vs Plugnotas, veja [Antes de atribuir erro ao Plugnotas](docs/operacao-mei-nfse.md#guia-mei-conectividade-local).
+
 ### Rotas principais
-- `GET /api/health`
+
+Lista **não exaustiva** (amostra histórica de onboarding). Para o mapa real de prefixos, use `backend/src/routes/index.js` (`router.use`). Rotas fiscais / Guia MEI / Plugnotas: ver [`docs/operacao-mei-nfse.md`](docs/operacao-mei-nfse.md).
+
+- `GET /health` (raiz do servidor — smoke test rápido)
+- `GET /api/health/supabase` (checagem Supabase; ver `backend/src/routes/health.routes.js`)
 - `POST /api/auth/signup`
 - `POST /api/auth/signin`
 - `POST /api/auth/signout`
