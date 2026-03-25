@@ -39,6 +39,12 @@ if (import.meta.env.DEV && configuredApiUrl && !isLocalhostUrl(configuredApiUrl)
   console.warn('[API Client] VITE_API_URL aponta para ambiente remoto em DEV. Usando proxy local /api.');
 }
 
+/** US-INV-05 pós-QA: não logar query `token` em falhas sobre validate público. */
+export function redactInviteValidateTokenInUrlForLogs(url: string): string {
+  if (!url.includes('/invites/validate')) return url;
+  return url.replace(/([?&])token=[^&]*/gi, '$1token=[redacted]');
+}
+
 class ApiClient {
   baseUrl: string;
 
@@ -75,9 +81,11 @@ class ApiClient {
       ? details.body.slice(0, 1000)
       : details.body;
     const headers = this.sanitizeHeaders(details.headers);
+    const url = redactInviteValidateTokenInUrlForLogs(details.url);
 
     console.error('[API Client] Erro de requisição', {
       ...details,
+      url,
       headers,
       body: normalizedBody
     });

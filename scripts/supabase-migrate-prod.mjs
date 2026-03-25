@@ -53,7 +53,8 @@ const info = (message) => {
 const supabaseBin = resolve(repoRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'supabase.cmd' : 'supabase');
 
 const runSupabase = (cmdArgs, { capture = false } = {}) => {
-  const runArgs = ['--workdir', supabaseDir, ...cmdArgs];
+  // workdir = raiz do repo (contém supabase/); apontar só para supabase/ quebra db push (histórico local vazio).
+  const runArgs = ['--workdir', repoRoot, ...cmdArgs];
   const opts = { encoding: 'utf8', stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit', cwd: repoRoot };
   let result = spawnSync('supabase', runArgs, opts);
 

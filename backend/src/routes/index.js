@@ -9,6 +9,7 @@ import meiNotasRoutes from './mei-notas.routes.js';
 import recorrenciasRoutes from './recorrencias.routes.js';
 import adminRoutes from './admin.routes.js';
 import healthRoutes from './health.routes.js';
+import empresaInvitesRoutes from './empresa-invites.routes.js';
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.use('/auth', authRoutes);
 router.use('/categories', categoriesRoutes);
 router.use('/transactions', transactionsRoutes);
 router.use('/users', usersRoutes);
+router.use('/invites', empresaInvitesRoutes);
 router.use('/admin', adminRoutes);
 router.use('/health', healthRoutes);
 router.use('/google-calendar', googleCalendarRoutes);
