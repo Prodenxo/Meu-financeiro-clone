@@ -103,5 +103,16 @@ export const env = {
   PLUGNOTAS_NFE_CANCEL_PATH: process.env.PLUGNOTAS_NFE_CANCEL_PATH || '/nfe/:id/cancelamento',
   PLUGNOTAS_NFCE_CANCEL_PATH: process.env.PLUGNOTAS_NFCE_CANCEL_PATH || '/nfce/:id/cancelamento',
   N8N_WHATSAPP_WEBHOOK_URL: process.env.N8N_WHATSAPP_WEBHOOK_URL || '',
-  N8N_WHATSAPP_WEBHOOK_SECRET: process.env.N8N_WHATSAPP_WEBHOOK_SECRET || ''
+  N8N_WHATSAPP_WEBHOOK_SECRET: process.env.N8N_WHATSAPP_WEBHOOK_SECRET || '',
+  /**
+   * URL pública do frontend usada em links de convite (`/register?convite=`).
+   * Se vazio, usa `FRONTEND_URL` ou header `Origin` da requisição (fallback dev `http://localhost:3000`).
+   */
+  INVITE_APP_BASE_URL: (process.env.INVITE_APP_BASE_URL || '').trim(),
+  /**
+   * Limite por IP por minuto para `GET|POST /invites/validate` (NFR-02 US-INV-02).
+   * Padrão 120 em desenvolvimento e 60 caso contrário.
+   */
+  INVITE_VALIDATE_MAX_PER_MINUTE: process.env.INVITE_VALIDATE_MAX_PER_MINUTE
+    || (process.env.NODE_ENV === 'development' ? '120' : '60')
 };

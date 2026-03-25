@@ -16,17 +16,28 @@ export async function signUp(input: SignUpInput) {
     userId: string;
     phone: string | null;
     displayName: string | null;
+    session?: {
+      access_token: string;
+      refresh_token?: string;
+      expires_at?: number;
+    } | null;
   }>('/auth/signup', input);
 
-  // Se o backend retornar sessão/token, salvar
-  // Nota: O signup pode não retornar sessão imediatamente dependendo da configuração
-  // do Supabase (confirmação de email pode ser necessária)
+  if (result.session?.access_token) {
+    apiClient.setAuthToken({
+      access_token: result.session.access_token,
+      refresh_token: result.session.refresh_token,
+      expires_at: result.session.expires_at,
+      user: result.user
+    });
+  }
 
   return {
     user: result.user,
     userId: result.userId,
     phone: result.phone,
     displayName: result.displayName,
+    hadSession: Boolean(result.session?.access_token)
   };
 }
 

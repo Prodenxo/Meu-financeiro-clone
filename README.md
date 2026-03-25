@@ -115,6 +115,16 @@ npm run dev:frontend
 npm run dev:backend
 ```
 
+## Supabase: migrations e convites por empresa (US-INV-07)
+
+Se o backend retornar erro de banco do tipo **`relation "public.empresa_invites" does not exist`** ao usar **Convites por link** (`POST /api/invites`), em geral faltam **aplicar as migrations** no Postgres **do mesmo** projeto que `SUPABASE_URL` do `backend/.env`, ou o `.env` aponta para outro projeto.
+
+- **Runbook completo** (local, remoto, smoke SQL, checklist de release, triagem de suporte): [`docs/runbooks/supabase-empresa-invites-migrations.md`](docs/runbooks/supabase-empresa-invites-migrations.md).
+- **PR (GitHub):** ao alterar migrations ou convites, usar o modelo [`supabase-migrations`](.github/PULL_REQUEST_TEMPLATE/supabase-migrations.md) na descrição do pull request (se o repositório estiver no GitHub).
+- **Brief do sintoma:** [`docs/brief/brief-empresa-invites-relation-does-not-exist.md`](docs/brief/brief-empresa-invites-relation-does-not-exist.md).
+
+**NFR-07:** não promover backend com `/api/invites` para staging/produção sem migrations aplicadas e smoke `to_regclass('public.empresa_invites')` no banco alvo (detalhes no runbook).
+
 ## Observações
 - A fonte canônica de Edge Functions e migrations é `supabase/`.
 - O frontend consome o backend via `VITE_API_URL`, usando a camada `frontend/src/services`.

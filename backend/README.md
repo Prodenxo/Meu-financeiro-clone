@@ -24,6 +24,12 @@ backend/
 
 O diretório `backend/supabase/functions` foi descontinuado para evitar drift entre cópias.
 
+### Convites por empresa (`empresa_invites`)
+
+Rotas como **`POST /api/invites`** dependem da tabela `public.empresa_invites`. Se aparecer `relation "public.empresa_invites" does not exist`, aplique as migrations no banco referenciado por `SUPABASE_URL` deste backend e siga o runbook:
+
+[`docs/runbooks/supabase-empresa-invites-migrations.md`](../docs/runbooks/supabase-empresa-invites-migrations.md).
+
 ## Rodando localmente
 
 ```bash

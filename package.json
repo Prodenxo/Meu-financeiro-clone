@@ -25,7 +25,8 @@
     "validate:agents": "node .aios-core/infrastructure/scripts/validate-agents.js",
     "db:migrate:prod:check": "node scripts/supabase-migrate-prod.mjs --check",
     "db:migrate:prod": "node scripts/supabase-migrate-prod.mjs --apply",
-    "db:migrate:recorrencias": "cd backend && node ../scripts/apply-recorrencias-migrations.mjs"
+    "db:migrate:recorrencias": "cd backend && node ../scripts/apply-recorrencias-migrations.mjs",
+    "db:apply:empresa-invites": "node scripts/apply-empresa-invites-via-pg.mjs"
   },
   "workspaces": [
     "frontend",

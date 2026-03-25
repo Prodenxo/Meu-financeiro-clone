@@ -233,11 +233,19 @@ export const signUp = async ({ email, password, phone, displayName }, deps = {})
     }
   }
 
+  const session = data.session || null;
   return {
     user: data.user,
     userId,
     phone: cleanedPhone || data.user?.user_metadata?.phone || null,
-    displayName: displayName || data.user?.user_metadata?.display_name || null
+    displayName: displayName || data.user?.user_metadata?.display_name || null,
+    session: session
+      ? {
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          expires_at: session.expires_at
+        }
+      : null
   };
 };
 

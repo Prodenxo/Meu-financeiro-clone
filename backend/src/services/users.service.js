@@ -78,7 +78,7 @@ const findRoleByCandidates = async (adminClient, candidates) => {
   return { roleId: data.id, role: normalizeRoleValue(data.roles) };
 };
 
-const ensureRoleId = async (adminClient, role) => {
+export const ensureRoleId = async (adminClient, role) => {
   const resolved = await findRoleByCandidates(adminClient, getRoleCandidates(role));
   if (resolved?.roleId) return resolved;
 
@@ -217,7 +217,7 @@ const countActiveUsersByMei = async (adminClient, { empresaId, mei, ignoreUserId
   return count || 0;
 };
 
-const ensureEmpresaCapacity = async (adminClient, { empresaId, mei, ignoreUserId }) => {
+export const ensureEmpresaCapacity = async (adminClient, { empresaId, mei, ignoreUserId }) => {
   const { maxMei, maxNaoMei } = await getEmpresaLimits(adminClient, empresaId);
   const limit = mei ? maxMei : maxNaoMei;
 
@@ -230,6 +230,41 @@ const ensureEmpresaCapacity = async (adminClient, { empresaId, mei, ignoreUserId
         ? 'Limite de MEI atingido para esta empresa'
         : 'Limite de usuarios nao MEI atingido para esta empresa'
     );
+  }
+};
+
+/**
+ * Convite por empresa (US-INV-03): bloqueia contas administrativas e quem já tem vínculo ativo.
+ * @param {import('@supabase/supabase-js').SupabaseClient} adminClient
+ * @param {string} userId
+ */
+export const assertUserEligibleForEmpresaInvite = async (adminClient, userId) => {
+  if (!userId) throw badRequest('Usuário inválido');
+
+  const { data: profile, error: profileErr } = await adminClient
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (profileErr) throw badRequest(profileErr.message);
+
+  const profileRole = normalizeRoleValue(profile?.role);
+  if (profileRole === 'admin' || profileRole === 'superadmin') {
+    throw forbidden('Contas administrativas não podem aceitar convite de usuário');
+  }
+
+  const { data: activeLink, error: linkErr } = await adminClient
+    .from('role_x_user_x_empresa')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (linkErr) throw badRequest(linkErr.message);
+  if (activeLink?.id) {
+    throw badRequest('Esta conta já está vinculada a uma empresa');
   }
 };
 

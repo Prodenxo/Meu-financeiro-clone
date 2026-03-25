@@ -21,14 +21,18 @@ CREATE INDEX IF NOT EXISTS idx_recorrencias_dia_do_mes ON public.recorrencias(di
 
 ALTER TABLE public.recorrencias ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own recorrencias" ON public.recorrencias;
 CREATE POLICY "Users can view own recorrencias" ON public.recorrencias
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own recorrencias" ON public.recorrencias;
 CREATE POLICY "Users can insert own recorrencias" ON public.recorrencias
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own recorrencias" ON public.recorrencias;
 CREATE POLICY "Users can update own recorrencias" ON public.recorrencias
   FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own recorrencias" ON public.recorrencias;
 CREATE POLICY "Users can delete own recorrencias" ON public.recorrencias
   FOR DELETE USING (auth.uid() = user_id);

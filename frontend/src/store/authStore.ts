@@ -66,12 +66,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signUp: async (email, password, phone?, displayName?) => {
     const result = await signUpService({ email, password, phone, displayName });
+    if (result.hadSession) {
+      const session = await getSession();
+      if (session?.user) {
+        set({
+          user: session.user,
+          userId: session.user.id,
+          phone: session.user.user_metadata?.phone || result.phone || null,
+          displayName: session.user.user_metadata?.display_name || result.displayName || null,
+          role: normalizeRole(session.role || null),
+          empresaId: session.empresaId || session.user.user_metadata?.empresa_id || null,
+          mei: session.mei ?? true
+        });
+        await useTransactionStore.getState().fetchTransactions();
+        return;
+      }
+    }
     set({
       user: result.user,
       userId: result.userId,
       phone: result.phone,
       displayName: result.displayName,
-      empresaId: result.empresaId || null,
+      empresaId: null,
+      role: null,
+      mei: null
     });
   },
 
