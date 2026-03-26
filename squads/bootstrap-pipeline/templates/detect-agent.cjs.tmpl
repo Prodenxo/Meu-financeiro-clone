@@ -1,0 +1,36 @@
+const fs = require('fs');
+
+const AGENT_FILE = '/tmp/claude-active-agent.txt';
+const AGENTS = [
+  'dev', 'qa', 'architect', 'pm', 'po', 'sm',
+  'analyst', 'data-engineer', 'devops', 'aiox-master', 'ux-design-expert'
+];
+const AGENT_PATTERN = new RegExp(`@(${AGENTS.join('|')})\\b`);
+const SKILL_PATTERN = new RegExp(`/AIOX:agents:(${AGENTS.join('|')})`);
+
+let input = '';
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  try {
+    const data = JSON.parse(input);
+    const event = data.hook_event_name;
+    let agent = null;
+
+    if (event === 'UserPromptSubmit') {
+      const prompt = data.prompt || '';
+      const m = prompt.match(AGENT_PATTERN) || prompt.match(SKILL_PATTERN);
+      if (m) agent = m[1];
+    } else if (event === 'PreToolUse' && data.tool_name === 'Skill') {
+      const skill = (data.tool_input && data.tool_input.skill) || '';
+      const m = skill.match(/^AIOX:agents:([a-z-]+)$/);
+      if (m) agent = m[1];
+    }
+
+    if (agent) {
+      fs.writeFileSync(AGENT_FILE, agent);
+    }
+  } catch (_) {
+    // never block
+  }
+  process.exit(0);
+});

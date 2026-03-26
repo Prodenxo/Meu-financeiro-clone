@@ -67,9 +67,223 @@ const getSupabase = () => {
   return createSupabaseClient({ useServiceRole: true });
 };
 
+const digitsOnly = (value) => String(value || '').replace(/\D/g, '');
+
+/**
+ * Normaliza campos de emitente NFS-e (camelCase ou snake) para colunas Supabase.
+ * Omite chaves vazias quando omitEmpty=true (updates parciais).
+ * @param {Record<string, unknown>} raw
+ * @param {{ omitEmpty?: boolean }} [opts]
+ */
+export const normalizeEmitenteRowFragment = (raw, opts = {}) => {
+  const omitEmpty = Boolean(opts.omitEmpty);
+  const get = (camel, snake) => {
+    const v = raw[camel] !== undefined ? raw[camel] : raw[snake];
+    return v;
+  };
+  const out = {};
+
+  const razao = get('razaoSocial', 'razao_social');
+  if (razao !== undefined && razao !== null) {
+    const t = String(razao).trim();
+    if (t || !omitEmpty) out.razao_social = t || null;
+  }
+
+  const nf = get('nomeFantasia', 'nome_fantasia');
+  if (nf !== undefined && nf !== null) {
+    const t = String(nf).trim();
+    if (t || !omitEmpty) out.nome_fantasia = t || null;
+  }
+
+  const fe = get('fiscalEmail', 'fiscal_email') ?? get('email', 'email');
+  if (fe !== undefined && fe !== null) {
+    const t = String(fe).trim();
+    if (t || !omitEmpty) out.fiscal_email = t || null;
+  }
+
+  const rt = get('regimeTributario', 'regime_tributario');
+  if (rt !== undefined && rt !== null) {
+    const t = String(rt).trim();
+    if (t || !omitEmpty) out.regime_tributario = t || null;
+  }
+
+  const im = get('inscricaoMunicipal', 'inscricao_municipal');
+  if (im !== undefined && im !== null) {
+    const t = String(im).trim();
+    if (t || !omitEmpty) out.inscricao_municipal = t || null;
+  }
+
+  const cepVal = get('cep', 'cep');
+  if (cepVal !== undefined && cepVal !== null) {
+    const d = digitsOnly(cepVal).slice(0, 8);
+    if (d || !omitEmpty) out.cep = d || null;
+  }
+
+  const tipoL = get('tipoLogradouro', 'tipo_logradouro');
+  if (tipoL !== undefined && tipoL !== null) {
+    const t = String(tipoL).trim();
+    if (t || !omitEmpty) out.tipo_logradouro = t || null;
+  }
+
+  const log = get('logradouro', 'logradouro');
+  if (log !== undefined && log !== null) {
+    const t = String(log).trim();
+    if (t || !omitEmpty) out.logradouro = t || null;
+  }
+
+  const num = get('numero', 'numero');
+  if (num !== undefined && num !== null) {
+    const t = String(num).trim();
+    if (t || !omitEmpty) out.numero = t || null;
+  }
+
+  const comp = get('complemento', 'complemento');
+  if (comp !== undefined && comp !== null) {
+    const t = String(comp).trim();
+    if (t || !omitEmpty) out.complemento = t || null;
+  }
+
+  const bairro = get('bairro', 'bairro');
+  if (bairro !== undefined && bairro !== null) {
+    const t = String(bairro).trim();
+    if (t || !omitEmpty) out.bairro = t || null;
+  }
+
+  const ibge = get('ibgeMunicipio', 'ibge_municipio') ?? get('codigoCidade', 'codigo_cidade');
+  if (ibge !== undefined && ibge !== null) {
+    const t = String(ibge).replace(/\D/g, '').trim() || String(ibge).trim();
+    if (t || !omitEmpty) out.ibge_municipio = t || null;
+  }
+
+  const cidade = get('cidade', 'cidade') ?? get('descricaoCidade', 'descricao_cidade');
+  if (cidade !== undefined && cidade !== null) {
+    const t = String(cidade).trim();
+    if (t || !omitEmpty) out.cidade = t || null;
+  }
+
+  const uf = get('uf', 'uf') ?? get('estado', 'estado');
+  if (uf !== undefined && uf !== null) {
+    const u = String(uf).trim().toUpperCase().slice(0, 2);
+    if (u || !omitEmpty) out.uf = u || null;
+  }
+
+  const opt = get('optanteSimplesNacional', 'optante_simples_nacional')
+    ?? get('simplesNacional', 'simples_nacional');
+  if (opt !== undefined && opt !== null) {
+    if (typeof opt === 'boolean') {
+      out.optante_simples_nacional = opt;
+    } else {
+      const s = String(opt).trim().toLowerCase();
+      if (['1', 'true', 'yes', 'sim', 'on'].includes(s)) out.optante_simples_nacional = true;
+      else if (['0', 'false', 'no', 'nao', 'não', 'off'].includes(s)) out.optante_simples_nacional = false;
+      else if (!omitEmpty) out.optante_simples_nacional = null;
+    }
+  }
+
+  return out;
+};
+
+/**
+ * Converte linha DB em objeto camelCase para o frontend (NfEmissionCompanyForm).
+ */
+export const emitenteRowToApiShape = (row) => {
+  if (!row || typeof row !== 'object') return null;
+  return {
+    razaoSocial: row.razao_social ?? '',
+    nomeFantasia: row.nome_fantasia ?? '',
+    email: row.fiscal_email ?? '',
+    regimeTributario: row.regime_tributario ? String(row.regime_tributario) : '1',
+    simplesNacional: row.optante_simples_nacional !== false,
+    inscricaoMunicipal: row.inscricao_municipal ?? '',
+    cep: row.cep ?? '',
+    tipoLogradouro: (() => {
+      const t = row.tipo_logradouro != null ? String(row.tipo_logradouro).trim() : '';
+      return t || 'Rua';
+    })(),
+    logradouro: row.logradouro ?? '',
+    numero: row.numero ?? '',
+    complemento: row.complemento ?? '',
+    bairro: row.bairro ?? '',
+    codigoCidade: row.ibge_municipio ?? '',
+    descricaoCidade: row.cidade ?? '',
+    estado: row.uf ?? ''
+  };
+};
+
+/**
+ * Atualiza apenas dados fiscais/endereço NFS-e (sem exigir novo .pfx).
+ */
+export const patchEmitenteNfseFields = async (userId, partial) => {
+  if (!userId) throw badRequest('Usuário não identificado');
+  const fragment = normalizeEmitenteRowFragment(partial, { omitEmpty: true });
+  if (Object.keys(fragment).length === 0) {
+    throw badRequest('Nenhum campo de emitente para atualizar');
+  }
+  const supabase = getSupabase();
+  const { data: existing, error: selErr } = await supabase
+    .from(TABLE)
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (selErr) {
+    throw badRequest(selErr.message || 'Falha ao consultar certificado');
+  }
+  if (!existing?.id) {
+    throw badRequest('Nenhum registro de certificado encontrado. Envie o certificado no MEI primeiro.');
+  }
+  const payload = {
+    ...fragment,
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await supabase
+    .from(TABLE)
+    .update(payload)
+    .eq('user_id', userId);
+  if (error) {
+    throw badRequest(error.message || 'Falha ao atualizar dados fiscais');
+  }
+};
+
+/**
+ * Lê apenas colunas de emitente NFS-e (não exige pfx preenchido).
+ */
+export const getEmitenteNfseSnapshot = async (userId) => {
+  if (!userId) return null;
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select(`
+      razao_social,
+      nome_fantasia,
+      fiscal_email,
+      regime_tributario,
+      inscricao_municipal,
+      cep,
+      tipo_logradouro,
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      ibge_municipio,
+      cidade,
+      uf,
+      optante_simples_nacional
+    `)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const hasAny = Object.entries(data).some(([key, v]) => {
+    if (key === 'optante_simples_nacional') return typeof v === 'boolean';
+    return v !== null && v !== undefined && String(v).trim() !== '';
+  });
+  if (!hasAny) return null;
+  return emitenteRowToApiShape(data);
+};
+
 /**
  * Salva ou atualiza o certificado do usuário (upsert por user_id).
  * @param {object} opts - certValidFrom e certValidTo em ISO string (opcional).
+ * @param {Record<string, unknown>} [opts.emitente] — dados mínimos NFS-e (opcional).
  */
 export const saveCertificate = async (userId, {
   pfxBase64,
@@ -77,10 +291,12 @@ export const saveCertificate = async (userId, {
   passphraseIv,
   certDocument,
   certValidFrom = null,
-  certValidTo = null
+  certValidTo = null,
+  emitente = null
 }) => {
   if (!userId) throw badRequest('Usuário não identificado');
   const supabase = getSupabase();
+  const emitenteRow = emitente ? normalizeEmitenteRowFragment(emitente, { omitEmpty: false }) : {};
   const row = {
     user_id: userId,
     pfx_base64: pfxBase64,
@@ -89,6 +305,7 @@ export const saveCertificate = async (userId, {
     cert_document: certDocument || null,
     cert_valid_from: certValidFrom || null,
     cert_valid_to: certValidTo || null,
+    ...emitenteRow,
     updated_at: new Date().toISOString()
   };
   const { error } = await supabase

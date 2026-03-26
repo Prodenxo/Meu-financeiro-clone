@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   downloadMeiGuide,
   downloadParcelamentoPdf,
@@ -8,8 +8,10 @@ import {
   fetchParcelamentos,
   removeMeiCertificate,
   uploadMeiCertificate,
+  patchMeiCertificateEmitenteNfse,
   validateMeiGuide,
   type MeiPeriod,
+  type NfseEmitenteSnapshot,
   type ParcelamentoItem
 } from '../services/guidesMeiService';
 import {
@@ -92,6 +94,34 @@ const toPeriodoApuracao = (month: string, year: number) => {
   return `${year}${month}`;
 };
 
+const emitenteSnapshotToForm = (snap: NfseEmitenteSnapshot): NfEmissionCompanyForm => {
+  const r = snap.regimeTributario;
+  const regime: NfEmissionRegimeTributario =
+    r === '1' || r === '2' || r === '3' ? r : '1';
+  return {
+    ...getDefaultNfEmissionCompanyForm(),
+    ...snap,
+    regimeTributario: regime
+  };
+};
+
+const nfEmissionFormToPersistBody = (form: NfEmissionCompanyForm) => ({
+  razaoSocial: form.razaoSocial,
+  nomeFantasia: form.nomeFantasia,
+  email: form.email,
+  regimeTributario: form.regimeTributario,
+  inscricaoMunicipal: form.inscricaoMunicipal,
+  cep: form.cep,
+  tipoLogradouro: form.tipoLogradouro,
+  logradouro: form.logradouro,
+  numero: form.numero,
+  complemento: form.complemento,
+  bairro: form.bairro,
+  codigoCidade: form.codigoCidade,
+  descricaoCidade: form.descricaoCidade,
+  estado: form.estado,
+  simplesNacional: form.simplesNacional
+});
 
 const triggerFileDownload = (blob: Blob, filename: string) => {
   const downloadUrl = URL.createObjectURL(blob);
@@ -414,6 +444,8 @@ export default function GuidesMei() {
   const [nfEmissionCompanyForm, setNfEmissionCompanyForm] = useState<NfEmissionCompanyForm>(() => (
     getDefaultNfEmissionCompanyForm()
   ));
+  /** Evita sobrescrever edição local ao reexecutar `loadCertificateStatus`. */
+  const nfseEmitenteHydratedRef = useRef(false);
   const [nfEmissionCompanySyncLoading, setNfEmissionCompanySyncLoading] = useState<'consult' | 'patch' | null>(null);
   const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<string | null>(null);
   const [nfEmissionCompanySyncSuccess, setNfEmissionCompanySyncSuccess] = useState<string | null>(null);
@@ -448,6 +480,10 @@ export default function GuidesMei() {
       setCertValidFrom(status.certValidFrom ?? null);
       setCertValidTo(status.certValidTo ?? null);
       applyDocumento(status.documento);
+      if (status.nfseEmitente && !nfseEmitenteHydratedRef.current) {
+        nfseEmitenteHydratedRef.current = true;
+        setNfEmissionCompanyForm(emitenteSnapshotToForm(status.nfseEmitente));
+      }
     } catch {
       setHasUserCertificate(false);
       setHasServerCertificate(false);
@@ -730,9 +766,17 @@ export default function GuidesMei() {
     setIsUploadingCert(true);
     let uploadedToMei = false;
     try {
-      const status = await uploadMeiCertificate(certificateFile, trimmedPassword);
+      const status = await uploadMeiCertificate(
+        certificateFile,
+        trimmedPassword,
+        canViewNfse ? nfEmissionCompanyForm : undefined
+      );
       uploadedToMei = true;
       applyDocumento(status.documento, true);
+      if (canViewNfse && status.nfseEmitente) {
+        setNfEmissionCompanyForm(emitenteSnapshotToForm(status.nfseEmitente));
+        nfseEmitenteHydratedRef.current = true;
+      }
 
       if (!canViewNfse) {
         setCertificateFile(null);
@@ -901,6 +945,22 @@ export default function GuidesMei() {
         form: nfEmissionCompanyForm
       });
       const companyResponse = await atualizarEmpresaEmissaoNf(companyPayload);
+      let updatedStatus;
+      try {
+        updatedStatus = await patchMeiCertificateEmitenteNfse(
+          nfEmissionFormToPersistBody(nfEmissionCompanyForm)
+        );
+      } catch (persistErr) {
+        const msg = persistErr instanceof Error ? persistErr.message : String(persistErr);
+        setNfEmissionCompanySyncError(
+          `Empresa atualizada no emissor fiscal, mas os dados não foram gravados nesta aplicação: ${msg}`
+        );
+        return;
+      }
+      if (updatedStatus?.nfseEmitente) {
+        setNfEmissionCompanyForm(emitenteSnapshotToForm(updatedStatus.nfseEmitente));
+        nfseEmitenteHydratedRef.current = true;
+      }
       setNfEmissionCompanySyncSuccess(
         companyResponse.message || 'Empresa atualizada no serviço de emissão fiscal com sucesso.'
       );
@@ -925,6 +985,8 @@ export default function GuidesMei() {
     setIsRemovingCert(true);
     try {
       await removeMeiCertificate();
+      nfseEmitenteHydratedRef.current = false;
+      setNfEmissionCompanyForm(getDefaultNfEmissionCompanyForm());
       await loadCertificateStatus();
     } catch (error) {
       if (isFetchConnectivityFailure(error)) {

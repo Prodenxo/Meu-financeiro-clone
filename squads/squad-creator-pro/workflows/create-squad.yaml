@@ -1,0 +1,348 @@
+# Squad Creator Pipeline Workflow
+# Pattern: Based on MMOS greenfield-mind.yaml
+# Version: 1.0.0-draft
+
+workflow:
+  id: create-squad
+  name: Squad Creation Pipeline
+  version: 1.0.0
+  description: >-
+    Complete pipeline for creating AIOS squads with state machine orchestration,
+    human checkpoints, and quality gates. Based on MMOS DNA Mental™ methodology.
+  governance_protocol: "squads/squad-creator-pro/protocols/ai-first-governance.md"
+  ci_policy:
+    blocking_deterministic_only: true
+    semantic_checks_in_checkpoints: true
+
+  # ========================================================================
+  # AGENT MAPPING
+  # ========================================================================
+  agent_mapping:
+    agents:
+      oalanicolas: mind-cloner        # DNA extraction, pattern recognition
+      pedro-valerio: process-axiomist # Task anatomy, quality validation
+      squad-chief: orchestrator       # Integration, deployment
+
+    phase_ownership:
+      research: oalanicolas
+      validation: oalanicolas
+      extraction: oalanicolas
+      scaffolding: oalanicolas
+      tasks: pedro-valerio
+      quality_gate: pedro-valerio
+      integration: squad-chief
+      smoke_test: squad-chief
+
+    human_checkpoints:
+      - phase: quality_gate
+        agent: pedro-valerio
+        decision: APPROVE_REVISE_ABORT
+        criteria:
+          - axioma_score >= 7.0
+          - all_dimensions >= 6.0
+          - task_anatomy_complete
+
+  # ========================================================================
+  # STATE MACHINE DEFINITION
+  # ========================================================================
+  state_machine:
+    states:
+      - init
+      - research
+      - validation
+      - extraction
+      - scaffolding
+      - tasks
+      - quality_gate      # Human checkpoint
+      - integration
+      - smoke_test
+      - complete
+      - failed
+
+    transitions:
+      - trigger: start
+        source: init
+        dest: research
+
+      - trigger: research_complete
+        source: research
+        dest: validation
+
+      - trigger: validation_complete
+        source: validation
+        dest: extraction
+
+      - trigger: extraction_complete
+        source: extraction
+        dest: scaffolding
+
+      - trigger: scaffolding_complete
+        source: scaffolding
+        dest: tasks
+
+      - trigger: tasks_complete
+        source: tasks
+        dest: quality_gate
+
+      - trigger: quality_approved
+        source: quality_gate
+        dest: integration
+
+      - trigger: quality_revision
+        source: quality_gate
+        dest: tasks          # Loop back for revision
+
+      - trigger: integration_complete
+        source: integration
+        dest: smoke_test
+
+      - trigger: smoke_passed
+        source: smoke_test
+        dest: complete
+
+      - trigger: smoke_failed
+        source: smoke_test
+        dest: integration    # Retry integration
+
+      - trigger: fail
+        source: '*'          # From any state
+        dest: failed
+
+      - trigger: recover
+        source: failed
+        dest: init
+
+  # ========================================================================
+  # PIPELINE SEQUENCE
+  # ========================================================================
+  sequence:
+    # ----------------------------------------------------------------------
+    # PHASE 0: Research
+    # Agent: oalanicolas
+    # ----------------------------------------------------------------------
+    - phase: research
+      phase_id: phase_0
+      agent: oalanicolas
+      task: research-sources
+      description: "Pesquisa de fontes e contexto para o squad"
+      inputs:
+        - squad_type
+        - domain
+        - target_sources
+      outputs:
+        - outputs/{squad_slug}/research/sources.yaml
+        - outputs/{squad_slug}/research/context.md
+      metrics:
+        - sources_found
+        - sources_validated
+      trigger_on_complete: research_complete
+
+    # ----------------------------------------------------------------------
+    # PHASE 0.5: Source Validation
+    # Agent: oalanicolas
+    # ----------------------------------------------------------------------
+    - phase: validation
+      phase_id: phase_0_5
+      agent: oalanicolas
+      task: validate-sources
+      description: "Validação de qualidade das fontes"
+      skip_if: "mode == 'fast'"    # Skip em modo fast
+      inputs:
+        - outputs/{squad_slug}/research/sources.yaml
+      outputs:
+        - outputs/{squad_slug}/research/validation-report.md
+      quality_threshold:
+        min_sources: 3
+        source_quality: 0.7
+      trigger_on_complete: validation_complete
+
+    # ----------------------------------------------------------------------
+    # PHASE 1: DNA Extraction
+    # Agent: oalanicolas
+    # ----------------------------------------------------------------------
+    - phase: extraction
+      phase_id: phase_1
+      agent: oalanicolas
+      task: extract-dna
+      description: "Extração de padrões, frameworks, heurísticas"
+      inputs:
+        - outputs/{squad_slug}/research/sources.yaml
+        - outputs/{squad_slug}/research/context.md
+      outputs:
+        - outputs/{squad_slug}/dna/patterns.yaml
+        - outputs/{squad_slug}/dna/frameworks.yaml
+        - outputs/{squad_slug}/dna/heuristics.yaml
+        - outputs/{squad_slug}/dna/anchor-words.yaml
+      trigger_on_complete: extraction_complete
+
+    # ----------------------------------------------------------------------
+    # PHASE 2: Agent Scaffolding
+    # Agent: oalanicolas
+    # ----------------------------------------------------------------------
+    - phase: scaffolding
+      phase_id: phase_2
+      agent: oalanicolas
+      task: create-agent-scaffold
+      description: "Criação da estrutura base do agent"
+      inputs:
+        - outputs/{squad_slug}/dna/*.yaml
+      outputs:
+        - squads/{squad_slug}/agents/{agent_slug}.md
+        - squads/{squad_slug}/config.yaml            # Must include explicit entry_agent
+        - squads/{squad_slug}/config/squad-config.yaml
+        - squads/{squad_slug}/outputs/README.md      # Bootstrap runtime outputs directory
+      trigger_on_complete: scaffolding_complete
+
+    # ----------------------------------------------------------------------
+    # PHASE 3: Task Anatomy
+    # Agent: pedro-valerio
+    # ----------------------------------------------------------------------
+    - phase: tasks
+      phase_id: phase_3
+      agent: pedro-valerio
+      task: define-task-anatomy
+      description: "Definição de tasks com anatomia completa (8 campos)"
+      inputs:
+        - squads/{squad_slug}/agents/{agent_slug}.md
+        - outputs/{squad_slug}/dna/frameworks.yaml
+      outputs:
+        - squads/{squad_slug}/tasks/*.md
+      validation:
+        checklist: task-anatomy-checklist
+        required_fields: 8
+      trigger_on_complete: tasks_complete
+
+    # ----------------------------------------------------------------------
+    # PHASE 4: Quality Gate (HUMAN CHECKPOINT)
+    # Agent: pedro-valerio
+    # ----------------------------------------------------------------------
+    - phase: quality_gate
+      phase_id: phase_4
+      agent: pedro-valerio
+      task: axioma-validation
+      description: "Validação axiomática e quality gate"
+      human_checkpoint: true
+      checkpoint_type: APPROVE_REVISE_ABORT
+      inputs:
+        - squads/{squad_slug}/agents/*.md
+        - squads/{squad_slug}/tasks/*.md
+      outputs:
+        - outputs/{squad_slug}/validation/axioma-report.yaml
+        - outputs/{squad_slug}/validation/quality-gate-decision.md
+      validation:
+        axioma_threshold: 7.0
+        dimension_threshold: 6.0
+        dimensions:
+          - clarity
+          - completeness
+          - consistency
+          - testability
+          - reusability
+          - maintainability
+          - performance
+          - security
+          - usability
+          - documentation
+      decisions:
+        APPROVE:
+          trigger: quality_approved
+          next_phase: integration
+        REVISE:
+          trigger: quality_revision
+          next_phase: tasks
+          feedback_required: true
+        ABORT:
+          trigger: fail
+          reason_required: true
+
+    # ----------------------------------------------------------------------
+    # PHASE 5: Integration
+    # Agent: squad-chief
+    # ----------------------------------------------------------------------
+    - phase: integration
+      phase_id: phase_5
+      agent: squad-chief
+      task: integrate-squad
+      description: "Integração do squad no ecossistema"
+      inputs:
+        - squads/{squad_slug}/**/*
+      outputs:
+        - .claude/agents/{agent_slug}.md      # Symlink/copy
+        - squads/{squad_slug}/README.md       # Final docs
+        - squads/{squad_slug}/outputs/README.md
+      post_actions:
+        - refresh-registry
+        - validate-dependencies
+      trigger_on_complete: integration_complete
+
+    # ----------------------------------------------------------------------
+    # PHASE 6: Smoke Test
+    # Agent: squad-chief
+    # ----------------------------------------------------------------------
+    - phase: smoke_test
+      phase_id: phase_6
+      agent: squad-chief
+      task: smoke-test-agent
+      description: "Teste funcional do agent"
+      inputs:
+        - squads/{squad_slug}/agents/{agent_slug}.md
+      outputs:
+        - outputs/{squad_slug}/validation/smoke-test-report.md
+      test_scenarios:
+        - activation: "Agent responds with correct greeting"
+        - help: "Agent lists available commands"
+        - basic_task: "Agent executes simple task correctly"
+      pass_threshold: 3/3
+      on_failure:
+        trigger: smoke_failed
+        max_retries: 2
+      on_success:
+        trigger: smoke_passed
+
+  # ========================================================================
+  # METRICS & COST TRACKING
+  # ========================================================================
+  metrics:
+    track_per_phase:
+      - tokens_in
+      - tokens_out
+      - api_calls
+      - duration_seconds
+      - cost_usd_estimated
+
+    aggregations:
+      - total_tokens
+      - total_cost
+      - total_duration
+      - quality_score_final
+
+  # ========================================================================
+  # ERROR HANDLING
+  # ========================================================================
+  error_handling:
+    on_error:
+      - save_state            # Persist current state
+      - log_error             # Log error details
+      - notify: optional      # Optional notification
+
+    recovery:
+      enabled: true
+      strategy: resume_from_last_complete
+      max_retries: 3
+
+  # ========================================================================
+  # RESUME CONFIGURATION
+  # ========================================================================
+  resume:
+    state_file: .state.json
+    supported: true
+    preserve_outputs: true
+    allowed_phases:
+      - research
+      - validation
+      - extraction
+      - scaffolding
+      - tasks
+      - quality_gate
+      - integration
+      - smoke_test

@@ -1,0 +1,59 @@
+---
+description: Roteamento de modelo LLM no Cursor (paridade com llm-routing Claude)
+alwaysApply: true
+---
+
+# LLM routing (Cursor)
+
+No **Cursor**, o IDE **não** escolhe o modelo sozinho com base nesta regra. A matriz abaixo orienta **ti** e o assistente sobre **qual perfil** usar no **seletor de modelo** e, quando fizer sentido, no modo (**Chat**, **Composer**, **Agent**).
+
+## Mapa rápido Claude Code → Cursor
+
+| Claude Code (ex.: API / workflow com Haiku, Sonnet, Opus) | Cursor |
+|----------------------------------------------------------|--------|
+| Nomes de modelo explícitos | **Auto**, modelo **rápido/económico**, **equilibrado**, **Max** ou raciocínio prolongado (conforme o teu plano e disponibilidade) |
+| Roteamento pode estar em automações internas | **Manual** — escolha no seletor **por tarefa** |
+
+## Quando mudar de perfil (heurística)
+
+**Manter Auto ou modelo rápido/económico** quando: leitura pontual, grep, pequenos edits, formatação, perguntas de esclarecimento, diff localizado.
+
+**Subir para modelo mais forte ou Max / raciocínio prolongado** quando: causa raiz **incerta**, bug **intermitente**, concorrência/race conditions, segurança e revisão de auth/pagamentos, desenho arquitetural novo, refactors amplos em cadeia, ou **duas tentativas falhadas** seguidas no mesmo problema.
+
+**Para o assistente:** se o risco ou a ambiguidade forem altos, **explicitar** que convém modelo/modo mais forte — sem assumir que o seletor já foi alterado.
+
+## Matriz sugerida (AIOX)
+
+Ajuste por projeto. Use o **seletor de modelo** do Cursor conforme a complexidade.
+
+| Área | Modelo no Cursor (sugestão) | Exemplos |
+|------|------------------------------|----------|
+| Pré-checks, cópias, validação simples | **Auto** ou modelo rápido / económico | listar ficheiros, diff estático, formatação |
+| Orquestração, implementação, diagnóstico típico | **Auto** ou modelo predefinido equilibrado | features, refactors, revisão de PR |
+| Debugging profundo / causa raiz incerta / arquitetura pesada | **Auto** com modelo **Max** ou raciocínio prolongado (quando disponível) | falhas intermitentes, race conditions, trade-offs amplos |
+
+## Equivalência com Claude Code (Anthropic)
+
+| Cursor (sugestão) | Claude API / Claude Code |
+|-------------------|---------------------------|
+| Modelo rápido / económico | Haiku |
+| Modelo equilibrado / Auto típico | Sonnet |
+| Max / raciocínio profundo | Opus |
+
+## Alinhamento com o fluxo AIOX
+
+- **Stories:** requisitos e critérios em `docs/stories/` permanecem canónicos; esta matriz **não** os substitui.
+- **Memória:** factos transversais em `.cursor/mem/PROJECT_MEMORY.md`; consolidar muito contexto disperso costuma beneficiar de modelo mais forte.
+- **CLI first:** preferir gates (`npm run lint`, `typecheck`, `test`) quando o trabalho toca código.
+
+## Regras operacionais (bootstrap / pipeline)
+
+- **CLI first**: preferir scripts e gates (`npm run lint`, `typecheck`, `test`) antes da UI.
+- **Idempotência**: passos do bootstrap devem poder rerodar sem corromper estado.
+- **Checkpoint**: após falha, usar `*full-setup --resume`.
+
+## Bootstraps e manutenção
+
+- O passo **`llm-routing`** do bootstrap AIOX pode **reescrever** `.cursor/rules/llm-routing.mdc` (e `.claude/rules/llm-routing.md`). Se personalizares este ficheiro, **replica** a alteração no gerador em `squads/bootstrap-pipeline/scripts/bootstrap/steps/llm-routing.js` para não perder mudanças no próximo setup — ou regista o desvio em `PROJECT_MEMORY.md`.
+
+_Generado pelo pipeline AIOX bootstrap-pipeline._

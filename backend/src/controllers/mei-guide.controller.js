@@ -50,9 +50,19 @@ export const uploadCertificate = async (req, res, next) => {
   try {
     const data = await meiGuideService.uploadCertificate(req.user.id, {
       file: req.file,
-      password: req.body?.password
+      password: req.body?.password,
+      ...req.body
     });
     return sendSuccess(res, data, 'Certificado carregado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const patchCertificateEmitenteNfse = async (req, res, next) => {
+  try {
+    const data = await meiGuideService.patchCertificateEmitenteNfse(req.user.id, req.body || {});
+    return sendSuccess(res, data, 'Dados fiscais NFS-e atualizados');
   } catch (error) {
     return next(error);
   }

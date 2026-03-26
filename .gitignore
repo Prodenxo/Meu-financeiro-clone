@@ -33,7 +33,12 @@ Thumbs.db
 .aios-core
 .claude
 .codex
-.cursor
+# Cursor: versionar regras AIOX em .cursor/rules; demais pastas locais
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+!.cursor/mem/
+!.cursor/mem/**
 .gemini
 .github
 .aiox-core

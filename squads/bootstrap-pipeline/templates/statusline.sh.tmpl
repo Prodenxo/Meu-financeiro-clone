@@ -1,0 +1,98 @@
+#!/bin/bash
+input=$(cat)
+
+# --- JSON fields ---
+MODEL=$(echo "$input" | jq -r '.model.display_name // "—"')
+
+PCT_RAW=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
+PCT=${PCT_RAW%.*}
+PCT=${PCT:-0}
+
+SESSION_NAME=$(echo "$input" | jq -r '.session_name // empty')
+CWD=$(echo "$input" | jq -r '.cwd // .workspace.current_dir // ""')
+
+# Cost — check common paths
+COST=$(echo "$input" | jq -r '
+  .cost.total_cost_usd //
+  .session.cost_usd //
+  0')
+COST_FMT=$(printf '$%.2f' "$COST")
+
+# --- Git branch (skip optional locks) ---
+BRANCH=""
+if [ -n "$CWD" ] && [ -d "$CWD/.git" ] || git -C "$CWD" rev-parse --git-dir >/dev/null 2>&1; then
+  BRANCH=$(git -C "$CWD" -c core.fsync=none -c gc.auto=0 symbolic-ref --short HEAD 2>/dev/null || true)
+fi
+
+# --- Git diff stats: lines added / removed vs HEAD ---
+DIFF_STATS=""
+if [ -n "$CWD" ] && [ -n "$BRANCH" ]; then
+  STATS=$(git -C "$CWD" -c core.fsync=none diff --shortstat HEAD 2>/dev/null || true)
+  if [ -n "$STATS" ]; then
+    ADDED=$(echo "$STATS" | grep -oP '(\d+) insertion' | grep -oP '\d+' || echo "0")
+    REMOVED=$(echo "$STATS" | grep -oP '(\d+) deletion' | grep -oP '\d+' || echo "0")
+    ADDED=${ADDED:-0}
+    REMOVED=${REMOVED:-0}
+    DIFF_STATS="+${ADDED} -${REMOVED}"
+  else
+    DIFF_STATS="+0 -0"
+  fi
+fi
+
+# --- Session duration: derived from transcript mtime vs now ---
+SESSION_DURATION=""
+TRANSCRIPT=$(echo "$input" | jq -r '.transcript_path // empty')
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  START_EPOCH=$(stat -c %Y "$TRANSCRIPT" 2>/dev/null || true)
+  NOW_EPOCH=$(date +%s)
+  if [ -n "$START_EPOCH" ] && [ "$START_EPOCH" -gt 0 ] 2>/dev/null; then
+    ELAPSED=$(( NOW_EPOCH - START_EPOCH ))
+    MINS=$(( ELAPSED / 60 ))
+    SESSION_DURATION="${MINS}m"
+  fi
+fi
+SESSION_DURATION=${SESSION_DURATION:-"0m"}
+
+# Unicode block characters (UTF-8 encoded for bash portability)
+BLOCK_FULL=$'\xe2\x96\x88'   # █  U+2588 FULL BLOCK
+BLOCK_LIGHT=$'\xe2\x96\x91'  # ░  U+2591 LIGHT SHADE
+ARROW_RIGHT=$'\xe2\x96\xb8'  # ▸  U+25B8 SMALL RIGHT-POINTING TRIANGLE
+TRIANGLE=$'\xe2\x96\xb3'     # △  U+25B3 WHITE UP-POINTING TRIANGLE
+
+# --- Context bar (10 blocks) ---
+FILLED=$((PCT / 10))
+[ "$FILLED" -gt 10 ] && FILLED=10
+EMPTY=$((10 - FILLED))
+BAR=""
+for ((i=0; i<FILLED; i++)); do BAR="${BAR}${BLOCK_FULL}"; done
+for ((i=0; i<EMPTY; i++));  do BAR="${BAR}${BLOCK_LIGHT}"; done
+
+# --- Session label: prefer session_name, else last path component ---
+if [ -n "$SESSION_NAME" ]; then
+  SESSION_LABEL="$SESSION_NAME"
+else
+  SESSION_LABEL="${CWD##*/}"
+fi
+
+# --- Branch display ---
+BRANCH_DISPLAY=""
+if [ -n "$BRANCH" ]; then
+  BRANCH_DISPLAY=" ${ARROW_RIGHT} ${BRANCH}"
+fi
+
+# --- ANSI bold yellow ---
+Y='\033[1;33m'
+R='\033[0m'
+
+# --- Compose output ---
+# △IOX | session ▸ branch | model | bar PCT% | +N -N | Xm | $cost
+{
+  printf "${Y}${TRIANGLE}IOX${R}"
+  printf "${Y} | ${R}${Y}%s%s${R}" "$SESSION_LABEL" "$BRANCH_DISPLAY"
+  printf "${Y} | ${R}${Y}%s${R}" "$MODEL"
+  printf "${Y} | ${R}${Y}%s %d%%${R}" "$BAR" "$PCT"
+  [ -n "$DIFF_STATS" ] && printf "${Y} | ${R}${Y}%s${R}" "$DIFF_STATS"
+  printf "${Y} | ${R}${Y}%s${R}" "$SESSION_DURATION"
+  printf "${Y} | ${R}${Y}%s${R}" "$COST_FMT"
+  printf "\n"
+}

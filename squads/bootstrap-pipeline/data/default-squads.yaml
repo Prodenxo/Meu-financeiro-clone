@@ -1,0 +1,22 @@
+# Default squads to download during *full-setup
+# Source: github.com/SynkraAI/aiox-squads
+# Modify this file to customize which squads are installed on bootstrap
+
+version: "1.0.0"
+
+squads:
+  - name: squad-creator-pro
+    required: true
+    description: "Premium squad creation and management — mind cloning, DNA extraction, specialist delegation"
+    version: "3.1.0"
+    status: installed
+    source: "local-copy"
+    installed_at: "2026-03-24"
+
+  # Add additional squads below:
+  # - name: education
+  #   required: false
+  #   description: "Education curriculum engineering"
+  # - name: apex
+  #   required: false
+  #   description: "Ultra-premium frontend development"

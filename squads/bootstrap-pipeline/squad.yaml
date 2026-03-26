@@ -1,0 +1,79 @@
+name: bootstrap-pipeline
+version: "1.0.0"
+title: "Bootstrap Pipeline Squad — AIOX Full Setup Automation"
+description: >
+  Automates the complete AIOX project setup with a single *full-setup command.
+  Replaces the manual 13-step onboarding process with a resilient, idempotent
+  pipeline featuring pre-flight checks, checkpoint/resume, dry-run, and
+  formatted reporting. Reduces setup time from ~30min to <5min.
+author: "Synkra AIOX"
+slashPrefix: "bootstrap"
+patternPrefix: "BP"
+
+platforms:
+  - cli           # Terminal (WSL2, Linux, macOS)
+
+model: "pipeline-engine"
+
+tiers:
+  orchestrator: bootstrap-engineer
+  tier_1: []
+  tier_2: []
+  tier_3: []
+
+architecture:
+  layers:
+    permanent: "Pipeline Engine (step runner, checkpoint, reporting)"
+    variable: "Setup Steps (pluggable, configurable per project)"
+  style: "Sequential pipeline with Chain of Responsibility"
+
+paths:
+  agents: "agents/"
+  tasks: "tasks/"
+  scripts: "scripts/"
+  data: "data/"
+  workflows: "workflows/"
+  checklists: "checklists/"
+  templates: "templates/"
+  config: "config/"
+
+model_routing:
+  haiku:
+    - "pre-flight checks"
+    - "file copy operations"
+    - "config validation"
+    - "report generation"
+  sonnet:
+    - "pipeline orchestration"
+    - "error diagnosis"
+    - "smart config merge"
+  opus:
+    - "complex debugging (unknown root cause)"
+
+templates:
+  - id: settings-json
+    path: templates/settings.json.tmpl
+    target: ".claude/settings.json"
+    description: "Claude Code permissions, hooks, statusline, sandbox, and thinking config"
+  - id: claude-md
+    path: templates/CLAUDE.md.tmpl
+    target: ".claude/CLAUDE.md"
+    description: "AIOX behavioral rules (NEVER/ALWAYS) and framework instructions"
+  - id: statusline
+    path: templates/statusline.sh.tmpl
+    target: "~/.claude/statusline.sh"
+    description: "AIOX statusline script — △IOX | session ▸ branch | model | context bar | diff | duration | cost"
+    chmod: "755"
+  - id: detect-agent-hook
+    path: templates/detect-agent.cjs.tmpl
+    target: "~/.claude/hooks/detect-agent.cjs"
+    description: "Agent detection hook for UserPromptSubmit and PreToolUse events"
+
+dependencies:
+  external_squads: []
+  reuses_from_framework:
+    - ".aiox-core/development/tasks/environment-bootstrap.md"
+    - ".aiox-core/development/scripts/squad/squad-downloader.js"
+    - ".aiox-core/development/scripts/squad/squad-validator.js"
+  mcps: []
+  scripts: []
