@@ -1,0 +1,22 @@
+# Default plugins to install during *full-setup
+# Each plugin requires marketplace add + install steps
+
+version: "1.0.0"
+
+plugins:
+  - name: claude-mem
+    source: "thedotmack/claude-mem"
+    required: true
+    description: "Persistent cross-session memory for Claude Code; no Cursor use .cursor/mem/PROJECT_MEMORY.md + cursor-mem-protocol"
+    install_commands:
+      - "/plugin marketplace add thedotmack/claude-mem"
+      - "/plugin install claude-mem"
+
+  # Add additional plugins below:
+  # - name: plugin-name
+  #   source: "author/plugin-name"
+  #   required: false
+  #   description: "Plugin description"
+  #   install_commands:
+  #     - "/plugin marketplace add author/plugin-name"
+  #     - "/plugin install plugin-name"

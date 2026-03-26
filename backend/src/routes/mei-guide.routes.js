@@ -12,6 +12,7 @@ const upload = multer({
 
 router.post('/', requireAuth, requireMeiEnabled, controller.createGuide);
 router.post('/certificate', requireAuth, requireMeiEnabled, upload.single('certificate'), controller.uploadCertificate);
+router.patch('/certificate/emitente-nfse', requireAuth, requireMeiEnabled, controller.patchCertificateEmitenteNfse);
 router.delete('/certificate', requireAuth, requireMeiEnabled, controller.removeCertificate);
 router.get('/certificate/status', requireAuth, requireMeiEnabled, controller.getCertificateStatus);
 router.post('/validate', requireAuth, requireMeiEnabled, controller.validateGuide);

@@ -12,7 +12,9 @@ import {
   loadCertificate,
   deleteCertificate,
   getCertificateDocument,
-  getCertificateValidity
+  getCertificateValidity,
+  patchEmitenteNfseFields,
+  getEmitenteNfseSnapshot
 } from './mei-certificate-store.js';
 import {
   isCompetenciaPaid,
@@ -1066,6 +1068,42 @@ const resolveContribuinte = (userId, contrib, cnpj) => {
   return { numero, tipo };
 };
 
+/**
+ * Extrai objeto emitente NFS-e de body multipart/JSON (campos opcionais).
+ */
+const parseEmitenteFromPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') return null;
+  const keys = [
+    'razaoSocial', 'nomeFantasia', 'email', 'regimeTributario', 'inscricaoMunicipal',
+    'cep', 'tipoLogradouro', 'logradouro', 'numero', 'complemento', 'bairro',
+    'codigoCidade', 'descricaoCidade', 'estado', 'simplesNacional'
+  ];
+  const has = keys.some((k) => {
+    const v = payload[k];
+    if (v === undefined || v === null) return false;
+    if (typeof v === 'boolean') return true;
+    return String(v).trim() !== '';
+  });
+  if (!has) return null;
+  return {
+    razaoSocial: payload.razaoSocial,
+    nomeFantasia: payload.nomeFantasia,
+    email: payload.email,
+    regimeTributario: payload.regimeTributario,
+    inscricaoMunicipal: payload.inscricaoMunicipal,
+    cep: payload.cep,
+    tipoLogradouro: payload.tipoLogradouro,
+    logradouro: payload.logradouro,
+    numero: payload.numero,
+    complemento: payload.complemento,
+    bairro: payload.bairro,
+    ibgeMunicipio: payload.codigoCidade,
+    cidade: payload.descricaoCidade,
+    uf: payload.estado,
+    optanteSimplesNacional: payload.simplesNacional
+  };
+};
+
 export const uploadCertificate = async (userId, payload) => {
   if (!userId) {
     throw badRequest('Usuário não identificado');
@@ -1087,6 +1125,8 @@ export const uploadCertificate = async (userId, payload) => {
     throw badRequest('Certificado inválido ou senha incorreta');
   }
 
+  const emitente = parseEmitenteFromPayload(payload);
+
   if (env.MEI_CERT_ENCRYPTION_KEY) {
     try {
       const { passphraseEnc, passphraseIv } = encryptPassphrase(password);
@@ -1097,7 +1137,8 @@ export const uploadCertificate = async (userId, payload) => {
         passphraseIv,
         certDocument,
         certValidFrom: certInfo?.validFrom ?? null,
-        certValidTo: certInfo?.validTo ?? null
+        certValidTo: certInfo?.validTo ?? null,
+        ...(emitente ? { emitente } : {})
       });
     } catch (err) {
       throw badRequest(err?.message || 'Falha ao salvar certificado');
@@ -1109,6 +1150,15 @@ export const uploadCertificate = async (userId, payload) => {
     passphrase: password,
     certInfo
   });
+  return getCertificateStatus(userId);
+};
+
+/**
+ * PATCH só dados fiscais/endereço NFS-e (sem novo certificado).
+ */
+export const patchCertificateEmitenteNfse = async (userId, body) => {
+  if (!userId) throw badRequest('Usuário não identificado');
+  await patchEmitenteNfseFields(userId, body || {});
   return getCertificateStatus(userId);
 };
 
@@ -1151,12 +1201,19 @@ export const getCertificateStatus = async (userId) => {
   }
   const certValidFrom = userCert?.certInfo?.validFrom ?? certValidFromDb ?? null;
   const certValidTo = userCert?.certInfo?.validTo ?? certValidToDb ?? null;
+  let nfseEmitente = null;
+  try {
+    nfseEmitente = await getEmitenteNfseSnapshot(userId);
+  } catch {
+    nfseEmitente = null;
+  }
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
     documento: docFromCache || docFromDb || null,
     certValidFrom: certValidFrom || null,
-    certValidTo: certValidTo || null
+    certValidTo: certValidTo || null,
+    nfseEmitente
   };
 };
 

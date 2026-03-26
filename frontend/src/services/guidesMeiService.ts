@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import type { NfEmissionCompanyForm } from '../utils/nfEmissionCompany';
 
 export interface CreateMeiGuideInput {
   cnpj: string;
@@ -24,12 +25,33 @@ export interface MeiPeriod {
   errorMessage?: string | null;
 }
 
+/** Dados mínimos NFS-e persistidos em `user_mei_certificates` (espelho do formulário). */
+export type NfseEmitenteSnapshot = Pick<
+  NfEmissionCompanyForm,
+  | 'razaoSocial'
+  | 'nomeFantasia'
+  | 'email'
+  | 'regimeTributario'
+  | 'simplesNacional'
+  | 'inscricaoMunicipal'
+  | 'cep'
+  | 'tipoLogradouro'
+  | 'logradouro'
+  | 'numero'
+  | 'complemento'
+  | 'bairro'
+  | 'codigoCidade'
+  | 'descricaoCidade'
+  | 'estado'
+>;
+
 export interface MeiCertificateStatus {
   hasUserCertificate: boolean;
   hasEnvCertificate: boolean;
   documento?: string | null;
   certValidFrom?: string | null;
   certValidTo?: string | null;
+  nfseEmitente?: NfseEmitenteSnapshot | null;
 }
 
 export interface MeiValidationResult {
@@ -109,14 +131,45 @@ export async function fetchMeiCertificateStatus(): Promise<MeiCertificateStatus>
   return await apiClient.get<MeiCertificateStatus>('/mei-guide/certificate/status');
 }
 
+export function appendNfseEmitenteToFormData(
+  formData: FormData,
+  emitente: NfEmissionCompanyForm
+): void {
+  formData.append('razaoSocial', emitente.razaoSocial);
+  formData.append('nomeFantasia', emitente.nomeFantasia);
+  formData.append('email', emitente.email);
+  formData.append('regimeTributario', String(emitente.regimeTributario || '1'));
+  formData.append('inscricaoMunicipal', emitente.inscricaoMunicipal);
+  formData.append('cep', emitente.cep);
+  formData.append('tipoLogradouro', emitente.tipoLogradouro);
+  formData.append('logradouro', emitente.logradouro);
+  formData.append('numero', emitente.numero);
+  formData.append('complemento', emitente.complemento);
+  formData.append('bairro', emitente.bairro);
+  formData.append('codigoCidade', emitente.codigoCidade);
+  formData.append('descricaoCidade', emitente.descricaoCidade);
+  formData.append('estado', emitente.estado);
+  formData.append('simplesNacional', emitente.simplesNacional ? 'true' : 'false');
+}
+
 export async function uploadMeiCertificate(
   file: File,
-  password: string
+  password: string,
+  emitente?: NfEmissionCompanyForm
 ): Promise<MeiCertificateStatus> {
   const formData = new FormData();
   formData.append('certificate', file);
   formData.append('password', password);
+  if (emitente) {
+    appendNfseEmitenteToFormData(formData, emitente);
+  }
   return await apiClient.postForm<MeiCertificateStatus>('/mei-guide/certificate', formData);
+}
+
+export async function patchMeiCertificateEmitenteNfse(
+  body: Record<string, unknown>
+): Promise<MeiCertificateStatus> {
+  return await apiClient.patch<MeiCertificateStatus>('/mei-guide/certificate/emitente-nfse', body);
 }
 
 export async function removeMeiCertificate(): Promise<MeiCertificateStatus> {

@@ -1,0 +1,42 @@
+---
+description: Protocolo de memória de projeto (equivalente ao claude-mem no Cursor)
+alwaysApply: true
+---
+
+# Memória de projeto (paridade com claude-mem)
+
+O plugin **claude-mem** existe no **Claude Code** e captura/recupera memória com comandos do ecossistema Anthropic. No **Cursor** não há esse plugin: a memória persistente do **repositório** vive em ficheiros versionados + **Cursor Memories** (definições do utilizador).
+
+## Mapa rápido Claude Code → Cursor
+
+| claude-mem (Claude Code) | Cursor (este repo) |
+|--------------------------|-------------------|
+| Memória automática do plugin | **Manual** — o agente e a equipa editam `.cursor/mem/PROJECT_MEMORY.md` |
+| Sessões / histórico longo | `docs/` (stories, ADRs, notas) — não duplicar parágrafos longos no `PROJECT_MEMORY` |
+| Preferências do utilizador | **Cursor → Settings → Rules / Memories** (globais ao IDE) |
+
+## Onde gravar
+
+1. **`.cursor/mem/PROJECT_MEMORY.md`** (versionado no Git) — decisões estáveis, convenções, glossário curto, comandos úteis, armadilhas recorrentes, pendências de contexto. **Nunca** tokens, secrets, credenciais, nem dados pessoais/financeiros reais.
+2. **Cursor Memories** — factos sobre ti e preferências globais; **não** repetir o que já está no `PROJECT_MEMORY` do projeto.
+
+## Obrigações do agente (equivalente a “consultar memória”)
+
+1. **Antes** de iniciar implementação multi-ficheiro, refactor amplo, ou retomar um tema já discutido: **ler** `.cursor/mem/PROJECT_MEMORY.md` (via ferramenta de leitura) quando ainda não está no contexto.
+2. **Depois** de decisões de arquitetura, convenções novas ou bugs que **voltem a aparecer**: **propor** atualização a `PROJECT_MEMORY.md` (secção certa + linha em **Última atualização** com data `YYYY-MM-DD`).
+3. Histórico extenso ou RFC: resumo de 1–3 linhas no `PROJECT_MEMORY` + ponteiro para `docs/...`, não colar o texto todo.
+
+## Formato de entradas
+
+Use bullets curtos, auditáveis, com data quando ajudar:
+
+- `YYYY-MM-DD — Facto ou decisão em uma linha.`
+
+## Relação com stories AIOX
+
+- Trabalho rastreado em **`docs/stories/`** continua canónico para requisitos e checklist de story.
+- `PROJECT_MEMORY` guarda **factos transversais** que as stories não substituem (ex.: “sempre correr `npm run lint` antes de PR”).
+
+## Manutenção do repo
+
+- O pipeline AIOX cria `PROJECT_MEMORY.md` em bootstrap se ausente (`squads/bootstrap-pipeline/scripts/bootstrap/steps/cursor-mem.js`); **não** sobrescreve ficheiro existente.

@@ -1,65 +1,83 @@
-# AGENTS.md - Synkra AIOX (Codex CLI)
+# AGENTS.md - Meu Financeiro (Cursor + AIOX)
 
-Este arquivo define as instrucoes do projeto para o Codex CLI.
+Instruções do projeto para uso no **Cursor**. A fonte canônica dos agentes AIOX é `.aiox-core/development/agents/`; as regras usáveis no Cursor são geradas em `.cursor/rules/agents/`.
 
 <!-- AIOX-MANAGED-START: core -->
-## Core Rules
+## Regras principais
 
-1. Siga a Constitution em `.aiox-core/constitution.md`
-2. Priorize `CLI First -> Observability Second -> UI Third`
-3. Trabalhe por stories em `docs/stories/`
-4. Nao invente requisitos fora dos artefatos existentes
+1. Siga a constitution em `.aiox-core/constitution.md` (quando presente no workspace).
+2. Priorize `CLI First → Observability Second → UI Third`.
+3. Trabalhe por stories em `docs/stories/` quando aplicável.
+4. Não invente requisitos fora dos artefatos existentes.
 <!-- AIOX-MANAGED-END: core -->
 
 <!-- AIOX-MANAGED-START: quality -->
-## Quality Gates
+## Quality gates
 
-- Rode `npm run lint`
-- Rode `npm run typecheck`
-- Rode `npm test`
-- Atualize checklist e file list da story antes de concluir
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+- Atualize checklist e file list da story antes de concluir tarefas ligadas a story.
 <!-- AIOX-MANAGED-END: quality -->
 
 <!-- AIOX-MANAGED-START: codebase -->
-## Project Map
+## Mapa do repositório
 
-- Core framework: `.aiox-core/`
-- CLI entrypoints: `bin/`
-- App workspaces: `frontend/` (Vite + React), `backend/` (Express)
-- Tests: `frontend/` (Vitest), `backend/tests/` (Node test runner)
-- Docs: `docs/`
+- App frontend: `frontend/`
+- App backend: `backend/`
+- Framework AIOX (local): `.aiox-core/`
+- Scripts raiz: `scripts/`
+- Documentação / stories: `docs/`
 <!-- AIOX-MANAGED-END: codebase -->
 
 <!-- AIOX-MANAGED-START: commands -->
-## Common Commands
+## Comandos úteis
 
-- `npm run sync:ide`
-- `npm run sync:ide:check`
-- `npm run sync:skills:codex`
-- `npm run sync:skills:codex:global` (opcional; neste repo o padrao e local-first)
-- `npm run validate:structure`
-- `npm run validate:agents`
+- `npm run sync:ide` — sincroniza agentes AIOX para o **Cursor** (único alvo habilitado no `ideSync` deste repo).
+- `npm run sync:ide:cursor` — somente Cursor (equivalente prático ao anterior).
+- `npm run sync:ide:check` — valida `.cursor/rules/agents/` **e** os slash commands AIOX em `.cursor/commands/` (`aiox-*.md`, modo estrito).
+- `npm run validate:structure` / `npm run validate:agents` — validações AIOX.
+
+**Slash (`/`) no chat:** após `npm run sync:ide`, digite **`/`** e escolha um comando `aiox-*` (ex.: `aiox-dev`, `aiox-menu`). Cada um aponta para a regra em `.cursor/rules/agents/<id>.md`.
+
+**Quando rodar o sync:** após alterar `.aiox-core/development/agents/`, execute `npm run sync:ide` e versiona `.cursor/rules/agents/` e `.cursor/commands/aiox-*.md` conforme a tua política de Git.
+
+**MCP:** no Cursor, configure servidores MCP em *Settings → MCP*; o campo `mcp.configLocation` do AIOX refere-se ao ecossistema Claude Code (`.claude/mcp.json`), não ao Cursor.
+
+**Roteamento LLM:** matriz para escolher modelo/modo no Cursor em `.cursor/rules/llm-routing.mdc` (paridade com `.claude/rules/llm-routing.md` no Claude Code).
+
+**Memória tipo claude-mem:** no Cursor use `.cursor/mem/PROJECT_MEMORY.md` + a regra `.cursor/rules/cursor-mem-protocol.mdc`. O plugin `claude-mem` continua disponível só no Claude Code (`squads/bootstrap-pipeline/data/default-plugins.yaml`).
 <!-- AIOX-MANAGED-END: commands -->
 
 <!-- AIOX-MANAGED-START: shortcuts -->
-## Agent Shortcuts
+## Personas / agentes no Cursor
 
-Preferencia de ativacao no Codex CLI:
-1. Use `/skills` e selecione `aiox-<agent-id>` vindo de `.codex/skills` (ex.: `aiox-architect`)
-2. Se preferir, use os atalhos abaixo (`@architect`, `/architect`, etc.)
+**Forma recomendada:** use **`/`** com um comando `aiox-*` em `.cursor/commands/`, **ou** anexe `.cursor/rules/agents/<id>.md`, **ou** peça explicitamente para assumir essa persona até indicar fim de modo.
 
-Interprete os atalhos abaixo carregando o arquivo correspondente em `.aiox-core/development/agents/` (fallback: `.codex/agents/`), renderize o greeting via `generate-greeting.js` e assuma a persona ate `*exit`:
+**Fonte detalhada (YAML completo):** `.aiox-core/development/agents/<id>.md` — use quando precisar do bloco YAML integral ou de comandos `*...` documentados lá.
 
-- `@architect`, `/architect`, `/architect.md` -> `.aiox-core/development/agents/architect.md`
-- `@dev`, `/dev`, `/dev.md` -> `.aiox-core/development/agents/dev.md`
-- `@qa`, `/qa`, `/qa.md` -> `.aiox-core/development/agents/qa.md`
-- `@pm`, `/pm`, `/pm.md` -> `.aiox-core/development/agents/pm.md`
-- `@po`, `/po`, `/po.md` -> `.aiox-core/development/agents/po.md`
-- `@sm`, `/sm`, `/sm.md` -> `.aiox-core/development/agents/sm.md`
-- `@analyst`, `/analyst`, `/analyst.md` -> `.aiox-core/development/agents/analyst.md`
-- `@devops`, `/devops`, `/devops.md` -> `.aiox-core/development/agents/devops.md`
-- `@data-engineer`, `/data-engineer`, `/data-engineer.md` -> `.aiox-core/development/agents/data-engineer.md`
-- `@ux-design-expert`, `/ux-design-expert`, `/ux-design-expert.md` -> `.aiox-core/development/agents/ux-design-expert.md`
-- `@squad-creator`, `/squad-creator`, `/squad-creator.md` -> `.aiox-core/development/agents/squad-creator.md`
-- `@aiox-master`, `/aiox-master`, `/aiox-master.md` -> `.aiox-core/development/agents/aiox-master.md`
+Atalhos de nome (persona → ficheiro em `agents/`):
+
+- `@architect` → `architect.md`
+- `@dev` → `dev.md`
+- `@qa` → `qa.md`
+- `@pm` → `pm.md`
+- `@po` → `po.md`
+- `@sm` → `sm.md`
+- `@analyst` → `analyst.md`
+- `@devops` → `devops.md`
+- `@data-engineer` → `data-engineer.md`
+- `@ux-design-expert` → `ux-design-expert.md`
+- `@squad-creator` → `squad-creator.md`
+- `@aiox-master` → `aiox-master.md`
+
+Redirects (use o agente destino): `aiox-developer` / `aiox-orchestrator` → `aiox-master`; `db-sage` → `data-engineer`; `github-devops` → `devops`.
+
+**Memória entre sessões:** *Cursor Memories* (preferências globais) + **`.cursor/mem/PROJECT_MEMORY.md`** (contexto do repo, versionado) + `docs/` para histórico longo. Ver `cursor-mem-protocol.mdc`.
 <!-- AIOX-MANAGED-END: shortcuts -->
+
+<!-- AIOX-MANAGED-START: codex-appendix -->
+## Apêndice: Codex CLI (opcional)
+
+Se usar OpenAI Codex CLI no mesmo repositório, habilite o alvo `codex` em `ideSync` no `.aiox-core/core-config.yaml`, rode `npm run sync:ide` e utilize skills em `.codex/skills` (`npm run sync:skills:codex`). Este repositório está configurado por padrão **somente para Cursor** no `ideSync`.
+<!-- AIOX-MANAGED-END: codex-appendix -->

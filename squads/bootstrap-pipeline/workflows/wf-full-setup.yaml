@@ -1,0 +1,53 @@
+id: wf-full-setup
+name: Full Setup Pipeline
+version: "1.0.0"
+description: "Complete AIOX project setup — 13 sequential setup steps from pre-flight to validation"
+squad: bootstrap-pipeline
+
+trigger:
+  command: "*full-setup"
+  agent: bootstrap-engineer
+
+phases:
+  - id: preflight
+    name: Pre-flight Check
+    agent: bootstrap-engineer
+    task: preflight-check.md
+    blocking: true
+    artifacts:
+      output: PipelineContext
+
+  - id: setup
+    name: Setup Steps
+    agent: bootstrap-engineer
+    task: full-setup.md
+    steps:
+      - install-claude
+      - status-line
+      - localhost
+      - basic-configs
+      - package-install
+      - env-bootstrap
+      - permission-mode
+      - download-squads
+      - llm-routing
+      - cursor-mem
+      - install-plugins
+      - final-validation
+    checkpoint: true
+    resume: true
+
+  - id: report
+    name: Generate Report
+    agent: bootstrap-engineer
+    artifacts:
+      output:
+        - ".aiox/reports/bootstrap-{timestamp}.md"
+        - ".aiox/logs/bootstrap-{timestamp}.log"
+
+flags:
+  --resume: "Resume from last checkpoint"
+  --dry-run: "Preview without executing"
+  --force: "Ignore checkpoint, re-execute all"
+  --interactive: "Pause after each step"
+  --verbose: "Show detailed output"
