@@ -47,6 +47,7 @@ import { isFetchConnectivityFailure } from '../utils/isFetchConnectivityFailure'
 import { getPlugnotasCodeFromUnknownError } from '../utils/apiClientError';
 import { formatPlugnotasIntegrationError } from '../utils/plugnotasIntegrationErrorMessage';
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
+import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
 import {
   EmissaoFiscalErrorAlert,
@@ -460,6 +461,10 @@ export default function GuidesMei() {
   const [nfEmissionCompanySyncLoading, setNfEmissionCompanySyncLoading] = useState<'consult' | 'patch' | null>(null);
   const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<string | null>(null);
   const [nfEmissionCompanySyncSuccess, setNfEmissionCompanySyncSuccess] = useState<string | null>(null);
+  const [brasilApiLoading, setBrasilApiLoading] = useState(false);
+  const [brasilApiError, setBrasilApiError] = useState<string | null>(null);
+  const [nfsePrestadorBrasilApiLoading, setNfsePrestadorBrasilApiLoading] = useState(false);
+  const [nfsePrestadorBrasilApiError, setNfsePrestadorBrasilApiError] = useState<string | null>(null);
   const nfseValidationMessage = useMemo(() => (
     getNfseValidationMessage(nfseForm, {
       logradouro: nfEmissionCompanyForm.logradouro,
@@ -1092,6 +1097,89 @@ export default function GuidesMei() {
       setValidationError(error instanceof Error ? error.message : 'Erro ao validar CNPJ.');
     } finally {
       setIsValidating(false);
+    }
+  };
+
+  const mergeIfEmpty = <T extends Record<string, unknown>>(current: T, incoming: Partial<T>): T => {
+    const result = { ...current };
+    for (const key of Object.keys(incoming) as (keyof T)[]) {
+      const val = incoming[key];
+      if (val !== undefined && val !== null && String(val).trim() !== '' && !String(current[key] ?? '').trim()) {
+        (result as Record<keyof T, unknown>)[key] = val;
+      }
+    }
+    return result;
+  };
+
+  const applyBrasilApiToEmitente = (data: BrasilApiCnpjResponse) => {
+    setNfEmissionCompanyForm((prev) => mergeIfEmpty(prev, {
+      razaoSocial: data.razao_social ?? '',
+      nomeFantasia: data.nome_fantasia ?? '',
+      email: data.email ?? '',
+      logradouro: data.logradouro ?? '',
+      numero: data.numero ?? '',
+      complemento: data.complemento ?? '',
+      bairro: data.bairro ?? '',
+      cep: (data.cep ?? '').replace('-', ''),
+      descricaoCidade: data.municipio ?? '',
+      codigoCidade: data.codigo_municipio ?? '',
+      estado: data.uf ?? '',
+      simplesNacional: data.simples?.optante_simples_nacional ?? prev.simplesNacional,
+    }));
+  };
+
+  const handleCnpjMeiBlur = async () => {
+    await handleValidateBlur();
+    const digits = normalizeDoc(contribuinteDoc);
+    if (digits.length !== 14) return;
+    setBrasilApiError(null);
+    setBrasilApiLoading(true);
+    try {
+      const data = await fetchBrasilApiCnpj(digits);
+      applyBrasilApiToEmitente(data);
+    } catch (err) {
+      setBrasilApiError(err instanceof Error ? err.message : 'Erro ao consultar CNPJ.');
+    } finally {
+      setBrasilApiLoading(false);
+    }
+  };
+
+  const handlePrestadorCnpjBlur = async () => {
+    const digits = normalizeDoc(nfseForm.prestadorCpfCnpj);
+    if (digits.length !== 14) return;
+    setNfsePrestadorBrasilApiError(null);
+    setNfsePrestadorBrasilApiLoading(true);
+    try {
+      const data = await fetchBrasilApiCnpj(digits);
+      updateNfseForm(mergeIfEmpty(
+        {
+          prestadorRazaoSocial: nfseForm.prestadorRazaoSocial,
+          prestadorEmail: nfseForm.prestadorEmail,
+        } as Record<string, unknown>,
+        {
+          prestadorRazaoSocial: data.razao_social ?? '',
+          prestadorEmail: data.email ?? '',
+        }
+      ) as { prestadorRazaoSocial: string; prestadorEmail: string });
+      const currentEndereco = nfseForm.prestadorEndereco ?? {};
+      const merged = mergeIfEmpty(
+        currentEndereco as Record<string, unknown>,
+        {
+          logradouro: data.logradouro ?? '',
+          numero: data.numero ?? '',
+          complemento: data.complemento ?? '',
+          bairro: data.bairro ?? '',
+          cep: (data.cep ?? '').replace('-', ''),
+          codigoCidade: data.codigo_municipio ?? '',
+          descricaoCidade: data.municipio ?? '',
+          estado: data.uf ?? '',
+        }
+      );
+      updateNfsePrestadorEndereco(merged as Parameters<typeof updateNfsePrestadorEndereco>[0]);
+    } catch (err) {
+      setNfsePrestadorBrasilApiError(err instanceof Error ? err.message : 'Erro ao consultar CNPJ.');
+    } finally {
+      setNfsePrestadorBrasilApiLoading(false);
     }
   };
 
@@ -1779,11 +1867,17 @@ export default function GuidesMei() {
                 inputMode="numeric"
                 value={contribuinteDoc}
                 onChange={(event) => setContribuinteDoc(formatDocument(event.target.value))}
-                onBlur={handleValidateBlur}
+                onBlur={handleCnpjMeiBlur}
                 placeholder="00.000.000/0001-00"
               />
               {isValidating ? (
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Validando CNPJ...</p>
+              ) : null}
+              {brasilApiLoading ? (
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Buscando dados da empresa...</p>
+              ) : null}
+              {brasilApiError ? (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{brasilApiError}</p>
               ) : null}
             </div>
 
@@ -2251,8 +2345,15 @@ export default function GuidesMei() {
                     prestadorCpfCnpj: formatDocument(event.target.value)
                   })
                 }
+                onBlur={handlePrestadorCnpjBlur}
                 placeholder="00.000.000/0001-00"
               />
+              {nfsePrestadorBrasilApiLoading ? (
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Buscando dados da empresa...</p>
+              ) : null}
+              {nfsePrestadorBrasilApiError ? (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{nfsePrestadorBrasilApiError}</p>
+              ) : null}
             </div>
             <div>
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
