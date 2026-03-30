@@ -9,7 +9,7 @@ interface HeaderProps {
 
 export default function Header({ userName, sidebarExpanded, onToggleSidebar }: HeaderProps) {
   const { isDarkMode } = useThemeStore();
-  
+
   return (
     <header 
       className={`w-full py-3 px-4 md:px-6 flex flex-col md:flex-row items-start md:items-center justify-between fixed top-0 left-0 z-50 border-b backdrop-blur ${

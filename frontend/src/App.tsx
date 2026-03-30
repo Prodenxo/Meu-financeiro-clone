@@ -18,6 +18,8 @@ import Settings from './pages/Settings';
 import ManageUsers from './pages/ManageUsers';
 import AdminUserData from './pages/AdminUserData';
 import GuidesMei from './pages/GuidesMei';
+import MeiCatalogoClientes from './pages/MeiCatalogoClientes';
+import MeiCatalogoServicosProdutos from './pages/MeiCatalogoServicosProdutos';
 import Layout from './Layout/Layout';
 import { handleGoogleAuthCallback } from './lib/google-auth-flow';
 import { ToastContainer } from 'react-toastify';
@@ -139,6 +141,14 @@ export function AppRoutes() {
                   <Route
                     path="/guias-mei"
                     element={canAccessMeiArea ? <GuidesMei /> : <Navigate to="/" replace />}
+                  />
+                  <Route
+                    path="/mei-catalogo/clientes"
+                    element={canAccessMeiArea ? <MeiCatalogoClientes /> : <Navigate to="/" replace />}
+                  />
+                  <Route
+                    path="/mei-catalogo/servicos-produtos"
+                    element={canAccessMeiArea ? <MeiCatalogoServicosProdutos /> : <Navigate to="/" replace />}
                   />
                   <Route path="/settings" element={<Settings />} />
                   <Route

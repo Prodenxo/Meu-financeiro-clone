@@ -242,6 +242,41 @@ const buildListSuffix = (options: ListarNotasInput = {}) => {
 
 const normalizeCnpjDigits = (value: string) => String(value || '').replace(/\D/g, '');
 
+export interface CriarCatalogoNfseClienteInput {
+  nome: string;
+  /** CPF ou CNPJ (com ou sem máscara; o backend normaliza). */
+  documento: string;
+  email?: string | null;
+  documentType?: DocumentType;
+  metadata_json?: Record<string, unknown> | null;
+}
+
+export interface AtualizarCatalogoNfseClienteInput {
+  nome?: string;
+  email?: string | null;
+  metadata_json?: Record<string, unknown> | null;
+}
+
+export interface CriarCatalogoNfseProdutoInput {
+  /** Obrigatório no backend. */
+  discriminacao: string;
+  codigo?: string | null;
+  cnae?: string | null;
+  aliquota?: number | null;
+  valor_sugerido?: number | null;
+  documentType?: DocumentType;
+  metadata_json?: Record<string, unknown> | null;
+}
+
+export interface AtualizarCatalogoNfseProdutoInput {
+  discriminacao?: string;
+  codigo?: string | null;
+  cnae?: string | null;
+  aliquota?: number | null;
+  valor_sugerido?: number | null;
+  metadata_json?: Record<string, unknown> | null;
+}
+
 export async function emitirNota(input: EmitirNotaInput): Promise<NfseRecord> {
   return await apiClient.post<NfseRecord>('/mei-notas/emitir', input);
 }
@@ -382,4 +417,106 @@ export async function listarCatalogoNfseProdutos(
 ): Promise<NfseCatalogProduto[]> {
   const suffix = buildCatalogSuffix(options);
   return await apiClient.get<NfseCatalogProduto[]>(`/mei-notas/catalogo/produtos${suffix}`);
+}
+
+export async function criarCatalogoNfseCliente(
+  input: CriarCatalogoNfseClienteInput
+): Promise<NfseCatalogCliente> {
+  const documento = normalizeCnpjDigits(input.documento);
+  const body: Record<string, unknown> = {
+    nome: input.nome.trim(),
+    documento
+  };
+  if (input.email !== undefined && input.email !== null && String(input.email).trim()) {
+    body.email = String(input.email).trim();
+  } else if (input.email === null) {
+    body.email = null;
+  }
+  if (input.documentType) {
+    body.documentType = input.documentType;
+  }
+  if (input.metadata_json !== undefined) {
+    body.metadata_json = input.metadata_json;
+  }
+  return await apiClient.post<NfseCatalogCliente>('/mei-notas/catalogo/clientes', body);
+}
+
+export async function atualizarCatalogoNfseCliente(
+  id: string,
+  input: AtualizarCatalogoNfseClienteInput
+): Promise<NfseCatalogCliente> {
+  const body: Record<string, unknown> = {};
+  if (input.nome !== undefined) {
+    body.nome = input.nome.trim();
+  }
+  if (input.email !== undefined) {
+    body.email = input.email === null || input.email === '' ? null : String(input.email).trim();
+  }
+  if (input.metadata_json !== undefined) {
+    body.metadata_json = input.metadata_json;
+  }
+  return await apiClient.patch<NfseCatalogCliente>(
+    `/mei-notas/catalogo/clientes/${encodeURIComponent(id)}`,
+    body
+  );
+}
+
+/** DELETE catálogo cliente — 204 sem corpo (CAT-MEI-06). */
+export async function eliminarCatalogoNfseCliente(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/mei-notas/catalogo/clientes/${encodeURIComponent(id)}`);
+}
+
+export async function criarCatalogoNfseProduto(
+  input: CriarCatalogoNfseProdutoInput
+): Promise<NfseCatalogProduto> {
+  const body: Record<string, unknown> = {
+    discriminacao: input.discriminacao.trim(),
+    codigo: String(input.codigo ?? '').trim(),
+    cnae: String(input.cnae ?? '').trim(),
+    documentType: input.documentType ?? 'NFSE'
+  };
+  if (input.aliquota !== undefined && input.aliquota !== null) {
+    body.aliquota = input.aliquota;
+  }
+  if (input.valor_sugerido !== undefined && input.valor_sugerido !== null) {
+    body.valor_sugerido = input.valor_sugerido;
+  }
+  if (input.metadata_json !== undefined) {
+    body.metadata_json = input.metadata_json;
+  }
+  return await apiClient.post<NfseCatalogProduto>('/mei-notas/catalogo/produtos', body);
+}
+
+export async function atualizarCatalogoNfseProduto(
+  id: string,
+  input: AtualizarCatalogoNfseProdutoInput
+): Promise<NfseCatalogProduto> {
+  const body: Record<string, unknown> = {};
+  if (input.discriminacao !== undefined) {
+    body.discriminacao = input.discriminacao.trim();
+  }
+  if (input.codigo !== undefined) {
+    body.codigo = String(input.codigo ?? '').trim();
+  }
+  if (input.cnae !== undefined) {
+    body.cnae = String(input.cnae ?? '').trim();
+  }
+  if (input.aliquota !== undefined) {
+    body.aliquota = input.aliquota;
+  }
+  if (input.valor_sugerido !== undefined) {
+    body.valor_sugerido = input.valor_sugerido;
+  }
+  if (input.metadata_json !== undefined) {
+    body.metadata_json = input.metadata_json;
+  }
+  return await apiClient.patch<NfseCatalogProduto>(
+    `/mei-notas/catalogo/produtos/${encodeURIComponent(id)}`,
+    body
+  );
+}
+
+/** DELETE catálogo produto/serviço — 204 sem corpo (CAT-MEI-06). */
+export async function eliminarCatalogoNfseProduto(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/mei-notas/catalogo/produtos/${encodeURIComponent(id)}`);
 }

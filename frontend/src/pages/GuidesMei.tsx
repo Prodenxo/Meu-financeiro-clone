@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import {
   downloadMeiGuide,
   downloadParcelamentoPdf,
@@ -345,6 +346,9 @@ export default function GuidesMei() {
   const canViewNfse = role === 'superadmin'
     || role === 'admin'
     || (role === 'usuario' && mei !== false);
+  const inRouter = useInRouterContext();
+  const catalogoClientesLinkClass =
+    'font-medium text-blue-600 underline decoration-blue-600/80 underline-offset-2 hover:text-blue-700 dark:text-blue-400 dark:decoration-blue-400/80 dark:hover:text-blue-300';
   const [contribuinteDoc, setContribuinteDoc] = useState('');
   const [activeWorkspace, setActiveWorkspace] = useState<GuidesMeiWorkspace>(() =>
     resolveInitialWorkspace(readWorkspaceFromStorage(), canViewNfse)
@@ -451,6 +455,8 @@ export default function GuidesMei() {
   ));
   /** Evita sobrescrever edição local ao reexecutar `loadCertificateStatus`. */
   const nfseEmitenteHydratedRef = useRef(false);
+  /** Deteta troca para o separador NFS-e e dispara refetch do catálogo (CAT-MEI-05 / FR-CAT-07). */
+  const prevMeiWorkspaceRef = useRef<GuidesMeiWorkspace | null>(null);
   const [nfEmissionCompanySyncLoading, setNfEmissionCompanySyncLoading] = useState<'consult' | 'patch' | null>(null);
   const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<string | null>(null);
   const [nfEmissionCompanySyncSuccess, setNfEmissionCompanySyncSuccess] = useState<string | null>(null);
@@ -676,6 +682,29 @@ export default function GuidesMei() {
   useEffect(() => {
     void loadNfseCatalog();
   }, [loadNfseCatalog]);
+
+  useEffect(() => {
+    const prev = prevMeiWorkspaceRef.current;
+    prevMeiWorkspaceRef.current = activeWorkspace;
+    if (prev === null) {
+      return;
+    }
+    if (activeWorkspace === 'nfse' && prev !== 'nfse' && canViewNfse) {
+      void loadNfseCatalog();
+    }
+  }, [activeWorkspace, canViewNfse, loadNfseCatalog]);
+
+  /** FR-CAT-12 / paridade pós-CAT-MEI-07 e CAT-MEI-08: exclusões de clientes ou itens noutra rota reflectem-se nos atalhos ao regressar ao separador NFS-e ou ao foco do separador (visibility). */
+  useEffect(() => {
+    if (!canViewNfse) return;
+    const onVis = () => {
+      if (document.visibilityState === 'visible' && activeWorkspace === 'nfse') {
+        void loadNfseCatalog();
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [canViewNfse, activeWorkspace, loadNfseCatalog]);
 
   useEffect(() => {
     if (!canViewNfse && activeWorkspace === 'nfse') {
@@ -1394,6 +1423,35 @@ export default function GuidesMei() {
                   ? 'Gerencie certificado, DAS e emissão de NFS-e (notas de serviço) no mesmo fluxo.'
                   : 'Gerencie certificado e DAS no mesmo fluxo.'}
               </p>
+              {canViewNfse ? (
+                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  {inRouter ? (
+                    <>
+                      <Link to="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
+                        Catálogo de clientes (NFS-e)
+                      </Link>
+                      <span className="text-slate-300 dark:text-slate-600" aria-hidden>
+                        ·
+                      </span>
+                      <Link to="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
+                        Serviços e produtos (NFS-e)
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <a href="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
+                        Catálogo de clientes (NFS-e)
+                      </a>
+                      <span className="text-slate-300 dark:text-slate-600" aria-hidden>
+                        ·
+                      </span>
+                      <a href="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
+                        Serviços e produtos (NFS-e)
+                      </a>
+                    </>
+                  )}
+                </p>
+              ) : null}
               {hasServerCertificate && !hasUserCertificate ? (
                 <p className="mt-2 max-w-xl text-sm text-slate-600 dark:text-slate-400">
                   Autenticação via certificado do servidor. Para enviar ou substituir pelo seu certificado A1, abra{' '}
@@ -2089,6 +2147,33 @@ export default function GuidesMei() {
                 </select>
               </div>
             </div>
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+              {inRouter ? (
+                <>
+                  <Link to="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
+                    Gerir clientes
+                  </Link>
+                  <span className="text-slate-300 dark:text-slate-600" aria-hidden>
+                    ·
+                  </span>
+                  <Link to="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
+                    Gerir serviços e produtos
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <a href="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
+                    Gerir clientes
+                  </a>
+                  <span className="text-slate-300 dark:text-slate-600" aria-hidden>
+                    ·
+                  </span>
+                  <a href="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
+                    Gerir serviços e produtos
+                  </a>
+                </>
+              )}
+            </p>
 
             {nfseCatalogLoading ? (
               <p className="text-xs text-slate-500 dark:text-slate-400">

@@ -26,7 +26,11 @@ export default function Sidebar({ expanded }: SidebarProps) {
     if (path === '/') {
       return location.pathname === '/';
     }
-    return location.pathname.startsWith(path);
+    // Meu MEI: só ativo na rota da guia, não em /mei-catalogo/* (spec CAT-MEI-05 §3.2).
+    if (path === '/guias-mei') {
+      return location.pathname === '/guias-mei';
+    }
+    return location.pathname === path || location.pathname.startsWith(`${path}/`);
   };
 
   return (
