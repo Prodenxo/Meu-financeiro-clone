@@ -1019,6 +1019,28 @@ export default function GuidesMei() {
     }
   };
 
+  const handleSalvarDadosEmitente = async () => {
+    setNfEmissionCompanySyncError(null);
+    setNfEmissionCompanySyncSuccess(null);
+    setNfEmissionCompanySyncLoading('patch');
+    try {
+      const updatedStatus = await patchMeiCertificateEmitenteNfse(
+        nfEmissionFormToPersistBody(nfEmissionCompanyForm)
+      );
+      if (updatedStatus?.nfseEmitente) {
+        setNfEmissionCompanyForm(emitenteSnapshotToForm(updatedStatus.nfseEmitente));
+        nfseEmitenteHydratedRef.current = true;
+      }
+      setNfEmissionCompanySyncSuccess('Dados do emitente salvos com sucesso.');
+    } catch (error) {
+      setNfEmissionCompanySyncError(
+        error instanceof Error ? error.message : 'Falha ao salvar dados do emitente.'
+      );
+    } finally {
+      setNfEmissionCompanySyncLoading(null);
+    }
+  };
+
   const handleCertificateRemove = async () => {
     setCertificateError(null);
     setCertificateErrorPlugnotasCode(null);
@@ -2106,6 +2128,31 @@ export default function GuidesMei() {
             Atenção: para emissão de NFS-e, a empresa emitente precisa estar cadastrada no emissor fiscal com certificado
             digital A1 válido.
           </div>
+
+          {canViewNfse && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50/70 px-3 py-2 dark:border-slate-700/70 dark:bg-slate-900/50">
+              <p className="flex-1 text-xs text-slate-500 dark:text-slate-400">
+                {nfEmissionCompanyForm.razaoSocial
+                  ? <>Emitente configurado: <span className="font-medium text-slate-700 dark:text-slate-200">{nfEmissionCompanyForm.razaoSocial}</span></>
+                  : 'Dados do emitente não configurados. Configure na aba de certificado ou salve abaixo.'}
+              </p>
+              <button
+                type="button"
+                className="planner-button-secondary-compact shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={handleSalvarDadosEmitente}
+                disabled={nfEmissionCompanySyncLoading === 'patch'}
+              >
+                {nfEmissionCompanySyncLoading === 'patch' ? 'Salvando...' : 'Salvar dados do emitente'}
+              </button>
+            </div>
+          )}
+          {nfEmissionCompanySyncError && (
+            <div className="admin-alert-danger text-xs">{nfEmissionCompanySyncError}</div>
+          )}
+          {nfEmissionCompanySyncSuccess && (
+            <div className="admin-alert-success text-xs">{nfEmissionCompanySyncSuccess}</div>
+          )}
+
           <p className="admin-field-hint">
             Campos obrigatórios: CNPJ e endereço mínimo do prestador, CPF/CNPJ e razão social do tomador, código do serviço, CNAE, valor e discriminação. MEI no Simples Nacional: não se informa alíquota ISS — a prefeitura/provedor aplicam a regra.
           </p>
