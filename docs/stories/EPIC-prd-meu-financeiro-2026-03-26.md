@@ -23,9 +23,23 @@
 
 ---
 
+## PRD satélite — UI/UX Meu MEI (`/guias-mei`)
+
+**PRD:** `docs/prd/PRD-meu-mei-ui-ux-melhoria-2026-03-30.md` — **Spec UX:** `docs/specs/ux-spec-meu-mei-ui-2026-03-30.md`
+
+| Ordem | IDs | Story |
+|-------|-----|--------|
+| 1 | FR-UX-MEI-01–04 (P0) | [story-fr-ux-mei-p0-visao-geral-kpis-tabs.md](./story-fr-ux-mei-p0-visao-geral-kpis-tabs.md) |
+| 2 | FR-UX-MEI-05–06 (P1) | [story-fr-ux-mei-p1-tabs-a11y-microcopy.md](./story-fr-ux-mei-p1-tabs-a11y-microcopy.md) |
+| 3 | FR-UX-MEI-07 (P2) | [story-fr-ux-mei-p2-workspace-localstorage.md](./story-fr-ux-mei-p2-workspace-localstorage.md) |
+
+**Última atualização épico (UI Meu MEI):** 2026-03-30 — stories P0/P1/P2 a partir do PRD e spec UX.
+
+---
+
 ## Notas
 
 - **Segurança P0–P2** está em `docs/prd.md` + `docs/architecture.md`; não duplicado aqui como story de feature — implementação segue esse trilho em paralelo.
 - Priorização MoSCoW do PRD: Must → FR-P-06; Should → FR-P-05, FR-P-03/04; Could → FR-P-01/02 (ajustar ao sprint).
 
-**Última atualização:** 2026-03-26 — secção PRD satélite (correção schema NFS-e).
+**Última atualização:** 2026-03-30 — secção PRD satélite UI Meu MEI; 2026-03-26 — secção PRD satélite (correção schema NFS-e).

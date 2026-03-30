@@ -102,7 +102,6 @@ function fillNfEmissionCompanyMinimum(container: HTMLElement) {
     setTextInputValue(el, value);
   };
   setByPlaceholder('Razão social *', 'Empresa Teste MEI LTDA');
-  setByPlaceholder('Inscrição municipal *', '123456');
   setByPlaceholder('CEP *', '01310100');
   setByPlaceholder('Logradouro *', 'Avenida Paulista');
   setByPlaceholder('Número *', '1000');
@@ -529,7 +528,6 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
       'Nome fantasia (opcional)',
       'Email fiscal (opcional)',
       '__select__',
-      'Inscrição municipal *',
       'CEP *',
       'Tipo logradouro',
       'Logradouro *',

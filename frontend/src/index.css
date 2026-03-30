@@ -104,6 +104,15 @@
     @apply bg-blue-600 text-white shadow-soft dark:text-white;
   }
 
+  /* Meu MEI — Fluxo do MEI: foco teclado + reforço do tab ativo em modo escuro (FR-UX-MEI-05) */
+  .mei-fluxo-tab {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-blue-400 dark:focus-visible:ring-offset-slate-900;
+  }
+
+  .mei-fluxo-tab-active {
+    @apply ring-2 ring-blue-500/90 ring-offset-2 ring-offset-white dark:ring-blue-400 dark:ring-offset-slate-900;
+  }
+
   .admin-page-shell {
     @apply max-w-6xl mx-auto space-y-4 md:space-y-6 px-1.5 sm:px-0;
   }
@@ -125,7 +134,7 @@
   }
 
   .admin-stat-card {
-    @apply rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/60 p-2.5 sm:p-3 transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-soft hover:border-slate-300/80 dark:hover:border-slate-700/80;
+    @apply rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/60 p-2.5 sm:p-3;
   }
 
   .admin-stat-label {

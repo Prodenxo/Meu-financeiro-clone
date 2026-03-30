@@ -85,7 +85,6 @@ export interface NfseServicoInput {
 
 export interface EmitirNfseInput {
   prestadorCpfCnpj: string;
-  prestadorInscricaoMunicipal?: string;
   prestadorRazaoSocial?: string;
   prestadorEmail?: string;
   prestadorEndereco?: {

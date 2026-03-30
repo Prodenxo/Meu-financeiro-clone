@@ -1074,7 +1074,7 @@ const resolveContribuinte = (userId, contrib, cnpj) => {
 const parseEmitenteFromPayload = (payload) => {
   if (!payload || typeof payload !== 'object') return null;
   const keys = [
-    'razaoSocial', 'nomeFantasia', 'email', 'regimeTributario', 'inscricaoMunicipal',
+    'razaoSocial', 'nomeFantasia', 'email', 'regimeTributario',
     'cep', 'tipoLogradouro', 'logradouro', 'numero', 'complemento', 'bairro',
     'codigoCidade', 'descricaoCidade', 'estado', 'simplesNacional'
   ];
@@ -1090,7 +1090,6 @@ const parseEmitenteFromPayload = (payload) => {
     nomeFantasia: payload.nomeFantasia,
     email: payload.email,
     regimeTributario: payload.regimeTributario,
-    inscricaoMunicipal: payload.inscricaoMunicipal,
     cep: payload.cep,
     tipoLogradouro: payload.tipoLogradouro,
     logradouro: payload.logradouro,

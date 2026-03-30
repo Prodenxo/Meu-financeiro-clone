@@ -24,7 +24,6 @@ export type NfEmissionRegimeTributario = '1' | '2' | '3';
 export type NfEmissionCompanyForm = {
   razaoSocial: string;
   nomeFantasia: string;
-  inscricaoMunicipal: string;
   email: string;
   regimeTributario: NfEmissionRegimeTributario;
   simplesNacional: boolean;
@@ -42,7 +41,6 @@ export type NfEmissionCompanyForm = {
 export const getDefaultNfEmissionCompanyForm = (): NfEmissionCompanyForm => ({
   razaoSocial: '',
   nomeFantasia: '',
-  inscricaoMunicipal: '',
   email: '',
   regimeTributario: '1',
   simplesNacional: true,
@@ -70,9 +68,6 @@ export const getNfEmissionCompanyValidationMessage = (form: NfEmissionCompanyFor
   if (!hasRequiredText(form.codigoCidade)) return 'Informe o código IBGE da cidade.';
   if (!hasRequiredText(form.descricaoCidade)) return 'Informe a cidade da empresa.';
   if (form.estado.trim().length !== 2) return 'Informe a UF com 2 letras (ex.: PR).';
-  if (!hasRequiredText(form.inscricaoMunicipal)) {
-    return 'Informe a inscrição municipal (obrigatória no cadastro Plugnotas).';
-  }
   return null;
 };
 
@@ -109,7 +104,6 @@ export const buildNfEmissionEmpresaPayload = ({
     regimeTributario: Number(form.regimeTributario || '1'),
     simplesNacional: Boolean(form.simplesNacional),
     endereco,
-    inscricaoMunicipal: form.inscricaoMunicipal.trim(),
     /** Sem input na UI (US-MEI-NFS-02); política alinhada ao backend US-MEI-NFS-01. */
     inscricaoEstadual: PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
     nfse: {
