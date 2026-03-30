@@ -16,6 +16,10 @@ import {
   cancelarNfse,
   listarCatalogoNfseClientes,
   listarCatalogoNfseProdutos,
+  criarCatalogoNfseCliente,
+  atualizarCatalogoNfseCliente,
+  criarCatalogoNfseProduto,
+  atualizarCatalogoNfseProduto,
   listarNotas,
   listarNfse,
   obterNota,
@@ -210,6 +214,83 @@ describe('meiNotasService', () => {
     expect(mockedApiClient.get).toHaveBeenNthCalledWith(2, '/mei-notas/catalogo/produtos?q=1.02&limit=10&documentType=NFSE');
     expect(clientes).toEqual([{ id: 'cliente-1', nome: 'Cliente Teste' }]);
     expect(produtos).toEqual([{ id: 'produto-1', codigo: '1.02' }]);
+  });
+
+  it('cria cliente no catálogo NFS-e com documento normalizado', async () => {
+    const created = { id: 'c-new', nome: 'Acme', documento: '12345678000199' };
+    mockedApiClient.post.mockResolvedValueOnce(created);
+
+    const result = await criarCatalogoNfseCliente({
+      nome: 'Acme',
+      documento: '12.345.678/0001-99',
+      documentType: 'NFSE'
+    });
+
+    expect(mockedApiClient.post).toHaveBeenCalledWith('/mei-notas/catalogo/clientes', {
+      nome: 'Acme',
+      documento: '12345678000199',
+      documentType: 'NFSE'
+    });
+    expect(result).toEqual(created);
+  });
+
+  it('atualiza cliente no catálogo com PATCH e id codificado', async () => {
+    const updated = { id: 'c-1', nome: 'Novo' };
+    mockedApiClient.patch.mockResolvedValueOnce(updated);
+
+    const result = await atualizarCatalogoNfseCliente('c/1', { nome: 'Novo' });
+
+    expect(mockedApiClient.patch).toHaveBeenCalledWith('/mei-notas/catalogo/clientes/c%2F1', { nome: 'Novo' });
+    expect(result).toEqual(updated);
+  });
+
+  it('cria produto no catálogo NFS-e com corpo alinhado ao backend', async () => {
+    const created = {
+      id: 'p-new',
+      discriminacao: 'Consultoria',
+      codigo: 'S1',
+      cnae: '6201500',
+      aliquota: 5,
+      valor_sugerido: 150
+    };
+    mockedApiClient.post.mockResolvedValueOnce(created);
+
+    const result = await criarCatalogoNfseProduto({
+      discriminacao: 'Consultoria',
+      codigo: 'S1',
+      cnae: '6201500',
+      aliquota: 5,
+      valor_sugerido: 150,
+      documentType: 'NFSE'
+    });
+
+    expect(mockedApiClient.post).toHaveBeenCalledWith('/mei-notas/catalogo/produtos', {
+      discriminacao: 'Consultoria',
+      codigo: 'S1',
+      cnae: '6201500',
+      documentType: 'NFSE',
+      aliquota: 5,
+      valor_sugerido: 150
+    });
+    expect(result).toEqual(created);
+  });
+
+  it('atualiza produto no catálogo com PATCH e id codificado', async () => {
+    const updated = { id: 'p-1', discriminacao: 'Nova descrição' };
+    mockedApiClient.patch.mockResolvedValueOnce(updated);
+
+    const result = await atualizarCatalogoNfseProduto('p/1', {
+      discriminacao: 'Nova descrição',
+      aliquota: null,
+      valor_sugerido: null
+    });
+
+    expect(mockedApiClient.patch).toHaveBeenCalledWith('/mei-notas/catalogo/produtos/p%2F1', {
+      discriminacao: 'Nova descrição',
+      aliquota: null,
+      valor_sugerido: null
+    });
+    expect(result).toEqual(updated);
   });
 
   it('obtem NFSe com query sync=true quando solicitado', async () => {

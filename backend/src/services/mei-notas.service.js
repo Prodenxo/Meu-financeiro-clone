@@ -35,6 +35,7 @@ import {
   emitirNfce
 } from './plugnotas/nfce.service.js';
 import { isPlugnotasDebugExplicitlyEnabled } from './plugnotas/plugnotas-debug-env.js';
+import crypto from 'node:crypto';
 
 const TABLE = 'mei_nfse';
 const CLIENTS_TABLE = 'mei_nfse_clientes';
@@ -811,7 +812,20 @@ const applyCatalogSearch = (query, q, fields) => {
   return query.or(filters.join(','));
 };
 
-const getDb = () => createSupabaseClient({ useServiceRole: true });
+const defaultGetDb = () => createSupabaseClient({ useServiceRole: true });
+/** @type {null | (() => import('@supabase/supabase-js').SupabaseClient)} */
+let getDbOverride = null;
+
+/** @internal Apenas testes — substitui o cliente Supabase enquanto ativo. */
+export const __setGetDbForTests = (fn) => {
+  getDbOverride = typeof fn === 'function' ? fn : null;
+};
+
+export const __resetGetDbForTests = () => {
+  getDbOverride = null;
+};
+
+const getDb = () => (getDbOverride ? getDbOverride() : defaultGetDb());
 
 const insertRecord = async (userId, data) => {
   const dbClient = getDb();
@@ -1093,6 +1107,274 @@ export const listarCatalogoProdutos = async (
   const { data, error } = await query;
   if (error) throw badRequest(error.message);
   return data || [];
+};
+
+const ensureCatalogRecordId = (id) => {
+  if (!id || !String(id).trim()) throw badRequest('ID do registo do catálogo é obrigatório');
+};
+
+const findCatalogCliente = async (userId, id) => {
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(CLIENTS_TABLE)
+    .select('id, user_id, document_type, documento, nome, email, metadata_json, dedupe_key, last_used_at, created_at, updated_at')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw badRequest(error.message);
+  if (!data) throw notFound('Cliente do catálogo não encontrado');
+  return data;
+};
+
+const findCatalogProduto = async (userId, id) => {
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(PRODUCTS_TABLE)
+    .select('id, user_id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, dedupe_key, last_used_at, created_at, updated_at')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw badRequest(error.message);
+  if (!data) throw notFound('Item do catálogo não encontrado');
+  return data;
+};
+
+const EMAIL_LIKE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const assertEmailFormat = (email) => {
+  if (!EMAIL_LIKE.test(email)) {
+    throw badRequest('e-mail inválido');
+  }
+};
+
+/**
+ * POST catálogo cliente — upsert por dedupe_key (mesma lógica que emissão).
+ * @param {string} userId
+ * @param {{ documentType?: string, documento: string, nome: string, email?: string|null, metadata_json?: object|null }} body
+ */
+export const criarCatalogoCliente = async (userId, body = {}) => {
+  const documentType = normalizeDocumentType(
+    body.documentType || body.document_type || DOCUMENT_TYPE_NFSE
+  );
+  const nome = String(body.nome || '').trim();
+  if (!nome) {
+    throw badRequest('nome é obrigatório');
+  }
+  const documentoDigits = normalizeDoc(body.documento || '');
+  if (!documentoDigits || (documentoDigits.length !== 11 && documentoDigits.length !== 14)) {
+    throw badRequest('documento deve ser CPF (11 dígitos) ou CNPJ (14 dígitos)');
+  }
+  const emailRaw = body.email;
+  if (emailRaw !== undefined && emailRaw !== null && String(emailRaw).trim()) {
+    assertEmailFormat(String(emailRaw).trim());
+  }
+
+  const tomador = {
+    cpfCnpj: documentoDigits,
+    razaoSocial: nome
+  };
+  if (emailRaw !== undefined && emailRaw !== null && String(emailRaw).trim()) {
+    tomador.email = String(emailRaw).trim();
+  }
+  const entry = buildClienteCatalogEntry({ tomador }, { documentType });
+  if (!entry) {
+    throw badRequest('Não foi possível montar registo de cliente');
+  }
+
+  const now = new Date().toISOString();
+  const row = {
+    ...entry,
+    user_id: userId,
+    document_type: documentType,
+    last_used_at: now,
+    updated_at: now
+  };
+  if (body.metadata_json !== undefined) {
+    if (body.metadata_json === null) {
+      row.metadata_json = null;
+    } else {
+      const meta = sanitizeMetadata(body.metadata_json);
+      row.metadata_json = Object.keys(meta).length ? meta : null;
+    }
+  }
+
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(CLIENTS_TABLE)
+    .upsert(row, { onConflict: 'user_id,document_type,dedupe_key' })
+    .select('id, document_type, documento, nome, email, metadata_json, last_used_at, created_at, updated_at')
+    .single();
+  if (error) throw badRequest(error.message);
+  return data;
+};
+
+/**
+ * PATCH catálogo cliente — apenas nome, email, metadata_json (documento e dedupe_key imutáveis).
+ */
+export const atualizarCatalogoCliente = async (userId, id, body = {}) => {
+  ensureCatalogRecordId(id);
+  if (body.documento !== undefined || body.document_type !== undefined || body.documentType !== undefined) {
+    throw badRequest(
+      'Não é permitido alterar documento ou tipo de documento via PATCH; crie um novo registo se o documento mudou.'
+    );
+  }
+  if (body.dedupe_key !== undefined) {
+    throw badRequest('Não é permitido alterar dedupe_key');
+  }
+
+  await findCatalogCliente(userId, id);
+
+  const updates = {};
+  if (body.nome !== undefined) {
+    const nome = String(body.nome || '').trim();
+    if (!nome) throw badRequest('nome não pode ser vazio');
+    updates.nome = nome;
+  }
+  if (body.email !== undefined) {
+    if (body.email === null || body.email === '') {
+      updates.email = null;
+    } else {
+      const e = String(body.email).trim();
+      assertEmailFormat(e);
+      updates.email = normalizeEmail(e);
+    }
+  }
+  if (body.metadata_json !== undefined) {
+    if (body.metadata_json === null) {
+      updates.metadata_json = null;
+    } else {
+      const meta = sanitizeMetadata(body.metadata_json);
+      updates.metadata_json = Object.keys(meta).length ? meta : null;
+    }
+  }
+  if (Object.keys(updates).length === 0) {
+    throw badRequest('Informe ao menos um campo editável para atualizar (nome, email ou metadata_json)');
+  }
+
+  const now = new Date().toISOString();
+  updates.updated_at = now;
+  updates.last_used_at = now;
+
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(CLIENTS_TABLE)
+    .update(updates)
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('id, document_type, documento, nome, email, metadata_json, last_used_at, created_at, updated_at')
+    .single();
+  if (error) throw badRequest(error.message);
+  return data;
+};
+
+/**
+ * POST catálogo produto/serviço — dedupe_key gerado como manual:{uuid}.
+ */
+export const criarCatalogoProduto = async (userId, body = {}) => {
+  const documentType = normalizeDocumentType(
+    body.documentType || body.document_type || DOCUMENT_TYPE_NFSE
+  );
+  const discriminacao = String(body.discriminacao || '').trim();
+  if (!discriminacao) {
+    throw badRequest('discriminacao é obrigatória');
+  }
+  const codigo = String(body.codigo ?? '').trim();
+  const cnae = String(body.cnae ?? '').trim();
+  const aliquota = toNumber(body.aliquota);
+  const valor_sugerido = toNumber(body.valor_sugerido);
+  const dedupe_key = `manual:${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+
+  const row = {
+    user_id: userId,
+    document_type: documentType,
+    dedupe_key,
+    codigo,
+    cnae,
+    discriminacao,
+    aliquota,
+    valor_sugerido,
+    last_used_at: now,
+    updated_at: now
+  };
+  if (body.metadata_json !== undefined) {
+    if (body.metadata_json === null) {
+      row.metadata_json = null;
+    } else {
+      const meta = sanitizeMetadata(body.metadata_json);
+      row.metadata_json = Object.keys(meta).length ? meta : null;
+    }
+  }
+
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(PRODUCTS_TABLE)
+    .insert(row)
+    .select(
+      'id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, dedupe_key, last_used_at, created_at, updated_at'
+    )
+    .single();
+  if (error) throw badRequest(error.message);
+  return data;
+};
+
+/**
+ * PATCH catálogo produto — não altera dedupe_key nem document_type.
+ */
+export const atualizarCatalogoProduto = async (userId, id, body = {}) => {
+  ensureCatalogRecordId(id);
+  if (body.dedupe_key !== undefined || body.document_type !== undefined || body.documentType !== undefined) {
+    throw badRequest('Não é permitido alterar dedupe_key ou document_type');
+  }
+
+  await findCatalogProduto(userId, id);
+
+  const updates = {};
+  if (body.codigo !== undefined) {
+    updates.codigo = String(body.codigo ?? '').trim();
+  }
+  if (body.cnae !== undefined) {
+    updates.cnae = String(body.cnae ?? '').trim();
+  }
+  if (body.discriminacao !== undefined) {
+    const d = String(body.discriminacao || '').trim();
+    if (!d) throw badRequest('discriminacao não pode ser vazia');
+    updates.discriminacao = d;
+  }
+  if (body.aliquota !== undefined) {
+    updates.aliquota = toNumber(body.aliquota);
+  }
+  if (body.valor_sugerido !== undefined) {
+    updates.valor_sugerido = toNumber(body.valor_sugerido);
+  }
+  if (body.metadata_json !== undefined) {
+    if (body.metadata_json === null) {
+      updates.metadata_json = null;
+    } else {
+      const meta = sanitizeMetadata(body.metadata_json);
+      updates.metadata_json = Object.keys(meta).length ? meta : null;
+    }
+  }
+  if (Object.keys(updates).length === 0) {
+    throw badRequest('Informe ao menos um campo para atualizar');
+  }
+
+  const now = new Date().toISOString();
+  updates.updated_at = now;
+  updates.last_used_at = now;
+
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(PRODUCTS_TABLE)
+    .update(updates)
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select(
+      'id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, dedupe_key, last_used_at, created_at, updated_at'
+    )
+    .single();
+  if (error) throw badRequest(error.message);
+  return data;
 };
 
 export const obterNota = async (userId, id, { sync = false } = {}) => {

@@ -162,6 +162,49 @@ export const listarCatalogoProdutos = async (req, res, next) => {
   }
 };
 
+const sendCreated = (res, data, message) => res.status(201).json({
+  success: true,
+  data,
+  message,
+  errors: null
+});
+
+export const criarCatalogoCliente = async (req, res, next) => {
+  try {
+    const data = await meiNotasService.criarCatalogoCliente(req.user.id, req.body);
+    return sendCreated(res, data, 'Cliente do catálogo registado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const atualizarCatalogoCliente = async (req, res, next) => {
+  try {
+    const data = await meiNotasService.atualizarCatalogoCliente(req.user.id, req.params.id, req.body);
+    return sendSuccess(res, data, 'Cliente do catálogo atualizado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const criarCatalogoProduto = async (req, res, next) => {
+  try {
+    const data = await meiNotasService.criarCatalogoProduto(req.user.id, req.body);
+    return sendCreated(res, data, 'Item do catálogo registado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const atualizarCatalogoProduto = async (req, res, next) => {
+  try {
+    const data = await meiNotasService.atualizarCatalogoProduto(req.user.id, req.params.id, req.body);
+    return sendSuccess(res, data, 'Item do catálogo atualizado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const atualizar = async (req, res, next) => {
   try {
     const data = await meiNotasService.atualizarNota(req.user.id, req.params.id, req.body);

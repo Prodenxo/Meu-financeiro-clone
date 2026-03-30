@@ -46,6 +46,12 @@ vi.mock('./pages/Dashboard', () => ({
 vi.mock('./pages/GuidesMei', () => ({
   default: () => <div>GUIAS_MEI_PAGE</div>
 }));
+vi.mock('./pages/MeiCatalogoClientes', () => ({
+  default: () => <div>MEI_CATALOGO_CLIENTES_PAGE</div>
+}));
+vi.mock('./pages/MeiCatalogoServicosProdutos', () => ({
+  default: () => <div>MEI_CATALOGO_SERVICOS_PRODUTOS_PAGE</div>
+}));
 vi.mock('./pages/Transactions', () => ({ default: () => <div /> }));
 vi.mock('./pages/Orcamentos', () => ({ default: () => <div /> }));
 vi.mock('./pages/Categorias', () => ({ default: () => <div /> }));
@@ -137,6 +143,150 @@ describe('AppRoutes mei gate', () => {
 
     expect(container.textContent).toContain('GUIAS_MEI_PAGE');
     expect(container.textContent).not.toContain('DASHBOARD_PAGE');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('redireciona /mei-catalogo/clientes para / quando mei=false', async () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={['/mei-catalogo/clientes']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <AppRoutes />
+        </MemoryRouter>
+      );
+    });
+
+    expect(container.textContent).toContain('DASHBOARD_PAGE');
+    expect(container.textContent).not.toContain('MEI_CATALOGO_CLIENTES_PAGE');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('permite /mei-catalogo/clientes quando usuario tem mei=true', async () => {
+    authState.mei = true;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={['/mei-catalogo/clientes']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <AppRoutes />
+        </MemoryRouter>
+      );
+    });
+
+    expect(container.textContent).toContain('MEI_CATALOGO_CLIENTES_PAGE');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('redireciona /mei-catalogo/servicos-produtos para / quando mei=false', async () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={['/mei-catalogo/servicos-produtos']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <AppRoutes />
+        </MemoryRouter>
+      );
+    });
+
+    expect(container.textContent).toContain('DASHBOARD_PAGE');
+    expect(container.textContent).not.toContain('MEI_CATALOGO_SERVICOS_PRODUTOS_PAGE');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('permite /mei-catalogo/servicos-produtos quando usuario tem mei=true', async () => {
+    authState.mei = true;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={['/mei-catalogo/servicos-produtos']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <AppRoutes />
+        </MemoryRouter>
+      );
+    });
+
+    expect(container.textContent).toContain('MEI_CATALOGO_SERVICOS_PRODUTOS_PAGE');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('permite /mei-catalogo/clientes para superadmin mesmo com mei=false', async () => {
+    authState.role = 'superadmin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={['/mei-catalogo/clientes']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <AppRoutes />
+        </MemoryRouter>
+      );
+    });
+
+    expect(container.textContent).toContain('MEI_CATALOGO_CLIENTES_PAGE');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('permite /mei-catalogo/servicos-produtos para admin mesmo com mei=false', async () => {
+    authState.role = 'admin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={['/mei-catalogo/servicos-produtos']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <AppRoutes />
+        </MemoryRouter>
+      );
+    });
+
+    expect(container.textContent).toContain('MEI_CATALOGO_SERVICOS_PRODUTOS_PAGE');
 
     await act(async () => {
       root.unmount();
