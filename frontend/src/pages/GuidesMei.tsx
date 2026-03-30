@@ -54,6 +54,12 @@ import {
   LongFiscalErrorMessage,
   PlugnotasIntegrationErrorAlert
 } from '../components/FiscalIntegrationErrorAlert';
+import type { GuidesMeiWorkspace } from './guidesMeiWorkspaceStorage';
+import {
+  MEI_WORKSPACE_STORAGE_KEY,
+  readWorkspaceFromStorage,
+  resolveInitialWorkspace
+} from './guidesMeiWorkspaceStorage';
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
   if (!competencia) return 'guia-mei.pdf';
@@ -110,7 +116,6 @@ const nfEmissionFormToPersistBody = (form: NfEmissionCompanyForm) => ({
   nomeFantasia: form.nomeFantasia,
   email: form.email,
   regimeTributario: form.regimeTributario,
-  inscricaoMunicipal: form.inscricaoMunicipal,
   cep: form.cep,
   tipoLogradouro: form.tipoLogradouro,
   logradouro: form.logradouro,
@@ -245,7 +250,6 @@ const parseDecimalInput = (value: unknown) => {
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 };
-type GuidesMeiWorkspace = 'overview' | 'das' | 'nfse' | 'parcelamentos';
 
 /** Rótulo curto na UI do workspace fiscal (Guia MEI só NFS-e — US-MEI-NFS-03). */
 const GUIA_MEI_NFSE_DOCUMENT_LABEL = 'NFSe';
@@ -342,7 +346,9 @@ export default function GuidesMei() {
     || role === 'admin'
     || (role === 'usuario' && mei !== false);
   const [contribuinteDoc, setContribuinteDoc] = useState('');
-  const [activeWorkspace, setActiveWorkspace] = useState<GuidesMeiWorkspace>('overview');
+  const [activeWorkspace, setActiveWorkspace] = useState<GuidesMeiWorkspace>(() =>
+    resolveInitialWorkspace(readWorkspaceFromStorage(), canViewNfse)
+  );
   const defaultPeriod = useMemo(() => getDefaultPeriod(), []);
   const [selectedYear, setSelectedYear] = useState<number>(defaultPeriod.year);
   const [selectedMonth, setSelectedMonth] = useState<string>(defaultPeriod.month);
@@ -369,7 +375,6 @@ export default function GuidesMei() {
   const hasCertificate = hasUserCertificate;
   const [nfseForm, setNfseForm] = useState<EmitirNfseInput>({
     prestadorCpfCnpj: '',
-    prestadorInscricaoMunicipal: '',
     prestadorRazaoSocial: '',
     prestadorEmail: '',
     prestadorEndereco: {
@@ -677,6 +682,14 @@ export default function GuidesMei() {
       setActiveWorkspace('overview');
     }
   }, [activeWorkspace, canViewNfse]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MEI_WORKSPACE_STORAGE_KEY, activeWorkspace);
+    } catch {
+      /* quota / modo privado / indisponível */
+    }
+  }, [activeWorkspace]);
 
   useEffect(() => {
     if (!normalizedContribuinte) return;
@@ -1077,9 +1090,6 @@ export default function GuidesMei() {
           enviarEmail: Boolean(nfseForm.enviarEmail)
         };
 
-        if (nfseForm.prestadorInscricaoMunicipal?.trim()) {
-          payload.prestadorInscricaoMunicipal = nfseForm.prestadorInscricaoMunicipal.trim();
-        }
         if (nfseForm.prestadorRazaoSocial?.trim()) {
           payload.prestadorRazaoSocial = nfseForm.prestadorRazaoSocial.trim();
         }
@@ -1320,13 +1330,13 @@ export default function GuidesMei() {
         id: 'overview',
         label: 'Visão geral',
         description: 'Resumo e atalhos rápidos',
-        badge: `${meiPeriods.length} períodos DAS`
+        badge: 'Resumo no topo'
       },
       {
         id: 'das',
         label: 'Certificado e DAS',
         description: 'Configuração e geração de guias',
-        badge: dasPendentesCount > 0 ? `${dasPendentesCount} pendências` : 'Sem pendências'
+        badge: dasPendentesCount > 0 ? 'Há pendências' : 'Em dia'
       }
     ];
 
@@ -1335,7 +1345,7 @@ export default function GuidesMei() {
         id: 'nfse',
         label: 'NFS-e',
         description: 'Notas de serviço: emissão e acompanhamento',
-        badge: `${filteredNfseList.length} notas no filtro`
+        badge: 'Emitir e filtrar'
       });
     }
 
@@ -1347,7 +1357,7 @@ export default function GuidesMei() {
     });
 
     return tabs;
-  }, [canViewNfse, dasPendentesCount, filteredNfseList.length, meiPeriods.length, parcelamentosList.length]);
+  }, [canViewNfse, dasPendentesCount, parcelamentosList.length]);
 
   const handleDownloadClick = async () => {
     if (isDownloadingGuide) return;
@@ -1384,6 +1394,19 @@ export default function GuidesMei() {
                   ? 'Gerencie certificado, DAS e emissão de NFS-e (notas de serviço) no mesmo fluxo.'
                   : 'Gerencie certificado e DAS no mesmo fluxo.'}
               </p>
+              {hasServerCertificate && !hasUserCertificate ? (
+                <p className="mt-2 max-w-xl text-sm text-slate-600 dark:text-slate-400">
+                  Autenticação via certificado do servidor. Para enviar ou substituir pelo seu certificado A1, abra{' '}
+                  <button
+                    type="button"
+                    className="font-medium text-blue-600 underline decoration-blue-600/80 underline-offset-2 hover:text-blue-700 dark:text-blue-400 dark:decoration-blue-400/80 dark:hover:text-blue-300"
+                    onClick={() => setActiveWorkspace('das')}
+                  >
+                    Certificado e DAS
+                  </button>
+                  .
+                </p>
+              ) : null}
             </div>
             <span
               className={
@@ -1426,6 +1449,19 @@ export default function GuidesMei() {
               )}
             </div>
           </div>
+          {dasPendentesCount > 0 ? (
+            <p className="mt-3 max-w-2xl text-sm text-amber-800 dark:text-amber-100/95">
+              Há períodos DAS em aberto — abra{' '}
+              <button
+                type="button"
+                className="font-medium underline decoration-amber-800/70 underline-offset-2 hover:text-amber-900 dark:decoration-amber-200/70 dark:hover:text-amber-50"
+                onClick={() => setActiveWorkspace('das')}
+              >
+                Certificado e DAS
+              </button>{' '}
+              para gerar ou regularizar.
+            </p>
+          ) : null}
         </section>
 
         <section className="admin-section-card">
@@ -1433,21 +1469,28 @@ export default function GuidesMei() {
             <div>
               <h2 className="admin-section-title">Fluxo do MEI</h2>
               <p className="admin-section-subtitle">
-                Navegue por contexto para reduzir rolagem e focar no que precisa agora.
+                Os números principais estão no resumo acima. Escolha uma área abaixo para ir direto à etapa.
               </p>
             </div>
           </div>
           <div className="admin-toolbar space-y-3">
-            <div className={`grid gap-2 ${canViewNfse ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+            <div
+              className={`grid gap-2 ${canViewNfse ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}
+              role="tablist"
+              aria-label="Fluxo do MEI"
+            >
               {workspaceTabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
+                  id={`mei-tab-${tab.id}`}
+                  role="tab"
+                  aria-selected={activeWorkspace === tab.id}
+                  aria-controls={activeWorkspace === tab.id ? `mei-panel-${tab.id}` : undefined}
                   onClick={() => setActiveWorkspace(tab.id)}
-                  className={`planner-tab h-full w-full items-start justify-between rounded-xl px-4 py-3 text-left ${
-                    activeWorkspace === tab.id ? 'planner-tab-active' : ''
+                  className={`mei-fluxo-tab planner-tab h-full w-full items-start justify-between rounded-xl px-4 py-3 text-left ${
+                    activeWorkspace === tab.id ? 'planner-tab-active mei-fluxo-tab-active' : ''
                   }`}
-                  aria-pressed={activeWorkspace === tab.id}
                 >
                   <span className="flex flex-col items-start gap-1">
                     <span className="text-sm font-semibold">{tab.label}</span>
@@ -1461,73 +1504,119 @@ export default function GuidesMei() {
         </section>
 
         {activeWorkspace === 'overview' ? (
-          <section className="admin-section-card">
+          <section
+            className="admin-section-card"
+            role="tabpanel"
+            id="mei-panel-overview"
+            aria-labelledby="mei-tab-overview"
+          >
             <div className="admin-section-header">
               <div>
                 <h2 className="admin-section-title">Visão geral operacional</h2>
                 <p className="admin-section-subtitle">
-                  Escolha uma etapa para continuar com menos ruído visual.
+                  {canViewNfse
+                    ? 'Atalhos para cada etapa (certificado, DAS, NFS-e, parcelamentos) com menos rolagem.'
+                    : 'Atalhos para cada etapa (certificado, DAS e parcelamentos) com menos rolagem.'}
                 </p>
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setActiveWorkspace('das')}
-                className="admin-toolbar text-left transition hover:border-slate-300/80 dark:hover:border-slate-700/80"
-              >
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Certificado e DAS</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Configure certificado, valide CNPJ e gere o DAS do período.
-                </p>
-                <div className="mt-3 admin-actions">
-                  <span className={hasUserCertificate ? 'admin-badge-success' : 'admin-badge-warning'}>
-                    {hasUserCertificate ? 'Certificado em uso' : 'Certificado pendente'}
-                  </span>
-                  <span className={dasPendentesCount > 0 ? 'admin-badge-warning' : 'admin-badge-success'}>
-                    {dasPendentesCount > 0 ? `${dasPendentesCount} pendências DAS` : 'DAS sem pendências'}
-                  </span>
+              <div className="admin-toolbar flex flex-col gap-3 text-left">
+                <div>
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Certificado e DAS</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Configure certificado, valide CNPJ e gere o DAS do período.
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {hasServerCertificate && !hasUserCertificate
+                      ? 'Você está usando o certificado do servidor; envie o seu A1 nesta etapa, se precisar.'
+                      : hasUserCertificate
+                        ? 'Certificado A1 ativo nesta sessão para operações que exigem o seu arquivo.'
+                        : 'Sem certificado A1 na sessão: ainda é possível informar CNPJ e gerar DAS conforme o fluxo.'}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className={hasUserCertificate ? 'admin-badge-success' : 'admin-badge-warning'}>
+                      {hasUserCertificate ? 'Certificado em uso' : 'Certificado pendente'}
+                    </span>
+                    <span className={dasPendentesCount > 0 ? 'admin-badge-warning' : 'admin-badge-success'}>
+                      {dasPendentesCount > 0 ? 'Há DAS em aberto' : 'DAS em dia'}
+                    </span>
+                  </div>
                 </div>
-              </button>
-
-              {canViewNfse ? (
                 <button
                   type="button"
-                  onClick={() => setActiveWorkspace('nfse')}
-                  className="admin-toolbar text-left transition hover:border-slate-300/80 dark:hover:border-slate-700/80"
+                  className="planner-button-secondary w-full self-stretch sm:w-auto sm:self-start"
+                  onClick={() => setActiveWorkspace('das')}
                 >
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">NFS-e</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Nesta guia você emite e acompanha apenas notas de serviço (NFSe), com integração fiscal.
-                  </p>
-                  <div className="mt-3 admin-actions">
-                    <span className="admin-badge-primary">{`${filteredNfseList.length} notas no filtro`}</span>
-                    <span className="admin-badge-neutral">Emissão com integração fiscal</span>
-                  </div>
+                  Abrir Certificado e DAS
                 </button>
+              </div>
+
+              {canViewNfse ? (
+                <div className="admin-toolbar flex flex-col gap-3 text-left">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">NFS-e</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Emita e acompanhe notas de serviço (NFS-e) com integração fiscal.
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      {nfseList.length === 0
+                        ? 'Nenhuma NFS-e registrada ainda. Após emitir, as notas aparecem aqui e no resumo acima.'
+                        : filteredNfseList.length === 0
+                          ? 'Nenhuma nota corresponde aos filtros ativos na guia NFS-e. Ajuste os filtros ou emita uma nova nota.'
+                          : 'Use a guia NFS-e para emitir, baixar XML/PDF e filtrar por status ou período.'}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="admin-badge-neutral">Lista e emissão</span>
+                      <span className="admin-badge-neutral">Integração fiscal</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="planner-button-secondary w-full self-stretch sm:w-auto sm:self-start"
+                    onClick={() => setActiveWorkspace('nfse')}
+                  >
+                    Abrir NFS-e
+                  </button>
+                </div>
               ) : null}
 
-              <button
-                type="button"
-                onClick={() => setActiveWorkspace('parcelamentos')}
-                className="admin-toolbar text-left transition hover:border-slate-300/80 dark:hover:border-slate-700/80"
-              >
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Parcelamentos</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Consulte pedidos de parcelamento do MEI via SERPRO.
-                </p>
-                <div className="mt-3 admin-actions">
-                  <span className="admin-badge-neutral">
-                    {parcelamentosList.length > 0 ? `${parcelamentosList.length} pedidos` : 'Consulta SERPRO'}
-                  </span>
+              <div className="admin-toolbar flex flex-col gap-3 text-left">
+                <div>
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Parcelamentos</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Consulte pedidos de parcelamento do MEI via SERPRO.
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {parcelamentosList.length === 0
+                      ? 'Nenhum pedido listado ainda. Abra a área para consultar na SERPRO.'
+                      : 'Pedidos já carregados. O total aparece no separador Parcelamentos; abra a área para detalhes e SERPRO.'}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="admin-badge-neutral">
+                      {parcelamentosList.length > 0 ? 'Pedidos disponíveis' : 'Consulta SERPRO'}
+                    </span>
+                  </div>
                 </div>
-              </button>
+                <button
+                  type="button"
+                  className="planner-button-secondary w-full self-stretch sm:w-auto sm:self-start"
+                  onClick={() => setActiveWorkspace('parcelamentos')}
+                >
+                  Abrir Parcelamentos
+                </button>
+              </div>
             </div>
           </section>
         ) : null}
 
         {activeWorkspace === 'das' ? (
-          <>
+          <div
+            className="space-y-4 md:space-y-6"
+            role="tabpanel"
+            id="mei-panel-das"
+            aria-labelledby="mei-tab-das"
+          >
             <section className="admin-section-card">
           <div className="mb-3">
             <button
@@ -1651,7 +1740,7 @@ export default function GuidesMei() {
                     Dados mínimos para emissão de NFS-e
                   </p>
                   <p className="admin-field-hint mb-2">
-                    Campos com * são obrigatórios para a configuração inicial. A inscrição municipal é exigida pelo Plugnotas. A inscrição estadual da empresa não é solicitada neste fluxo: o envio ao emissor segue a política MEI (apenas NFS-e).
+                    Campos com * são obrigatórios para a configuração inicial. A inscrição estadual da empresa não é solicitada neste fluxo: o envio ao emissor segue a política MEI (apenas NFS-e).
                   </p>
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
@@ -1686,13 +1775,6 @@ export default function GuidesMei() {
                       <option value="2">Regime tributário: Simples excesso sublimite (2)</option>
                       <option value="3">Regime tributário: Regime normal (3)</option>
                     </select>
-                    <input
-                      className="planner-input-compact"
-                      type="text"
-                      value={nfEmissionCompanyForm.inscricaoMunicipal}
-                      onChange={(event) => updateNfEmissionCompanyForm({ inscricaoMunicipal: event.target.value })}
-                      placeholder="Inscrição municipal *"
-                    />
                   </div>
                   <div className="mt-2 grid gap-2 md:grid-cols-4">
                     <input
@@ -1932,11 +2014,16 @@ export default function GuidesMei() {
             </div>
           )}
         </section>
-          </>
+          </div>
         ) : null}
 
         {canViewNfse && activeWorkspace === 'nfse' ? (
-          <>
+          <div
+            className="space-y-4 md:space-y-6"
+            role="tabpanel"
+            id="mei-panel-nfse"
+            aria-labelledby="mei-tab-nfse"
+          >
             <section className="admin-section-card">
           <div className="mb-3">
             <button
@@ -2033,18 +2120,6 @@ export default function GuidesMei() {
                   })
                 }
                 placeholder="00.000.000/0001-00"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
-                Inscrição municipal (opcional)
-              </label>
-              <input
-                className="planner-input-compact w-full"
-                type="text"
-                value={nfseForm.prestadorInscricaoMunicipal}
-                onChange={(event) => updateNfseForm({ prestadorInscricaoMunicipal: event.target.value })}
-                placeholder="Inscrição municipal"
               />
             </div>
             <div>
@@ -2474,11 +2549,16 @@ export default function GuidesMei() {
             </div>
           )}
         </section>
-          </>
+          </div>
         ) : null}
 
         {activeWorkspace === 'parcelamentos' ? (
-          <section className="admin-section-card">
+          <section
+            className="admin-section-card"
+            role="tabpanel"
+            id="mei-panel-parcelamentos"
+            aria-labelledby="mei-tab-parcelamentos"
+          >
             <div className="mb-3">
               <button
                 type="button"

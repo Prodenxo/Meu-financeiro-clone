@@ -107,12 +107,6 @@ export const normalizeEmitenteRowFragment = (raw, opts = {}) => {
     if (t || !omitEmpty) out.regime_tributario = t || null;
   }
 
-  const im = get('inscricaoMunicipal', 'inscricao_municipal');
-  if (im !== undefined && im !== null) {
-    const t = String(im).trim();
-    if (t || !omitEmpty) out.inscricao_municipal = t || null;
-  }
-
   const cepVal = get('cep', 'cep');
   if (cepVal !== undefined && cepVal !== null) {
     const d = digitsOnly(cepVal).slice(0, 8);
@@ -194,7 +188,6 @@ export const emitenteRowToApiShape = (row) => {
     email: row.fiscal_email ?? '',
     regimeTributario: row.regime_tributario ? String(row.regime_tributario) : '1',
     simplesNacional: row.optante_simples_nacional !== false,
-    inscricaoMunicipal: row.inscricao_municipal ?? '',
     cep: row.cep ?? '',
     tipoLogradouro: (() => {
       const t = row.tipo_logradouro != null ? String(row.tipo_logradouro).trim() : '';
@@ -257,7 +250,6 @@ export const getEmitenteNfseSnapshot = async (userId) => {
       nome_fantasia,
       fiscal_email,
       regime_tributario,
-      inscricao_municipal,
       cep,
       tipo_logradouro,
       logradouro,

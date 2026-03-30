@@ -11,7 +11,6 @@ import {
 const fullValidForm = () => ({
   ...getDefaultNfEmissionCompanyForm(),
   razaoSocial: 'Empresa Teste LTDA',
-  inscricaoMunicipal: '123456',
   cep: '01310100',
   logradouro: 'Av. Paulista',
   numero: '1000',
@@ -22,16 +21,15 @@ const fullValidForm = () => ({
 });
 
 describe('nfEmissionCompany', () => {
-  it('getNfEmissionCompanyValidationMessage exige inscrição municipal; sem campo IE (US-MEI-NFS-02)', () => {
+  it('getNfEmissionCompanyValidationMessage aceita formulário completo sem inscrição municipal; IE pela política MEI (US-MEI-NFS-02)', () => {
     const base = fullValidForm();
     expect(getNfEmissionCompanyValidationMessage(base)).toBeNull();
-
     expect(
-      getNfEmissionCompanyValidationMessage({ ...base, inscricaoMunicipal: '   ' })
-    ).toContain('inscrição municipal');
+      getNfEmissionCompanyValidationMessage({ ...base, razaoSocial: '   ' })
+    ).toContain('razão social');
   });
 
-  it('buildNfEmissionEmpresaPayload inclui IM, IE e nfe/nfce inativos sem config (apenas NFS-e)', () => {
+  it('buildNfEmissionEmpresaPayload não envia inscrição municipal; inclui IE e nfe/nfce inativos sem config (apenas NFS-e)', () => {
     const form = fullValidForm();
     const payload = buildNfEmissionEmpresaPayload({
       cnpj: '12345678000190',
@@ -39,7 +37,7 @@ describe('nfEmissionCompany', () => {
       form
     });
 
-    expect(payload.inscricaoMunicipal).toBe('123456');
+    expect('inscricaoMunicipal' in payload).toBe(false);
     expect(payload.inscricaoEstadual).toBe(PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA);
     expect(payload.certificado).toBe('cert-abc');
     const nfce = payload.nfce as Record<string, unknown>;

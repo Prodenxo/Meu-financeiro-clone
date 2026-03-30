@@ -333,6 +333,9 @@ const buildPayloadFromInput = (input, userId) => {
     : [buildServicoFromInput(servicosInput)].filter(Boolean);
   const prestadorEndereco = buildPrestadorEnderecoFromInput(input);
 
+  const prestadorBase = { ...(input?.prestador || {}) };
+  delete prestadorBase.inscricaoMunicipal;
+
   const payload = prune({
     idIntegracao,
     enviarEmail: input?.enviarEmail ?? false,
@@ -340,9 +343,8 @@ const buildPayloadFromInput = (input, userId) => {
     descricao: input?.descricao ?? null,
     informacoesComplementares: input?.informacoesComplementares ?? null,
     prestador: prune({
-      ...(input?.prestador || {}),
+      ...prestadorBase,
       cpfCnpj: prestadorDoc || input?.prestador?.cpfCnpj || null,
-      inscricaoMunicipal: input?.prestador?.inscricaoMunicipal || input?.prestadorInscricaoMunicipal || null,
       razaoSocial: input?.prestador?.razaoSocial || input?.prestadorRazaoSocial || null,
       email: input?.prestador?.email || input?.prestadorEmail || null,
       endereco: prestadorEndereco

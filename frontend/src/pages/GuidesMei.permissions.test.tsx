@@ -4,6 +4,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import GuidesMei from './GuidesMei';
+import { MEI_WORKSPACE_STORAGE_KEY } from './guidesMeiWorkspaceStorage';
 
 const globalWithActFlag = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
 globalWithActFlag.IS_REACT_ACT_ENVIRONMENT = true;
@@ -66,6 +67,7 @@ describe('GuidesMei permissões NFSe', () => {
   beforeEach(() => {
     authState.role = 'usuario';
     authState.mei = true;
+    localStorage.removeItem(MEI_WORKSPACE_STORAGE_KEY);
   });
 
   it('oculta elementos de NFSe para usuário com mei=false', async () => {
@@ -170,6 +172,66 @@ describe('GuidesMei permissões NFSe', () => {
 
     await act(async () => {
       root.unmount();
+    });
+  });
+
+  describe('workspace localStorage (FR-UX-MEI-P2)', () => {
+    it('restaura Certificado e DAS quando a chave guarda das', async () => {
+      localStorage.setItem(MEI_WORKSPACE_STORAGE_KEY, 'das');
+
+      const container = document.createElement('div');
+      const root = createRoot(container);
+
+      await act(async () => {
+        root.render(<GuidesMei />);
+      });
+
+      expect(container.querySelector('#mei-tab-das')?.getAttribute('aria-selected')).toBe('true');
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
+    it('com nfse guardado e sem permissão NFS-e, ativa Visão geral', async () => {
+      localStorage.setItem(MEI_WORKSPACE_STORAGE_KEY, 'nfse');
+      authState.role = 'usuario';
+      authState.mei = false;
+
+      const container = document.createElement('div');
+      const root = createRoot(container);
+
+      await act(async () => {
+        root.render(<GuidesMei />);
+      });
+
+      expect(container.querySelector('#mei-tab-overview')?.getAttribute('aria-selected')).toBe('true');
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
+    it('persiste das ao clicar no tab DAS', async () => {
+      const container = document.createElement('div');
+      const root = createRoot(container);
+
+      await act(async () => {
+        root.render(<GuidesMei />);
+      });
+
+      const dasTab = container.querySelector('#mei-tab-das');
+      expect(dasTab).toBeTruthy();
+
+      await act(async () => {
+        dasTab!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      expect(localStorage.getItem(MEI_WORKSPACE_STORAGE_KEY)).toBe('das');
+
+      await act(async () => {
+        root.unmount();
+      });
     });
   });
 });
