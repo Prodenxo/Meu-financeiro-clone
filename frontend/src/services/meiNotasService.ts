@@ -461,6 +461,11 @@ export async function atualizarCatalogoNfseCliente(
   );
 }
 
+/** DELETE catálogo cliente — 204 sem corpo (CAT-MEI-06). */
+export async function eliminarCatalogoNfseCliente(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/mei-notas/catalogo/clientes/${encodeURIComponent(id)}`);
+}
+
 export async function criarCatalogoNfseProduto(
   input: CriarCatalogoNfseProdutoInput
 ): Promise<NfseCatalogProduto> {
@@ -509,4 +514,9 @@ export async function atualizarCatalogoNfseProduto(
     `/mei-notas/catalogo/produtos/${encodeURIComponent(id)}`,
     body
   );
+}
+
+/** DELETE catálogo produto/serviço — 204 sem corpo (CAT-MEI-06). */
+export async function eliminarCatalogoNfseProduto(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/mei-notas/catalogo/produtos/${encodeURIComponent(id)}`);
 }

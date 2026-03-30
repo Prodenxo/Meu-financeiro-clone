@@ -1,6 +1,6 @@
 # PRD — Catálogo MEI: áreas dedicadas de clientes e de serviços/produtos
 
-**Versão:** 1.1  
+**Versão:** 1.2  
 **Data:** 2026-03-30  
 **Tipo:** Brownfield — nova capacidade (frontend + backend)  
 **Fontes:** [`docs/brief/brief-area-cadastro-clientes-servicos-produtos.md`](../brief/brief-area-cadastro-clientes-servicos-produtos.md); código atual (`mei-notas` catálogo, `GuidesMei.tsx`, `meiNotasService.ts`)
@@ -214,6 +214,7 @@ O MEI (e perfis associados) deve conseguir **gerir o catálogo antes e durante**
 |--------|------|-------|-----------|
 | 1.0 | 2026-03-30 | Morgan (PM) | Versão inicial a partir do brief de catálogo MEI. |
 | 1.1 | 2026-03-30 | Spike CAT-MEI-01 | §11.1 + ajuste de risco §13; ligação a `docs/technical/catalogo-mei-persistencia-e-api-2026-03-30.md`. |
+| 1.2 | 2026-03-30 | Morgan (PM) | Extensão de escopo: exclusão no catálogo documentada em [`PRD-catalogo-mei-exclusao-clientes-produtos-2026-03-30.md`](PRD-catalogo-mei-exclusao-clientes-produtos-2026-03-30.md) (fase 2; §6.3 do MVP mantém-se histórico até implementação). |
 
 ---
 

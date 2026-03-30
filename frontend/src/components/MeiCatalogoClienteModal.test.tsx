@@ -137,4 +137,36 @@ describe('MeiCatalogoClienteModal', () => {
     });
     expect(onSaved).toHaveBeenCalledWith('edit');
   });
+
+  it('fluxo novo cliente não mostra zona perigosa de exclusão', () => {
+    render(
+      <MeiCatalogoClienteModal open editing={null} onClose={vi.fn()} onSaved={vi.fn()} />
+    );
+    const dialog = screen.getAllByRole('dialog')[0]!;
+    expect(within(dialog).queryByText(/Eliminar do catálogo/i)).toBeNull();
+  });
+
+  it('edição com onRequestDelete: zona perigosa chama callback', () => {
+    const onRequestDelete = vi.fn();
+    const editing = {
+      id: 'u1',
+      nome: 'Loja',
+      documento: '12345678000199',
+      email: null as string | null
+    };
+
+    render(
+      <MeiCatalogoClienteModal
+        open
+        editing={editing}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        onRequestDelete={onRequestDelete}
+      />
+    );
+
+    const dialog = screen.getAllByRole('dialog')[0]!;
+    fireEvent.click(within(dialog).getByRole('button', { name: /Excluir do catálogo/i }));
+    expect(onRequestDelete).toHaveBeenCalledTimes(1);
+  });
 });

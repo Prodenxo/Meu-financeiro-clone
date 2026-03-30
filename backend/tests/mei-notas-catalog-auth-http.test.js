@@ -58,3 +58,11 @@ test('HTTP catálogo — 401 sem Authorization em PATCH /catalogo/produtos/:id',
     discriminacao: 'Atualizado'
   });
 });
+
+test('HTTP catálogo — 401 sem Authorization em DELETE /catalogo/clientes/:id', async () => {
+  await runCatalogAuthCases('DELETE', '/catalogo/clientes/550e8400-e29b-41d4-a716-446655440000', null);
+});
+
+test('HTTP catálogo — 401 sem Authorization em DELETE /catalogo/produtos/:id', async () => {
+  await runCatalogAuthCases('DELETE', '/catalogo/produtos/660e8400-e29b-41d4-a716-446655440001', null);
+});

@@ -5,6 +5,11 @@ import {
   atualizarCatalogoNfseCliente
 } from '../services/meiNotasService';
 import { formatCpfCnpjPtBr, onlyDigits } from '../lib/formatCpfCnpjPtBr';
+import {
+  MEI_CATALOGO_DELETE_CLIENTE_DANGER_CTA,
+  MEI_CATALOGO_DELETE_CLIENTE_DANGER_HEADING,
+  MEI_CATALOGO_DELETE_CLIENTE_DANGER_HINT
+} from '../copy/meiCatalogoClienteDelete';
 
 const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -14,6 +19,8 @@ export interface MeiCatalogoClienteModalProps {
   /** Após sucesso (lista e toast fora). */
   onSaved: (kind: 'create' | 'edit') => void;
   editing: NfseCatalogCliente | null;
+  /** Modo edição: abre o diálogo de confirmação de exclusão (controlado pelo pai). */
+  onRequestDelete?: () => void;
 }
 
 type FieldKey = 'nome' | 'documento' | 'email';
@@ -22,7 +29,8 @@ export default function MeiCatalogoClienteModal({
   open,
   onClose,
   onSaved,
-  editing
+  editing,
+  onRequestDelete
 }: MeiCatalogoClienteModalProps) {
   const [nome, setNome] = useState('');
   const [documento, setDocumento] = useState('');
@@ -241,6 +249,25 @@ export default function MeiCatalogoClienteModal({
               </p>
             ) : null}
           </div>
+
+          {isEdit && onRequestDelete ? (
+            <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                {MEI_CATALOGO_DELETE_CLIENTE_DANGER_HEADING}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {MEI_CATALOGO_DELETE_CLIENTE_DANGER_HINT}
+              </p>
+              <button
+                type="button"
+                className="mt-3 inline-flex min-h-[44px] items-center rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                onClick={onRequestDelete}
+                disabled={saving}
+              >
+                {MEI_CATALOGO_DELETE_CLIENTE_DANGER_CTA}
+              </button>
+            </div>
+          ) : null}
 
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className="planner-button-secondary-compact" onClick={onClose} disabled={saving}>

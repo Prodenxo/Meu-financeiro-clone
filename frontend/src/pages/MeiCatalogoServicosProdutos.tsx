@@ -1,11 +1,16 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Package, Pencil, PlusCircle } from 'lucide-react';
+import { ArrowLeft, Package, Pencil, PlusCircle, Trash2 } from 'lucide-react';
 import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
 import EmptyState from '../components/EmptyState';
 import MeiCatalogoProdutoModal from '../components/MeiCatalogoProdutoModal';
-import { listarCatalogoNfseProdutos, type NfseCatalogProduto } from '../services/meiNotasService';
+import MeiCatalogoDeleteProdutoConfirmDialog from '../components/MeiCatalogoDeleteProdutoConfirmDialog';
+import {
+  eliminarCatalogoNfseProduto,
+  listarCatalogoNfseProdutos,
+  type NfseCatalogProduto
+} from '../services/meiNotasService';
 import { formatBrlDisplay } from '../lib/formatMoneyPtBr';
 import { toast } from '../lib/toast';
 
@@ -24,6 +29,12 @@ function formatAliquotaLista(n: number | null | undefined): string {
   return `${n.toLocaleString('pt-BR', { maximumFractionDigits: 4 })} %`;
 }
 
+function ariaLabelExcluirItem(row: NfseCatalogProduto): string {
+  const preview = summarizeDiscriminacao(row.discriminacao);
+  const short = preview.length > 80 ? `${preview.slice(0, 77)}…` : preview;
+  return `Excluir item ${short} do catálogo`;
+}
+
 export default function MeiCatalogoServicosProdutos() {
   const [searchInput, setSearchInput] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
@@ -32,6 +43,11 @@ export default function MeiCatalogoServicosProdutos() {
   const [listError, setListError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<NfseCatalogProduto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<NfseCatalogProduto | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  /** UX spec §12.3: evita segundo DELETE antes do re-render com isDeleting (duplo clique rápido). */
+  const deleteRequestInFlightRef = useRef(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -64,6 +80,35 @@ export default function MeiCatalogoServicosProdutos() {
   const handleSaved = (kind: 'create' | 'edit') => {
     toast.success(kind === 'create' ? 'Item registado no catálogo.' : 'Item atualizado.');
     void loadProdutos();
+  };
+
+  const closeDeleteConfirm = () => {
+    if (deleteSubmitting) return;
+    setDeleteTarget(null);
+    setDeleteError(null);
+  };
+
+  const confirmDeleteProduto = async () => {
+    if (!deleteTarget || deleteRequestInFlightRef.current) return;
+    deleteRequestInFlightRef.current = true;
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+    try {
+      await eliminarCatalogoNfseProduto(deleteTarget.id);
+      toast.success('Item removido do catálogo.');
+      setDeleteTarget(null);
+      setDeleteError(null);
+      setModalOpen(false);
+      setEditing(null);
+      void loadProdutos();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Não foi possível eliminar o item.';
+      setDeleteError(msg);
+      toast.error(msg);
+    } finally {
+      deleteRequestInFlightRef.current = false;
+      setDeleteSubmitting(false);
+    }
   };
 
   const openCreate = () => {
@@ -173,14 +218,26 @@ export default function MeiCatalogoServicosProdutos() {
                   <dt className="text-slate-500 dark:text-slate-400">Código</dt>
                   <dd className="truncate">{row.codigo?.trim() ? row.codigo : '—'}</dd>
                 </dl>
-                <div className="mt-3 flex justify-end">
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                    className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-lg px-2 py-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
                     onClick={() => openEdit(row)}
                   >
                     <Pencil size={16} aria-hidden />
                     Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-lg px-2 py-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                    aria-label={ariaLabelExcluirItem(row)}
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleteTarget(row);
+                    }}
+                  >
+                    <Trash2 size={16} aria-hidden />
+                    Excluir
                   </button>
                 </div>
               </li>
@@ -207,7 +264,7 @@ export default function MeiCatalogoServicosProdutos() {
                   <th scope="col" className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">
                     Código
                   </th>
-                  <th scope="col" className="w-24 px-4 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">
+                  <th scope="col" className="min-w-[140px] px-4 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">
                     Ações
                   </th>
                 </tr>
@@ -242,6 +299,18 @@ export default function MeiCatalogoServicosProdutos() {
                         <Pencil size={16} aria-hidden />
                         Editar
                       </button>
+                      <button
+                        type="button"
+                        className="ml-1 inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                        aria-label={ariaLabelExcluirItem(row)}
+                        onClick={() => {
+                          setDeleteError(null);
+                          setDeleteTarget(row);
+                        }}
+                      >
+                        <Trash2 size={16} aria-hidden />
+                        Excluir
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -259,6 +328,21 @@ export default function MeiCatalogoServicosProdutos() {
         }}
         onSaved={handleSaved}
         editing={editing}
+        onRequestDelete={() => {
+          if (editing) {
+            setDeleteError(null);
+            setDeleteTarget(editing);
+          }
+        }}
+      />
+
+      <MeiCatalogoDeleteProdutoConfirmDialog
+        open={Boolean(deleteTarget)}
+        produto={deleteTarget}
+        isDeleting={deleteSubmitting}
+        errorMessage={deleteError}
+        onCancel={closeDeleteConfirm}
+        onConfirm={() => void confirmDeleteProduto()}
       />
     </PageShell>
   );

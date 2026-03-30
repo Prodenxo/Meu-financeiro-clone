@@ -1,23 +1,26 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const listarMock = vi.fn();
 const criarMock = vi.fn();
+const eliminarMock = vi.fn();
 
 vi.mock('../services/meiNotasService', () => ({
   listarCatalogoNfseClientes: (...args: unknown[]) => listarMock(...args),
   criarCatalogoNfseCliente: (...args: unknown[]) => criarMock(...args),
-  atualizarCatalogoNfseCliente: vi.fn()
+  atualizarCatalogoNfseCliente: vi.fn(),
+  eliminarCatalogoNfseCliente: (...args: unknown[]) => eliminarMock(...args)
 }));
 
 const toastSuccess = vi.fn();
+const toastError = vi.fn();
 
 vi.mock('../lib/toast', () => ({
   toast: {
     success: (...args: unknown[]) => toastSuccess(...args),
-    error: vi.fn(),
+    error: (...args: unknown[]) => toastError(...args),
     info: vi.fn()
   }
 }));
@@ -25,8 +28,13 @@ vi.mock('../lib/toast', () => ({
 import MeiCatalogoClientes from './MeiCatalogoClientes';
 
 describe('MeiCatalogoClientes', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    eliminarMock.mockResolvedValue(undefined);
     listarMock.mockResolvedValue([]);
     criarMock.mockResolvedValue({
       id: 'n1',
@@ -52,8 +60,8 @@ describe('MeiCatalogoClientes', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('Cliente Um')).toBeTruthy();
-    expect(screen.getByText('um@exemplo.com')).toBeTruthy();
+    expect((await screen.findAllByText('Cliente Um')).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('um@exemplo.com').length).toBeGreaterThanOrEqual(1);
     expect(listarMock).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 50, documentType: 'NFSE' })
     );
@@ -118,5 +126,170 @@ describe('MeiCatalogoClientes', () => {
     await waitFor(() => expect(criarMock).toHaveBeenCalled());
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Cliente registado.'));
     await waitFor(() => expect(listarMock.mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it('exclusão: abre confirmação, Cancelar não chama API', async () => {
+    listarMock.mockResolvedValue([
+      {
+        id: 'c-del-1',
+        nome: 'Cliente Excluir',
+        documento: '12345678000199',
+        email: null
+      }
+    ]);
+
+    render(
+      <MemoryRouter>
+        <MeiCatalogoClientes />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText('Cliente Excluir')).length).toBeGreaterThanOrEqual(1);
+    const excluir = screen.getAllByRole('button', {
+      name: /Excluir cliente Cliente Excluir do catálogo/i
+    })[0]!;
+    fireEvent.click(excluir);
+
+    const confirmDlg = await screen.findByTestId('mei-delete-cliente-confirm');
+    expect(within(confirmDlg).getByRole('heading', { name: /Excluir cliente do catálogo/i })).toBeTruthy();
+    fireEvent.click(within(confirmDlg).getByRole('button', { name: /^Cancelar$/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('mei-delete-cliente-confirm')).toBeNull();
+    });
+    expect(eliminarMock).not.toHaveBeenCalled();
+  });
+
+  it('exclusão: confirmar chama DELETE, toast e re-lista', async () => {
+    listarMock.mockResolvedValue([
+      {
+        id: 'c-del-2',
+        nome: 'Para Apagar',
+        documento: '11111111000191',
+        email: 'x@y.co'
+      }
+    ]);
+
+    render(
+      <MemoryRouter>
+        <MeiCatalogoClientes />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText('Para Apagar')).length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /Excluir cliente Para Apagar do catálogo/i })[0]!
+    );
+
+    const confirmDlg = await screen.findByTestId('mei-delete-cliente-confirm');
+    expect(within(confirmDlg).getByText(/Notas fiscais já emitidas não são anuladas/i)).toBeTruthy();
+
+    fireEvent.click(within(confirmDlg).getByRole('button', { name: /^Excluir do catálogo$/ }));
+
+    await waitFor(() => expect(eliminarMock).toHaveBeenCalledWith('c-del-2'));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Cliente removido do catálogo.'));
+    await waitFor(() => expect(listarMock.mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it('exclusão: erro de API mostra mensagem e toast.error', async () => {
+    eliminarMock.mockRejectedValueOnce(new Error('Registo não encontrado'));
+    listarMock.mockResolvedValue([
+      {
+        id: 'c-404',
+        nome: 'Fantasma',
+        documento: '12345678000199',
+        email: null
+      }
+    ]);
+
+    render(
+      <MemoryRouter>
+        <MeiCatalogoClientes />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText('Fantasma')).length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /Excluir cliente Fantasma do catálogo/i })[0]!
+    );
+    const confirmDlg = await screen.findByTestId('mei-delete-cliente-confirm');
+    fireEvent.click(within(confirmDlg).getByRole('button', { name: /^Excluir do catálogo$/ }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith('Registo não encontrado'));
+    await waitFor(() => {
+      expect(within(confirmDlg).getByRole('alert').textContent).toContain('Registo não encontrado');
+    });
+  });
+
+  it('exclusão: zona perigosa no modal edição abre o mesmo diálogo e confirma DELETE (mitigação QA)', async () => {
+    listarMock.mockResolvedValue([
+      {
+        id: 'c-modal-del',
+        nome: 'Editar E Apagar',
+        documento: '12345678000199',
+        email: 'e@a.co'
+      }
+    ]);
+
+    render(
+      <MemoryRouter>
+        <MeiCatalogoClientes />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText('Editar E Apagar')).length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Editar$/i })[0]!);
+
+    const editDialog = (
+      await screen.findAllByRole('dialog')
+    ).find((d) => within(d).queryByRole('heading', { name: /Editar cliente/i }));
+    expect(editDialog).toBeTruthy();
+
+    fireEvent.click(
+      within(editDialog!).getByRole('button', { name: /Excluir do catálogo/i })
+    );
+
+    const confirmDlg = await screen.findByTestId('mei-delete-cliente-confirm');
+    expect(within(confirmDlg).getByText(/Cliente: Editar E Apagar/i)).toBeTruthy();
+
+    fireEvent.click(within(confirmDlg).getByRole('button', { name: /^Excluir do catálogo$/ }));
+
+    await waitFor(() => expect(eliminarMock).toHaveBeenCalledWith('c-modal-del'));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Cliente removido do catálogo.'));
+    await waitFor(() => expect(screen.queryByTestId('mei-delete-cliente-confirm')).toBeNull());
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: /Editar cliente/i })).toBeNull();
+    });
+    await waitFor(() => expect(listarMock.mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it('exclusão: Esc no diálogo cancela sem chamar API', async () => {
+    listarMock.mockResolvedValue([
+      {
+        id: 'c-esc',
+        nome: 'Cliente Esc',
+        documento: '12345678000199',
+        email: null
+      }
+    ]);
+
+    render(
+      <MemoryRouter>
+        <MeiCatalogoClientes />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText('Cliente Esc')).length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /Excluir cliente Cliente Esc do catálogo/i })[0]!
+    );
+
+    const dlg = await screen.findByTestId('mei-delete-cliente-confirm');
+    fireEvent.keyDown(dlg, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('mei-delete-cliente-confirm')).toBeNull();
+    });
+    expect(eliminarMock).not.toHaveBeenCalled();
   });
 });

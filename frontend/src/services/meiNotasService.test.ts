@@ -18,8 +18,10 @@ import {
   listarCatalogoNfseProdutos,
   criarCatalogoNfseCliente,
   atualizarCatalogoNfseCliente,
+  eliminarCatalogoNfseCliente,
   criarCatalogoNfseProduto,
   atualizarCatalogoNfseProduto,
+  eliminarCatalogoNfseProduto,
   listarNotas,
   listarNfse,
   obterNota,
@@ -38,6 +40,7 @@ vi.mock('./apiClient', () => ({
     post: vi.fn(),
     get: vi.fn(),
     patch: vi.fn(),
+    delete: vi.fn(),
     postForm: vi.fn(),
     requestBlob: vi.fn()
   }
@@ -47,6 +50,7 @@ const mockedApiClient = apiClient as unknown as {
   post: Mock;
   get: Mock;
   patch: Mock;
+  delete: Mock;
   postForm: Mock;
   requestBlob: Mock;
 };
@@ -244,6 +248,14 @@ describe('meiNotasService', () => {
     expect(result).toEqual(updated);
   });
 
+  it('elimina cliente do catálogo com DELETE e id codificado', async () => {
+    mockedApiClient.delete.mockResolvedValueOnce(undefined);
+
+    await eliminarCatalogoNfseCliente('c/1');
+
+    expect(mockedApiClient.delete).toHaveBeenCalledWith('/mei-notas/catalogo/clientes/c%2F1');
+  });
+
   it('cria produto no catálogo NFS-e com corpo alinhado ao backend', async () => {
     const created = {
       id: 'p-new',
@@ -291,6 +303,14 @@ describe('meiNotasService', () => {
       valor_sugerido: null
     });
     expect(result).toEqual(updated);
+  });
+
+  it('elimina produto do catálogo com DELETE e id codificado', async () => {
+    mockedApiClient.delete.mockResolvedValueOnce(undefined);
+
+    await eliminarCatalogoNfseProduto('p/1');
+
+    expect(mockedApiClient.delete).toHaveBeenCalledWith('/mei-notas/catalogo/produtos/p%2F1');
   });
 
   it('obtem NFSe com query sync=true quando solicitado', async () => {

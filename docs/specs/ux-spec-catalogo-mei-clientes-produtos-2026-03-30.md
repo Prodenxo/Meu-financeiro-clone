@@ -1,6 +1,6 @@
 # Especificação de front-end e UX — Catálogo MEI (clientes e serviços/produtos)
 
-**Versão:** 1.0  
+**Versão:** 1.1  
 **Data:** 2026-03-30  
 **Autoria:** Uma (UX / design system — fluxo AIOX)  
 **Requisitos de origem:** [`docs/prd/PRD-catalogo-clientes-servicos-produtos-mei-2026-03-30.md`](../prd/PRD-catalogo-clientes-servicos-produtos-mei-2026-03-30.md)  
@@ -132,10 +132,11 @@ Alinhado à decisão de produto do PRD (ocultar + bloquear):
 - Ilustração ou ícone leve + título *“Ainda não há clientes no catálogo”* + CTA **Novo cliente** (análogo para produtos).  
 - Microcopy opcional: *“Os dados aparecem aqui e na emissão de NFS-e.”*
 
-### 6.4 Ações por linha (MVP)
+### 6.4 Ações por linha (MVP listagem + extensão exclusão)
 
-- **Editar** apenas (sem eliminar — PRD MVP). Ícone `Pencil` + texto em desktop se couber.  
-- Área clicável mínima 44×44 px em *touch*.
+- **Editar:** ícone `Pencil` + texto em desktop se couber.  
+- **Excluir** (fase 2 — PRD + UX): ver [`ux-spec-catalogo-mei-exclusao-2026-03-30.md`](ux-spec-catalogo-mei-exclusao-2026-03-30.md) (diálogo de confirmação, *copy* fiscal, lista e modal).  
+- Área clicável mínima 44×44 px em *touch* por ação.
 
 ### 6.5 Modal criar / editar
 
@@ -256,6 +257,7 @@ Ajustar tom com *content design* / PO se houver guia de voz.
 | Versão | Data | Notas |
 |--------|------|--------|
 | 1.0 | 2026-03-30 | Versão inicial a partir do PRD de catálogo MEI. |
+| 1.1 | 2026-03-30 | §6.4 — ponte para spec de **exclusão** [`ux-spec-catalogo-mei-exclusao-2026-03-30.md`](ux-spec-catalogo-mei-exclusao-2026-03-30.md). |
 
 ---
 

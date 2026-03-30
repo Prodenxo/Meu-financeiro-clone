@@ -80,6 +80,33 @@ describe('MeiCatalogoProdutoModal', () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
+  it('edição com onRequestDelete mostra zona perigosa e dispara callback', async () => {
+    const onRequestDelete = vi.fn();
+    const editing = {
+      id: 'p1',
+      discriminacao: 'Serviço',
+      codigo: '',
+      cnae: '',
+      aliquota: null as number | null,
+      valor_sugerido: null as number | null
+    };
+
+    render(
+      <MeiCatalogoProdutoModal
+        open
+        editing={editing}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        onRequestDelete={onRequestDelete}
+      />
+    );
+
+    const dialog = screen.getAllByRole('dialog')[0]!;
+    expect(within(dialog).getByText(/Eliminar do catálogo/i)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: /Excluir do catálogo/i }));
+    expect(onRequestDelete).toHaveBeenCalled();
+  });
+
   it('edição chama PATCH com campos', async () => {
     atualizarMock.mockResolvedValue({ id: 'p1', discriminacao: 'Novo' });
     const onSaved = vi.fn();

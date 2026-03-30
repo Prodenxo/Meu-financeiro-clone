@@ -205,6 +205,24 @@ export const atualizarCatalogoProduto = async (req, res, next) => {
   }
 };
 
+export const eliminarCatalogoCliente = async (req, res, next) => {
+  try {
+    await meiNotasService.eliminarCatalogoCliente(req.user.id, req.params.id);
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const eliminarCatalogoProduto = async (req, res, next) => {
+  try {
+    await meiNotasService.eliminarCatalogoProduto(req.user.id, req.params.id);
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const atualizar = async (req, res, next) => {
   try {
     const data = await meiNotasService.atualizarNota(req.user.id, req.params.id, req.body);

@@ -37,9 +37,11 @@ router.get('/relatorio/nfe', requireAuth, requireMeiEnabled, controller.relatori
 router.get('/catalogo/clientes', requireAuth, requireMeiEnabled, controller.listarCatalogoClientes);
 router.post('/catalogo/clientes', requireAuth, requireMeiEnabled, controller.criarCatalogoCliente);
 router.patch('/catalogo/clientes/:id', requireAuth, requireMeiEnabled, controller.atualizarCatalogoCliente);
+router.delete('/catalogo/clientes/:id', requireAuth, requireMeiEnabled, controller.eliminarCatalogoCliente);
 router.get('/catalogo/produtos', requireAuth, requireMeiEnabled, controller.listarCatalogoProdutos);
 router.post('/catalogo/produtos', requireAuth, requireMeiEnabled, controller.criarCatalogoProduto);
 router.patch('/catalogo/produtos/:id', requireAuth, requireMeiEnabled, controller.atualizarCatalogoProduto);
+router.delete('/catalogo/produtos/:id', requireAuth, requireMeiEnabled, controller.eliminarCatalogoProduto);
 router.patch('/:id', requireAuth, requireMeiEnabled, controller.atualizar);
 router.post('/:id/cancelar', requireAuth, requireMeiEnabled, controller.cancelar);
 router.post('/:id/arquivar', requireAuth, requireMeiEnabled, controller.arquivar);

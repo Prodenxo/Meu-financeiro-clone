@@ -6,12 +6,19 @@ import {
   moneyDigitsFromNumber,
   parseMoneyInputToNumber
 } from '../lib/formatMoneyPtBr';
+import {
+  MEI_CATALOGO_DELETE_PRODUTO_DANGER_CTA,
+  MEI_CATALOGO_DELETE_PRODUTO_DANGER_HEADING,
+  MEI_CATALOGO_DELETE_PRODUTO_DANGER_HINT
+} from '../copy/meiCatalogoProdutoDelete';
 
 export interface MeiCatalogoProdutoModalProps {
   open: boolean;
   onClose: () => void;
   onSaved: (kind: 'create' | 'edit') => void;
   editing: NfseCatalogProduto | null;
+  /** Modo edição: abre o diálogo de confirmação de exclusão (controlado pelo pai). */
+  onRequestDelete?: () => void;
 }
 
 type FieldKey = 'discriminacao' | 'codigo' | 'cnae' | 'aliquota' | 'valor_sugerido';
@@ -33,7 +40,8 @@ export default function MeiCatalogoProdutoModal({
   open,
   onClose,
   onSaved,
-  editing
+  editing,
+  onRequestDelete
 }: MeiCatalogoProdutoModalProps) {
   const [discriminacao, setDiscriminacao] = useState('');
   const [codigo, setCodigo] = useState('');
@@ -311,6 +319,25 @@ export default function MeiCatalogoProdutoModal({
               </p>
             ) : null}
           </div>
+
+          {isEdit && onRequestDelete ? (
+            <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                {MEI_CATALOGO_DELETE_PRODUTO_DANGER_HEADING}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {MEI_CATALOGO_DELETE_PRODUTO_DANGER_HINT}
+              </p>
+              <button
+                type="button"
+                className="mt-3 inline-flex min-h-[44px] items-center rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                onClick={onRequestDelete}
+                disabled={saving}
+              >
+                {MEI_CATALOGO_DELETE_PRODUTO_DANGER_CTA}
+              </button>
+            </div>
+          ) : null}
 
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className="planner-button-secondary-compact" onClick={onClose} disabled={saving}>

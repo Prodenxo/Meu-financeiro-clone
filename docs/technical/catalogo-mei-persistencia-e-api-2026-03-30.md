@@ -1,9 +1,9 @@
 # Catálogo MEI (NFS-e) — persistência e contrato API de escrita
 
-**Versão:** 1.0  
+**Versão:** 1.1  
 **Data:** 2026-03-30  
 **Spike:** STORY-CAT-MEI-01  
-**Estado:** canónico para CAT-MEI-02 … CAT-MEI-05 até nova ADR rever.
+**Estado:** canónico para CAT-MEI-02 … CAT-MEI-08 (DELETE em §7.5) até nova ADR rever.
 
 ---
 
@@ -15,7 +15,7 @@
 | A emissão alimenta o catálogo? | **Sim.** Após `emitirNota`, o serviço chama `upsertClienteCatalogo` e `upsertProdutosCatalogo` (best-effort; falhas só geram `console.warn`). |
 | POST/PATCH dedicados existem hoje? | **Não.** Apenas `GET /api/mei-notas/catalogo/clientes` e `GET /api/mei-notas/catalogo/produtos`. |
 | **Go** para implementar CRUD app-side? | **Sim (go).** Escrita pode ser implementada **no backend** com **service role** Supabase nas mesmas tabelas, espelhando validações de domínio e `dedupe_key`, **sem** depender de API de catálogo do provedor fiscal. |
-| DELETE no MVP? | **Não** no produto (PRD). Tecnicamente: não há política RLS `DELETE` nas tabelas; o cliente **service role** pode executar `DELETE` SQL se a equipa adicionar rota e política/revisão de segurança numa fase posterior. |
+| DELETE no MVP? | **Fase 2 (CAT-MEI-06):** rotas `DELETE` autenticadas no backend com **service role**; sem FK de `mei_nfse` para `id` do catálogo (notas usam `payload_json`, sem referência relacional) — **hard delete** aprovado no gate 2026-03-30. RLS continua sem política `DELETE` para PostgREST direto. |
 
 ---
 
@@ -139,7 +139,7 @@ A **prefeitura/provedor** pode exigir campos adicionais no **payload de emissão
 
 ---
 
-## 7. Contrato REST proposto (implementação CAT-MEI-02)
+## 7. Contrato REST proposto (implementação CAT-MEI-02 + CAT-MEI-06)
 
 **Prefixo:** `/api/mei-notas` (já montado em `backend/src/routes/index.js`).
 
@@ -147,12 +147,30 @@ A **prefeitura/provedor** pode exigir campos adicionais no **payload de emissão
 |--------|---------|-----------|
 | `POST` | `/catalogo/clientes` | Cria ou substitui por `dedupe_key` implícito (mesma lógica que upsert emissão). |
 | `PATCH` | `/catalogo/clientes/:id` | Atualiza campos permitidos do registo do `user_id` da sessão. |
+| `DELETE` | `/catalogo/clientes/:id` | Remove o registo **se** `id` existir e `user_id` coincidir com a sessão. Ver semântica §7.5. |
 | `POST` | `/catalogo/produtos` | Cria linha com `dedupe_key` servidor (`manual:uuid`). |
 | `PATCH` | `/catalogo/produtos/:id` | Atualiza campos permitidos. |
-
-**Não proposto no MVP:** `DELETE` (produto/PRD).  
+| `DELETE` | `/catalogo/produtos/:id` | Igual ao DELETE de clientes (§7.5). |
 
 **Query params dos GET:** mantidos (`q`, `limit`, `documentType`).
+
+### 7.5 Semântica `DELETE` (CAT-MEI-06)
+
+- **Autenticação:** `requireAuth` + `requireMeiEnabled`, como nos outros verbos de catálogo.
+- **Resposta:** **`204 No Content`** sem corpo quando:
+  - a linha foi apagada neste pedido, ou
+  - já não existia para este utilizador (**idempotência** — segundo `DELETE` no mesmo `id` após sucesso).
+- **`404`:** quando existe linha com o `id` pedido mas pertencente a **outro** `user_id` (mensagem genérica *não encontrado*, sem vazar existência alheia).
+- **`400`:** `:id` vazio ou não UUID v4/válido conforme validação do serviço.
+- **Persistência:** `DELETE` SQL com filtro `id` + `user_id` da sessão (service role).
+
+### 7.6 Exemplo `DELETE /catalogo/clientes/:id`
+
+**Pedido:** sem corpo.
+
+**Resposta:** `204` (sucesso ou idempotente).
+
+**Erros:** `400` id inválido; `401`/`403`; `404` registo de outro utilizador.
 
 ### 7.1 Exemplo `POST /catalogo/clientes`
 
@@ -227,6 +245,7 @@ Regra: não permitir PATCH que viole `documento` 11/14 ou `dedupe_key` duplicado
 | Tópico | Ficheiro |
 |--------|----------|
 | Listagem catálogo | `backend/src/services/mei-notas.service.js` — `listarCatalogoClientes`, `listarCatalogoProdutos` |
+| DELETE catálogo | `mei-notas.service.js` — `eliminarCatalogoCliente`, `eliminarCatalogoProduto` |
 | Upsert pós-emissão | `mei-notas.service.js` — `upsertClienteCatalogo`, `upsertProdutosCatalogo`, `buildClienteCatalogEntry`, `buildProdutoCatalogEntries` |
 | Rotas GET | `backend/src/routes/mei-notas.routes.js` |
 | Schema | `supabase/migrations/20260312103000_create_mei_nfse_catalog_tables.sql`, `20260312114000_add_document_type_to_mei_nfse_catalog.sql` |
@@ -238,3 +257,4 @@ Regra: não permitir PATCH que viole `documento` 11/14 ou `dedupe_key` duplicado
 | Versão | Data | Autor | Descrição |
 |--------|------|-------|-----------|
 | 1.0 | 2026-03-30 | Dex (dev) / spike CAT-MEI-01 | Primeira versão após análise do código e migrações. |
+| 1.1 | 2026-03-30 | CAT-MEI-06 | Contrato `DELETE` clientes/produtos; gate schema (sem FK `mei_nfse` → catálogo); §7.5–7.6. |

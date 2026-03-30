@@ -1109,8 +1109,14 @@ export const listarCatalogoProdutos = async (
   return data || [];
 };
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const ensureCatalogRecordId = (id) => {
-  if (!id || !String(id).trim()) throw badRequest('ID do registo do catálogo é obrigatório');
+  const raw = id != null ? String(id).trim() : '';
+  if (!raw) throw badRequest('ID do registo do catálogo é obrigatório');
+  if (!UUID_RE.test(raw)) throw badRequest('ID do registo do catálogo inválido');
+  return raw;
 };
 
 const findCatalogCliente = async (userId, id) => {
@@ -1212,7 +1218,7 @@ export const criarCatalogoCliente = async (userId, body = {}) => {
  * PATCH catálogo cliente — apenas nome, email, metadata_json (documento e dedupe_key imutáveis).
  */
 export const atualizarCatalogoCliente = async (userId, id, body = {}) => {
-  ensureCatalogRecordId(id);
+  const recordId = ensureCatalogRecordId(id);
   if (body.documento !== undefined || body.document_type !== undefined || body.documentType !== undefined) {
     throw badRequest(
       'Não é permitido alterar documento ou tipo de documento via PATCH; crie um novo registo se o documento mudou.'
@@ -1222,7 +1228,7 @@ export const atualizarCatalogoCliente = async (userId, id, body = {}) => {
     throw badRequest('Não é permitido alterar dedupe_key');
   }
 
-  await findCatalogCliente(userId, id);
+  await findCatalogCliente(userId, recordId);
 
   const updates = {};
   if (body.nome !== undefined) {
@@ -1259,7 +1265,7 @@ export const atualizarCatalogoCliente = async (userId, id, body = {}) => {
   const { data, error } = await dbClient
     .from(CLIENTS_TABLE)
     .update(updates)
-    .eq('id', id)
+    .eq('id', recordId)
     .eq('user_id', userId)
     .select('id, document_type, documento, nome, email, metadata_json, last_used_at, created_at, updated_at')
     .single();
@@ -1322,12 +1328,12 @@ export const criarCatalogoProduto = async (userId, body = {}) => {
  * PATCH catálogo produto — não altera dedupe_key nem document_type.
  */
 export const atualizarCatalogoProduto = async (userId, id, body = {}) => {
-  ensureCatalogRecordId(id);
+  const recordId = ensureCatalogRecordId(id);
   if (body.dedupe_key !== undefined || body.document_type !== undefined || body.documentType !== undefined) {
     throw badRequest('Não é permitido alterar dedupe_key ou document_type');
   }
 
-  await findCatalogProduto(userId, id);
+  await findCatalogProduto(userId, recordId);
 
   const updates = {};
   if (body.codigo !== undefined) {
@@ -1367,7 +1373,7 @@ export const atualizarCatalogoProduto = async (userId, id, body = {}) => {
   const { data, error } = await dbClient
     .from(PRODUCTS_TABLE)
     .update(updates)
-    .eq('id', id)
+    .eq('id', recordId)
     .eq('user_id', userId)
     .select(
       'id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, dedupe_key, last_used_at, created_at, updated_at'
@@ -1375,6 +1381,60 @@ export const atualizarCatalogoProduto = async (userId, id, body = {}) => {
     .single();
   if (error) throw badRequest(error.message);
   return data;
+};
+
+/**
+ * DELETE catálogo cliente — 204 sempre que o estado final for “ausente para este utilizador”;
+ * 404 apenas se existir linha com o id mas pertencente a outro utilizador.
+ * Segundo DELETE (idempotente): 204.
+ */
+export const eliminarCatalogoCliente = async (userId, id) => {
+  const recordId = ensureCatalogRecordId(id);
+  const dbClient = getDb();
+  const { data: removed, error } = await dbClient
+    .from(CLIENTS_TABLE)
+    .delete()
+    .eq('id', recordId)
+    .eq('user_id', userId)
+    .select('id');
+  if (error) throw badRequest(error.message);
+  if (removed && removed.length > 0) return;
+
+  const { data: anyRow, error: errLookup } = await dbClient
+    .from(CLIENTS_TABLE)
+    .select('id, user_id')
+    .eq('id', recordId)
+    .maybeSingle();
+  if (errLookup) throw badRequest(errLookup.message);
+  if (anyRow && anyRow.user_id !== userId) {
+    throw notFound('Cliente do catálogo não encontrado');
+  }
+};
+
+/**
+ * DELETE catálogo produto — mesma semântica que {@link eliminarCatalogoCliente}.
+ */
+export const eliminarCatalogoProduto = async (userId, id) => {
+  const recordId = ensureCatalogRecordId(id);
+  const dbClient = getDb();
+  const { data: removed, error } = await dbClient
+    .from(PRODUCTS_TABLE)
+    .delete()
+    .eq('id', recordId)
+    .eq('user_id', userId)
+    .select('id');
+  if (error) throw badRequest(error.message);
+  if (removed && removed.length > 0) return;
+
+  const { data: anyRow, error: errLookup } = await dbClient
+    .from(PRODUCTS_TABLE)
+    .select('id, user_id')
+    .eq('id', recordId)
+    .maybeSingle();
+  if (errLookup) throw badRequest(errLookup.message);
+  if (anyRow && anyRow.user_id !== userId) {
+    throw notFound('Item do catálogo não encontrado');
+  }
 };
 
 export const obterNota = async (userId, id, { sync = false } = {}) => {

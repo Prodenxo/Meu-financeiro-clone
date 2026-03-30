@@ -694,6 +694,7 @@ export default function GuidesMei() {
     }
   }, [activeWorkspace, canViewNfse, loadNfseCatalog]);
 
+  /** FR-CAT-12 / paridade pós-CAT-MEI-07 e CAT-MEI-08: exclusões de clientes ou itens noutra rota reflectem-se nos atalhos ao regressar ao separador NFS-e ou ao foco do separador (visibility). */
   useEffect(() => {
     if (!canViewNfse) return;
     const onVis = () => {
