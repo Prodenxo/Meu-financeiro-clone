@@ -1319,7 +1319,7 @@ export default function AdminUserData() {
             <div className="admin-section-card">
               <div className="admin-section-header">
                 <div>
-                  <h2 className="admin-section-title">Notas fiscais (Plugnotas)</h2>
+                  <h2 className="admin-section-title">Notas fiscais</h2>
                   <p className="admin-section-subtitle">
                     A lista pode trazer NFSe, NF-e ou NFC-e conforme o histórico no emissor; o envio por este painel é
                     apenas NFSe. Status indica criação, cancelamento ou erro.
@@ -1416,7 +1416,7 @@ export default function AdminUserData() {
                   </h2>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     Emissão em nome do usuário selecionado (NFSe). Preencha tomador e serviço.
-                    Rejeições após o envio refletem o retorno do provedor de emissão fiscal (Plugnotas).
+                    Rejeições após o envio refletem o retorno do provedor de emissão fiscal.
                   </p>
                   {emitirNotaError ? (
                     <EmissaoFiscalErrorAlertModal documentTypeLabel="NFSe" message={emitirNotaError} />

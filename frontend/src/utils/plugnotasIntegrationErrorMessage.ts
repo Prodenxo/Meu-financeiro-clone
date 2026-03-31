@@ -9,7 +9,7 @@ export function formatPlugnotasIntegrationError(message: string): string {
     && (lower.includes('empresa') || lower.includes('parâmetros') || lower.includes('parametros'))
   ) {
     return (
-      'O Plugnotas não encontrou cadastro desta empresa para o seu token. '
+      'O emissor fiscal não encontrou cadastro desta empresa para o seu token. '
       + 'Cadastre primeiro enviando o certificado (.pfx) e os dados na guia; depois use "Atualizar cadastro (sem novo certificado)" se precisar. '
       + 'Verifique também se o ambiente (sandbox/produção) e o token coincidem com a conta onde o CNPJ está registrado. '
       + `[Detalhe do emissor: ${message}]`
@@ -21,7 +21,7 @@ export function formatPlugnotasIntegrationError(message: string): string {
     && (lower.includes('serviço') || lower.includes('servico'))
   ) {
     return (
-      'O provedor Plugnotas recusou a chamada (URL base ou ambiente incorreto). '
+      'O provedor de emissão fiscal recusou a chamada (URL base ou ambiente incorreto). '
       + 'Confira no servidor se PLUGNOTAS_API_BASE_URL e PLUGNOTAS_API_KEY são do mesmo ambiente (sandbox ou produção). '
       + message
     );

@@ -207,7 +207,7 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
 
     expect(container.textContent).not.toContain('Servidor ou conexão indisponível');
     expect(container.textContent).toContain('Falha na validação: certificado rejeitado pelo serviço.');
-    expect(container.textContent).toContain('Plugnotas');
+    expect(container.textContent).toContain('provedor de emissão fiscal');
 
     await act(async () => {
       root.unmount();
@@ -470,7 +470,7 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     expect(cadastrarCertificadoEmissaoNfMock).toHaveBeenCalled();
     expect(container.textContent).not.toContain('Servidor ou conexão indisponível');
     expect(container.textContent).toContain('CNPJ no formulário');
-    expect(container.textContent).toContain('app2.plugnotas.com.br');
+    expect(container.textContent).toContain('provedor fiscal');
     expect(container.textContent).toContain('Saiba mais');
     expect(container.querySelector('a[href="/guia-mei-certificado-409-sem-id.html"]')).toBeTruthy();
 
@@ -527,6 +527,7 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
       'Razão social *',
       'Nome fantasia (opcional)',
       'Email fiscal (opcional)',
+      'Inscrição municipal (se exigida pelo município)',
       '__select__',
       'CEP *',
       'Tipo logradouro',

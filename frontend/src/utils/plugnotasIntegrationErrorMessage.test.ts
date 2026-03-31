@@ -10,7 +10,7 @@ describe('formatPlugnotasIntegrationError', () => {
   it('enriquece quando API diz não localizar empresa', () => {
     const msg = 'Não localizamos qualquer Empresa com os parâmetros informados';
     const out = formatPlugnotasIntegrationError(msg);
-    expect(out).toContain('Plugnotas');
+    expect(out).toContain('emissor fiscal');
     expect(out).toContain(msg);
   });
 

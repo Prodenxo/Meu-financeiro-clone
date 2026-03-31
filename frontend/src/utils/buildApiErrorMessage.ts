@@ -29,7 +29,7 @@ export function buildApiErrorMessage(payload: ApiErrorPayload | null | undefined
   }
   const pr = payload?.errors?.plugnotasRequest;
   if (pr && typeof pr.method === 'string' && typeof pr.path === 'string') {
-    return `${text} (${pr.method} ${pr.path} no Plugnotas)`;
+    return `${text} (${pr.method} ${pr.path} no emissor fiscal)`;
   }
   const attempts = payload?.errors?.plugnotasUpdateAttempts;
   if (Array.isArray(attempts) && attempts.length > 0) {
@@ -41,7 +41,7 @@ export function buildApiErrorMessage(payload: ApiErrorPayload | null | undefined
         return `${m} ${p} → HTTP ${st}`;
       })
       .join('; ');
-    return `${text} [Tentativas Plugnotas: ${summary}]`;
+    return `${text} [Tentativas do emissor: ${summary}]`;
   }
   return text;
 }
