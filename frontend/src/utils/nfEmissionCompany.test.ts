@@ -29,7 +29,7 @@ describe('nfEmissionCompany', () => {
     ).toContain('razão social');
   });
 
-  it('buildNfEmissionEmpresaPayload não envia inscrição municipal; inclui IE e nfe/nfce inativos sem config (apenas NFS-e)', () => {
+  it('buildNfEmissionEmpresaPayload omite inscrição municipal quando vazia; inclui IE e nfe/nfce inativos sem config (apenas NFS-e)', () => {
     const form = fullValidForm();
     const payload = buildNfEmissionEmpresaPayload({
       cnpj: '12345678000190',
@@ -48,6 +48,12 @@ describe('nfEmissionCompany', () => {
     expect('config' in nfe).toBe(false);
     const nfse = payload.nfse as Record<string, unknown>;
     expect(nfse[PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
+  });
+
+  it('buildNfEmissionEmpresaPayload envia inscrição municipal quando preenchida', () => {
+    const form = { ...fullValidForm(), inscricaoMunicipal: '12345' };
+    const payload = buildNfEmissionEmpresaPayload({ cnpj: '12345678000190', form });
+    expect(payload.inscricaoMunicipal).toBe('12345');
   });
 
   it('buildNfEmissionEmpresaPayload sempre envia IE pela política MEI e omite certificado no PATCH', () => {
