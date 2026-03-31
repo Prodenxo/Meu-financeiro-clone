@@ -44,16 +44,17 @@ import {
   type NfEmissionRegimeTributario
 } from '../utils/nfEmissionCompany';
 import { isFetchConnectivityFailure } from '../utils/isFetchConnectivityFailure';
-import { getPlugnotasCodeFromUnknownError } from '../utils/apiClientError';
-import { formatPlugnotasIntegrationError } from '../utils/plugnotasIntegrationErrorMessage';
+import { getPlugnotasCodeFromUnknownError as getFiscalErrorCode } from '../utils/apiClientError';
+import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
+import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
 import {
   EmissaoFiscalErrorAlert,
   GuiaMeiCertificateConnectivityPanel,
   GuiaMeiEmpresaCadastroErrorPanel,
   LongFiscalErrorMessage,
-  PlugnotasIntegrationErrorAlert
+  PlugnotasIntegrationErrorAlert as FiscalProviderErrorAlert
 } from '../components/FiscalIntegrationErrorAlert';
 import type { GuidesMeiWorkspace } from './guidesMeiWorkspaceStorage';
 import {
@@ -375,7 +376,7 @@ export default function GuidesMei() {
   const [selectedMonth, setSelectedMonth] = useState<string>(defaultPeriod.month);
   const [periodError, setPeriodError] = useState<string | null>(null);
   const [certificateError, setCertificateError] = useState<string | null>(null);
-  const [certificateErrorPlugnotasCode, setCertificateErrorPlugnotasCode] = useState<string | null>(null);
+  const [certificateErrorFiscalCode, setCertificateErrorFiscalCode] = useState<string | null>(null);
   const [certificateConnectivityAlert, setCertificateConnectivityAlert] = useState(false);
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [certificatePassword, setCertificatePassword] = useState('');
@@ -432,12 +433,12 @@ export default function GuidesMei() {
   }, []);
 
   const setEmissionNfseError = useCallback((raw: string) => {
-    setNfseError(formatPlugnotasIntegrationError(raw));
+    setNfseError(formatFiscalError(raw));
     setNfseErrorKind('emission');
   }, []);
 
   const setOperationNfseError = useCallback((raw: string) => {
-    setNfseError(formatPlugnotasIntegrationError(raw));
+    setNfseError(formatFiscalError(raw));
     setNfseErrorKind('operation');
   }, []);
   const [nfseCatalogLoading, setNfseCatalogLoading] = useState(false);
@@ -468,6 +469,10 @@ export default function GuidesMei() {
   const [nfEmissionCompanySyncLoading, setNfEmissionCompanySyncLoading] = useState<'consult' | 'patch' | null>(null);
   const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<string | null>(null);
   const [nfEmissionCompanySyncSuccess, setNfEmissionCompanySyncSuccess] = useState<string | null>(null);
+  const [brasilApiLoading, setBrasilApiLoading] = useState(false);
+  const [brasilApiError, setBrasilApiError] = useState<string | null>(null);
+  const [nfsePrestadorBrasilApiLoading, setNfsePrestadorBrasilApiLoading] = useState(false);
+  const [nfsePrestadorBrasilApiError, setNfsePrestadorBrasilApiError] = useState<string | null>(null);
   /** Após PATCH emitente: opt-in para alinhar o formulário NFS-e ao snapshot guardado (mitigação QA FR-AP-02). */
   const [nfseEmitentePendingApply, setNfseEmitentePendingApply] = useState<NfseEmitenteSnapshot | null>(null);
   /** FR-P04 Story 2.3: uma tentativa de BFF prefill no separador NFSe; não sobrescrever após edição do prestador. */
@@ -601,7 +606,7 @@ export default function GuidesMei() {
       setNfseCatalogProdutos(produtos || []);
     } catch (error) {
       setNfseCatalogError(
-        formatPlugnotasIntegrationError(
+        formatFiscalError(
           error instanceof Error ? error.message : 'Erro ao carregar catálogo fiscal.'
         )
       );
@@ -857,14 +862,14 @@ export default function GuidesMei() {
   const handleCertificateUpload = async () => {
     if (!certificateFile) {
       setCertificateConnectivityAlert(false);
-      setCertificateErrorPlugnotasCode(null);
+      setCertificateErrorFiscalCode(null);
       setCertificateError('Selecione o arquivo do certificado.');
       return;
     }
     const trimmedPassword = certificatePassword.trim();
     if (!trimmedPassword) {
       setCertificateConnectivityAlert(false);
-      setCertificateErrorPlugnotasCode(null);
+      setCertificateErrorFiscalCode(null);
       setCertificateError('Informe a senha do certificado.');
       return;
     }
@@ -872,14 +877,14 @@ export default function GuidesMei() {
       const companyValidationMessage = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
       if (companyValidationMessage) {
         setCertificateConnectivityAlert(false);
-        setCertificateErrorPlugnotasCode(null);
+        setCertificateErrorFiscalCode(null);
         setCertificateError(companyValidationMessage);
         return;
       }
     }
 
     setCertificateError(null);
-    setCertificateErrorPlugnotasCode(null);
+    setCertificateErrorFiscalCode(null);
     setCertificateConnectivityAlert(false);
     setCertificateSuccess(null);
     setIsUploadingCert(true);
@@ -971,17 +976,17 @@ export default function GuidesMei() {
         ].filter(Boolean).join(' ')
       );
     } catch (error) {
-      // Rede até o backend: upload MEI, POST certificado Plugnotas ou cadastro empresa no mesmo try (US-CONN-MEI-03 / US-MEI-FISC-01).
+      // Rede até o backend: upload MEI, POST certificado fiscal ou cadastro empresa no mesmo try (US-CONN-MEI-03 / US-MEI-FISC-01).
       if (isFetchConnectivityFailure(error)) {
         setCertificateConnectivityAlert(true);
         setCertificateError(null);
-        setCertificateErrorPlugnotasCode(null);
+        setCertificateErrorFiscalCode(null);
       } else {
         setCertificateConnectivityAlert(false);
-        const fallbackMessage = formatPlugnotasIntegrationError(
+        const fallbackMessage = formatFiscalError(
           error instanceof Error ? error.message : 'Erro ao enviar certificado.'
         );
-        setCertificateErrorPlugnotasCode(getPlugnotasCodeFromUnknownError(error));
+        setCertificateErrorFiscalCode(getFiscalErrorCode(error));
         setCertificateError(
           uploadedToMei
             ? `Certificado enviado no MEI, mas falhou a configuração automática da integração fiscal: ${fallbackMessage}`
@@ -1033,7 +1038,7 @@ export default function GuidesMei() {
       );
     } catch (error) {
       setNfEmissionCompanySyncError(
-        formatPlugnotasIntegrationError(
+        formatFiscalError(
           error instanceof Error
             ? error.message
             : 'Falha ao consultar cadastro no serviço de emissão fiscal.'
@@ -1089,7 +1094,7 @@ export default function GuidesMei() {
       );
     } catch (error) {
       setNfEmissionCompanySyncError(
-        formatPlugnotasIntegrationError(
+        formatFiscalError(
           error instanceof Error
             ? error.message
             : 'Falha ao atualizar empresa no serviço de emissão fiscal.'
@@ -1100,9 +1105,31 @@ export default function GuidesMei() {
     }
   };
 
+  const handleSalvarDadosEmitente = async () => {
+    setNfEmissionCompanySyncError(null);
+    setNfEmissionCompanySyncSuccess(null);
+    setNfEmissionCompanySyncLoading('patch');
+    try {
+      const updatedStatus = await patchMeiCertificateEmitenteNfse(
+        nfEmissionFormToPersistBody(nfEmissionCompanyForm)
+      );
+      if (updatedStatus?.nfseEmitente) {
+        setNfEmissionCompanyForm(emitenteSnapshotToForm(updatedStatus.nfseEmitente));
+        nfseEmitenteHydratedRef.current = true;
+      }
+      setNfEmissionCompanySyncSuccess('Dados do emitente salvos com sucesso.');
+    } catch (error) {
+      setNfEmissionCompanySyncError(
+        error instanceof Error ? error.message : 'Falha ao salvar dados do emitente.'
+      );
+    } finally {
+      setNfEmissionCompanySyncLoading(null);
+    }
+  };
+
   const handleCertificateRemove = async () => {
     setCertificateError(null);
-    setCertificateErrorPlugnotasCode(null);
+    setCertificateErrorFiscalCode(null);
     setCertificateConnectivityAlert(false);
     setCertificateSuccess(null);
     setIsRemovingCert(true);
@@ -1123,10 +1150,10 @@ export default function GuidesMei() {
       if (isFetchConnectivityFailure(error)) {
         setCertificateConnectivityAlert(true);
         setCertificateError(null);
-        setCertificateErrorPlugnotasCode(null);
+        setCertificateErrorFiscalCode(null);
       } else {
         setCertificateConnectivityAlert(false);
-        setCertificateErrorPlugnotasCode(null);
+        setCertificateErrorFiscalCode(null);
         setCertificateError(error instanceof Error ? error.message : 'Erro ao remover certificado.');
       }
     } finally {
@@ -1159,6 +1186,89 @@ export default function GuidesMei() {
       setValidationError(error instanceof Error ? error.message : 'Erro ao validar CNPJ.');
     } finally {
       setIsValidating(false);
+    }
+  };
+
+  const mergeIfEmpty = <T extends Record<string, unknown>>(current: T, incoming: Partial<T>): T => {
+    const result = { ...current };
+    for (const key of Object.keys(incoming) as (keyof T)[]) {
+      const val = incoming[key];
+      if (val !== undefined && val !== null && String(val).trim() !== '' && !String(current[key] ?? '').trim()) {
+        (result as Record<keyof T, unknown>)[key] = val;
+      }
+    }
+    return result;
+  };
+
+  const applyBrasilApiToEmitente = (data: BrasilApiCnpjResponse) => {
+    setNfEmissionCompanyForm((prev) => mergeIfEmpty(prev, {
+      razaoSocial: data.razao_social ?? '',
+      nomeFantasia: data.nome_fantasia ?? '',
+      email: data.email ?? '',
+      logradouro: data.logradouro ?? '',
+      numero: data.numero ?? '',
+      complemento: data.complemento ?? '',
+      bairro: data.bairro ?? '',
+      cep: (data.cep ?? '').replace('-', ''),
+      descricaoCidade: data.municipio ?? '',
+      codigoCidade: data.codigo_municipio ?? '',
+      estado: data.uf ?? '',
+      simplesNacional: data.simples?.optante_simples_nacional ?? prev.simplesNacional,
+    }));
+  };
+
+  const handleCnpjMeiBlur = async () => {
+    await handleValidateBlur();
+    const digits = normalizeDoc(contribuinteDoc);
+    if (digits.length !== 14) return;
+    setBrasilApiError(null);
+    setBrasilApiLoading(true);
+    try {
+      const data = await fetchBrasilApiCnpj(digits);
+      applyBrasilApiToEmitente(data);
+    } catch (err) {
+      setBrasilApiError(err instanceof Error ? err.message : 'Erro ao consultar CNPJ.');
+    } finally {
+      setBrasilApiLoading(false);
+    }
+  };
+
+  const handlePrestadorCnpjBlur = async () => {
+    const digits = normalizeDoc(nfseForm.prestadorCpfCnpj);
+    if (digits.length !== 14) return;
+    setNfsePrestadorBrasilApiError(null);
+    setNfsePrestadorBrasilApiLoading(true);
+    try {
+      const data = await fetchBrasilApiCnpj(digits);
+      updateNfseForm(mergeIfEmpty(
+        {
+          prestadorRazaoSocial: nfseForm.prestadorRazaoSocial,
+          prestadorEmail: nfseForm.prestadorEmail,
+        } as Record<string, unknown>,
+        {
+          prestadorRazaoSocial: data.razao_social ?? '',
+          prestadorEmail: data.email ?? '',
+        }
+      ) as { prestadorRazaoSocial: string; prestadorEmail: string });
+      const currentEndereco = nfseForm.prestadorEndereco ?? {};
+      const merged = mergeIfEmpty(
+        currentEndereco as Record<string, unknown>,
+        {
+          logradouro: data.logradouro ?? '',
+          numero: data.numero ?? '',
+          complemento: data.complemento ?? '',
+          bairro: data.bairro ?? '',
+          cep: (data.cep ?? '').replace('-', ''),
+          codigoCidade: data.codigo_municipio ?? '',
+          descricaoCidade: data.municipio ?? '',
+          estado: data.uf ?? '',
+        }
+      );
+      updateNfsePrestadorEndereco(merged as Parameters<typeof updateNfsePrestadorEndereco>[0]);
+    } catch (err) {
+      setNfsePrestadorBrasilApiError(err instanceof Error ? err.message : 'Erro ao consultar CNPJ.');
+    } finally {
+      setNfsePrestadorBrasilApiLoading(false);
     }
   };
 
@@ -1808,7 +1918,7 @@ export default function GuidesMei() {
           {certificateError ? (
             <GuiaMeiEmpresaCadastroErrorPanel
               message={certificateError}
-              plugnotasCode={certificateErrorPlugnotasCode}
+              fiscalErrorCode={certificateErrorFiscalCode}
             />
           ) : null}
 
@@ -1870,11 +1980,17 @@ export default function GuidesMei() {
                 inputMode="numeric"
                 value={contribuinteDoc}
                 onChange={(event) => setContribuinteDoc(formatDocument(event.target.value))}
-                onBlur={handleValidateBlur}
+                onBlur={handleCnpjMeiBlur}
                 placeholder="00.000.000/0001-00"
               />
               {isValidating ? (
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Validando CNPJ...</p>
+              ) : null}
+              {brasilApiLoading ? (
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Buscando dados da empresa...</p>
+              ) : null}
+              {brasilApiError ? (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{brasilApiError}</p>
               ) : null}
             </div>
 
@@ -1887,7 +2003,7 @@ export default function GuidesMei() {
                   onChange={(event) => {
                     setCertificateConnectivityAlert(false);
                     setCertificateError(null);
-                    setCertificateErrorPlugnotasCode(null);
+                    setCertificateErrorFiscalCode(null);
                     setCertificateFile(event.target.files?.[0] || null);
                   }}
                 />
@@ -1898,7 +2014,7 @@ export default function GuidesMei() {
                   onChange={(event) => {
                     setCertificateConnectivityAlert(false);
                     setCertificateError(null);
-                    setCertificateErrorPlugnotasCode(null);
+                    setCertificateErrorFiscalCode(null);
                     setCertificatePassword(event.target.value);
                   }}
                   placeholder="Senha do certificado"
@@ -2210,7 +2326,7 @@ export default function GuidesMei() {
               <h2 className="admin-section-title">{`Emitir ${GUIA_MEI_NFSE_DOCUMENT_LABEL}`}</h2>
               <p className="admin-section-subtitle">
                 Preencha os dados fiscais para emissão pelo sistema integrado.
-                Após o envio, mensagens de rejeição ou validação costumam vir do provedor de emissão (Plugnotas), não deste aplicativo.
+                Após o envio, mensagens de rejeição ou validação costumam vir do provedor de emissão fiscal, não deste aplicativo.
               </p>
             </div>
           </div>
@@ -2219,6 +2335,31 @@ export default function GuidesMei() {
             Atenção: para emissão de NFS-e, a empresa emitente precisa estar cadastrada no emissor fiscal com certificado
             digital A1 válido.
           </div>
+
+          {canViewNfse && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50/70 px-3 py-2 dark:border-slate-700/70 dark:bg-slate-900/50">
+              <p className="flex-1 text-xs text-slate-500 dark:text-slate-400">
+                {nfEmissionCompanyForm.razaoSocial
+                  ? <>Emitente configurado: <span className="font-medium text-slate-700 dark:text-slate-200">{nfEmissionCompanyForm.razaoSocial}</span></>
+                  : 'Dados do emitente não configurados. Configure na aba de certificado ou salve abaixo.'}
+              </p>
+              <button
+                type="button"
+                className="planner-button-secondary-compact shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={handleSalvarDadosEmitente}
+                disabled={nfEmissionCompanySyncLoading === 'patch'}
+              >
+                {nfEmissionCompanySyncLoading === 'patch' ? 'Salvando...' : 'Salvar dados do emitente'}
+              </button>
+            </div>
+          )}
+          {nfEmissionCompanySyncError && (
+            <div className="admin-alert-danger text-xs">{nfEmissionCompanySyncError}</div>
+          )}
+          {nfEmissionCompanySyncSuccess && (
+            <div className="admin-alert-success text-xs">{nfEmissionCompanySyncSuccess}</div>
+          )}
+
           <p className="admin-field-hint">
             Campos obrigatórios: CNPJ e endereço mínimo do prestador, CPF/CNPJ e razão social do tomador, código do serviço, CNAE, valor e discriminação. MEI no Simples Nacional: não se informa alíquota ISS — a prefeitura/provedor aplicam a regra.
           </p>
@@ -2331,10 +2472,19 @@ export default function GuidesMei() {
                   touchNfsePrestadorBffParity();
                   updateNfseForm({
                     prestadorCpfCnpj: formatDocument(event.target.value)
+                  })
+                }
+                onBlur={handlePrestadorCnpjBlur}
                   });
                 }}
                 placeholder="00.000.000/0001-00"
               />
+              {nfsePrestadorBrasilApiLoading ? (
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Buscando dados da empresa...</p>
+              ) : null}
+              {nfsePrestadorBrasilApiError ? (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{nfsePrestadorBrasilApiError}</p>
+              ) : null}
             </div>
             <div>
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
@@ -2605,7 +2755,7 @@ export default function GuidesMei() {
             <EmissaoFiscalErrorAlert documentTypeLabel={GUIA_MEI_NFSE_DOCUMENT_LABEL} message={nfseError} />
           ) : null}
           {nfseError && nfseErrorKind === 'operation' ? (
-            <PlugnotasIntegrationErrorAlert message={nfseError} />
+            <FiscalProviderErrorAlert message={nfseError} />
           ) : null}
           {nfseSuccess && (
             <div className="admin-alert-success">
