@@ -62,6 +62,16 @@ import {
   readWorkspaceFromStorage,
   resolveInitialWorkspace
 } from './guidesMeiWorkspaceStorage';
+import {
+  emptyNfsePrestadorEndereco,
+  mergeEmitenteSnapshotIntoNfseForm,
+  replacePrestadorFromEmitenteSnapshot
+} from '../utils/nfseEmitenteHydration';
+import {
+  isNfsePrestadorPrefillEffectivelyEmpty,
+  mergeNfsePrestadorPrefillIntoForm
+} from '../utils/nfsePrestadorPrefillMerge';
+import { fetchNfsePrestadorPrefill } from '../services/meiPrestadorPrefillService';
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
   if (!competencia) return 'guia-mei.pdf';
@@ -103,12 +113,13 @@ const toPeriodoApuracao = (month: string, year: number) => {
 };
 
 const emitenteSnapshotToForm = (snap: NfseEmitenteSnapshot): NfEmissionCompanyForm => {
-  const r = snap.regimeTributario;
+  const { certDocument: _omitCert, ...companyFields } = snap;
+  const r = companyFields.regimeTributario;
   const regime: NfEmissionRegimeTributario =
     r === '1' || r === '2' || r === '3' ? r : '1';
   return {
     ...getDefaultNfEmissionCompanyForm(),
-    ...snap,
+    ...companyFields,
     regimeTributario: regime
   };
 };
@@ -256,6 +267,12 @@ const parseDecimalInput = (value: unknown) => {
 /** Rótulo curto na UI do workspace fiscal (Guia MEI só NFS-e — US-MEI-NFS-03). */
 const GUIA_MEI_NFSE_DOCUMENT_LABEL = 'NFSe';
 
+/** Story 2.3 — paridade mobile (MeiScreen NFSe). */
+const NFSE_PRESTADOR_PREFILL_MSG_EMPTY =
+  'Não há cadastro MEI activo para preencher automaticamente. Complete o certificado ou preencha o prestador manualmente.';
+const NFSE_PRESTADOR_PREFILL_MSG_ERROR =
+  'Não foi possível carregar os dados do cadastro. Preencha o prestador manualmente.';
+
 type NfsePrestadorEndereco = {
   logradouro: string;
   numero: string;
@@ -382,16 +399,7 @@ export default function GuidesMei() {
     prestadorCpfCnpj: '',
     prestadorRazaoSocial: '',
     prestadorEmail: '',
-    prestadorEndereco: {
-      logradouro: '',
-      numero: '',
-      codigoCidade: '',
-      cep: '',
-      complemento: '',
-      bairro: '',
-      estado: '',
-      descricaoCidade: ''
-    },
+    prestadorEndereco: emptyNfsePrestadorEndereco(),
     tomadorCpfCnpj: '',
     tomadorRazaoSocial: '',
     tomadorEmail: '',
@@ -465,6 +473,17 @@ export default function GuidesMei() {
   const [brasilApiError, setBrasilApiError] = useState<string | null>(null);
   const [nfsePrestadorBrasilApiLoading, setNfsePrestadorBrasilApiLoading] = useState(false);
   const [nfsePrestadorBrasilApiError, setNfsePrestadorBrasilApiError] = useState<string | null>(null);
+  /** Após PATCH emitente: opt-in para alinhar o formulário NFS-e ao snapshot guardado (mitigação QA FR-AP-02). */
+  const [nfseEmitentePendingApply, setNfseEmitentePendingApply] = useState<NfseEmitenteSnapshot | null>(null);
+  /** FR-P04 Story 2.3: uma tentativa de BFF prefill no separador NFSe; não sobrescrever após edição do prestador. */
+  const nfsePrestadorPrefillAppliedRef = useRef(false);
+  /** Evita segundo pedido HTTP se o utilizador sair e voltar ao separador enquanto o 1.º fetch ainda corre (mitigação QA Story 2.3). */
+  const nfsePrestadorPrefillInFlightRef = useRef(false);
+  const nfsePrestadorUserEditedRef = useRef(false);
+  /** FR-P05: ao voltar ao separador, repõe banner se outcome for empty/error. */
+  const nfsePrestadorPrefillBannerOutcomeRef = useRef<'unset' | 'empty' | 'error' | 'ok'>('unset');
+  const [nfsePrestadorPrefillLoading, setNfsePrestadorPrefillLoading] = useState(false);
+  const [nfsePrestadorPrefillBanner, setNfsePrestadorPrefillBanner] = useState<string | null>(null);
   const nfseValidationMessage = useMemo(() => (
     getNfseValidationMessage(nfseForm, {
       logradouro: nfEmissionCompanyForm.logradouro,
@@ -477,6 +496,17 @@ export default function GuidesMei() {
       descricaoCidade: nfEmissionCompanyForm.descricaoCidade
     })
   ), [nfseForm, nfEmissionCompanyForm]);
+
+  const touchNfsePrestadorBffParity = useCallback(() => {
+    nfsePrestadorUserEditedRef.current = true;
+    if (
+      nfsePrestadorPrefillBannerOutcomeRef.current === 'empty'
+      || nfsePrestadorPrefillBannerOutcomeRef.current === 'error'
+    ) {
+      nfsePrestadorPrefillBannerOutcomeRef.current = 'ok';
+      setNfsePrestadorPrefillBanner(null);
+    }
+  }, []);
 
   const normalizedContribuinte = useMemo(() => normalizeDoc(contribuinteDoc), [contribuinteDoc]);
   const contribuinteTipo = useMemo(() => getDocType(normalizedContribuinte), [normalizedContribuinte]);
@@ -498,7 +528,9 @@ export default function GuidesMei() {
       applyDocumento(status.documento);
       if (status.nfseEmitente && !nfseEmitenteHydratedRef.current) {
         nfseEmitenteHydratedRef.current = true;
-        setNfEmissionCompanyForm(emitenteSnapshotToForm(status.nfseEmitente));
+        const snap = status.nfseEmitente;
+        setNfEmissionCompanyForm(emitenteSnapshotToForm(snap));
+        setNfseForm((current) => mergeEmitenteSnapshotIntoNfseForm(current, snap));
       }
     } catch {
       setHasUserCertificate(false);
@@ -610,6 +642,7 @@ export default function GuidesMei() {
   const updateNfsePrestadorEndereco = (
     updates: Partial<NonNullable<EmitirNfseInput['prestadorEndereco']>>
   ) => {
+    touchNfsePrestadorBffParity();
     setNfseForm((current) => ({
       ...current,
       prestadorEndereco: {
@@ -726,6 +759,50 @@ export default function GuidesMei() {
   }, [activeWorkspace]);
 
   useEffect(() => {
+    if (!canViewNfse || activeWorkspace !== 'nfse') return;
+    const o = nfsePrestadorPrefillBannerOutcomeRef.current;
+    if (o === 'empty') setNfsePrestadorPrefillBanner(NFSE_PRESTADOR_PREFILL_MSG_EMPTY);
+    else if (o === 'error') setNfsePrestadorPrefillBanner(NFSE_PRESTADOR_PREFILL_MSG_ERROR);
+  }, [canViewNfse, activeWorkspace]);
+
+  useEffect(() => {
+    if (!canViewNfse || activeWorkspace !== 'nfse') return;
+    if (nfsePrestadorPrefillAppliedRef.current) return;
+    if (nfsePrestadorUserEditedRef.current) return;
+    if (nfsePrestadorPrefillInFlightRef.current) return;
+
+    nfsePrestadorPrefillInFlightRef.current = true;
+    (async () => {
+      setNfsePrestadorPrefillLoading(true);
+      setNfsePrestadorPrefillBanner(null);
+      nfsePrestadorPrefillBannerOutcomeRef.current = 'unset';
+      try {
+        const prefill = await fetchNfsePrestadorPrefill();
+        if (nfsePrestadorUserEditedRef.current) return;
+        if (nfsePrestadorPrefillAppliedRef.current) return;
+        nfsePrestadorPrefillAppliedRef.current = true;
+        setNfseForm((f) => mergeNfsePrestadorPrefillIntoForm(f, prefill, { onlyFillEmpty: true }));
+        if (isNfsePrestadorPrefillEffectivelyEmpty(prefill)) {
+          nfsePrestadorPrefillBannerOutcomeRef.current = 'empty';
+          setNfsePrestadorPrefillBanner(NFSE_PRESTADOR_PREFILL_MSG_EMPTY);
+        } else {
+          nfsePrestadorPrefillBannerOutcomeRef.current = 'ok';
+          setNfsePrestadorPrefillBanner(null);
+        }
+      } catch {
+        if (nfsePrestadorUserEditedRef.current) return;
+        if (nfsePrestadorPrefillAppliedRef.current) return;
+        nfsePrestadorPrefillAppliedRef.current = true;
+        nfsePrestadorPrefillBannerOutcomeRef.current = 'error';
+        setNfsePrestadorPrefillBanner(NFSE_PRESTADOR_PREFILL_MSG_ERROR);
+      } finally {
+        nfsePrestadorPrefillInFlightRef.current = false;
+        setNfsePrestadorPrefillLoading(false);
+      }
+    })();
+  }, [canViewNfse, activeWorkspace]);
+
+  useEffect(() => {
     if (!normalizedContribuinte) return;
     const formatted = formatDocument(normalizedContribuinte);
     setNfseForm((current) => (
@@ -821,8 +898,10 @@ export default function GuidesMei() {
       uploadedToMei = true;
       applyDocumento(status.documento, true);
       if (canViewNfse && status.nfseEmitente) {
-        setNfEmissionCompanyForm(emitenteSnapshotToForm(status.nfseEmitente));
+        const snap = status.nfseEmitente;
+        setNfEmissionCompanyForm(emitenteSnapshotToForm(snap));
         nfseEmitenteHydratedRef.current = true;
+        setNfseForm((current) => mergeEmitenteSnapshotIntoNfseForm(current, snap));
       }
 
       if (!canViewNfse) {
@@ -986,6 +1065,7 @@ export default function GuidesMei() {
       return;
     }
     setNfEmissionCompanySyncLoading('patch');
+    setNfseEmitentePendingApply(null);
     try {
       const companyPayload = buildNfEmissionEmpresaPayload({
         cnpj,
@@ -1007,6 +1087,7 @@ export default function GuidesMei() {
       if (updatedStatus?.nfseEmitente) {
         setNfEmissionCompanyForm(emitenteSnapshotToForm(updatedStatus.nfseEmitente));
         nfseEmitenteHydratedRef.current = true;
+        setNfseEmitentePendingApply(updatedStatus.nfseEmitente);
       }
       setNfEmissionCompanySyncSuccess(
         companyResponse.message || 'Empresa atualizada no serviço de emissão fiscal com sucesso.'
@@ -1055,7 +1136,15 @@ export default function GuidesMei() {
     try {
       await removeMeiCertificate();
       nfseEmitenteHydratedRef.current = false;
+      setNfseEmitentePendingApply(null);
       setNfEmissionCompanyForm(getDefaultNfEmissionCompanyForm());
+      setNfseForm((current) => ({
+        ...current,
+        prestadorRazaoSocial: '',
+        prestadorEmail: '',
+        prestadorEndereco: emptyNfsePrestadorEndereco(),
+        prestadorCpfCnpj: ''
+      }));
       await loadCertificateStatus();
     } catch (error) {
       if (isFetchConnectivityFailure(error)) {
@@ -1234,6 +1323,9 @@ export default function GuidesMei() {
         }
         if (nfseForm.prestadorEmail?.trim()) {
           payload.prestadorEmail = nfseForm.prestadorEmail.trim();
+        }
+        if (nfseForm.prestadorInscricaoMunicipal?.trim()) {
+          payload.prestadorInscricaoMunicipal = nfseForm.prestadorInscricaoMunicipal.trim();
         }
         if (tomadorCpfCnpj) {
           payload.tomadorCpfCnpj = tomadorCpfCnpj;
@@ -1846,6 +1938,27 @@ export default function GuidesMei() {
             </div>
           )}
 
+          {nfseEmitentePendingApply && canViewNfse ? (
+            <div className="admin-alert-warning space-y-2">
+              <p className="text-sm leading-relaxed">
+                Os dados guardados nesta aplicação <strong>não</strong> alteram automaticamente o formulário de emissão de
+                NFS-e (para não substituir valores que você já tenha editado no separador NFS-e).
+              </p>
+              <button
+                type="button"
+                className="planner-button-secondary-compact"
+                onClick={() => {
+                  const snap = nfseEmitentePendingApply;
+                  if (!snap) return;
+                  setNfseForm((current) => replacePrestadorFromEmitenteSnapshot(current, snap));
+                  setNfseEmitentePendingApply(null);
+                }}
+              >
+                Aplicar dados guardados ao formulário NFS-e
+              </button>
+            </div>
+          ) : null}
+
           {validationSuccess && (
             <div className="admin-alert-success">
               {validationSuccess}
@@ -2329,6 +2442,21 @@ export default function GuidesMei() {
             </div>
           )}
 
+          {nfsePrestadorPrefillLoading ? (
+            <p className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span
+                className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600 dark:border-slate-600 dark:border-t-slate-300"
+                aria-hidden
+              />
+              A carregar dados do cadastro…
+            </p>
+          ) : null}
+          {nfsePrestadorPrefillBanner ? (
+            <div className="admin-alert-warning" role="status">
+              {nfsePrestadorPrefillBanner}
+            </div>
+          ) : null}
+
           <div className="admin-toolbar grid gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
@@ -2340,12 +2468,15 @@ export default function GuidesMei() {
                 type="text"
                 inputMode="numeric"
                 value={nfseForm.prestadorCpfCnpj}
-                onChange={(event) =>
+                onChange={(event) => {
+                  touchNfsePrestadorBffParity();
                   updateNfseForm({
                     prestadorCpfCnpj: formatDocument(event.target.value)
                   })
                 }
                 onBlur={handlePrestadorCnpjBlur}
+                  });
+                }}
                 placeholder="00.000.000/0001-00"
               />
               {nfsePrestadorBrasilApiLoading ? (
@@ -2363,7 +2494,10 @@ export default function GuidesMei() {
                 className="planner-input-compact w-full"
                 type="text"
                 value={nfseForm.prestadorRazaoSocial}
-                onChange={(event) => updateNfseForm({ prestadorRazaoSocial: event.target.value })}
+                onChange={(event) => {
+                  touchNfsePrestadorBffParity();
+                  updateNfseForm({ prestadorRazaoSocial: event.target.value });
+                }}
                 placeholder="Razão social"
               />
             </div>
@@ -2375,7 +2509,10 @@ export default function GuidesMei() {
                 className="planner-input-compact w-full"
                 type="email"
                 value={nfseForm.prestadorEmail}
-                onChange={(event) => updateNfseForm({ prestadorEmail: event.target.value })}
+                onChange={(event) => {
+                  touchNfsePrestadorBffParity();
+                  updateNfseForm({ prestadorEmail: event.target.value });
+                }}
                 placeholder="email@prestador.com"
               />
             </div>

@@ -1176,6 +1176,7 @@ export const removeCertificate = async (userId) => {
   return getCertificateStatus(userId);
 };
 
+/** Status do certificado MEI; `nfseEmitente` segue o typedef `NfseEmitenteApiSnapshot` em `mei-certificate-store.js`. */
 export const getCertificateStatus = async (userId) => {
   await ensureUserCertLoaded(userId);
   const userCert = getUserCert(userId);

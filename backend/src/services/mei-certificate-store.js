@@ -178,29 +178,82 @@ export const normalizeEmitenteRowFragment = (raw, opts = {}) => {
 };
 
 /**
- * Converte linha DB em objeto camelCase para o frontend (NfEmissionCompanyForm).
+ * Contrato estável de `nfseEmitente` em `GET /mei-guide/certificate/status` e respostas de upload/patch.
+ * Espelha colunas de `user_mei_certificates` para autopreenchimento do prestador (PRD autopreenchimento 2026-03-31).
+ *
+ * @typedef {object} NfseEmitenteApiSnapshot
+ * @property {string} razaoSocial — `razao_social`
+ * @property {string} nomeFantasia — `nome_fantasia`
+ * @property {string} email — `fiscal_email`
+ * @property {string} regimeTributario
+ * @property {boolean} simplesNacional — `optante_simples_nacional`
+ * @property {string} cep — só dígitos (até 8)
+ * @property {string} tipoLogradouro — `tipo_logradouro`
+ * @property {string} logradouro
+ * @property {string} numero
+ * @property {string} complemento
+ * @property {string} bairro
+ * @property {string} codigoCidade — `ibge_municipio` (normalizado para dígitos quando aplicável)
+ * @property {string} descricaoCidade — `cidade`
+ * @property {string} estado — `uf`, 2 letras maiúsculas
+ * @property {string} [certDocument] — `cert_document`, só dígitos (CNPJ/CPF gravado); opcional quando vazio
+ */
+
+/**
+ * Indica se a linha do `select` de emitente tem algum dado útil para o cliente (inclui só CNPJ/CPF em `cert_document`).
+ * @param {Record<string, unknown>|null|undefined} data
+ */
+export const emitenteDbRowHasNfseData = (data) => {
+  if (!data || typeof data !== 'object') return false;
+  const docDigits = digitsOnly(data.cert_document);
+  if (docDigits.length >= 11) return true;
+  /** Só `optante_simples_nacional` não caracteriza snapshot útil (evita objeto “pobre” no status). */
+  return Object.entries(data).some(([key, v]) => {
+    if (key === 'cert_document' || key === 'optante_simples_nacional') return false;
+    if (v === null || v === undefined) return false;
+    if (typeof v === 'boolean') return false;
+    return String(v).trim() !== '';
+  });
+};
+
+/**
+ * Converte linha DB em objeto camelCase para o frontend (`NfEmissionCompanyForm` + opcional `certDocument`).
+ * @param {Record<string, unknown>} row
+ * @returns {NfseEmitenteApiSnapshot|null}
  */
 export const emitenteRowToApiShape = (row) => {
   if (!row || typeof row !== 'object') return null;
-  return {
-    razaoSocial: row.razao_social ?? '',
-    nomeFantasia: row.nome_fantasia ?? '',
-    email: row.fiscal_email ?? '',
+  const cepDigits = digitsOnly(row.cep).slice(0, 8);
+  const ufRaw = row.uf != null ? String(row.uf).trim().toUpperCase().slice(0, 2) : '';
+  const ibgeRaw = row.ibge_municipio != null ? String(row.ibge_municipio) : '';
+  const codigoCidadeDigits = digitsOnly(ibgeRaw) || ibgeRaw.trim();
+  const base = {
+    razaoSocial: row.razao_social != null ? String(row.razao_social) : '',
+    nomeFantasia: row.nome_fantasia != null ? String(row.nome_fantasia) : '',
+    email: row.fiscal_email != null ? String(row.fiscal_email) : '',
     regimeTributario: row.regime_tributario ? String(row.regime_tributario) : '1',
     simplesNacional: row.optante_simples_nacional !== false,
-    cep: row.cep ?? '',
+    cep: cepDigits,
     tipoLogradouro: (() => {
       const t = row.tipo_logradouro != null ? String(row.tipo_logradouro).trim() : '';
       return t || 'Rua';
     })(),
-    logradouro: row.logradouro ?? '',
-    numero: row.numero ?? '',
-    complemento: row.complemento ?? '',
-    bairro: row.bairro ?? '',
-    codigoCidade: row.ibge_municipio ?? '',
-    descricaoCidade: row.cidade ?? '',
-    estado: row.uf ?? ''
+    logradouro: row.logradouro != null ? String(row.logradouro) : '',
+    numero: row.numero != null ? String(row.numero) : '',
+    complemento: row.complemento != null ? String(row.complemento) : '',
+    bairro: row.bairro != null ? String(row.bairro) : '',
+    codigoCidade: codigoCidadeDigits,
+    descricaoCidade: row.cidade != null ? String(row.cidade) : '',
+    estado: ufRaw
   };
+  const cd = row.cert_document;
+  if (cd != null && String(cd).trim() !== '') {
+    const d = digitsOnly(cd).slice(0, 14);
+    if (d.length >= 11) {
+      return { ...base, certDocument: d };
+    }
+  }
+  return base;
 };
 
 /**
@@ -239,6 +292,8 @@ export const patchEmitenteNfseFields = async (userId, partial) => {
 
 /**
  * Lê apenas colunas de emitente NFS-e (não exige pfx preenchido).
+ * @param {string} userId
+ * @returns {Promise<NfseEmitenteApiSnapshot|null>}
  */
 export const getEmitenteNfseSnapshot = async (userId) => {
   if (!userId) return null;
@@ -246,6 +301,7 @@ export const getEmitenteNfseSnapshot = async (userId) => {
   const { data, error } = await supabase
     .from(TABLE)
     .select(`
+      cert_document,
       razao_social,
       nome_fantasia,
       fiscal_email,
@@ -264,11 +320,7 @@ export const getEmitenteNfseSnapshot = async (userId) => {
     .eq('user_id', userId)
     .maybeSingle();
   if (error || !data) return null;
-  const hasAny = Object.entries(data).some(([key, v]) => {
-    if (key === 'optante_simples_nacional') return typeof v === 'boolean';
-    return v !== null && v !== undefined && String(v).trim() !== '';
-  });
-  if (!hasAny) return null;
+  if (!emitenteDbRowHasNfseData(data)) return null;
   return emitenteRowToApiShape(data);
 };
 
