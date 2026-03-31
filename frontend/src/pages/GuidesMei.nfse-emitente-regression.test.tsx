@@ -29,6 +29,19 @@ const frAp03 = vi.hoisted(() => ({
   documento: null as string | null
 }));
 
+const defaultNfsePrefillEmpty = () => ({
+  prestadorCpfCnpj: null,
+  prestadorRazaoSocial: null,
+  prestadorEmail: null,
+  prestadorInscricaoMunicipal: null,
+  prestadorEndereco: null,
+  sourceRowId: null
+});
+
+const { fetchNfsePrestadorPrefillMock } = vi.hoisted(() => ({
+  fetchNfsePrestadorPrefillMock: vi.fn()
+}));
+
 const fullSnapshot = (): NfseEmitenteSnapshot => ({
   certDocument: '11222333000181',
   razaoSocial: 'Hydrate Co LTDA',
@@ -76,6 +89,10 @@ vi.mock('../services/guidesMeiService', () => ({
   validateMeiGuide: vi.fn(async () => ({ valid: true }))
 }));
 
+vi.mock('../services/meiPrestadorPrefillService', () => ({
+  fetchNfsePrestadorPrefill: fetchNfsePrestadorPrefillMock
+}));
+
 vi.mock('../services/meiNotasService', () => ({
   arquivarNfse: vi.fn(async () => ({})),
   atualizarNfse: vi.fn(async () => ({})),
@@ -104,6 +121,10 @@ async function openNfsePanel(container: HTMLElement) {
   await act(async () => {
     nfseTab!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 }
 
 describe('GuidesMei regressão autopreenchimento NFS-e (FR-AP-03)', () => {
@@ -114,6 +135,7 @@ describe('GuidesMei regressão autopreenchimento NFS-e (FR-AP-03)', () => {
     frAp03.nfseEmitente = null;
     frAp03.documento = null;
     emitirNfseMock.mockClear();
+    fetchNfsePrestadorPrefillMock.mockImplementation(async () => defaultNfsePrefillEmpty());
   });
 
   it('sem nfseEmitente, prestador permanece vazio para preenchimento manual (sem erro de montagem)', async () => {
@@ -244,6 +266,74 @@ describe('GuidesMei regressão autopreenchimento NFS-e (FR-AP-03)', () => {
     expect(payload.tomadorRazaoSocial).toBe('Tomador Teste SA');
     expect(payload.servico.codigo.trim()).toBe('010203');
     expect(payload.servico.discriminacao.trim()).toBe('Discriminação contrato teste FR-AP-03');
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('emitir NFS-e envia prestadorInscricaoMunicipal quando o BFF prefill a preenche (mitigação QA Story 2.3)', async () => {
+    frAp03.nfseEmitente = fullSnapshot();
+    fetchNfsePrestadorPrefillMock.mockImplementation(async () => ({
+      ...defaultNfsePrefillEmpty(),
+      prestadorInscricaoMunicipal: 'IM-PREFILL-99'
+    }));
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+    await openNfsePanel(container);
+
+    const panel = container.querySelector('#mei-panel-nfse') as HTMLElement;
+    const view = within(panel);
+
+    const tomadorDoc = view.getByPlaceholderText('000.000.000-00') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(tomadorDoc, { target: { value: '529.982.247-25' } });
+    });
+
+    const razaoTomador = view.getAllByPlaceholderText('Razão social')[1] as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(razaoTomador, { target: { value: 'Tomador IM SA' } });
+    });
+
+    const codigoServico = view.getByPlaceholderText(/01\.02\.03/i) as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(codigoServico, { target: { value: '010203' } });
+    });
+
+    const cnae = view.getByPlaceholderText('6201500') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(cnae, { target: { value: '6201500' } });
+    });
+
+    const valor = view.getByPlaceholderText('1500,00') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(valor, { target: { value: '100,50' } });
+    });
+
+    const disc = view.getByPlaceholderText('Descreva o serviço prestado') as HTMLTextAreaElement;
+    await act(async () => {
+      fireEvent.change(disc, { target: { value: 'Serviço teste IM' } });
+    });
+
+    const emitBtn = view.getByRole('button', { name: /Emitir NFSe/i });
+    await act(async () => {
+      fireEvent.click(emitBtn);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(emitirNfseMock).toHaveBeenCalledTimes(1);
+    const payload = emitirNfseMock.mock.calls[0][0];
+    expect(payload.prestadorInscricaoMunicipal).toBe('IM-PREFILL-99');
+    expect(String(payload.prestadorCpfCnpj || '').replace(/\D/g, '')).toBe('11222333000181');
 
     await act(async () => {
       root.unmount();
