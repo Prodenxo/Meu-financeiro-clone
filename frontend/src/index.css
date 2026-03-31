@@ -262,7 +262,7 @@
   }
 
   .admin-dropdown-panel {
-    @apply absolute z-10 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-700/80 bg-white/95 dark:bg-slate-900/90 shadow-soft backdrop-blur;
+    @apply absolute z-50 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-soft backdrop-blur;
   }
 
   .admin-dropdown-option {
