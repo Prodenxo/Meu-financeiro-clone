@@ -2479,11 +2479,9 @@ export default function GuidesMei() {
                   touchNfsePrestadorBffParity();
                   updateNfseForm({
                     prestadorCpfCnpj: formatDocument(event.target.value)
-                  })
-                }
-                onBlur={handlePrestadorCnpjBlur}
                   });
                 }}
+                onBlur={handlePrestadorCnpjBlur}
                 placeholder="00.000.000/0001-00"
               />
               {nfsePrestadorBrasilApiLoading ? (
