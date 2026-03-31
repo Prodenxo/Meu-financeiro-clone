@@ -44,8 +44,8 @@ import {
   type NfEmissionRegimeTributario
 } from '../utils/nfEmissionCompany';
 import { isFetchConnectivityFailure } from '../utils/isFetchConnectivityFailure';
-import { getPlugnotasCodeFromUnknownError } from '../utils/apiClientError';
-import { formatPlugnotasIntegrationError } from '../utils/plugnotasIntegrationErrorMessage';
+import { getPlugnotasCodeFromUnknownError as getFiscalErrorCode } from '../utils/apiClientError';
+import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
@@ -54,7 +54,7 @@ import {
   GuiaMeiCertificateConnectivityPanel,
   GuiaMeiEmpresaCadastroErrorPanel,
   LongFiscalErrorMessage,
-  PlugnotasIntegrationErrorAlert
+  FiscalProviderErrorAlert as FiscalProviderErrorAlert
 } from '../components/FiscalIntegrationErrorAlert';
 import type { GuidesMeiWorkspace } from './guidesMeiWorkspaceStorage';
 import {
@@ -359,7 +359,7 @@ export default function GuidesMei() {
   const [selectedMonth, setSelectedMonth] = useState<string>(defaultPeriod.month);
   const [periodError, setPeriodError] = useState<string | null>(null);
   const [certificateError, setCertificateError] = useState<string | null>(null);
-  const [certificateErrorPlugnotasCode, setCertificateErrorPlugnotasCode] = useState<string | null>(null);
+  const [certificateErrorFiscalCode, setCertificateErrorFiscalCode] = useState<string | null>(null);
   const [certificateConnectivityAlert, setCertificateConnectivityAlert] = useState(false);
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [certificatePassword, setCertificatePassword] = useState('');
@@ -425,12 +425,12 @@ export default function GuidesMei() {
   }, []);
 
   const setEmissionNfseError = useCallback((raw: string) => {
-    setNfseError(formatPlugnotasIntegrationError(raw));
+    setNfseError(formatFiscalError(raw));
     setNfseErrorKind('emission');
   }, []);
 
   const setOperationNfseError = useCallback((raw: string) => {
-    setNfseError(formatPlugnotasIntegrationError(raw));
+    setNfseError(formatFiscalError(raw));
     setNfseErrorKind('operation');
   }, []);
   const [nfseCatalogLoading, setNfseCatalogLoading] = useState(false);
@@ -574,7 +574,7 @@ export default function GuidesMei() {
       setNfseCatalogProdutos(produtos || []);
     } catch (error) {
       setNfseCatalogError(
-        formatPlugnotasIntegrationError(
+        formatFiscalError(
           error instanceof Error ? error.message : 'Erro ao carregar catálogo fiscal.'
         )
       );
@@ -785,14 +785,14 @@ export default function GuidesMei() {
   const handleCertificateUpload = async () => {
     if (!certificateFile) {
       setCertificateConnectivityAlert(false);
-      setCertificateErrorPlugnotasCode(null);
+      setCertificateErrorFiscalCode(null);
       setCertificateError('Selecione o arquivo do certificado.');
       return;
     }
     const trimmedPassword = certificatePassword.trim();
     if (!trimmedPassword) {
       setCertificateConnectivityAlert(false);
-      setCertificateErrorPlugnotasCode(null);
+      setCertificateErrorFiscalCode(null);
       setCertificateError('Informe a senha do certificado.');
       return;
     }
@@ -800,14 +800,14 @@ export default function GuidesMei() {
       const companyValidationMessage = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
       if (companyValidationMessage) {
         setCertificateConnectivityAlert(false);
-        setCertificateErrorPlugnotasCode(null);
+        setCertificateErrorFiscalCode(null);
         setCertificateError(companyValidationMessage);
         return;
       }
     }
 
     setCertificateError(null);
-    setCertificateErrorPlugnotasCode(null);
+    setCertificateErrorFiscalCode(null);
     setCertificateConnectivityAlert(false);
     setCertificateSuccess(null);
     setIsUploadingCert(true);
@@ -897,17 +897,17 @@ export default function GuidesMei() {
         ].filter(Boolean).join(' ')
       );
     } catch (error) {
-      // Rede até o backend: upload MEI, POST certificado Plugnotas ou cadastro empresa no mesmo try (US-CONN-MEI-03 / US-MEI-FISC-01).
+      // Rede até o backend: upload MEI, POST certificado fiscal ou cadastro empresa no mesmo try (US-CONN-MEI-03 / US-MEI-FISC-01).
       if (isFetchConnectivityFailure(error)) {
         setCertificateConnectivityAlert(true);
         setCertificateError(null);
-        setCertificateErrorPlugnotasCode(null);
+        setCertificateErrorFiscalCode(null);
       } else {
         setCertificateConnectivityAlert(false);
-        const fallbackMessage = formatPlugnotasIntegrationError(
+        const fallbackMessage = formatFiscalError(
           error instanceof Error ? error.message : 'Erro ao enviar certificado.'
         );
-        setCertificateErrorPlugnotasCode(getPlugnotasCodeFromUnknownError(error));
+        setCertificateErrorFiscalCode(getFiscalErrorCode(error));
         setCertificateError(
           uploadedToMei
             ? `Certificado enviado no MEI, mas falhou a configuração automática da integração fiscal: ${fallbackMessage}`
@@ -959,7 +959,7 @@ export default function GuidesMei() {
       );
     } catch (error) {
       setNfEmissionCompanySyncError(
-        formatPlugnotasIntegrationError(
+        formatFiscalError(
           error instanceof Error
             ? error.message
             : 'Falha ao consultar cadastro no serviço de emissão fiscal.'
@@ -1013,7 +1013,7 @@ export default function GuidesMei() {
       );
     } catch (error) {
       setNfEmissionCompanySyncError(
-        formatPlugnotasIntegrationError(
+        formatFiscalError(
           error instanceof Error
             ? error.message
             : 'Falha ao atualizar empresa no serviço de emissão fiscal.'
@@ -1048,7 +1048,7 @@ export default function GuidesMei() {
 
   const handleCertificateRemove = async () => {
     setCertificateError(null);
-    setCertificateErrorPlugnotasCode(null);
+    setCertificateErrorFiscalCode(null);
     setCertificateConnectivityAlert(false);
     setCertificateSuccess(null);
     setIsRemovingCert(true);
@@ -1061,10 +1061,10 @@ export default function GuidesMei() {
       if (isFetchConnectivityFailure(error)) {
         setCertificateConnectivityAlert(true);
         setCertificateError(null);
-        setCertificateErrorPlugnotasCode(null);
+        setCertificateErrorFiscalCode(null);
       } else {
         setCertificateConnectivityAlert(false);
-        setCertificateErrorPlugnotasCode(null);
+        setCertificateErrorFiscalCode(null);
         setCertificateError(error instanceof Error ? error.message : 'Erro ao remover certificado.');
       }
     } finally {
@@ -1826,7 +1826,7 @@ export default function GuidesMei() {
           {certificateError ? (
             <GuiaMeiEmpresaCadastroErrorPanel
               message={certificateError}
-              plugnotasCode={certificateErrorPlugnotasCode}
+              fiscalErrorCode={certificateErrorFiscalCode}
             />
           ) : null}
 
@@ -1890,7 +1890,7 @@ export default function GuidesMei() {
                   onChange={(event) => {
                     setCertificateConnectivityAlert(false);
                     setCertificateError(null);
-                    setCertificateErrorPlugnotasCode(null);
+                    setCertificateErrorFiscalCode(null);
                     setCertificateFile(event.target.files?.[0] || null);
                   }}
                 />
@@ -1901,7 +1901,7 @@ export default function GuidesMei() {
                   onChange={(event) => {
                     setCertificateConnectivityAlert(false);
                     setCertificateError(null);
-                    setCertificateErrorPlugnotasCode(null);
+                    setCertificateErrorFiscalCode(null);
                     setCertificatePassword(event.target.value);
                   }}
                   placeholder="Senha do certificado"
@@ -2213,7 +2213,7 @@ export default function GuidesMei() {
               <h2 className="admin-section-title">{`Emitir ${GUIA_MEI_NFSE_DOCUMENT_LABEL}`}</h2>
               <p className="admin-section-subtitle">
                 Preencha os dados fiscais para emissão pelo sistema integrado.
-                Após o envio, mensagens de rejeição ou validação costumam vir do provedor de emissão (Plugnotas), não deste aplicativo.
+                Após o envio, mensagens de rejeição ou validação costumam vir do provedor de emissão fiscal, não deste aplicativo.
               </p>
             </div>
           </div>
@@ -2618,7 +2618,7 @@ export default function GuidesMei() {
             <EmissaoFiscalErrorAlert documentTypeLabel={GUIA_MEI_NFSE_DOCUMENT_LABEL} message={nfseError} />
           ) : null}
           {nfseError && nfseErrorKind === 'operation' ? (
-            <PlugnotasIntegrationErrorAlert message={nfseError} />
+            <FiscalProviderErrorAlert message={nfseError} />
           ) : null}
           {nfseSuccess && (
             <div className="admin-alert-success">

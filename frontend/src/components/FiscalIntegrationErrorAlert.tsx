@@ -189,7 +189,7 @@ export function EmissaoFiscalErrorAlert({ documentTypeLabel, message }: EmissaoF
       </p>
       <LongFiscalErrorMessage message={message} tone="danger" />
       <p className={providerHintClass}>
-        A mensagem acima foi retornada pelo provedor de emissão fiscal (Plugnotas), não pelo aplicativo em si.
+        A mensagem acima foi retornada pelo provedor de emissão fiscal, não pelo aplicativo em si.
         Ajuste os dados conforme o texto e envie novamente.
       </p>
       {showNacionalHint ? <NfseNacionalOperacaoDocHint /> : null}
@@ -212,7 +212,7 @@ export function PlugnotasIntegrationErrorAlert({ message, title }: PlugnotasInte
       ) : null}
       <LongFiscalErrorMessage message={message} tone="danger" />
       <p className={providerHintClass}>
-        Se a mensagem citar validação ou rejeição, ela costuma vir do provedor de emissão fiscal (Plugnotas), não deste app.
+        Se a mensagem citar validação ou rejeição, ela costuma vir do provedor de emissão fiscal, não deste app.
       </p>
       {showNacionalHint ? <NfseNacionalOperacaoDocHint /> : null}
     </div>
@@ -232,14 +232,14 @@ export function EmissaoFiscalErrorAlertModal({ documentTypeLabel, message }: Emi
       </p>
       <LongFiscalErrorMessage message={message} tone="rose" />
       <p className={providerHintClass}>
-        Mensagem do provedor de emissão fiscal (Plugnotas). Corrija os dados e tente de novo.
+        Mensagem do provedor de emissão fiscal. Corrija os dados e tente de novo.
       </p>
       {showNacionalHint ? <NfseNacionalOperacaoDocHint linkTone="rose" /> : null}
     </div>
   );
 }
 
-/** Falha de rede ao enviar certificado na Guia MEI: não confundir com rejeição Plugnotas (US-CONN-MEI-03). */
+/** Falha de rede ao enviar certificado na Guia MEI: não confundir com rejeição do provedor fiscal (US-CONN-MEI-03). */
 export function GuiaMeiCertificateConnectivityPanel() {
   const href = getGuiaMeiConnectivityHelpHref();
   const linkClass = linkClassForTone('warning');
@@ -273,7 +273,7 @@ export function GuiaMeiCertificado409SemIdChecklist() {
   return (
     <div className="rounded-md border border-rose-200/90 bg-white/80 px-3 py-2 dark:border-rose-800/70 dark:bg-slate-950/30">
       <p className="text-xs font-semibold text-rose-900 dark:text-rose-100">
-        Certificado já no Plugnotas — não foi possível obter o ID automaticamente
+        Certificado já no provedor fiscal — não foi possível obter o ID automaticamente
       </p>
       <p className="mt-1 text-xs leading-snug text-rose-800/95 dark:text-rose-300/95">
         O aplicativo recebeu confirmação de que o certificado existe na conta do emissor, mas não conseguiu recuperar o
@@ -282,29 +282,21 @@ export function GuiaMeiCertificado409SemIdChecklist() {
       <ul className="mt-2 list-inside list-disc space-y-1 text-xs leading-snug text-rose-800/95 dark:text-rose-300/95">
         <li>
           <strong className="font-semibold">CNPJ no formulário</strong> — 14 dígitos, o mesmo do certificado e do cadastro
-          no Plugnotas.
+          no provedor fiscal.
         </li>
         <li>
-          <strong className="font-semibold">Conta no Plugnotas</strong> — em{' '}
-          <a
-            href="https://app2.plugnotas.com.br"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={linkClass}
-          >
-            app2.plugnotas.com.br
-          </a>
-          , use a <strong className="font-semibold">mesma conta</strong> ligada à chave de API configurada no servidor do
+          <strong className="font-semibold">Conta no provedor fiscal</strong> — acesse o painel do provedor
+          e use a <strong className="font-semibold">mesma conta</strong> ligada à chave de API configurada no servidor do
           app; confira se o certificado aparece para esse CNPJ.
         </li>
         <li>
-          <strong className="font-semibold">Ambiente da API</strong> — URL base e chave de API do Plugnotas devem ser do{' '}
+          <strong className="font-semibold">Ambiente da API</strong> — URL base e chave de API do provedor fiscal devem ser do{' '}
           <strong className="font-semibold">mesmo ambiente</strong> (por exemplo, sandbox com sandbox, produção com
           produção). Evite misturar painel de uma conta e requisições com credenciais de outra.
         </li>
         <li>
           <strong className="font-semibold">Empresa no provedor</strong> — se a empresa ainda não existir na conta, pode
-          faltar vínculo para localizar o certificado; siga o que o painel do Plugnotas permitir cadastrar ou revisar.
+          faltar vínculo para localizar o certificado; siga o que o painel do provedor fiscal permitir cadastrar ou revisar.
         </li>
       </ul>
       <p className="mt-2 text-xs leading-snug text-rose-800/90 dark:text-rose-300/90">
@@ -322,23 +314,23 @@ export function GuiaMeiCertificado409SemIdChecklist() {
 
 type GuiaMeiEmpresaCadastroErrorPanelProps = {
   message: string;
-  /** Definido quando a API retorna `errors.plugnotasCode` (ex.: US-MEI-FISC-02). */
-  plugnotasCode?: string | null;
+  /** Definido quando a API retorna `errors.fiscalErrorCode` (ex.: US-MEI-FISC-02). */
+  fiscalErrorCode?: string | null;
 };
 
 /**
  * Cadastro certificado/empresa na Guia MEI: mensagem completa (quebras + textos longos) + tom de provedor (US-NFCE-EMP-03).
  */
-export function GuiaMeiEmpresaCadastroErrorPanel({ message, plugnotasCode = null }: GuiaMeiEmpresaCadastroErrorPanelProps) {
+export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = null }: GuiaMeiEmpresaCadastroErrorPanelProps) {
   const showNfceHint = shouldOfferNfceCadastroDocHint(message);
   const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message);
   const linkClass = linkClassForTone('danger');
   const isLocalOnly = isLikelyLocalOnlyGuiaMeiEmpresaCertError(message);
-  const showCert409 = plugnotasCode === PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID;
+  const showCert409 = fiscalErrorCode === PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID;
   const meiEmpresaDocHref = getMeiEmpresaPlugnotasCadastroHelpHref();
   const meiEmpresaDocLinkLabel = meiOperacaoNfseDocUrl
     ? 'abra a documentação de operação'
-    : 'abra o guia rápido (cadastro no Plugnotas)';
+    : 'abra o guia rápido de cadastro';
 
   return (
     <div className="admin-alert-danger space-y-2" role="alert">
@@ -349,7 +341,7 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, plugnotasCode = null
           A Guia MEI só emite <strong className="font-semibold">NFS-e</strong> na interface; se o texto citar{' '}
           <strong className="font-semibold">NFC-e</strong>, <code className="rounded bg-rose-100/90 px-1 py-0.5 text-[0.65rem] dark:bg-rose-950/70">versaoQrCode</code> ou{' '}
           <code className="rounded bg-rose-100/90 px-1 py-0.5 text-[0.65rem] dark:bg-rose-950/70">sefaz</code>, costuma ser validação do{' '}
-          <strong className="font-semibold">cadastro da empresa</strong> no Plugnotas (não emissão de NFC-e por esta tela). Para orientação,{' '}
+          <strong className="font-semibold">cadastro da empresa</strong> no provedor fiscal (não emissão de NFC-e por esta tela). Para orientação,{' '}
           <a href={meiEmpresaDocHref} target="_blank" rel="noopener noreferrer" className={linkClass}>
             {meiEmpresaDocLinkLabel}
           </a>
@@ -376,7 +368,7 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, plugnotasCode = null
         <p className={providerHintClass}>Corrija os dados no formulário conforme a mensagem acima e tente de novo.</p>
       ) : (
         <p className={providerHintClass}>
-          Quando a mensagem citar validação de JSON, campos fiscais, integração fiscal ou o nome Plugnotas, quem recusou o
+          Quando a mensagem citar validação de JSON, campos fiscais ou integração fiscal, quem recusou o
           cadastro costuma ser o <strong className="font-semibold">provedor de emissão fiscal</strong>, não este
           aplicativo. Use o texto acima como referência e tente de novo.
         </p>
