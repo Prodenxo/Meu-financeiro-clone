@@ -864,7 +864,7 @@ export default function AdminUserData() {
               {loadingData ? 'Atualizando...' : 'Atualizar dados'}
             </button>
           </div>
-          <div className="admin-toolbar relative">
+          <div className="admin-toolbar relative z-20">
             <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Buscar usuário</label>
             <input
               type="text"

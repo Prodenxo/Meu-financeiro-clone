@@ -715,7 +715,7 @@ export default function ManageUsers() {
                 <div className="admin-empty-state">Nenhuma empresa cadastrada.</div>
               ) : (
                 <div className="space-y-4">
-                  <div className="admin-toolbar relative">
+                  <div className="admin-toolbar relative z-20">
                     <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Buscar empresa</label>
                     <div className="flex items-center gap-2">
                       <input
@@ -1518,7 +1518,7 @@ export default function ManageUsers() {
                           </div>
                         )}
                         {role === 'superadmin' ? (
-                          <div className="relative admin-toolbar">
+                          <div className="relative admin-toolbar z-20">
                             <div className="flex items-center gap-2">
                               <input
                                 type="text"
