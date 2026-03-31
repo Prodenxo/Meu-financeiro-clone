@@ -983,9 +983,11 @@ export default function GuidesMei() {
         setCertificateErrorFiscalCode(null);
       } else {
         setCertificateConnectivityAlert(false);
-        const fallbackMessage = formatFiscalError(
-          error instanceof Error ? error.message : 'Erro ao enviar certificado.'
-        );
+        const rawMessage = error instanceof Error ? error.message : 'Erro ao enviar certificado.';
+        const isInscricaoMunicipalError = /inscri[cç][aã]o\s*municipal/i.test(rawMessage);
+        const fallbackMessage = isInscricaoMunicipalError
+          ? 'Seu município exige inscrição municipal para emissão de NFS-e. Preencha o campo "Inscrição municipal" no formulário acima e tente novamente.'
+          : formatFiscalError(rawMessage);
         setCertificateErrorFiscalCode(getFiscalErrorCode(error));
         setCertificateError(
           uploadedToMei
