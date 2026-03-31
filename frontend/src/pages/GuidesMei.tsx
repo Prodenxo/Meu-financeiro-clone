@@ -54,7 +54,7 @@ import {
   GuiaMeiCertificateConnectivityPanel,
   GuiaMeiEmpresaCadastroErrorPanel,
   LongFiscalErrorMessage,
-  FiscalProviderErrorAlert as FiscalProviderErrorAlert
+  PlugnotasIntegrationErrorAlert as FiscalProviderErrorAlert
 } from '../components/FiscalIntegrationErrorAlert';
 import type { GuidesMeiWorkspace } from './guidesMeiWorkspaceStorage';
 import {
