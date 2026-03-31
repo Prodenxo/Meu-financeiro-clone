@@ -25,7 +25,7 @@ export interface MeiPeriod {
   errorMessage?: string | null;
 }
 
-/** Dados mínimos NFS-e persistidos em `user_mei_certificates` (espelho do formulário). */
+/** Dados mínimos NFS-e persistidos em `user_mei_certificates` (espelho do formulário + documento opcional). */
 export type NfseEmitenteSnapshot = Pick<
   NfEmissionCompanyForm,
   | 'razaoSocial'
@@ -42,7 +42,10 @@ export type NfseEmitenteSnapshot = Pick<
   | 'codigoCidade'
   | 'descricaoCidade'
   | 'estado'
->;
+> & {
+  /** `cert_document` no backend — só dígitos (FR-AP-01). */
+  certDocument?: string;
+};
 
 export interface MeiCertificateStatus {
   hasUserCertificate: boolean;

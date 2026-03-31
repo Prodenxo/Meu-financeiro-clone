@@ -61,6 +61,11 @@ import {
   readWorkspaceFromStorage,
   resolveInitialWorkspace
 } from './guidesMeiWorkspaceStorage';
+import {
+  emptyNfsePrestadorEndereco,
+  mergeEmitenteSnapshotIntoNfseForm,
+  replacePrestadorFromEmitenteSnapshot
+} from '../utils/nfseEmitenteHydration';
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
   if (!competencia) return 'guia-mei.pdf';
@@ -102,12 +107,13 @@ const toPeriodoApuracao = (month: string, year: number) => {
 };
 
 const emitenteSnapshotToForm = (snap: NfseEmitenteSnapshot): NfEmissionCompanyForm => {
-  const r = snap.regimeTributario;
+  const { certDocument: _omitCert, ...companyFields } = snap;
+  const r = companyFields.regimeTributario;
   const regime: NfEmissionRegimeTributario =
     r === '1' || r === '2' || r === '3' ? r : '1';
   return {
     ...getDefaultNfEmissionCompanyForm(),
-    ...snap,
+    ...companyFields,
     regimeTributario: regime
   };
 };
@@ -381,16 +387,7 @@ export default function GuidesMei() {
     prestadorCpfCnpj: '',
     prestadorRazaoSocial: '',
     prestadorEmail: '',
-    prestadorEndereco: {
-      logradouro: '',
-      numero: '',
-      codigoCidade: '',
-      cep: '',
-      complemento: '',
-      bairro: '',
-      estado: '',
-      descricaoCidade: ''
-    },
+    prestadorEndereco: emptyNfsePrestadorEndereco(),
     tomadorCpfCnpj: '',
     tomadorRazaoSocial: '',
     tomadorEmail: '',
@@ -460,6 +457,8 @@ export default function GuidesMei() {
   const [nfEmissionCompanySyncLoading, setNfEmissionCompanySyncLoading] = useState<'consult' | 'patch' | null>(null);
   const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<string | null>(null);
   const [nfEmissionCompanySyncSuccess, setNfEmissionCompanySyncSuccess] = useState<string | null>(null);
+  /** Após PATCH emitente: opt-in para alinhar o formulário NFS-e ao snapshot guardado (mitigação QA FR-AP-02). */
+  const [nfseEmitentePendingApply, setNfseEmitentePendingApply] = useState<NfseEmitenteSnapshot | null>(null);
   const nfseValidationMessage = useMemo(() => (
     getNfseValidationMessage(nfseForm, {
       logradouro: nfEmissionCompanyForm.logradouro,
@@ -493,7 +492,9 @@ export default function GuidesMei() {
       applyDocumento(status.documento);
       if (status.nfseEmitente && !nfseEmitenteHydratedRef.current) {
         nfseEmitenteHydratedRef.current = true;
-        setNfEmissionCompanyForm(emitenteSnapshotToForm(status.nfseEmitente));
+        const snap = status.nfseEmitente;
+        setNfEmissionCompanyForm(emitenteSnapshotToForm(snap));
+        setNfseForm((current) => mergeEmitenteSnapshotIntoNfseForm(current, snap));
       }
     } catch {
       setHasUserCertificate(false);
@@ -816,8 +817,10 @@ export default function GuidesMei() {
       uploadedToMei = true;
       applyDocumento(status.documento, true);
       if (canViewNfse && status.nfseEmitente) {
-        setNfEmissionCompanyForm(emitenteSnapshotToForm(status.nfseEmitente));
+        const snap = status.nfseEmitente;
+        setNfEmissionCompanyForm(emitenteSnapshotToForm(snap));
         nfseEmitenteHydratedRef.current = true;
+        setNfseForm((current) => mergeEmitenteSnapshotIntoNfseForm(current, snap));
       }
 
       if (!canViewNfse) {
@@ -981,6 +984,7 @@ export default function GuidesMei() {
       return;
     }
     setNfEmissionCompanySyncLoading('patch');
+    setNfseEmitentePendingApply(null);
     try {
       const companyPayload = buildNfEmissionEmpresaPayload({
         cnpj,
@@ -1002,6 +1006,7 @@ export default function GuidesMei() {
       if (updatedStatus?.nfseEmitente) {
         setNfEmissionCompanyForm(emitenteSnapshotToForm(updatedStatus.nfseEmitente));
         nfseEmitenteHydratedRef.current = true;
+        setNfseEmitentePendingApply(updatedStatus.nfseEmitente);
       }
       setNfEmissionCompanySyncSuccess(
         companyResponse.message || 'Empresa atualizada no serviço de emissão fiscal com sucesso.'
@@ -1028,7 +1033,15 @@ export default function GuidesMei() {
     try {
       await removeMeiCertificate();
       nfseEmitenteHydratedRef.current = false;
+      setNfseEmitentePendingApply(null);
       setNfEmissionCompanyForm(getDefaultNfEmissionCompanyForm());
+      setNfseForm((current) => ({
+        ...current,
+        prestadorRazaoSocial: '',
+        prestadorEmail: '',
+        prestadorEndereco: emptyNfsePrestadorEndereco(),
+        prestadorCpfCnpj: ''
+      }));
       await loadCertificateStatus();
     } catch (error) {
       if (isFetchConnectivityFailure(error)) {
@@ -1735,6 +1748,27 @@ export default function GuidesMei() {
               {nfEmissionCompanySyncSuccess}
             </div>
           )}
+
+          {nfseEmitentePendingApply && canViewNfse ? (
+            <div className="admin-alert-warning space-y-2">
+              <p className="text-sm leading-relaxed">
+                Os dados guardados nesta aplicação <strong>não</strong> alteram automaticamente o formulário de emissão de
+                NFS-e (para não substituir valores que você já tenha editado no separador NFS-e).
+              </p>
+              <button
+                type="button"
+                className="planner-button-secondary-compact"
+                onClick={() => {
+                  const snap = nfseEmitentePendingApply;
+                  if (!snap) return;
+                  setNfseForm((current) => replacePrestadorFromEmitenteSnapshot(current, snap));
+                  setNfseEmitentePendingApply(null);
+                }}
+              >
+                Aplicar dados guardados ao formulário NFS-e
+              </button>
+            </div>
+          ) : null}
 
           {validationSuccess && (
             <div className="admin-alert-success">
