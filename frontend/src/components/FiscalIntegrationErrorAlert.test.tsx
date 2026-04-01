@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -144,6 +145,7 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     expect(container.textContent).toMatch(
       /guia rápido.*cadastro|documentação de operação|abra o guia rápido de cadastro/i
     );
+    expect(container.textContent).toMatch(/guia rápido de cadastro|documentação de operação/);
     expect(
       container.querySelector('a[href^="/guia-mei-nfce-cadastro.html#cadastro-empresa-nfce-qrcode-sefaz"]')
     ).toBeTruthy();
@@ -193,10 +195,13 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
         <GuiaMeiEmpresaCadastroErrorPanel
           message="O certificado já está cadastrado no Plugnotas, mas não foi possível obter o ID automaticamente."
           fiscalErrorCode={PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID}
+          message="O certificado já está cadastrado no emissor fiscal, mas não foi possível obter o ID automaticamente."
+          fiscalErrorCode="certificado_409_sem_id"
         />
       );
     });
     expect(container.textContent).toContain('CNPJ no formulário');
+    expect(container.textContent).toContain('provedor fiscal');
     expect(container.textContent).toContain('Saiba mais');
     expect(container.querySelector('a[href="/guia-mei-certificado-409-sem-id.html"]')).toBeTruthy();
   });

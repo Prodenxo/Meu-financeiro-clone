@@ -17,6 +17,8 @@ describe('formatPlugnotasIntegrationError', () => {
     expect(out).toContain('Plugnotas');
     expect(out).not.toContain('Referência do emissor');
     expect(out).not.toContain(msg);
+    expect(out).toContain('emissor fiscal');
+    expect(out).toContain(msg);
   });
 
   it('enriquece rota inexistente no serviço (sem anexar mensagem bruta)', () => {

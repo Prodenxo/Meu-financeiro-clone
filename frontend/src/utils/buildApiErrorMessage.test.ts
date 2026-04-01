@@ -32,7 +32,7 @@ describe('buildApiErrorMessage', () => {
         details: 'det',
         errors: { plugnotasRequest: { method: 'POST', path: '/nfse' } }
       })
-    ).toBe('Falha\ndet (POST /nfse no Plugnotas)');
+    ).toBe('Falha\ndet (POST /nfse no emissor fiscal)');
   });
 
   it('inclui resumo de plugnotasUpdateAttempts', () => {
@@ -45,6 +45,6 @@ describe('buildApiErrorMessage', () => {
           ]
         }
       })
-    ).toBe('Update falhou [Tentativas Plugnotas: PATCH /empresa/1 → HTTP 404]');
+    ).toBe('Update falhou [Tentativas do emissor: PATCH /empresa/1 → HTTP 404]');
   });
 });
