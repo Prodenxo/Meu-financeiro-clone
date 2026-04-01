@@ -10,15 +10,15 @@ describe('formatPlugnotasIntegrationError', () => {
     expect(out).toContain('Empresa no Plugnotas');
   });
 
-  it('enriquece quando API diz não localizar empresa (sem anexar mensagem bruta)', () => {
+  it('enriquece quando API diz não localizar empresa (copy humana, sem colar JSON)', () => {
     const msg = 'Não localizamos qualquer Empresa com os parâmetros informados';
     const out = formatPlugnotasIntegrationError(msg);
     expect(out).toContain('Empresa não encontrada no Plugnotas');
     expect(out).toContain('Plugnotas');
     expect(out).not.toContain('Referência do emissor');
+    expect(out).toContain('certificado');
+    expect(out).toContain('token');
     expect(out).not.toContain(msg);
-    expect(out).toContain('emissor fiscal');
-    expect(out).toContain(msg);
   });
 
   it('enriquece rota inexistente no serviço (sem anexar mensagem bruta)', () => {
