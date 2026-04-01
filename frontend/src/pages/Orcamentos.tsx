@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Wallet } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
@@ -15,6 +15,7 @@ import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
 import EmptyState from '../components/EmptyState';
 import LoadingOverlay from '../components/LoadingOverlay';
+import FetchErrorBanner from '../components/FetchErrorBanner';
 
 const meses = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -26,6 +27,7 @@ export default function Orcamentos() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [summary, setSummary] = useState<CategoryBudgetSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const [budgetsByCategory, setBudgetsByCategory] = useState<Record<number, string>>({});
   const [savedBudgetsByCategory, setSavedBudgetsByCategory] = useState<Record<number, string>>({});
@@ -37,33 +39,41 @@ export default function Orcamentos() {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
 
-  useEffect(() => {
+  const loadBudgetPage = useCallback(async () => {
     if (!userId) return;
-    let mounted = true;
     setLoading(true);
-    Promise.all([
-      fetchCategories(userId),
-      fetchCategoryBudgetsSummary(userId, { year: selectedYear, month: selectedMonth + 1 })
-    ])
-      .then(([cats, budgets]) => {
-        if (!mounted) return;
-        setCategories(cats);
-        setSummary(budgets);
-        const mapped: Record<number, string> = {};
-        budgets.forEach((budget) => {
-          mapped[budget.categorias_id] = budget.valor_orcado === null || budget.valor_orcado === undefined
+    setLoadError(null);
+    try {
+      const [cats, budgets] = await Promise.all([
+        fetchCategories(userId),
+        fetchCategoryBudgetsSummary(userId, { year: selectedYear, month: selectedMonth + 1 }),
+      ]);
+      setCategories(cats);
+      setSummary(budgets);
+      const mapped: Record<number, string> = {};
+      budgets.forEach((budget) => {
+        mapped[budget.categorias_id] =
+          budget.valor_orcado === null || budget.valor_orcado === undefined
             ? ''
             : String(Math.round(Number(budget.valor_orcado) * 100));
-        });
-        setBudgetsByCategory(mapped);
-        setSavedBudgetsByCategory(mapped);
-      })
-      .catch((error) => console.error('Erro ao buscar orçamento mensal:', error))
-      .finally(() => mounted && setLoading(false));
-    return () => {
-      mounted = false;
-    };
-  }, [userId, selectedMonth, selectedYear]);
+      });
+      setBudgetsByCategory(mapped);
+      setSavedBudgetsByCategory(mapped);
+    } catch (error: unknown) {
+      console.error('Erro ao buscar orçamento mensal:', error);
+      setLoadError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Não foi possível carregar o orçamento. Verifique a ligação à internet e tente novamente.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, selectedYear, selectedMonth]);
+
+  useEffect(() => {
+    void loadBudgetPage();
+  }, [loadBudgetPage]);
 
   const categoryMap = useMemo(() => {
     const map = new Map<number, Category>();
@@ -227,6 +237,9 @@ export default function Orcamentos() {
       <PageTitle subtitle="Acompanhe seu planejamento financeiro e compare com o realizado.">
         Orçamento Mensal
       </PageTitle>
+      {loadError ? (
+        <FetchErrorBanner message={loadError} onRetry={() => void loadBudgetPage()} />
+      ) : null}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
           <select
@@ -303,7 +316,7 @@ export default function Orcamentos() {
 
         {loading ? (
           <LoadingOverlay message="Carregando orçamentos..." />
-        ) : rows.length === 0 ? (
+        ) : loadError ? null : rows.length === 0 ? (
           <EmptyState
             icon={Wallet}
             title="Nenhum orçamento neste mês"

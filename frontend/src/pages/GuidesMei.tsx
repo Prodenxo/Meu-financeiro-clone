@@ -73,6 +73,13 @@ import {
 } from '../utils/nfsePrestadorPrefillMerge';
 import { fetchNfsePrestadorPrefill } from '../services/meiPrestadorPrefillService';
 
+function formatMeiFiscalErr(error: unknown, fallback: string): string {
+  return formatFiscalError(
+    error instanceof Error ? error.message : fallback,
+    getFiscalErrorCode(error)
+  );
+}
+
 const buildFilenameFromCompetencia = (competencia: string | null) => {
   if (!competencia) return 'guia-mei.pdf';
   return `guia-mei-${competencia}.pdf`;
@@ -432,13 +439,13 @@ export default function GuidesMei() {
     setNfseErrorKind(null);
   }, []);
 
-  const setEmissionNfseError = useCallback((raw: string) => {
-    setNfseError(formatFiscalError(raw));
+  const setEmissionNfseError = useCallback((msg: string) => {
+    setNfseError(msg);
     setNfseErrorKind('emission');
   }, []);
 
-  const setOperationNfseError = useCallback((raw: string) => {
-    setNfseError(formatFiscalError(raw));
+  const setOperationNfseError = useCallback((msg: string) => {
+    setNfseError(msg);
     setNfseErrorKind('operation');
   }, []);
   const [nfseCatalogLoading, setNfseCatalogLoading] = useState(false);
@@ -579,9 +586,7 @@ export default function GuidesMei() {
       });
       setNfseList(list);
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao listar NFSe.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao listar NFSe.'));
     } finally {
       setNfseLoading(false);
     }
@@ -605,11 +610,7 @@ export default function GuidesMei() {
       setNfseCatalogClientes(clientes || []);
       setNfseCatalogProdutos(produtos || []);
     } catch (error) {
-      setNfseCatalogError(
-        formatFiscalError(
-          error instanceof Error ? error.message : 'Erro ao carregar catálogo fiscal.'
-        )
-      );
+      setNfseCatalogError(formatMeiFiscalErr(error, 'Erro ao carregar catálogo fiscal.'));
     } finally {
       setNfseCatalogLoading(false);
     }
@@ -984,7 +985,8 @@ export default function GuidesMei() {
       } else {
         setCertificateConnectivityAlert(false);
         const fallbackMessage = formatFiscalError(
-          error instanceof Error ? error.message : 'Erro ao enviar certificado.'
+          error instanceof Error ? error.message : 'Erro ao enviar certificado.',
+          getFiscalErrorCode(error)
         );
         setCertificateErrorFiscalCode(getFiscalErrorCode(error));
         setCertificateError(
@@ -1038,11 +1040,7 @@ export default function GuidesMei() {
       );
     } catch (error) {
       setNfEmissionCompanySyncError(
-        formatFiscalError(
-          error instanceof Error
-            ? error.message
-            : 'Falha ao consultar cadastro no serviço de emissão fiscal.'
-        )
+        formatMeiFiscalErr(error, 'Falha ao consultar cadastro no serviço de emissão fiscal.')
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -1094,11 +1092,7 @@ export default function GuidesMei() {
       );
     } catch (error) {
       setNfEmissionCompanySyncError(
-        formatFiscalError(
-          error instanceof Error
-            ? error.message
-            : 'Falha ao atualizar empresa no serviço de emissão fiscal.'
-        )
+        formatMeiFiscalErr(error, 'Falha ao atualizar empresa no serviço de emissão fiscal.')
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -1119,9 +1113,7 @@ export default function GuidesMei() {
       }
       setNfEmissionCompanySyncSuccess('Dados do emitente salvos com sucesso.');
     } catch (error) {
-      setNfEmissionCompanySyncError(
-        error instanceof Error ? error.message : 'Falha ao salvar dados do emitente.'
-      );
+      setNfEmissionCompanySyncError(formatMeiFiscalErr(error, 'Falha ao salvar dados do emitente.'));
     } finally {
       setNfEmissionCompanySyncLoading(null);
     }
@@ -1154,7 +1146,7 @@ export default function GuidesMei() {
       } else {
         setCertificateConnectivityAlert(false);
         setCertificateErrorFiscalCode(null);
-        setCertificateError(error instanceof Error ? error.message : 'Erro ao remover certificado.');
+        setCertificateError(formatMeiFiscalErr(error, 'Erro ao remover certificado.'));
       }
     } finally {
       setIsRemovingCert(false);
@@ -1365,9 +1357,7 @@ export default function GuidesMei() {
       setSelectedCatalogClienteId('');
       setSelectedCatalogProdutoId('');
     } catch (error) {
-      setEmissionNfseError(
-        error instanceof Error ? error.message : 'Erro ao emitir nota fiscal.'
-      );
+      setEmissionNfseError(formatMeiFiscalErr(error, 'Erro ao emitir nota fiscal.'));
     } finally {
       setNfseSubmitting(false);
     }
@@ -1384,9 +1374,7 @@ export default function GuidesMei() {
       setNfseList((current) => current.map((item) => (item.id === id ? updated : item)));
       setNfseSuccess('Status da NFSe atualizado com sucesso.');
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao atualizar NFSe.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao atualizar NFSe.'));
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1403,9 +1391,7 @@ export default function GuidesMei() {
       triggerFileDownload(blob, filename || `nfse-${record.id}.pdf`);
       setNfseSuccess('Download do PDF iniciado.');
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao baixar PDF da NFSe.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao baixar PDF da NFSe.'));
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1422,9 +1408,7 @@ export default function GuidesMei() {
       triggerFileDownload(blob, filename || `nfse-${record.id}.xml`);
       setNfseSuccess('Download do XML iniciado.');
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao baixar XML da NFSe.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao baixar XML da NFSe.'));
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1448,9 +1432,7 @@ export default function GuidesMei() {
       setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
       setNfseSuccess(!reviewRequested ? 'NFSe marcada para revisão.' : 'Marcação de revisão removida.');
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao atualizar NFSe.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao atualizar NFSe.'));
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1472,9 +1454,7 @@ export default function GuidesMei() {
       setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
       setNfseSuccess('Solicitação de cancelamento processada.');
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao cancelar nota fiscal.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao cancelar nota fiscal.'));
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1495,7 +1475,7 @@ export default function GuidesMei() {
       setNfseSuccess(!isArchived ? 'Nota fiscal arquivada com sucesso.' : 'Nota fiscal desarquivada com sucesso.');
     } catch (error) {
       setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao atualizar arquivamento da nota fiscal.'
+        formatMeiFiscalErr(error, 'Erro ao atualizar arquivamento da nota fiscal.')
       );
     } finally {
       finishNfseAction(actionKey);
@@ -2471,12 +2451,10 @@ export default function GuidesMei() {
                 onChange={(event) => {
                   touchNfsePrestadorBffParity();
                   updateNfseForm({
-                    prestadorCpfCnpj: formatDocument(event.target.value)
-                  })
-                }
-                onBlur={handlePrestadorCnpjBlur}
+                    prestadorCpfCnpj: formatDocument(event.target.value),
                   });
                 }}
+                onBlur={handlePrestadorCnpjBlur}
                 placeholder="00.000.000/0001-00"
               />
               {nfsePrestadorBrasilApiLoading ? (

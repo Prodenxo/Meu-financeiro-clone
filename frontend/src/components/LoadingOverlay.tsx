@@ -1,10 +1,21 @@
 interface LoadingOverlayProps {
   message?: string;
+  className?: string;
 }
 
-export default function LoadingOverlay({ message = 'Carregando...' }: LoadingOverlayProps) {
+export default function LoadingOverlay({
+  message = 'Carregando...',
+  className = '',
+}: LoadingOverlayProps) {
   return (
-    <div className="relative w-full min-h-[120px] flex items-center justify-center rounded-xl bg-white/70 dark:bg-slate-900/50">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label={message}
+      className={`relative flex w-full min-h-[120px] items-center justify-center rounded-xl bg-white/70 dark:bg-slate-900/50 ${className}`.trim()}
+    >
+      <span className="sr-only">{message}</span>
       <div className="flex flex-col items-center gap-3">
         <svg
           className="animate-spin h-8 w-8 text-blue-500 dark:text-blue-400"

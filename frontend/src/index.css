@@ -92,6 +92,16 @@
     @apply planner-button-secondary rounded-full px-3 py-2 text-sm;
   }
 
+  /** Ação destrutiva (confirmar exclusão, desconectar, sair) — FR-UX-GLOBAL-B03 / UX-GLOBAL-07 */
+  .planner-button-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-rose-500 active:bg-rose-600/90 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /** Ação positiva secundária (WhatsApp, desbloquear) — alinhado ao token emerald do produto */
+  .planner-button-success {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-500 active:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
   .planner-chip {
     @apply inline-flex items-center rounded-full bg-slate-100/80 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800/60 dark:text-slate-200;
   }

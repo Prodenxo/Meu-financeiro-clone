@@ -14,6 +14,8 @@ import { fetchMeiCertificateStatus } from '../services/guidesMeiService';
 import type { MeiCertificateStatus } from '../services/guidesMeiService';
 import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
+import LoadingOverlay from '../components/LoadingOverlay';
+import FetchErrorBanner from '../components/FetchErrorBanner';
 
 const locales = {
   'pt-BR': ptBR,
@@ -218,8 +220,8 @@ export default function Agenda() {
       <PageTitle subtitle="Visualize seus pagamentos futuros e eventos">Agenda</PageTitle>
       <div className="h-full flex flex-col">
         {checkingAuth ? (
-          <div className="planner-card p-4 md:p-6 mb-4 md:mb-8">
-            <p className="text-slate-600 dark:text-slate-400">Verificando autenticação...</p>
+          <div className="planner-card mb-4 overflow-hidden p-0 md:mb-8">
+            <LoadingOverlay message="A verificar ligação ao Google Calendar…" className="min-h-[100px] rounded-xl" />
           </div>
         ) : !isGoogleAuthorized ? (
           <div className="planner-card p-4 md:p-6 mb-4 md:mb-8">
@@ -246,20 +248,18 @@ export default function Agenda() {
 
         {isGoogleAuthorized && (
           <>
-            {loadingGoogleEvents && (
-              <div className="planner-card p-3 mb-4 md:mb-8">
-                <p className="text-sm md:text-base text-slate-600 dark:text-slate-400">
-                  Carregando eventos do Google Calendar...
-                </p>
+            {loadingGoogleEvents ? (
+              <div className="planner-card mb-4 overflow-hidden p-0 md:mb-8">
+                <LoadingOverlay message="A carregar eventos do Google Calendar…" className="min-h-[88px] rounded-xl" />
               </div>
-            )}
-            {googleEventsError && (
-              <div className="bg-amber-100/70 dark:bg-amber-900/40 p-3 rounded-xl mb-4 md:mb-8 border border-amber-200/60 dark:border-amber-800/60">
-                <p className="text-sm md:text-base text-amber-700 dark:text-amber-200">
-                  Não foi possível carregar eventos do Google Calendar.
-                </p>
-              </div>
-            )}
+            ) : null}
+            {googleEventsError ? (
+              <FetchErrorBanner
+                title="Não foi possível carregar eventos do Google Calendar"
+                message={googleEventsError}
+                onRetry={() => void fetchGoogleEvents()}
+              />
+            ) : null}
           </>
         )}
 

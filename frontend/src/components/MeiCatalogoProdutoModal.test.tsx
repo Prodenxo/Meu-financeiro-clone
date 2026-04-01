@@ -76,7 +76,8 @@ describe('MeiCatalogoProdutoModal', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /^Guardar$/i }));
 
     const alert = await within(dialog).findByRole('alert');
-    expect(alert.textContent).toContain('Falha do servidor');
+    expect(alert.textContent).toMatch(/Operação fiscal/i);
+    expect(alert.textContent).toContain('Não foi possível concluir o pedido');
     expect(onSaved).not.toHaveBeenCalled();
   });
 

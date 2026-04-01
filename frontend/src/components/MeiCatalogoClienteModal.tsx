@@ -10,6 +10,7 @@ import {
   MEI_CATALOGO_DELETE_CLIENTE_DANGER_HEADING,
   MEI_CATALOGO_DELETE_CLIENTE_DANGER_HINT
 } from '../copy/meiCatalogoClienteDelete';
+import { formatMeiFiscalMappedForAlert, mapMeiFiscalErrorFromUnknown } from '../lib/fiscalUserError';
 
 const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -37,7 +38,6 @@ export default function MeiCatalogoClienteModal({
   const [email, setEmail] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [apiError, setApiError] = useState<string | null>(null);
-  const [apiDetails, setApiDetails] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const nomeRef = useRef<HTMLInputElement>(null);
@@ -50,7 +50,6 @@ export default function MeiCatalogoClienteModal({
     if (!open) return;
     setFieldErrors({});
     setApiError(null);
-    setApiDetails(null);
     if (editing) {
       setNome(editing.nome || '');
       setDocumento(formatCpfCnpjPtBr(editing.documento || ''));
@@ -102,7 +101,6 @@ export default function MeiCatalogoClienteModal({
     e.preventDefault();
     if (!validate()) return;
     setApiError(null);
-    setApiDetails(null);
     setSaving(true);
     try {
       if (isEdit && editing) {
@@ -121,9 +119,9 @@ export default function MeiCatalogoClienteModal({
       onSaved(isEdit ? 'edit' : 'create');
       onClose();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro ao guardar.';
-      setApiError(msg);
-      setApiDetails(err instanceof Error ? err.stack ?? null : String(err));
+      setApiError(
+        formatMeiFiscalMappedForAlert(mapMeiFiscalErrorFromUnknown(err, 'Erro ao guardar.'))
+      );
     } finally {
       setSaving(false);
     }
@@ -167,13 +165,7 @@ export default function MeiCatalogoClienteModal({
             className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
             role="alert"
           >
-            {apiError}
-            {apiDetails ? (
-              <details className="mt-2 text-xs opacity-90">
-                <summary className="cursor-pointer">Detalhe técnico</summary>
-                <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all">{apiDetails}</pre>
-              </details>
-            ) : null}
+            <span className="whitespace-pre-wrap break-words">{apiError}</span>
           </div>
         )}
 

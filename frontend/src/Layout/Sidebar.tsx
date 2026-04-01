@@ -13,7 +13,7 @@ export default function Sidebar({ expanded }: SidebarProps) {
     || role === 'admin'
     || (role === 'usuario' && mei !== false);
   const navItems = [
-    { path: '/', label: 'Visão Geral', icon: Home },
+    { path: '/', label: 'Início', icon: Home },
     { path: '/transacoes', label: 'Transações', icon: List },
     { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
     { path: '/categorias', label: 'Categorias', icon: Grid3x3 },

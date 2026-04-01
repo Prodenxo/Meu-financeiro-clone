@@ -1,0 +1,217 @@
+import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
+import { getPlugnotasCodeFromUnknownError } from '../utils/apiClientError';
+
+/** Fallback global (spec UX-GLOBAL-06 / FR-UX-GLOBAL-B06) — sem corpo técnico ao utilizador. */
+export const MEI_FISCAL_ERROR_FALLBACK_DESCRIPTION =
+  'Não foi possível concluir o pedido. Tenta de novo. Se persistir, contacta o suporte.';
+
+export type MeiFiscalUserCopy = {
+  title: string;
+  description: string;
+  actionLabel?: string;
+  href?: string;
+};
+
+function meiOperacaoNfseDocBase(): string {
+  const raw = typeof import.meta.env.VITE_MEI_OPERACAO_NFSE_DOC_URL === 'string'
+    ? import.meta.env.VITE_MEI_OPERACAO_NFSE_DOC_URL.trim()
+    : '';
+  return raw ? raw.replace(/#.*$/, '') : '';
+}
+
+function hrefCertificado409SemId(): string {
+  const base = meiOperacaoNfseDocBase();
+  if (base) return `${base}#certificado-plugnotas-409-sem-id`;
+  return '/guia-mei-certificado-409-sem-id.html';
+}
+
+/** Texto que parece JSON de API — não mostrar como mensagem principal ao utilizador. */
+export function looksLikeOpaqueApiPayload(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 60) return false;
+  if (t.startsWith('{') && t.includes('"') && (t.includes('"message"') || t.includes('"errors"'))) {
+    return true;
+  }
+  if (t.startsWith('[') && t.includes('{')) return true;
+  return false;
+}
+
+function normalizeMsg(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Mapeia `plugnotasCode` e/ou texto bruto da API para copy humana + próximo passo.
+ * Ordem: código estável → padrões HTTP/rede → heurísticas Plugnotas → mensagem explícita conhecida → fallback global.
+ */
+export function mapMeiFiscalErrorToCopy(input: {
+  rawMessage: string;
+  plugnotasCode?: string | null;
+}): MeiFiscalUserCopy {
+  const code = input.plugnotasCode?.trim() || null;
+  const raw = (input.rawMessage || '').trim();
+  const lower = raw.toLowerCase();
+
+  if (code === PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID) {
+    return {
+      title: 'Certificado e conta Plugnotas',
+      description:
+        'O provedor reconheceu o certificado, mas não devolveu o identificador da empresa nesta conta. '
+        + 'Confirme se o CNPJ, o ambiente (testes/produção) e a API key são da mesma conta Plugnotas onde a empresa está cadastrada. '
+        + 'Depois volte a enviar o certificado ou peça apoio ao suporte Plugnotas.',
+      actionLabel: 'Documentação',
+      href: hrefCertificado409SemId(),
+    };
+  }
+
+  if (
+    /\b401\b/.test(raw)
+    || lower.includes('unauthorized')
+    || lower.includes('não autorizado')
+    || lower.includes('nao autorizado')
+    || lower.includes('token inválido')
+    || lower.includes('token invalido')
+  ) {
+    return {
+      title: 'Sessão ou permissão',
+      description:
+        'A sessão pode ter expirado ou o token não tem permissão para esta operação. Saia e entre de novo na conta e tente outra vez.',
+    };
+  }
+
+  if (/\b403\b/.test(raw) || lower.includes('forbidden') || lower.includes('proibido')) {
+    return {
+      title: 'Acesso negado',
+      description:
+        'O servidor recusou esta operação. Verifique se a sua conta tem perfil adequado ou contacte o administrador da empresa.',
+    };
+  }
+
+  if (
+    /\b404\b/.test(raw)
+    || lower.includes('not found')
+    || lower.includes('não encontrad')
+    || lower.includes('nao encontrad')
+  ) {
+    return {
+      title: 'Registo não encontrado',
+      description:
+        'O item pedido já não existe ou o identificador está incorreto. Atualize a lista e confirme os dados.',
+    };
+  }
+
+  if (
+    lower.includes('duplicate')
+    || lower.includes('unique')
+    || lower.includes('já existe')
+    || lower.includes('ja existe')
+    || lower.includes('already exists')
+    || lower.includes('conflict')
+    || lower.includes('23505')
+  ) {
+    return {
+      title: 'Registo duplicado',
+      description:
+        'Já existe um registo com estes dados (por exemplo, o mesmo CPF/CNPJ no catálogo). Altere o documento ou edite o registo existente.',
+    };
+  }
+
+  if (
+    lower.includes('failed to fetch')
+    || lower.includes('networkerror')
+    || lower.includes('network request failed')
+    || lower === 'load failed'
+    || lower.includes('erro de rede')
+  ) {
+    return {
+      title: 'Ligação à internet',
+      description:
+        'Não foi possível contactar o servidor. Verifique a Wi‑Fi ou os dados móveis e tente de novo.',
+    };
+  }
+
+  if (looksLikeOpaqueApiPayload(raw)) {
+    return {
+      title: 'Erro no serviço',
+      description: MEI_FISCAL_ERROR_FALLBACK_DESCRIPTION,
+    };
+  }
+
+  if (lower.includes('não há cadastro desta empresa no plugnotas') || lower.includes('nao ha cadastro desta empresa no plugnotas')) {
+    return {
+      title: 'Empresa no Plugnotas',
+      description: normalizeMsg(raw),
+    };
+  }
+
+  if (
+    (lower.includes('não localizamos') || lower.includes('nao localizamos'))
+    && (lower.includes('empresa') || lower.includes('parâmetros') || lower.includes('parametros'))
+  ) {
+    return {
+      title: 'Empresa não encontrada no Plugnotas',
+      description:
+        'O Plugnotas não encontrou cadastro desta empresa para o seu token. Cadastre primeiro o certificado (.pfx) e os dados na guia MEI; '
+        + 'confirme também se ambiente (sandbox/produção) e token são da conta onde o CNPJ está registado.',
+    };
+  }
+
+  if (
+    lower.includes('rota')
+    && (lower.includes('não existe') || lower.includes('nao existe'))
+    && (lower.includes('serviço') || lower.includes('servico'))
+  ) {
+    return {
+      title: 'Configuração do Plugnotas',
+      description:
+        'O provedor recusou a chamada (URL base ou ambiente incorreto). Quem gere o servidor deve confirmar PLUGNOTAS_API_BASE_URL e a chave no mesmo ambiente.',
+    };
+  }
+
+  if (!raw) {
+    return { title: 'Operação fiscal', description: MEI_FISCAL_ERROR_FALLBACK_DESCRIPTION };
+  }
+
+  return { title: 'Operação fiscal', description: MEI_FISCAL_ERROR_FALLBACK_DESCRIPTION };
+}
+
+/** Texto único para painéis / `LongFiscalErrorMessage` (título + descrição). */
+export function formatMeiFiscalMappedForAlert(copy: MeiFiscalUserCopy): string {
+  const action =
+    copy.href && copy.actionLabel
+      ? `\n\n${copy.actionLabel}: ${copy.href}`
+      : copy.href
+        ? `\n\nMais informação: ${copy.href}`
+        : '';
+  return `${copy.title}\n\n${copy.description}${action}`;
+}
+
+/** Uma linha curta para toasts — sem JSON nem stack. */
+export function meiFiscalToastMessage(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : fallback;
+  const copy = mapMeiFiscalErrorToCopy({
+    rawMessage: raw || fallback,
+    plugnotasCode: getPlugnotasCodeFromUnknownError(err),
+  });
+  const line = `${copy.title}: ${copy.description}`.replace(/\s+/g, ' ').trim();
+  return line.length > 220 ? `${line.slice(0, 217)}…` : line;
+}
+
+/**
+ * Entrada usada por `formatPlugnotasIntegrationError` (Guia MEI e integrações).
+ */
+export function formatMeiFiscalErrorForIntegrations(rawMessage: string, plugnotasCode?: string | null): string {
+  const copy = mapMeiFiscalErrorToCopy({
+    rawMessage,
+    plugnotasCode: plugnotasCode ?? null,
+  });
+  return formatMeiFiscalMappedForAlert(copy);
+}
+
+export function mapMeiFiscalErrorFromUnknown(err: unknown, fallbackMessage: string): MeiFiscalUserCopy {
+  const raw = err instanceof Error ? err.message : fallbackMessage;
+  return mapMeiFiscalErrorToCopy({
+    rawMessage: raw || fallbackMessage,
+    plugnotasCode: getPlugnotasCodeFromUnknownError(err),
+  });
+}

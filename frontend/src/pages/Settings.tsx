@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { checkGoogleAuth } from '../lib/google-calendar';
@@ -9,11 +9,22 @@ import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
+import { AccessBlockedExplainer } from '../components/AccessBlockedExplainer';
+import {
+  adminSettingsRestrictedAccessBlockProps,
+  type AccessBlockKind,
+} from '../lib/accessBlockPresets';
 
 export default function Settings() {
   const { user, userId, phone, displayName, updatePhone, updateDisplayName, signOut, role } = useAuthStore();
   const { isDarkMode, toggleTheme } = useThemeStore();
   const navigate = useNavigate();
+  const location = useLocation();
+  const accessBlock = (location.state as { accessBlock?: AccessBlockKind } | null)?.accessBlock;
+  const showAdminAccessBlock = accessBlock === 'admin-settings-restricted';
+  const dismissAdminAccessNotice = () => {
+    navigate(location.pathname, { replace: true, state: {} });
+  };
   const [isGoogleAuthenticated, setIsGoogleAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -102,7 +113,17 @@ export default function Settings() {
 
   return (
     <PageShell>
-      <PageTitle subtitle="Gerencie suas preferências e informações">Configurações</PageTitle>
+      <PageTitle subtitle="Conta, tema da app e outras opções. Gerencie as suas preferências e informações.">
+        Configurações
+      </PageTitle>
+
+      {showAdminAccessBlock ? (
+        <AccessBlockedExplainer
+          {...adminSettingsRestrictedAccessBlockProps()}
+          testId="access-block-admin-settings"
+          onDismiss={dismissAdminAccessNotice}
+        />
+      ) : null}
 
         {error && (
           <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded">
@@ -207,7 +228,7 @@ export default function Settings() {
             href="https://wa.me/5521974526796"
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full md:w-auto planner-button bg-emerald-600 hover:bg-emerald-500"
+            className="w-full md:w-auto planner-button-success"
           >
             <MessageCircle className="w-4 h-4 mr-2" />
             Fale com nosso agente
@@ -310,7 +331,7 @@ export default function Settings() {
               </div>
               <button
                 onClick={handleDisconnectGoogle}
-                className="w-full md:w-auto planner-button bg-rose-600 hover:bg-rose-500 flex items-center justify-center gap-2"
+                className="w-full md:w-auto planner-button-danger flex items-center justify-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -353,7 +374,7 @@ export default function Settings() {
               </p>
               <button
                 onClick={handleSignOut}
-                className="w-full md:w-auto planner-button bg-rose-600 hover:bg-rose-500"
+                className="w-full md:w-auto planner-button-danger"
               >
                 Sair da Conta
               </button>

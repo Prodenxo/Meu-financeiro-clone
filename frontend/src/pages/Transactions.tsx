@@ -9,6 +9,8 @@ import { toast } from '../lib/toast';
 import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
 import EmptyState from '../components/EmptyState';
+import LoadingOverlay from '../components/LoadingOverlay';
+import FetchErrorBanner from '../components/FetchErrorBanner';
 import ButtonSpinner from '../components/ButtonSpinner';
 import RecorrenciaModal from '../components/RecorrenciaModal';
 import RecorrenciaDeleteModal from '../components/RecorrenciaDeleteModal';
@@ -654,7 +656,8 @@ function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, load
         </div>
         <div className="flex gap-3">
           <button
-            className="flex-1 planner-button bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+            type="button"
+            className="flex-1 planner-button-danger"
             disabled={!!loading}
             onClick={() => onDelete(transacao.id)}
           >
@@ -685,7 +688,15 @@ const formatValorRec = (v: number) =>
   Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function Transactions() {
-  const { transactions, deleteTransaction, addTransaction, updateTransaction, fetchTransactions } = useTransactionStore();
+  const {
+    transactions,
+    deleteTransaction,
+    addTransaction,
+    updateTransaction,
+    fetchTransactions,
+    loading: transactionsLoading,
+    error: transactionsError,
+  } = useTransactionStore();
   const {
     recorrencias,
     fetchRecorrencias,
@@ -737,6 +748,10 @@ export default function Transactions() {
   useEffect(() => {
     void fetchRecorrencias();
   }, [fetchRecorrencias]);
+
+  useEffect(() => {
+    void fetchTransactions();
+  }, [fetchTransactions]);
 
   useEffect(() => {
     if (dateRange.start && dateRange.end) {
@@ -1397,6 +1412,13 @@ export default function Transactions() {
       <PageShell>
       <PageTitle>Transações</PageTitle>
 
+      {transactionsError ? (
+        <FetchErrorBanner
+          message={transactionsError}
+          onRetry={() => void fetchTransactions()}
+        />
+      ) : null}
+
       {/* Header e busca - Mobile */}
       <div className="mb-4 md:mb-6">
         <div className="relative mb-4">
@@ -1602,6 +1624,10 @@ export default function Transactions() {
           </button>
         </div>
 
+        {transactionsLoading && transactions.length === 0 ? (
+          <LoadingOverlay message="Carregando transações…" className="min-h-[280px]" />
+        ) : (
+          <>
         {/* Tabela desktop */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm text-gray-700 dark:text-gray-200">
@@ -1769,24 +1795,26 @@ export default function Transactions() {
               </div>
             </div>
           ))}
-          {filtered.length === 0 && (
-            <EmptyState
-              icon={List}
-              title="Nenhuma transação encontrada"
-              description="Adicione sua primeira transação para acompanhar receitas e despesas."
-              action={
-                <button
-                  type="button"
-                  className="planner-button inline-flex items-center gap-2"
-                  onClick={() => { setSaveError(null); setModalOpen(true); }}
-                >
-                  <PlusCircle size={18} />
-                  Nova transação
-                </button>
-              }
-            />
-          )}
         </div>
+        {filtered.length === 0 && !transactionsLoading && !transactionsError && (
+          <EmptyState
+            icon={List}
+            title="Nenhuma transação encontrada"
+            description="Adicione sua primeira transação para acompanhar receitas e despesas."
+            action={
+              <button
+                type="button"
+                className="planner-button inline-flex items-center gap-2"
+                onClick={() => { setSaveError(null); setModalOpen(true); }}
+              >
+                <PlusCircle size={18} />
+                Nova transação
+              </button>
+            }
+          />
+        )}
+          </>
+        )}
       </div>
 
       {/* Botão flutuante mobile */}

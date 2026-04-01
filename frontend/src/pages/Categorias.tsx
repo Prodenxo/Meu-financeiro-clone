@@ -13,6 +13,7 @@ import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
 import EmptyState from '../components/EmptyState';
 import LoadingOverlay from '../components/LoadingOverlay';
+import FetchErrorBanner from '../components/FetchErrorBanner';
 
 function CategoriaModal({ open, onClose, onSave, categoria }: { open: boolean, onClose: () => void, onSave: (cat: { nome: string, tipo: string }) => void, categoria?: Category | null }) {
   const [nome, setNome] = useState('');
@@ -88,6 +89,8 @@ function CategoriaModal({ open, onClose, onSave, categoria }: { open: boolean, o
 export default function Categorias() {
   const [categorias, setCategorias] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [budgetLoadError, setBudgetLoadError] = useState<string | null>(null);
   const [spentByCategory, setSpentByCategory] = useState<Record<number, number>>({});
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategoria, setEditingCategoria] = useState<Category | null>(null);
@@ -103,11 +106,15 @@ export default function Categorias() {
     }
 
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await fetchCategories(userId);
       setCategorias(data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao carregar categorias:', error);
+      setLoadError(
+        'Não foi possível carregar as categorias. Verifique a ligação à internet e tente novamente.'
+      );
     } finally {
       setLoading(false);
     }
@@ -116,9 +123,11 @@ export default function Categorias() {
   async function loadBudgetSummary() {
     if (!userId) {
       setSpentByCategory({});
+      setBudgetLoadError(null);
       return;
     }
 
+    setBudgetLoadError(null);
     try {
       const data = await fetchCategoryBudgetsSummary(userId);
       const spentMapped: Record<number, number> = {};
@@ -126,8 +135,11 @@ export default function Categorias() {
         spentMapped[budget.categorias_id] = Number(budget.valor_gasto || 0);
       });
       setSpentByCategory(spentMapped);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao carregar orçamentos:', error);
+      setBudgetLoadError(
+        'Não foi possível carregar os totais gastos por categoria (orçamento). Verifique a ligação e tente novamente.'
+      );
     }
   }
 
@@ -238,7 +250,8 @@ export default function Categorias() {
             </div>
             <div className="flex gap-3">
               <button
-                className="flex-1 bg-rose-600 text-white py-2.5 rounded-xl font-semibold hover:bg-rose-700 shadow-md"
+                type="button"
+                className="flex-1 planner-button-danger"
                 onClick={() => handleDeleteCategoria(deletingCategoria.id)}
               >
                 Sim, excluir
@@ -261,6 +274,17 @@ export default function Categorias() {
       <PageTitle subtitle="A IA já identifica categorias automaticamente. Você pode personalizar também.">
         Categorias
       </PageTitle>
+
+      {loadError && !loading ? (
+        <FetchErrorBanner message={loadError} onRetry={() => void loadCategorias()} />
+      ) : null}
+      {budgetLoadError ? (
+        <FetchErrorBanner
+          title="Totais por categoria (orçamento)"
+          message={budgetLoadError}
+          onRetry={() => void loadBudgetSummary()}
+        />
+      ) : null}
 
       <div className="flex flex-col md:flex-row md:items-center gap-3 mb-6">
         <div className="flex-1">
@@ -290,7 +314,7 @@ export default function Categorias() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {loading ? (
           <LoadingOverlay message="Carregando categorias..." />
-        ) : categoriasFiltradas.length === 0 ? (
+        ) : loadError ? null : categoriasFiltradas.length === 0 ? (
           <div className="lg:col-span-2">
             <EmptyState
               icon={Grid3x3}

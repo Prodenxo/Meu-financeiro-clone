@@ -1597,7 +1597,7 @@ export default function ManageUsers() {
                             <button
                               onClick={() => handleUnbanUser(user)}
                               disabled={loading}
-                              className="planner-button w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500"
+                              className="planner-button-success w-full sm:w-auto"
                             >
                               Desbloquear
                             </button>
@@ -1615,7 +1615,7 @@ export default function ManageUsers() {
                             <button
                               onClick={() => handleDeleteUser(user)}
                               disabled={loading}
-                              className="planner-button w-full sm:w-auto bg-rose-600 hover:bg-rose-500"
+                              className="planner-button-danger w-full sm:w-auto"
                             >
                               Excluir
                             </button>

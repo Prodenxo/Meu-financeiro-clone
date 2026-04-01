@@ -5,6 +5,8 @@ import type { Recorrencia, CreateRecorrenciaInput, UpdateRecorrenciaInput } from
 import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
 import EmptyState from '../components/EmptyState';
+import LoadingOverlay from '../components/LoadingOverlay';
+import FetchErrorBanner from '../components/FetchErrorBanner';
 import RecorrenciaModal from '../components/RecorrenciaModal';
 import RecorrenciaDeleteModal from '../components/RecorrenciaDeleteModal';
 import { toast } from '../lib/toast';
@@ -85,14 +87,9 @@ export default function Recorrencias() {
         Recorrências
       </PageTitle>
 
-      {error && (
-        <div
-          className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-          role="alert"
-        >
-          {error}
-        </div>
-      )}
+      {error ? (
+        <FetchErrorBanner message={error} onRetry={() => void fetchRecorrencias()} />
+      ) : null}
 
       <div className="mb-4 flex justify-end">
         <button
@@ -110,13 +107,17 @@ export default function Recorrencias() {
       </div>
 
       {loading ? (
-        <div className="text-slate-500 dark:text-slate-400 py-8 text-center">Carregando...</div>
-      ) : !recorrencias.length ? (
+        <LoadingOverlay message="Carregando recorrências…" className="min-h-[200px]" />
+      ) : error ? null : !recorrencias.length ? (
         <EmptyState
+          icon={Repeat}
           title="Nenhuma recorrência"
           description="Crie uma recorrência para que um lançamento seja gerado automaticamente todo mês no dia escolhido (ex.: dia 5, Netflix R$ 50)."
-          actionLabel="Nova recorrência"
-          onAction={() => setModalOpen(true)}
+          action={
+            <button type="button" className="planner-button" onClick={() => setModalOpen(true)}>
+              Nova recorrência
+            </button>
+          }
         />
       ) : (
         <ul className="space-y-3">
