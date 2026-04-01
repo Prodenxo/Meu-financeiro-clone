@@ -13,6 +13,7 @@ import {
 } from '../services/meiNotasService';
 import { formatBrlDisplay } from '../lib/formatMoneyPtBr';
 import { toast } from '../lib/toast';
+import { meiFiscalToastMessage } from '../lib/fiscalUserError';
 
 const SEARCH_DEBOUNCE_MS = 300;
 const LIST_LIMIT = 50;
@@ -67,7 +68,7 @@ export default function MeiCatalogoServicosProdutos() {
       });
       setRows(data);
     } catch (err) {
-      setListError(err instanceof Error ? err.message : 'Erro ao carregar itens do catálogo.');
+      setListError(meiFiscalToastMessage(err, 'Erro ao carregar itens do catálogo.'));
     } finally {
       setLoading(false);
     }
@@ -102,7 +103,7 @@ export default function MeiCatalogoServicosProdutos() {
       setEditing(null);
       void loadProdutos();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Não foi possível eliminar o item.';
+      const msg = meiFiscalToastMessage(err, 'Não foi possível eliminar o item.');
       setDeleteError(msg);
       toast.error(msg);
     } finally {
@@ -205,7 +206,7 @@ export default function MeiCatalogoServicosProdutos() {
             {rows.map((row) => (
               <li
                 key={row.id}
-                className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800/80 dark:bg-slate-900/40"
+                className="planner-card-muted p-4 shadow-sm"
               >
                 <p className="font-medium text-slate-900 dark:text-white">{summarizeDiscriminacao(row.discriminacao)}</p>
                 <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-sm text-slate-600 dark:text-slate-300">

@@ -11,6 +11,7 @@ import {
   LongFiscalErrorMessage,
   PlugnotasIntegrationErrorAlert
 } from './FiscalIntegrationErrorAlert';
+import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
 
 const globalWithActFlag = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
 globalWithActFlag.IS_REACT_ACT_ENVIRONMENT = true;
@@ -141,6 +142,9 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     expect(container.textContent).toContain('revisar nfce.config.versaoQrCode');
     expect(container.textContent).toContain('NFC-e');
     expect(container.textContent).toContain('provedor de emissão fiscal');
+    expect(container.textContent).toMatch(
+      /guia rápido.*cadastro|documentação de operação|abra o guia rápido de cadastro/i
+    );
     expect(container.textContent).toMatch(/guia rápido de cadastro|documentação de operação/);
     expect(
       container.querySelector('a[href^="/guia-mei-nfce-cadastro.html#cadastro-empresa-nfce-qrcode-sefaz"]')
@@ -184,11 +188,13 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     expect(container.textContent).toContain('formulário');
   });
 
-  it('exibe checklist e Saiba mais quando plugnotasCode é certificado_409_sem_id (US-MEI-FISC-03)', async () => {
+  it('exibe checklist e Saiba mais quando fiscalErrorCode é certificado_409_sem_id (US-MEI-FISC-03)', async () => {
     const root = createRoot(container);
     await act(async () => {
       root.render(
         <GuiaMeiEmpresaCadastroErrorPanel
+          message="O certificado já está cadastrado no Plugnotas, mas não foi possível obter o ID automaticamente."
+          fiscalErrorCode={PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID}
           message="O certificado já está cadastrado no emissor fiscal, mas não foi possível obter o ID automaticamente."
           fiscalErrorCode="certificado_409_sem_id"
         />

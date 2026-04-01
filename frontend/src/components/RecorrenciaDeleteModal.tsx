@@ -43,7 +43,7 @@ export default function RecorrenciaDeleteModal({
           </button>
           <button
             type="button"
-            className="planner-button flex-1 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 inline-flex items-center justify-center gap-2"
+            className="planner-button-danger flex-1"
             onClick={() => onConfirm()}
             disabled={loading}
           >

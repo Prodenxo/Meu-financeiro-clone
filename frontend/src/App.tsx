@@ -24,6 +24,7 @@ import Layout from './Layout/Layout';
 import { handleGoogleAuthCallback } from './lib/google-auth-flow';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import LoadingOverlay from './components/LoadingOverlay';
 
 const buildRedirectPath = (pathname: string) => {
   const hash = window.location.hash;
@@ -140,24 +141,62 @@ export function AppRoutes() {
                   <Route path="/recorrencias" element={<Recorrencias />} />
                   <Route
                     path="/guias-mei"
-                    element={canAccessMeiArea ? <GuidesMei /> : <Navigate to="/" replace />}
+                    element={
+                      canAccessMeiArea ? (
+                        <GuidesMei />
+                      ) : (
+                        <Navigate to="/" replace state={{ accessBlock: 'mei-required' as const }} />
+                      )
+                    }
                   />
                   <Route
                     path="/mei-catalogo/clientes"
-                    element={canAccessMeiArea ? <MeiCatalogoClientes /> : <Navigate to="/" replace />}
+                    element={
+                      canAccessMeiArea ? (
+                        <MeiCatalogoClientes />
+                      ) : (
+                        <Navigate to="/" replace state={{ accessBlock: 'mei-required' as const }} />
+                      )
+                    }
                   />
                   <Route
                     path="/mei-catalogo/servicos-produtos"
-                    element={canAccessMeiArea ? <MeiCatalogoServicosProdutos /> : <Navigate to="/" replace />}
+                    element={
+                      canAccessMeiArea ? (
+                        <MeiCatalogoServicosProdutos />
+                      ) : (
+                        <Navigate to="/" replace state={{ accessBlock: 'mei-required' as const }} />
+                      )
+                    }
                   />
                   <Route path="/settings" element={<Settings />} />
                   <Route
                     path="/settings/users"
-                    element={hasRole(role, ['admin']) ? <ManageUsers /> : <Navigate to="/settings" replace />}
+                    element={
+                      hasRole(role, ['admin']) ? (
+                        <ManageUsers />
+                      ) : (
+                        <Navigate
+                          to="/settings"
+                          replace
+                          state={{ accessBlock: 'admin-settings-restricted' as const }}
+                        />
+                      )
+                    }
                   />
                   <Route
                     path="/settings/usuarios-dados"
-                    element={hasRole(role, ['admin']) ? <AdminUserData /> : <Navigate to="/settings" replace />}
+                    element={
+                      hasRole(role, ['admin']) ? (
+                        <AdminUserData />
+                      ) : (
+                        <Navigate
+                          to="/settings"
+                          replace
+                          state={{ accessBlock: 'admin-settings-restricted' as const }}
+                        />
+                      )
+                    }
                   />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
@@ -189,8 +228,10 @@ function App() {
 
   if (!sessionRestored) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <div>Carregando...</div>
+      <div className="flex h-screen items-center justify-center bg-slate-50/80 px-4 dark:bg-slate-950/80">
+        <div className="w-full max-w-md">
+          <LoadingOverlay message="A restaurar a sessão…" className="min-h-[160px] shadow-sm dark:shadow-none" />
+        </div>
       </div>
     );
   }

@@ -11,6 +11,7 @@ import {
   MEI_CATALOGO_DELETE_PRODUTO_DANGER_HEADING,
   MEI_CATALOGO_DELETE_PRODUTO_DANGER_HINT
 } from '../copy/meiCatalogoProdutoDelete';
+import { formatMeiFiscalMappedForAlert, mapMeiFiscalErrorFromUnknown } from '../lib/fiscalUserError';
 
 export interface MeiCatalogoProdutoModalProps {
   open: boolean;
@@ -50,7 +51,6 @@ export default function MeiCatalogoProdutoModal({
   const [valorCentDigits, setValorCentDigits] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [apiError, setApiError] = useState<string | null>(null);
-  const [apiDetails, setApiDetails] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const discRef = useRef<HTMLTextAreaElement>(null);
@@ -65,7 +65,6 @@ export default function MeiCatalogoProdutoModal({
     if (!open) return;
     setFieldErrors({});
     setApiError(null);
-    setApiDetails(null);
     if (editing) {
       setDiscriminacao(editing.discriminacao || '');
       setCodigo(editing.codigo || '');
@@ -120,7 +119,6 @@ export default function MeiCatalogoProdutoModal({
     e.preventDefault();
     if (!validate()) return;
     setApiError(null);
-    setApiDetails(null);
     setSaving(true);
     const alParsed = parseAliquotaInput(aliquotaStr);
     const aliquotaVal = aliquotaStr.trim() && !Number.isNaN(alParsed as number) ? alParsed : null;
@@ -148,9 +146,9 @@ export default function MeiCatalogoProdutoModal({
       onSaved(isEdit ? 'edit' : 'create');
       onClose();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro ao guardar.';
-      setApiError(msg);
-      setApiDetails(err instanceof Error ? err.stack ?? null : String(err));
+      setApiError(
+        formatMeiFiscalMappedForAlert(mapMeiFiscalErrorFromUnknown(err, 'Erro ao guardar.'))
+      );
     } finally {
       setSaving(false);
     }
@@ -195,13 +193,7 @@ export default function MeiCatalogoProdutoModal({
             className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
             role="alert"
           >
-            {apiError}
-            {apiDetails ? (
-              <details className="mt-2 text-xs opacity-90">
-                <summary className="cursor-pointer">Detalhe técnico</summary>
-                <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all">{apiDetails}</pre>
-              </details>
-            ) : null}
+            <span className="whitespace-pre-wrap break-words">{apiError}</span>
           </div>
         )}
 

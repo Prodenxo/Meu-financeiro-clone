@@ -15,10 +15,17 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { fetchCategories, fetchCategoryBudgetsSummary, fetchCategoryBudgetsYearly, type Category, type CategoryBudgetYearly } from '../services/categoryService';
 import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
+import FetchErrorBanner from '../components/FetchErrorBanner';
+import LoadingOverlay from '../components/LoadingOverlay';
+import { AccessBlockedExplainer } from '../components/AccessBlockedExplainer';
+import {
+  meiRequiredAccessBlockProps,
+  type AccessBlockKind,
+} from '../lib/accessBlockPresets';
 
 ChartJS.register(
   CategoryScale,
@@ -33,8 +40,15 @@ ChartJS.register(
 );
 
 export default function Dashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { transactions, fetchTransactions, addTransaction, updateTransaction, deleteTransaction, loading, error } = useTransactionStore();
   const { userId, user, role } = useAuthStore();
+  const accessBlock = (location.state as { accessBlock?: AccessBlockKind } | null)?.accessBlock;
+  const showMeiAccessBlock = accessBlock === 'mei-required';
+  const dismissAccessNotice = () => {
+    navigate(location.pathname, { replace: true, state: {} });
+  };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [formData, setFormData] = useState({
@@ -519,7 +533,17 @@ export default function Dashboard() {
 
   return (
     <PageShell>
-      <PageTitle subtitle="Resumo das suas finanças e transações">Visão Geral</PageTitle>
+      <PageTitle subtitle="Resumo das suas finanças e transações">Início</PageTitle>
+      {error ? (
+        <FetchErrorBanner message={error} onRetry={() => void fetchTransactions()} />
+      ) : null}
+      {showMeiAccessBlock ? (
+        <AccessBlockedExplainer
+          {...meiRequiredAccessBlockProps()}
+          testId="access-block-mei-required"
+          onDismiss={dismissAccessNotice}
+        />
+      ) : null}
       {/* Conteúdo do dashboard abaixo, sem header/main duplicado */}
       {hasRole(role, ['admin']) && (
         <div className="planner-card p-5 md:p-6 mb-4 md:mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -594,6 +618,10 @@ export default function Dashboard() {
       </div>
       {!bpoOpen && (
         <>
+          {loading && transactions.length === 0 && !error ? (
+            <LoadingOverlay message="Carregando transações…" className="min-h-[280px]" />
+          ) : (
+            <>
           {/* Cards de resumo */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5 mb-4 md:mb-6">
             <div className="planner-card p-5 md:p-6 flex flex-col justify-between md:min-h-[150px]">
@@ -833,6 +861,8 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+            </>
+          )}
         </>
       )}
       {bpoOpen && (

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode
+} from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import {
   downloadMeiGuide,
@@ -49,6 +57,7 @@ import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/p
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
+import { MeiNfseListRowActions } from '../components/MeiNfseListRowActions';
 import {
   EmissaoFiscalErrorAlert,
   GuiaMeiCertificateConnectivityPanel,
@@ -72,6 +81,13 @@ import {
   mergeNfsePrestadorPrefillIntoForm
 } from '../utils/nfsePrestadorPrefillMerge';
 import { fetchNfsePrestadorPrefill } from '../services/meiPrestadorPrefillService';
+
+function formatMeiFiscalErr(error: unknown, fallback: string): string {
+  return formatFiscalError(
+    error instanceof Error ? error.message : fallback,
+    getFiscalErrorCode(error)
+  );
+}
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
   if (!competencia) return 'guia-mei.pdf';
@@ -359,6 +375,122 @@ const getNfseValidationMessage = (
   return null;
 };
 
+/** FR-NFSE-UX-P1: primeira secção com erro (Prestador → Tomador → Serviço) para expansão ao tentar emitir. */
+type NfseEmitFormSection = 'prestador' | 'tomador' | 'servico' | 'opcionais';
+
+/** Secção `opcionais` existe no UI; a validação local atual não mapeia erros para ela (só prestador/tomador/serviço). */
+const getNfseValidationSection = (
+  input: EmitirNfseInput,
+  fallbackPrestadorEndereco: Partial<NfsePrestadorEndereco> = {}
+): NfseEmitFormSection | null => {
+  if (!getNfseValidationMessage(input, fallbackPrestadorEndereco)) return null;
+  const prestadorCpfCnpj = normalizeDoc(input.prestadorCpfCnpj || '');
+  if (prestadorCpfCnpj.length !== 14) return 'prestador';
+  const prestadorEndereco = resolvePrestadorEndereco(input.prestadorEndereco, fallbackPrestadorEndereco);
+  if (!prestadorEndereco.logradouro) return 'prestador';
+  if (!prestadorEndereco.numero) return 'prestador';
+  if (!prestadorEndereco.codigoCidade) return 'prestador';
+  if (prestadorEndereco.cep.length !== 8) return 'prestador';
+
+  const tomadorCpfCnpj = normalizeDoc(input.tomadorCpfCnpj || '');
+  if (!tomadorCpfCnpj) return 'tomador';
+  if (tomadorCpfCnpj.length !== 11 && tomadorCpfCnpj.length !== 14) return 'tomador';
+  const tomadorRazaoSocial = String(input.tomadorRazaoSocial || '').trim();
+  if (!tomadorRazaoSocial) return 'tomador';
+
+  const servico = input.servico;
+  if (!servico) return 'servico';
+  if (
+    !hasRequiredText(servico.codigo)
+    || !hasRequiredText(servico.cnae)
+    || !hasRequiredText(servico.discriminacao)
+    || !hasRequiredText(servico.valorServico)
+  ) {
+    return 'servico';
+  }
+  const codigoServicoErro = getNfseServicoCodigoValidationError(servico.codigo);
+  if (codigoServicoErro) return 'servico';
+
+  const valorServico = parseDecimalInput(servico.valorServico);
+  if (valorServico === null || valorServico <= 0) return 'servico';
+
+  return 'servico';
+};
+
+function MeiNfseEmitCollapsible(props: {
+  section: NfseEmitFormSection;
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const panelId = `mei-nfse-emit-panel-${props.section}`;
+  const headingId = `mei-nfse-emit-heading-${props.section}`;
+  return (
+    <div className="rounded-lg border border-slate-200/80 p-3 dark:border-slate-700/80">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 rounded-md py-1 text-left text-sm font-semibold text-slate-700 dark:text-gray-200"
+        aria-expanded={props.open}
+        aria-controls={panelId}
+        id={headingId}
+        onClick={props.onToggle}
+      >
+        <span>{props.title}</span>
+        <span className="shrink-0 text-xs font-normal text-slate-500 dark:text-slate-400" aria-hidden>
+          {props.open ? '▼' : '▶'}
+        </span>
+      </button>
+      {props.open ? (
+        <div
+          id={panelId}
+          className="mt-3 space-y-3"
+          role="region"
+          aria-labelledby={headingId}
+        >
+          {props.children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MeiNfseAjudaFiscalCollapsible(props: {
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const panelId = 'mei-nfse-ajuda-fiscal-panel';
+  const headingId = 'mei-nfse-ajuda-fiscal-heading';
+  return (
+    <div className="mb-3 rounded-lg border border-slate-200/80 p-3 dark:border-slate-700/80">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 rounded-md py-1 text-left text-sm font-semibold text-slate-700 dark:text-gray-200"
+        aria-expanded={props.open}
+        aria-controls={panelId}
+        id={headingId}
+        onClick={props.onToggle}
+      >
+        <span>Ajuda fiscal (MEI / campos obrigatórios)</span>
+        <span className="shrink-0 text-xs font-normal text-slate-500 dark:text-slate-400" aria-hidden>
+          {props.open ? '▼' : '▶'}
+        </span>
+      </button>
+      {props.open ? (
+        <div
+          id={panelId}
+          className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300"
+          role="region"
+          aria-labelledby={headingId}
+        >
+          {props.children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function GuidesMei() {
   const { role, mei } = useAuthStore();
   const canViewNfse = role === 'superadmin'
@@ -432,13 +564,13 @@ export default function GuidesMei() {
     setNfseErrorKind(null);
   }, []);
 
-  const setEmissionNfseError = useCallback((raw: string) => {
-    setNfseError(formatFiscalError(raw));
+  const setEmissionNfseError = useCallback((msg: string) => {
+    setNfseError(msg);
     setNfseErrorKind('emission');
   }, []);
 
-  const setOperationNfseError = useCallback((raw: string) => {
-    setNfseError(formatFiscalError(raw));
+  const setOperationNfseError = useCallback((msg: string) => {
+    setNfseError(msg);
     setNfseErrorKind('operation');
   }, []);
   const [nfseCatalogLoading, setNfseCatalogLoading] = useState(false);
@@ -484,8 +616,8 @@ export default function GuidesMei() {
   const nfsePrestadorPrefillBannerOutcomeRef = useRef<'unset' | 'empty' | 'error' | 'ok'>('unset');
   const [nfsePrestadorPrefillLoading, setNfsePrestadorPrefillLoading] = useState(false);
   const [nfsePrestadorPrefillBanner, setNfsePrestadorPrefillBanner] = useState<string | null>(null);
-  const nfseValidationMessage = useMemo(() => (
-    getNfseValidationMessage(nfseForm, {
+  const nfsePrestadorAddressFallback = useMemo(
+    () => ({
       logradouro: nfEmissionCompanyForm.logradouro,
       numero: nfEmissionCompanyForm.numero,
       codigoCidade: nfEmissionCompanyForm.codigoCidade,
@@ -494,8 +626,81 @@ export default function GuidesMei() {
       bairro: nfEmissionCompanyForm.bairro,
       estado: nfEmissionCompanyForm.estado,
       descricaoCidade: nfEmissionCompanyForm.descricaoCidade
-    })
-  ), [nfseForm, nfEmissionCompanyForm]);
+    }),
+    [nfEmissionCompanyForm]
+  );
+
+  const nfseValidationMessage = useMemo(
+    () => getNfseValidationMessage(nfseForm, nfsePrestadorAddressFallback),
+    [nfseForm, nfsePrestadorAddressFallback]
+  );
+
+  /** FR-NFSE-UX-P1: colapsáveis do formulário de emissão (todos expandidos por defeito). */
+  const [nfseEmitDisclosure, setNfseEmitDisclosure] = useState({
+    prestador: true,
+    tomador: true,
+    servico: true,
+    opcionais: true,
+    ajudaFiscal: false
+  });
+
+  const toggleNfseEmitSection = useCallback((key: keyof typeof nfseEmitDisclosure) => {
+    setNfseEmitDisclosure((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  /** FR-NFSE-UX-P1 / mitigação QA: setas Home/End no menu (padrão APG). */
+  const handleNfseMoreMenuKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const k = event.key;
+    if (k !== 'ArrowDown' && k !== 'ArrowUp' && k !== 'Home' && k !== 'End') return;
+    const menu = event.currentTarget;
+    const items = Array.from(
+      menu.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')
+    ).filter((btn) => !btn.disabled);
+    if (items.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const active = document.activeElement;
+    let idx = items.findIndex((el) => el === active);
+    if (idx < 0) idx = 0;
+    if (k === 'ArrowDown') idx = (idx + 1) % items.length;
+    else if (k === 'ArrowUp') idx = (idx - 1 + items.length) % items.length;
+    else if (k === 'Home') idx = 0;
+    else idx = items.length - 1;
+    items[idx]?.focus();
+  }, []);
+
+  /** FR-NFSE-UX-P1: menu «Mais ações» por linha (evita re-render global da lista). */
+  const [nfseMoreMenuOpenId, setNfseMoreMenuOpenId] = useState<string | null>(null);
+  const nfseMoreMenuFirstItemRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!nfseMoreMenuOpenId) return;
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest(`[data-nfse-more-menu-root="${nfseMoreMenuOpenId}"]`)) {
+        setNfseMoreMenuOpenId(null);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setNfseMoreMenuOpenId(null);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [nfseMoreMenuOpenId]);
+
+  useEffect(() => {
+    if (!nfseMoreMenuOpenId) return;
+    const id = requestAnimationFrame(() => {
+      nfseMoreMenuFirstItemRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [nfseMoreMenuOpenId]);
 
   const touchNfsePrestadorBffParity = useCallback(() => {
     nfsePrestadorUserEditedRef.current = true;
@@ -579,9 +784,7 @@ export default function GuidesMei() {
       });
       setNfseList(list);
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao listar NFSe.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao listar NFSe.'));
     } finally {
       setNfseLoading(false);
     }
@@ -605,11 +808,7 @@ export default function GuidesMei() {
       setNfseCatalogClientes(clientes || []);
       setNfseCatalogProdutos(produtos || []);
     } catch (error) {
-      setNfseCatalogError(
-        formatFiscalError(
-          error instanceof Error ? error.message : 'Erro ao carregar catálogo fiscal.'
-        )
-      );
+      setNfseCatalogError(formatMeiFiscalErr(error, 'Erro ao carregar catálogo fiscal.'));
     } finally {
       setNfseCatalogLoading(false);
     }
@@ -676,11 +875,12 @@ export default function GuidesMei() {
     if (!id) return;
     const selected = nfseCatalogProdutos.find((item) => item.id === id);
     if (!selected) return;
+    const vs = selected.valor_sugerido;
     updateNfseServico({
       codigo: selected.codigo || '',
       cnae: selected.cnae || '',
       discriminacao: selected.discriminacao || '',
-      valorServico: selected.valor_sugerido ?? ''
+      valorServico: vs != null && vs !== '' ? String(vs) : ''
     });
   };
 
@@ -983,6 +1183,10 @@ export default function GuidesMei() {
         setCertificateErrorFiscalCode(null);
       } else {
         setCertificateConnectivityAlert(false);
+        const fallbackMessage = formatFiscalError(
+          error instanceof Error ? error.message : 'Erro ao enviar certificado.',
+          getFiscalErrorCode(error)
+        );
         const rawMessage = error instanceof Error ? error.message : 'Erro ao enviar certificado.';
         const isInscricaoMunicipalError = /inscri[cç][aã]o\s*municipal/i.test(rawMessage);
         const fallbackMessage = isInscricaoMunicipalError
@@ -1040,11 +1244,7 @@ export default function GuidesMei() {
       );
     } catch (error) {
       setNfEmissionCompanySyncError(
-        formatFiscalError(
-          error instanceof Error
-            ? error.message
-            : 'Falha ao consultar cadastro no serviço de emissão fiscal.'
-        )
+        formatMeiFiscalErr(error, 'Falha ao consultar cadastro no serviço de emissão fiscal.')
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -1096,11 +1296,7 @@ export default function GuidesMei() {
       );
     } catch (error) {
       setNfEmissionCompanySyncError(
-        formatFiscalError(
-          error instanceof Error
-            ? error.message
-            : 'Falha ao atualizar empresa no serviço de emissão fiscal.'
-        )
+        formatMeiFiscalErr(error, 'Falha ao atualizar empresa no serviço de emissão fiscal.')
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -1121,9 +1317,7 @@ export default function GuidesMei() {
       }
       setNfEmissionCompanySyncSuccess('Dados do emitente salvos com sucesso.');
     } catch (error) {
-      setNfEmissionCompanySyncError(
-        error instanceof Error ? error.message : 'Falha ao salvar dados do emitente.'
-      );
+      setNfEmissionCompanySyncError(formatMeiFiscalErr(error, 'Falha ao salvar dados do emitente.'));
     } finally {
       setNfEmissionCompanySyncLoading(null);
     }
@@ -1156,7 +1350,7 @@ export default function GuidesMei() {
       } else {
         setCertificateConnectivityAlert(false);
         setCertificateErrorFiscalCode(null);
-        setCertificateError(error instanceof Error ? error.message : 'Erro ao remover certificado.');
+        setCertificateError(formatMeiFiscalErr(error, 'Erro ao remover certificado.'));
       }
     } finally {
       setIsRemovingCert(false);
@@ -1280,6 +1474,14 @@ export default function GuidesMei() {
     setNfseSuccess(null);
 
     if (nfseValidationMessage) {
+      const section = getNfseValidationSection(nfseForm, nfsePrestadorAddressFallback);
+      if (section) {
+        setNfseEmitDisclosure((prev) => ({ ...prev, [section]: true }));
+        const panelId = `mei-nfse-emit-panel-${section}`;
+        requestAnimationFrame(() => {
+          document.getElementById(panelId)?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+        });
+      }
       return;
     }
 
@@ -1367,9 +1569,7 @@ export default function GuidesMei() {
       setSelectedCatalogClienteId('');
       setSelectedCatalogProdutoId('');
     } catch (error) {
-      setEmissionNfseError(
-        error instanceof Error ? error.message : 'Erro ao emitir nota fiscal.'
-      );
+      setEmissionNfseError(formatMeiFiscalErr(error, 'Erro ao emitir nota fiscal.'));
     } finally {
       setNfseSubmitting(false);
     }
@@ -1386,9 +1586,7 @@ export default function GuidesMei() {
       setNfseList((current) => current.map((item) => (item.id === id ? updated : item)));
       setNfseSuccess('Status da NFSe atualizado com sucesso.');
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao atualizar NFSe.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao atualizar NFSe.'));
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1405,9 +1603,7 @@ export default function GuidesMei() {
       triggerFileDownload(blob, filename || `nfse-${record.id}.pdf`);
       setNfseSuccess('Download do PDF iniciado.');
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao baixar PDF da NFSe.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao baixar PDF da NFSe.'));
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1424,9 +1620,7 @@ export default function GuidesMei() {
       triggerFileDownload(blob, filename || `nfse-${record.id}.xml`);
       setNfseSuccess('Download do XML iniciado.');
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao baixar XML da NFSe.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao baixar XML da NFSe.'));
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1450,9 +1644,7 @@ export default function GuidesMei() {
       setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
       setNfseSuccess(!reviewRequested ? 'NFSe marcada para revisão.' : 'Marcação de revisão removida.');
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao atualizar NFSe.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao atualizar NFSe.'));
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1474,9 +1666,7 @@ export default function GuidesMei() {
       setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
       setNfseSuccess('Solicitação de cancelamento processada.');
     } catch (error) {
-      setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao cancelar nota fiscal.'
-      );
+      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao cancelar nota fiscal.'));
     } finally {
       finishNfseAction(actionKey);
     }
@@ -1497,7 +1687,7 @@ export default function GuidesMei() {
       setNfseSuccess(!isArchived ? 'Nota fiscal arquivada com sucesso.' : 'Nota fiscal desarquivada com sucesso.');
     } catch (error) {
       setOperationNfseError(
-        error instanceof Error ? error.message : 'Erro ao atualizar arquivamento da nota fiscal.'
+        formatMeiFiscalErr(error, 'Erro ao atualizar arquivamento da nota fiscal.')
       );
     } finally {
       finishNfseAction(actionKey);
@@ -1540,6 +1730,179 @@ export default function GuidesMei() {
       return true;
     });
   }, [nfseDocumentTypeFilter, nfseList, nfsePeriodFilter, nfseStatusFilter]);
+
+  const resetNfseListFilters = useCallback(() => {
+    setNfseStatusFilter('all');
+    setNfsePeriodFilter('all');
+    setNfseDocumentTypeFilter('all');
+    setNfseShowArchived(false);
+  }, []);
+
+  const scrollToNfseEmitSection = useCallback(() => {
+    document.getElementById('mei-nfse-emit')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const nfseWorkspaceGuidance = useMemo(() => {
+    const razao = nfEmissionCompanyForm.razaoSocial?.trim();
+    if (!razao) {
+      return (
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Configure o emitente na aba{' '}
+          <button
+            type="button"
+            className="font-medium text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            onClick={() => setActiveWorkspace('das')}
+          >
+            Certificado e DAS
+          </button>
+          {' '}ou guarde os dados do emitente na secção &quot;Antes de emitir&quot;.
+        </p>
+      );
+    }
+    if (nfseCatalogLoading) {
+      return (
+        <p className="text-sm text-slate-500 dark:text-slate-400" role="status">
+          A atualizar catálogo fiscal…
+        </p>
+      );
+    }
+    if (nfseCatalogClientes.length === 0 && nfseCatalogProdutos.length === 0) {
+      return (
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Cadastre clientes e serviços para usar atalhos, ou preencha o formulário abaixo manualmente.{' '}
+          {inRouter ? (
+            <>
+              <Link to="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
+                Gerir clientes
+              </Link>
+              <span className="text-slate-300 dark:text-slate-600" aria-hidden>
+                {' · '}
+              </span>
+              <Link to="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
+                Gerir serviços e produtos
+              </Link>
+            </>
+          ) : (
+            <>
+              <a href="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
+                Gerir clientes
+              </a>
+              <span className="text-slate-300 dark:text-slate-600" aria-hidden>
+                {' · '}
+              </span>
+              <a href="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
+                Gerir serviços e produtos
+              </a>
+            </>
+          )}
+        </p>
+      );
+    }
+    return (
+      <p className="text-sm text-slate-600 dark:text-slate-300">
+        Use os atalhos na secção &quot;Antes de emitir&quot; ou preencha tomador e serviço para emitir.
+      </p>
+    );
+  }, [
+    catalogoClientesLinkClass,
+    inRouter,
+    nfEmissionCompanyForm.razaoSocial,
+    nfseCatalogClientes.length,
+    nfseCatalogLoading,
+    nfseCatalogProdutos.length,
+    setActiveWorkspace
+  ]);
+
+  /** FR-NFSE-UX-P2 §7: pilha de feedback abaixo do botão Emitir — (1) bloqueio certificado/emitente. */
+  const nfseEmitFeedbackTier1 = useMemo(() => {
+    const nodes: ReactNode[] = [];
+    if (certificateConnectivityAlert) {
+      nodes.push(<GuiaMeiCertificateConnectivityPanel key="nfse-fb-connectivity" />);
+    }
+    if (certificateError) {
+      nodes.push(
+        <GuiaMeiEmpresaCadastroErrorPanel
+          key="nfse-fb-cert"
+          message={certificateError}
+          fiscalErrorCode={certificateErrorFiscalCode}
+        />
+      );
+    }
+    if (nfEmissionCompanySyncError) {
+      nodes.push(
+        <div key="nfse-fb-sync" className="admin-alert-danger text-xs">
+          {nfEmissionCompanySyncError}
+        </div>
+      );
+    }
+    if (!hasUserCertificate) {
+      nodes.push(
+        <div key="nfse-fb-no-cert" className="admin-alert-danger space-y-1 text-sm" role="alert">
+          <p className="font-semibold">Certificado necessário para emitir NFSe</p>
+          <p className="text-xs leading-relaxed">
+            A emissão pelo emissor fiscal exige certificado digital A1. Envie o certificado na aba{' '}
+            <button
+              type="button"
+              className="font-medium text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+              onClick={() => setActiveWorkspace('das')}
+            >
+              Certificado e DAS
+            </button>
+            .
+          </p>
+        </div>
+      );
+    }
+    if (!nfEmissionCompanyForm.razaoSocial?.trim()) {
+      nodes.push(
+        <div key="nfse-fb-no-emitente" className="admin-alert-warning text-sm" role="status">
+          <p className="font-semibold">Emitente não configurado</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            Guarde os dados do emitente na secção «Antes de emitir» ou configure na aba Certificado e DAS antes de
+            enviar a nota.
+          </p>
+        </div>
+      );
+    }
+    if (nfseEmitentePendingApply && canViewNfse) {
+      nodes.push(
+        <div key="nfse-fb-pending-emitente" className="admin-alert-warning space-y-2">
+          <p className="text-sm leading-relaxed">
+            Os dados guardados nesta aplicação <strong>não</strong> alteram automaticamente o formulário de emissão de
+            NFS-e (para não substituir valores que você já tenha editado).
+          </p>
+          <button
+            type="button"
+            className="planner-button-secondary-compact"
+            onClick={() => {
+              const snap = nfseEmitentePendingApply;
+              if (!snap) return;
+              setNfseForm((current) => replacePrestadorFromEmitenteSnapshot(current, snap));
+              setNfseEmitentePendingApply(null);
+            }}
+          >
+            Aplicar dados guardados ao formulário NFS-e
+          </button>
+        </div>
+      );
+    }
+    if (nodes.length === 0) return null;
+    return (
+      <div className="space-y-3" data-nfse-feedback-tier="critical">
+        {nodes}
+      </div>
+    );
+  }, [
+    canViewNfse,
+    certificateConnectivityAlert,
+    certificateError,
+    certificateErrorFiscalCode,
+    hasUserCertificate,
+    nfEmissionCompanyForm.razaoSocial,
+    nfEmissionCompanySyncError,
+    nfseEmitentePendingApply,
+    setActiveWorkspace
+  ]);
 
   const dasPendentesCount = useMemo(
     () => meiPeriods.filter((period) => period.status !== 'pago').length,
@@ -2320,25 +2683,27 @@ export default function GuidesMei() {
             id="mei-panel-nfse"
             aria-labelledby="mei-tab-nfse"
           >
-            <section className="admin-section-card">
-          <div className="mb-3">
-            <button
-              type="button"
-              onClick={() => setActiveWorkspace('overview')}
-              className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 underline"
-            >
-              Voltar ao Meu MEI
-            </button>
-          </div>
-          <div className="admin-section-header">
-            <div>
-              <h2 className="admin-section-title">{`Emitir ${GUIA_MEI_NFSE_DOCUMENT_LABEL}`}</h2>
-              <p className="admin-section-subtitle">
-                Preencha os dados fiscais para emissão pelo sistema integrado.
-                Após o envio, mensagens de rejeição ou validação costumam vir do provedor de emissão fiscal, não deste aplicativo.
-              </p>
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={() => setActiveWorkspace('overview')}
+                className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 underline"
+              >
+                Voltar ao Meu MEI
+              </button>
             </div>
-          </div>
+
+            <section
+              id="mei-nfse-pre"
+              className="admin-section-card"
+              aria-labelledby="mei-nfse-pre-heading"
+            >
+              <h2 id="mei-nfse-pre-heading" className="admin-section-title">
+                Antes de emitir
+              </h2>
+              <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+                Certificado, emitente no emissor fiscal e atalhos do catálogo.
+              </p>
 
           <div className="admin-alert-warning">
             Atenção: para emissão de NFS-e, a empresa emitente precisa estar cadastrada no emissor fiscal com certificado
@@ -2368,10 +2733,6 @@ export default function GuidesMei() {
           {nfEmissionCompanySyncSuccess && (
             <div className="admin-alert-success text-xs">{nfEmissionCompanySyncSuccess}</div>
           )}
-
-          <p className="admin-field-hint">
-            Campos obrigatórios: CNPJ e endereço mínimo do prestador, CPF/CNPJ e razão social do tomador, código do serviço, CNAE, valor e discriminação. MEI no Simples Nacional: não se informa alíquota ISS — a prefeitura/provedor aplicam a regra.
-          </p>
 
           <div className="admin-toolbar space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
@@ -2438,7 +2799,7 @@ export default function GuidesMei() {
               )}
             </p>
 
-            {nfseCatalogLoading ? (
+            {nfseCatalogLoading && !nfEmissionCompanyForm.razaoSocial?.trim() ? (
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Atualizando catálogo fiscal...
               </p>
@@ -2465,14 +2826,46 @@ export default function GuidesMei() {
               {nfsePrestadorPrefillBanner}
             </div>
           ) : null}
+            </section>
 
+            <section id="mei-nfse-emit" className="admin-section-card" aria-labelledby="mei-nfse-emit-heading">
+          <div className="admin-section-header">
+            <div>
+              <h2 id="mei-nfse-emit-heading" className="admin-section-title">{`Emitir ${GUIA_MEI_NFSE_DOCUMENT_LABEL}`}</h2>
+              <p className="admin-section-subtitle">
+                Preencha os dados fiscais para emissão pelo sistema integrado.
+                Após o envio, mensagens de rejeição ou validação costumam vir do provedor de emissão fiscal, não deste aplicativo.
+              </p>
+              <div className="mt-3 border-t border-slate-200/80 pt-3 dark:border-slate-700/80" role="status" aria-live="polite">
+                {nfseWorkspaceGuidance}
+              </div>
+            </div>
+          </div>
+
+          <MeiNfseAjudaFiscalCollapsible
+            open={nfseEmitDisclosure.ajudaFiscal}
+            onToggle={() => toggleNfseEmitSection('ajudaFiscal')}
+          >
+            <p className="admin-field-hint text-xs leading-relaxed">
+              Campos obrigatórios: CNPJ e endereço mínimo do prestador, CPF/CNPJ e razão social do tomador, código do serviço, CNAE, valor e discriminação. MEI no Simples Nacional: não se informa alíquota ISS — a prefeitura/provedor aplicam a regra.
+            </p>
+          </MeiNfseAjudaFiscalCollapsible>
+
+          <div className="space-y-3">
+            <MeiNfseEmitCollapsible
+              section="prestador"
+              title="Prestador"
+              open={nfseEmitDisclosure.prestador}
+              onToggle={() => toggleNfseEmitSection('prestador')}
+            >
           <div className="admin-toolbar grid gap-3 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-prestador-cnpj">
                 CNPJ do prestador
                 <span className="admin-required-mark">*</span>
               </label>
               <input
+                id="nfse-prestador-cnpj"
                 className="planner-input-compact w-full"
                 type="text"
                 inputMode="numeric"
@@ -2480,6 +2873,7 @@ export default function GuidesMei() {
                 onChange={(event) => {
                   touchNfsePrestadorBffParity();
                   updateNfseForm({
+                    prestadorCpfCnpj: formatDocument(event.target.value),
                     prestadorCpfCnpj: formatDocument(event.target.value)
                   });
                 }}
@@ -2583,12 +2977,23 @@ export default function GuidesMei() {
                 Dica: se você já configurou a empresa no sistema fiscal, os dados salvos serão usados como fallback no envio.
               </p>
             </div>
+          </div>
+            </MeiNfseEmitCollapsible>
+
+            <MeiNfseEmitCollapsible
+              section="tomador"
+              title="Tomador"
+              open={nfseEmitDisclosure.tomador}
+              onToggle={() => toggleNfseEmitSection('tomador')}
+            >
+          <div className="admin-toolbar grid gap-3 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-tomador-doc">
                 CPF/CNPJ do tomador
                 <span className="admin-required-mark">*</span>
               </label>
               <input
+                id="nfse-tomador-doc"
                 className="planner-input-compact w-full"
                 type="text"
                 inputMode="numeric"
@@ -2602,11 +3007,12 @@ export default function GuidesMei() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-tomador-razao">
                 Razão social do tomador
                 <span className="admin-required-mark">*</span>
               </label>
               <input
+                id="nfse-tomador-razao"
                 className="planner-input-compact w-full"
                 type="text"
                 value={nfseForm.tomadorRazaoSocial}
@@ -2615,10 +3021,11 @@ export default function GuidesMei() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-tomador-email">
                 Email do tomador (opcional)
               </label>
               <input
+                id="nfse-tomador-email"
                 className="planner-input-compact w-full"
                 type="email"
                 value={nfseForm.tomadorEmail}
@@ -2627,10 +3034,11 @@ export default function GuidesMei() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-id-integracao">
                 ID de integração (opcional)
               </label>
               <input
+                id="nfse-id-integracao"
                 className="planner-input-compact w-full"
                 type="text"
                 value={nfseForm.idIntegracao}
@@ -2639,18 +3047,23 @@ export default function GuidesMei() {
               />
             </div>
           </div>
+            </MeiNfseEmitCollapsible>
 
+            <MeiNfseEmitCollapsible
+              section="servico"
+              title="Serviço"
+              open={nfseEmitDisclosure.servico}
+              onToggle={() => toggleNfseEmitSection('servico')}
+            >
           <div className="admin-toolbar space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-gray-200">Serviço</h3>
-            </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-servico-codigo">
                   Código do serviço
                   <span className="admin-required-mark">*</span>
                 </label>
                 <input
+                  id="nfse-servico-codigo"
                   className="planner-input-compact w-full"
                   type="text"
                   value={nfseForm.servico.codigo}
@@ -2659,11 +3072,12 @@ export default function GuidesMei() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-servico-cnae">
                   CNAE
                   <span className="admin-required-mark">*</span>
                 </label>
                 <input
+                  id="nfse-servico-cnae"
                   className="planner-input-compact w-full"
                   type="text"
                   value={nfseForm.servico.cnae}
@@ -2672,62 +3086,99 @@ export default function GuidesMei() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-servico-valor">
                   Valor do serviço
                   <span className="admin-required-mark">*</span>
                 </label>
                 <input
+                  id="nfse-servico-valor"
                   className="planner-input-compact w-full"
                   type="text"
                   inputMode="decimal"
-                  value={nfseForm.servico.valorServico}
+                  value={String(nfseForm.servico.valorServico ?? '')}
                   onChange={(event) => updateNfseServico({ valorServico: event.target.value })}
                   placeholder="1500,00"
                 />
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-servico-discriminacao">
                 Discriminação do serviço
                 <span className="admin-required-mark">*</span>
               </label>
               <textarea
+                id="nfse-servico-discriminacao"
                 className="planner-input-compact w-full min-h-[90px]"
                 value={nfseForm.servico.discriminacao}
                 onChange={(event) => updateNfseServico({ discriminacao: event.target.value })}
                 placeholder="Descreva o serviço prestado"
               />
             </div>
-          </div>
-
-          <div className="admin-toolbar space-y-3">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-gray-200">
-              Cidade de prestação (opcional)
-            </h3>
-            <div className="grid gap-3 md:grid-cols-3">
-              <input
-                className="planner-input-compact"
-                type="text"
-                value={nfseForm.cidadePrestacao?.codigo || ''}
-                onChange={(event) => updateNfseCidade({ codigo: event.target.value })}
-                placeholder="Código IBGE"
-              />
-              <input
-                className="planner-input-compact"
-                type="text"
-                value={nfseForm.cidadePrestacao?.descricao || ''}
-                onChange={(event) => updateNfseCidade({ descricao: event.target.value })}
-                placeholder="Cidade"
-              />
-              <input
-                className="planner-input-compact"
-                type="text"
-                value={nfseForm.cidadePrestacao?.estado || ''}
-                onChange={(event) => updateNfseCidade({ estado: event.target.value })}
-                placeholder="UF"
-              />
+            <div
+              className="rounded-md border border-slate-200/70 bg-slate-50/80 px-3 py-2 text-xs text-slate-600 dark:border-slate-700/70 dark:bg-slate-900/40 dark:text-slate-300"
+              aria-live="polite"
+            >
+              <p className="font-semibold text-slate-700 dark:text-slate-200">Resumo</p>
+              <p>
+                Tomador: {nfseForm.tomadorRazaoSocial?.trim() || '—'}
+                {' · '}
+                Valor: {String(nfseForm.servico.valorServico ?? '').trim() || '—'}
+                {' · '}
+                {nfseValidationMessage ? 'Ajuste os campos obrigatórios' : 'Validação local ok'}
+              </p>
             </div>
-            <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+          </div>
+            </MeiNfseEmitCollapsible>
+
+            <MeiNfseEmitCollapsible
+              section="opcionais"
+              title="Opcionais (cidade de prestação e envio por email)"
+              open={nfseEmitDisclosure.opcionais}
+              onToggle={() => toggleNfseEmitSection('opcionais')}
+            >
+          <div className="admin-toolbar space-y-3">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-cidade-prestacao-codigo">
+                  Código IBGE (prestação)
+                </label>
+                <input
+                  id="nfse-cidade-prestacao-codigo"
+                  className="planner-input-compact w-full"
+                  type="text"
+                  value={nfseForm.cidadePrestacao?.codigo || ''}
+                  onChange={(event) => updateNfseCidade({ codigo: event.target.value })}
+                  placeholder="Código IBGE"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-cidade-prestacao-desc">
+                  Cidade (prestação)
+                </label>
+                <input
+                  id="nfse-cidade-prestacao-desc"
+                  className="planner-input-compact w-full"
+                  type="text"
+                  value={nfseForm.cidadePrestacao?.descricao || ''}
+                  onChange={(event) => updateNfseCidade({ descricao: event.target.value })}
+                  placeholder="Cidade"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-cidade-prestacao-uf">
+                  UF (prestação)
+                </label>
+                <input
+                  id="nfse-cidade-prestacao-uf"
+                  className="planner-input-compact w-full"
+                  type="text"
+                  value={nfseForm.cidadePrestacao?.estado || ''}
+                  onChange={(event) => updateNfseCidade({ estado: event.target.value })}
+                  placeholder="UF"
+                />
+              </div>
+            </div>
+            <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400" htmlFor="nfse-enviar-email">
               <input
                 id="nfse-enviar-email"
                 type="checkbox"
@@ -2738,50 +3189,126 @@ export default function GuidesMei() {
               Enviar email ao tomador (se configurado)
             </label>
           </div>
+            </MeiNfseEmitCollapsible>
+          </div>
 
           <div className="admin-actions">
             <button
+              type="button"
               className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
               onClick={handleEmitNfse}
-              disabled={nfseSubmitting || Boolean(nfseValidationMessage)}
+              disabled={nfseSubmitting}
+              aria-invalid={Boolean(nfseValidationMessage)}
             >
               {nfseSubmitting ? 'Enviando...' : `Emitir ${GUIA_MEI_NFSE_DOCUMENT_LABEL}`}
             </button>
           </div>
 
-          {nfseValidationMessage && (
-            <div className="admin-alert-warning space-y-1" role="status">
-              <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">
-                Ajuste os dados antes de enviar ({GUIA_MEI_NFSE_DOCUMENT_LABEL})
-              </p>
-              <LongFiscalErrorMessage message={nfseValidationMessage} tone="warning" />
-            </div>
-          )}
-
-          {nfseError && nfseErrorKind === 'emission' ? (
-            <EmissaoFiscalErrorAlert documentTypeLabel={GUIA_MEI_NFSE_DOCUMENT_LABEL} message={nfseError} />
-          ) : null}
-          {nfseError && nfseErrorKind === 'operation' ? (
-            <FiscalProviderErrorAlert message={nfseError} />
-          ) : null}
-          {nfseSuccess && (
-            <div className="admin-alert-success">
-              {nfseSuccess}
-            </div>
-          )}
+          <div
+            id="mei-nfse-emit-feedback"
+            className="mt-4 space-y-3"
+            role="region"
+            aria-label={`Feedback de emissão de ${GUIA_MEI_NFSE_DOCUMENT_LABEL}`}
+          >
+            {nfseEmitFeedbackTier1}
+            {nfseValidationMessage ? (
+              <div
+                className="admin-alert-warning space-y-1"
+                role="status"
+                data-nfse-feedback-tier="validation"
+              >
+                <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">
+                  Ajuste os dados antes de enviar ({GUIA_MEI_NFSE_DOCUMENT_LABEL})
+                </p>
+                <LongFiscalErrorMessage message={nfseValidationMessage} tone="warning" />
+              </div>
+            ) : null}
+            {nfseError && nfseErrorKind === 'emission' ? (
+              <div data-nfse-feedback-tier="emission-error">
+                <EmissaoFiscalErrorAlert documentTypeLabel={GUIA_MEI_NFSE_DOCUMENT_LABEL} message={nfseError} />
+              </div>
+            ) : null}
+            {nfseError && nfseErrorKind === 'operation' ? (
+              <div data-nfse-feedback-tier="provider-error">
+                <FiscalProviderErrorAlert message={nfseError} />
+              </div>
+            ) : null}
+            {nfseSuccess ? (
+              <div className="admin-alert-success" data-nfse-feedback-tier="success">
+                {nfseSuccess}
+              </div>
+            ) : null}
+          </div>
         </section>
 
-        <section className="admin-section-card">
+        <section id="mei-nfse-list" className="admin-section-card" aria-labelledby="mei-nfse-list-heading">
           <div className="admin-section-header">
             <div>
-              <h2 className="admin-section-title">Notas emitidas</h2>
+              <h2 id="mei-nfse-list-heading" className="admin-section-title">Notas emitidas</h2>
               <p className="admin-section-subtitle">
-                Acompanhe status, revise e baixe XML/PDF das notas emitidas.
+                Acompanhe status, descarregue XML/PDF e faça a gestão de cada nota. O resumo numérico do separador está no topo da página quando visível.
               </p>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-              <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200/70 bg-slate-50/70 px-3 py-2 text-xs text-slate-600 dark:border-slate-700/70 dark:bg-slate-900/50 dark:text-slate-400">
+          </div>
+
+          <div className="admin-toolbar flex flex-col gap-3">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-filter-lista-tipo">
+                  Tipo na lista
+                </label>
+                <select
+                  id="nfse-filter-lista-tipo"
+                  className="planner-input-compact w-full"
+                  value={nfseDocumentTypeFilter}
+                  onChange={(event) => setNfseDocumentTypeFilter(event.target.value as 'all' | 'NFSE')}
+                >
+                  <option value="all">Todas (histórico)</option>
+                  <option value="NFSE">Somente NFSe</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-filter-status">
+                  Status
+                </label>
+                <select
+                  id="nfse-filter-status"
+                  className="planner-input-compact w-full"
+                  value={nfseStatusFilter}
+                  onChange={(event) => setNfseStatusFilter(event.target.value)}
+                >
+                  <option value="all">Todos os status</option>
+                  <option value="processando">Processando</option>
+                  <option value="concluido">Concluída</option>
+                  <option value="rejeitado">Rejeitada</option>
+                  <option value="interrompido">Interrompida</option>
+                  <option value="cancelamento_pendente">Cancelamento pendente</option>
+                  <option value="cancelado">Cancelada</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-filter-periodo">
+                  Período de competência
+                </label>
+                <select
+                  id="nfse-filter-periodo"
+                  className="planner-input-compact w-full"
+                  value={nfsePeriodFilter}
+                  onChange={(event) => setNfsePeriodFilter(event.target.value)}
+                >
+                  <option value="all">Todos os períodos</option>
+                  {nfsePeriodOptions.map((period) => (
+                    <option key={period} value={period}>
+                      {period.split('-').reverse().join('/')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+              <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200/70 bg-slate-50/70 px-3 py-2 text-xs text-slate-600 dark:border-slate-700/70 dark:bg-slate-900/50 dark:text-slate-400" htmlFor="nfse-filter-arquivadas">
                 <input
+                  id="nfse-filter-arquivadas"
                   type="checkbox"
                   className="h-4 w-4"
                   checked={nfseShowArchived}
@@ -2790,6 +3317,8 @@ export default function GuidesMei() {
                 Mostrar arquivadas
               </label>
               <button
+                id="nfse-list-atualizar"
+                type="button"
                 className="planner-button-secondary-compact w-full sm:w-auto"
                 onClick={() => void loadNfseList()}
                 disabled={nfseLoading}
@@ -2799,131 +3328,174 @@ export default function GuidesMei() {
             </div>
           </div>
 
-          <div className="admin-toolbar grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            <select
-              className="planner-input-compact"
-              value={nfseDocumentTypeFilter}
-              onChange={(event) => setNfseDocumentTypeFilter(event.target.value as 'all' | 'NFSE')}
-            >
-              <option value="all">Todas (histórico)</option>
-              <option value="NFSE">Somente NFSe</option>
-            </select>
-            <select
-              className="planner-input-compact"
-              value={nfseStatusFilter}
-              onChange={(event) => setNfseStatusFilter(event.target.value)}
-            >
-              <option value="all">Todos os status</option>
-              <option value="processando">Processando</option>
-              <option value="concluido">Concluída</option>
-              <option value="rejeitado">Rejeitada</option>
-              <option value="interrompido">Interrompida</option>
-              <option value="cancelamento_pendente">Cancelamento pendente</option>
-              <option value="cancelado">Cancelada</option>
-            </select>
-            <select
-              className="planner-input-compact"
-              value={nfsePeriodFilter}
-              onChange={(event) => setNfsePeriodFilter(event.target.value)}
-            >
-              <option value="all">Todos os períodos</option>
-              {nfsePeriodOptions.map((period) => (
-                <option key={period} value={period}>
-                  {period.split('-').reverse().join('/')}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {nfseLoading ? (
             <div className="admin-empty-state">Carregando notas...</div>
-          ) : filteredNfseList.length === 0 ? (
-            <div className="admin-empty-state">Nenhuma nota fiscal encontrada para o filtro atual.</div>
-          ) : (
-            <div className="space-y-3">
-              {filteredNfseList.map((item) => {
-                const statusKey = getNfseStatusKey(item.status);
-                const rowBusy = isNfseRowBusy(item.id);
-                const metadata = toNfseMetadata(item.metadata_json);
-                const reviewRequested = Boolean(metadata.reviewRequested);
-                const isArchived = Boolean(item.archived_at);
-                return (
-                  <div key={item.id} className="admin-user-card">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-700 dark:text-gray-200">
-                          {item.id_integracao || item.plugnotas_id || item.id}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-gray-400">
-                          Emitida em {formatDateTime(item.created_at)}
-                          {item.document_type ? ` • Tipo ${item.document_type}` : ''}
-                          {item.protocol ? ` • Protocolo ${item.protocol}` : ''}
-                        </p>
-                      </div>
-                      <div className="admin-actions">
-                        <span className={getNfseStatusBadgeClass(item.status)}>
-                          {formatNfseStatus(item.status)}
-                        </span>
-                        {isArchived && <span className="admin-badge-neutral">Arquivada</span>}
-                        {reviewRequested && <span className="admin-badge-warning">Revisão</span>}
-                      </div>
-                    </div>
-                    <div className="admin-actions-grid">
-                      <button
-                        className="planner-button-secondary-compact w-full"
-                        onClick={() => handleSyncNfse(item.id)}
-                        disabled={rowBusy}
-                      >
-                        {isNfseActionLoading(`${item.id}:sync`) ? 'Atualizando...' : 'Atualizar status'}
-                      </button>
-                      <button
-                        className="planner-button-secondary-compact w-full"
-                        onClick={() => handleDownloadNfsePdf(item)}
-                        disabled={rowBusy || statusKey === 'processando'}
-                      >
-                        {isNfseActionLoading(`${item.id}:pdf`) ? 'Baixando PDF...' : 'Baixar PDF'}
-                      </button>
-                      <button
-                        className="planner-button-secondary-compact w-full"
-                        onClick={() => handleDownloadNfseXml(item)}
-                        disabled={rowBusy || statusKey === 'processando'}
-                      >
-                        {isNfseActionLoading(`${item.id}:xml`) ? 'Baixando XML...' : 'Baixar XML'}
-                      </button>
-                      <button
-                        className="planner-button-secondary-compact w-full"
-                        onClick={() => handleToggleReviewNfse(item)}
-                        disabled={rowBusy || isArchived}
-                      >
-                        {isNfseActionLoading(`${item.id}:update`)
-                          ? 'Salvando...'
-                          : reviewRequested
-                            ? 'Remover revisão'
-                            : 'Marcar revisão'}
-                      </button>
-                      <button
-                        className="planner-button-secondary-compact w-full"
-                        onClick={() => handleCancelNfse(item)}
-                        disabled={rowBusy || statusKey === 'cancelado' || statusKey === 'cancelamento_pendente'}
-                      >
-                        {isNfseActionLoading(`${item.id}:cancel`) ? 'Cancelando...' : 'Cancelar nota'}
-                      </button>
-                      <button
-                        className="planner-button-secondary-compact w-full"
-                        onClick={() => handleArchiveNfse(item)}
-                        disabled={rowBusy}
-                      >
-                        {isNfseActionLoading(`${item.id}:archive`)
-                          ? 'Salvando...'
-                          : isArchived
-                            ? 'Desarquivar'
-                            : 'Arquivar'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+          ) : nfseList.length === 0 ? (
+            <div className="admin-empty-state space-y-3">
+              {nfseError && nfseErrorKind === 'operation' ? (
+                <>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    Não foi possível carregar a lista. O detalhe do erro está na secção de emissão acima (pilha de
+                    feedback).
+                  </p>
+                  <button
+                    type="button"
+                    className="planner-button-secondary-compact"
+                    onClick={() => void loadNfseList()}
+                  >
+                    Tentar novamente
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">Ainda não há notas emitidas.</p>
+                  <button type="button" className="planner-button-secondary-compact" onClick={scrollToNfseEmitSection}>
+                    Preencher e emitir
+                  </button>
+                </>
+              )}
             </div>
+          ) : filteredNfseList.length === 0 ? (
+            <div className="admin-empty-state space-y-3">
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Nenhuma nota corresponde aos filtros atuais.
+              </p>
+              <button type="button" className="planner-button-secondary-compact" onClick={resetNfseListFilters}>
+                Limpar filtros
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3 lg:hidden">
+                {filteredNfseList.map((item) => {
+                  const statusKey = getNfseStatusKey(item.status);
+                  const rowBusy = isNfseRowBusy(item.id);
+                  const metadata = toNfseMetadata(item.metadata_json);
+                  const reviewRequested = Boolean(metadata.reviewRequested);
+                  const isArchived = Boolean(item.archived_at);
+                  return (
+                    <div key={item.id} className="admin-user-card">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700 dark:text-gray-200">
+                            {item.id_integracao || item.plugnotas_id || item.id}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-gray-400">
+                            Emitida em {formatDateTime(item.created_at)}
+                            {item.document_type ? ` • Tipo ${item.document_type}` : ''}
+                            {item.protocol ? ` • Protocolo ${item.protocol}` : ''}
+                          </p>
+                        </div>
+                        <div className="admin-actions">
+                          <span className={getNfseStatusBadgeClass(item.status)}>
+                            {formatNfseStatus(item.status)}
+                          </span>
+                          {isArchived && <span className="admin-badge-neutral">Arquivada</span>}
+                          {reviewRequested && <span className="admin-badge-warning">Revisão</span>}
+                        </div>
+                      </div>
+                      <MeiNfseListRowActions
+                        item={item}
+                        statusKey={statusKey}
+                        rowBusy={rowBusy}
+                        reviewRequested={reviewRequested}
+                        isArchived={isArchived}
+                        moreMenuOpenId={nfseMoreMenuOpenId}
+                        setMoreMenuOpenId={setNfseMoreMenuOpenId}
+                        isNfseActionLoading={isNfseActionLoading}
+                        onSync={() => void handleSyncNfse(item.id)}
+                        onDownloadPdf={() => void handleDownloadNfsePdf(item)}
+                        onDownloadXml={() => void handleDownloadNfseXml(item)}
+                        onToggleReview={() => void handleToggleReviewNfse(item)}
+                        onCancel={() => void handleCancelNfse(item)}
+                        onArchive={() => void handleArchiveNfse(item)}
+                        onMenuKeyDown={handleNfseMoreMenuKeyDown}
+                        menuFirstItemRef={nfseMoreMenuFirstItemRef}
+                        layout="card"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="hidden lg:block" aria-label="Lista de notas em tabela">
+                <div className="admin-table-shell">
+                  <div className="admin-table-wrap">
+                    <table className="admin-table w-full">
+                      <thead className="admin-table-head">
+                        <tr>
+                          <th className="admin-table-cell text-left">ID / Integração</th>
+                          <th className="admin-table-cell text-left">Data</th>
+                          <th className="admin-table-cell text-left">Status</th>
+                          <th className="admin-table-cell text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredNfseList.map((item) => {
+                          const statusKey = getNfseStatusKey(item.status);
+                          const rowBusy = isNfseRowBusy(item.id);
+                          const metadata = toNfseMetadata(item.metadata_json);
+                          const reviewRequested = Boolean(metadata.reviewRequested);
+                          const isArchived = Boolean(item.archived_at);
+                          return (
+                            <tr key={item.id} className="admin-table-row">
+                              <td className="admin-table-cell align-top">
+                                <div className="font-semibold text-slate-700 dark:text-gray-200">
+                                  {item.id_integracao || item.plugnotas_id || item.id}
+                                </div>
+                                {item.protocol ? (
+                                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                                    Protocolo {item.protocol}
+                                  </div>
+                                ) : null}
+                              </td>
+                              <td className="admin-table-cell align-top text-xs text-slate-600 dark:text-slate-300">
+                                {formatDateTime(item.created_at)}
+                                {item.document_type ? (
+                                  <>
+                                    <br />
+                                    <span className="text-slate-500">{item.document_type}</span>
+                                  </>
+                                ) : null}
+                              </td>
+                              <td className="admin-table-cell align-top">
+                                <div className="flex flex-wrap gap-1">
+                                  <span className={getNfseStatusBadgeClass(item.status)}>
+                                    {formatNfseStatus(item.status)}
+                                  </span>
+                                  {isArchived && <span className="admin-badge-neutral">Arquivada</span>}
+                                  {reviewRequested && <span className="admin-badge-warning">Revisão</span>}
+                                </div>
+                              </td>
+                              <td className="admin-table-cell align-top">
+                                <MeiNfseListRowActions
+                                  item={item}
+                                  statusKey={statusKey}
+                                  rowBusy={rowBusy}
+                                  reviewRequested={reviewRequested}
+                                  isArchived={isArchived}
+                                  moreMenuOpenId={nfseMoreMenuOpenId}
+                                  setMoreMenuOpenId={setNfseMoreMenuOpenId}
+                                  isNfseActionLoading={isNfseActionLoading}
+                                  onSync={() => void handleSyncNfse(item.id)}
+                                  onDownloadPdf={() => void handleDownloadNfsePdf(item)}
+                                  onDownloadXml={() => void handleDownloadNfseXml(item)}
+                                  onToggleReview={() => void handleToggleReviewNfse(item)}
+                                  onCancel={() => void handleCancelNfse(item)}
+                                  onArchive={() => void handleArchiveNfse(item)}
+                                  onMenuKeyDown={handleNfseMoreMenuKeyDown}
+                                  menuFirstItemRef={nfseMoreMenuFirstItemRef}
+                                  layout="table"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
         </section>
           </div>

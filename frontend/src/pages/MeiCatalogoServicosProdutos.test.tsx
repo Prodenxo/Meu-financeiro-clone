@@ -293,7 +293,11 @@ describe('MeiCatalogoServicosProdutos', () => {
     const confirmDlg = await screen.findByTestId('mei-delete-produto-confirm');
     fireEvent.click(within(confirmDlg).getByRole('button', { name: /^Excluir do catálogo$/ }));
 
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith('Registo não encontrado'));
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        expect.stringMatching(/^Registo não encontrado:/)
+      )
+    );
     await waitFor(() => {
       expect(within(confirmDlg).getByRole('alert').textContent).toContain('Registo não encontrado');
     });

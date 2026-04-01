@@ -1,17 +1,31 @@
 import { Link, useLocation } from 'react-router-dom';
+import type { LucideIcon } from 'lucide-react';
 import { Home, List, Grid3x3, Settings, Wallet } from 'lucide-react';
 import { useThemeStore } from '../store/themeStore';
+
+type BottomNavItem = {
+  path: string;
+  label: string;
+  icon: LucideIcon;
+  /** Só quando o rótulo curto precisa de contexto extra (ex.: «Mais» → settings). */
+  ariaLabel?: string;
+};
 
 export default function BottomNavigation() {
   const location = useLocation();
   const { isDarkMode } = useThemeStore();
 
-  const navItems = [
-    { path: '/', label: 'Inicio', icon: Home },
+  const navItems: BottomNavItem[] = [
+    { path: '/', label: 'Início', icon: Home },
     { path: '/transacoes', label: 'Transações', icon: List },
     { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
     { path: '/categorias', label: 'Categorias', icon: Grid3x3 },
-    { path: '/settings', label: 'Mais', icon: Settings },
+    {
+      path: '/settings',
+      label: 'Mais',
+      icon: Settings,
+      ariaLabel: 'Mais — conta, tema e outras opções',
+    },
   ];
 
   const isActive = (path: string) => {
@@ -23,6 +37,7 @@ export default function BottomNavigation() {
 
   return (
     <nav
+      aria-label="Navegação principal (mobile)"
       className={`fixed bottom-0 left-0 right-0 z-50 border-t backdrop-blur shadow-soft ${
         isDarkMode
           ? 'bg-slate-950/80 border-slate-800/70'
@@ -37,6 +52,10 @@ export default function BottomNavigation() {
             <Link
               key={item.path}
               to={item.path}
+              aria-current={active ? 'page' : undefined}
+              {...(item.ariaLabel
+                ? { 'aria-label': item.ariaLabel, title: item.ariaLabel }
+                : {})}
               className={`flex flex-col items-center justify-center h-12 rounded-2xl transition-colors ${
                 active
                   ? 'text-blue-700 dark:text-blue-200 bg-blue-600/10 dark:bg-blue-500/15'
@@ -45,7 +64,7 @@ export default function BottomNavigation() {
                   : 'text-slate-500'
               }`}
             >
-              <Icon size={20} className="mb-1" />
+              <Icon size={20} className="mb-1" aria-hidden />
               <span className="text-xs font-medium">{item.label}</span>
             </Link>
           );
