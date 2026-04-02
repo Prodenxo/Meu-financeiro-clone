@@ -545,8 +545,9 @@ export default function Dashboard() {
         />
       ) : null}
       {/* Conteúdo do dashboard abaixo, sem header/main duplicado */}
+      {/* FR-SIDEBAR-ADMIN-06 opção B (PRD §6 / UX §7): cartão só em viewports sem sidebar desktop (md:hidden). */}
       {hasRole(role, ['admin']) && (
-        <div className="planner-card p-5 md:p-6 mb-4 md:mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="md:hidden planner-card p-5 md:p-6 mb-4 md:mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <span className="text-slate-500 dark:text-slate-400 text-sm">Administração</span>
             <h2 className="text-lg md:text-xl font-semibold text-slate-900 dark:text-white">

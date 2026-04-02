@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, List, Grid3x3, Calendar, Settings, Wallet, FileText } from 'lucide-react';
+import { Home, List, Grid3x3, Calendar, Settings, Wallet, FileText, LayoutDashboard } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { hasRole } from '../lib/roles';
 
 interface SidebarProps {
   expanded: boolean;
@@ -12,7 +13,14 @@ export default function Sidebar({ expanded }: SidebarProps) {
   const canAccessMeiArea = role === 'superadmin'
     || role === 'admin'
     || (role === 'usuario' && mei !== false);
+  const adminPanelItem = {
+    path: '/settings/usuarios-dados',
+    label: 'Painel Admin',
+    icon: LayoutDashboard,
+  } as const;
+
   const navItems = [
+    ...(hasRole(role, ['admin']) ? [adminPanelItem] : []),
     { path: '/', label: 'Início', icon: Home },
     { path: '/transacoes', label: 'Transações', icon: List },
     { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
@@ -25,6 +33,22 @@ export default function Sidebar({ expanded }: SidebarProps) {
   const isActive = (path: string) => {
     if (path === '/') {
       return location.pathname === '/';
+    }
+    if (path === '/settings/usuarios-dados') {
+      return (
+        location.pathname === '/settings/usuarios-dados' ||
+        location.pathname.startsWith('/settings/usuarios-dados/')
+      );
+    }
+    // Configurações: não marcar como ativo na rota do Painel Admin (item dedicado acima).
+    if (path === '/settings') {
+      if (
+        location.pathname === '/settings/usuarios-dados' ||
+        location.pathname.startsWith('/settings/usuarios-dados/')
+      ) {
+        return false;
+      }
+      return location.pathname === '/settings' || location.pathname.startsWith(`${path}/`);
     }
     // Mei Infinito (/guias-mei): só ativo na rota da guia, não em /mei-catalogo/* (spec CAT-MEI-05 §3.2).
     if (path === '/guias-mei') {

@@ -4,10 +4,11 @@ import { render, screen, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 import Sidebar from './Sidebar';
+import type { UserRole } from '../lib/roles';
 
 const { useAuthStoreMock, authState } = vi.hoisted(() => {
   const state = {
-    role: 'usuario' as 'superadmin' | 'admin' | 'usuario',
+    role: 'usuario' as UserRole,
     mei: true
   };
   const hook = Object.assign(() => state, { getState: () => state });
@@ -18,13 +19,13 @@ vi.mock('../store/authStore', () => ({
   useAuthStore: useAuthStoreMock
 }));
 
-function renderSidebar(pathname: string) {
+function renderSidebar(pathname: string, expanded = true) {
   return render(
     <MemoryRouter
       initialEntries={[pathname]}
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
-      <Sidebar expanded />
+      <Sidebar expanded={expanded} />
     </MemoryRouter>
   );
 }
@@ -67,5 +68,79 @@ describe('Sidebar (Mei Infinito)', () => {
 
     const meiInfinitoLink = screen.getByRole('link', { name: /Mei Infinito/i });
     expect(meiInfinitoLink.className).toMatch(/bg-blue-600/);
+  });
+});
+
+describe('Sidebar (Painel Admin)', () => {
+  beforeEach(() => {
+    authState.role = 'usuario';
+    authState.mei = true;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('admin vê Painel Admin primeiro, com destino /settings/usuarios-dados', () => {
+    authState.role = 'admin';
+    renderSidebar('/transacoes');
+
+    const painel = screen.getByRole('link', { name: /^Painel Admin$/i });
+    expect(painel.getAttribute('href')).toBe('/settings/usuarios-dados');
+    const links = screen.getAllByRole('link');
+    expect(links[0]).toBe(painel);
+  });
+
+  it('superadmin vê o mesmo item Painel Admin', () => {
+    authState.role = 'superadmin';
+    renderSidebar('/');
+
+    expect(screen.getByRole('link', { name: /^Painel Admin$/i }).getAttribute('href')).toBe(
+      '/settings/usuarios-dados'
+    );
+  });
+
+  it('utilizador não admin não vê Painel Admin', () => {
+    authState.role = 'usuario';
+    renderSidebar('/');
+
+    expect(screen.queryByRole('link', { name: /^Painel Admin$/i })).toBeNull();
+  });
+
+  it('em /settings/usuarios-dados o item Painel Admin fica ativo e Configurações não', () => {
+    authState.role = 'admin';
+    renderSidebar('/settings/usuarios-dados');
+
+    const painel = screen.getByRole('link', { name: /^Painel Admin$/i });
+    const config = screen.getByRole('link', { name: /^Configurações$/i });
+    expect(painel.className).toMatch(/bg-blue-600/);
+    expect(config.className).not.toMatch(/bg-blue-600/);
+  });
+
+  it('outsider não vê Painel Admin (FR-SIDEBAR-ADMIN-03)', () => {
+    authState.role = 'outsider';
+    renderSidebar('/');
+
+    expect(screen.queryByRole('link', { name: /^Painel Admin$/i })).toBeNull();
+  });
+
+  it('sidebar colapsada: Painel Admin continua acessível por nome, primeiro link do menu (UX §8 cenário 5)', () => {
+    authState.role = 'admin';
+    renderSidebar('/orcamentos', false);
+
+    const painel = screen.getByRole('link', { name: /^Painel Admin$/i });
+    expect(painel.getAttribute('aria-label')).toBe('Painel Admin');
+    expect(painel.getAttribute('title')).toBe('Painel Admin');
+    const menu = screen.getByLabelText('Menu lateral');
+    const links = menu.querySelectorAll('a[href]');
+    expect(links[0]).toBe(painel);
+  });
+
+  it('subcaminho /settings/usuarios-dados/* mantém Painel Admin activo (FR-SIDEBAR-ADMIN-04)', () => {
+    authState.role = 'admin';
+    renderSidebar('/settings/usuarios-dados/detalhe');
+
+    const painel = screen.getByRole('link', { name: /^Painel Admin$/i });
+    expect(painel.className).toMatch(/bg-blue-600/);
   });
 });
