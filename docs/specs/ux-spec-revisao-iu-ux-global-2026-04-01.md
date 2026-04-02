@@ -9,7 +9,7 @@
 
 **Relação com outros artefactos**
 
-- **`docs/prd/PRD-meu-mei-ui-ux-melhoria-2026-03-30.md`** + **`docs/specs/ux-spec-meu-mei-ui-2026-03-30.md`** — canónicos para **`/guias-mei`**. Esta especificação **complementa** o programa global; onde a mesma rota for tocada, **não contradizer** FR-UX-MEI-* / secções do spec Meu MEI.
+- **`docs/prd/PRD-meu-mei-ui-ux-melhoria-2026-03-30.md`** + **`docs/specs/ux-spec-meu-mei-ui-2026-03-30.md`** — canónicos para **`/guias-mei`**. Esta especificação **complementa** o programa global; onde a mesma rota for tocada, **não contradizer** FR-UX-MEI-* / secções do spec da área Mei Infinito.
 - **`docs/prd/PRD-meu-financeiro-produto-brownfield-2026-03-26.md`** — contexto de produto; sem alterar regras fiscais por este documento.
 
 ---
@@ -53,7 +53,7 @@ Objetivo **FR-UX-GLOBAL-B01**: o utilizador em primeiro contacto associa **uma i
 | Ver compromissos | **Agenda** | `/agenda` |
 | Automatizar repetições | **Recorrências** | `/recorrencias` |
 | Ajustar conta / aparência / dados | **Configurações** | `/settings`, subrotas |
-| Operações MEI (guia fiscal) | **Meu MEI** (sidebar ≥ md); mobile: **atalhos** + entrada desde contexto MEI | `/guias-mei` |
+| Operações MEI (guia fiscal) | **Mei Infinito** (sidebar ≥ md); mobile: **atalhos** + entrada desde contexto MEI | `/guias-mei` |
 | Catálogo NFS-e (clientes / itens) | Dentro do fluxo MEI ou rotas dedicadas (já existentes) | `/mei-catalogo/clientes`, `/mei-catalogo/servicos-produtos` |
 
 **Auditoria (Fase A):** documentar desvios (ex.: utilizador tenta “Mais” no *bottom* esperando MEI e só encontra *settings*).
@@ -74,9 +74,9 @@ Objetivo **FR-UX-GLOBAL-B01**: o utilizador em primeiro contacto associa **uma i
 
 | Superfície | Viewport | Função especificada |
 |------------|----------|---------------------|
-| **Sidebar** | `md+` | Navegação principal do dia a dia + Meu MEI (se elegível) + Configurações. |
-| **Bottom navigation** | `< md` | Subconjunto de 5 destinos; **não** inclui Agenda, Recorrências, Meu MEI diretamente. |
-| **Atalhos rápidos** (flutuante) | `< md` | **Agenda**, **Meu MEI** (se elegível) — `Layout.tsx`. |
+| **Sidebar** | `md+` | Navegação principal do dia a dia + Mei Infinito (se elegível) + Configurações. |
+| **Bottom navigation** | `< md` | Subconjunto de 5 destinos; **não** inclui Agenda, Recorrências, Mei Infinito diretamente. |
+| **Atalhos rápidos** (flutuante) | `< md` | **Agenda**, **Mei Infinito** (se elegível) — `Layout.tsx`. |
 | **Header** | todos | Contexto global, utilizador, tema, *toggle* sidebar. |
 
 **Heurística Nielsen a aplicar na matriz:** *consistência e padrões* + *reconhecimento em vez de memorização* — utilizador mobile não deve precisar de “descobrir” que MEI só está nos atalhos.
@@ -135,7 +135,7 @@ Objetivo **FR-UX-GLOBAL-B01**: o utilizador em primeiro contacto associa **uma i
 
 **Estrutura obrigatória de UI** quando o utilizador **não** pode ver uma rota ou ação:
 
-1. **Título humano** (ex.: “Meu MEI indisponível”) — evitar “403” ou “Forbidden” como única mensagem.  
+1. **Título humano** (ex.: “Mei Infinito indisponível”) — evitar “403” ou “Forbidden” como única mensagem.  
 2. **Explicação em uma frase** — *porquê* (ex.: “A tua conta ainda não tem o MEI ativado.” / “Esta área é só para administradores.”).  
 3. **Próximo passo** — ligação ou instrução (ex.: “Fala com o administrador da conta.” / “Ativa o MEI nas configurações.” — conforme regra de negócio real).  
 4. **CTA opcional** — um botão primário quando existir destino válido.
@@ -165,7 +165,7 @@ Documentar no relatório Fase A, para cada categoria:
 | Tabelas / listas | cabeçalho, linha vazia, paginação | transações, catálogo MEI |
 | Modais / *drawers* | foco, *escape*, *aria* | fluxos existentes |
 | *Toasts* | sucesso/erro/info | `react-toastify` |
-| Cartões / *cards* | hierarquia tipográfica | dashboard, Meu MEI |
+| Cartões / *cards* | hierarquia tipográfica | dashboard, Mei Infinito |
 
 **Saída:** tabela **padrão canónico** + **desvios** (lista) — desvios ou são corrigidos na onda P1 ou **documentados** como exceção aceite com justificativa.
 

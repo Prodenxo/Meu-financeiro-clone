@@ -18,7 +18,7 @@ export default function Sidebar({ expanded }: SidebarProps) {
     { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
     { path: '/categorias', label: 'Categorias', icon: Grid3x3 },
     { path: '/agenda', label: 'Agenda', icon: Calendar },
-    ...(canAccessMeiArea ? [{ path: '/guias-mei', label: 'Meu MEI', icon: FileText }] : []),
+    ...(canAccessMeiArea ? [{ path: '/guias-mei', label: 'Mei Infinito', icon: FileText }] : []),
     { path: '/settings', label: 'Configurações', icon: Settings },
   ];
 
@@ -26,7 +26,7 @@ export default function Sidebar({ expanded }: SidebarProps) {
     if (path === '/') {
       return location.pathname === '/';
     }
-    // Meu MEI: só ativo na rota da guia, não em /mei-catalogo/* (spec CAT-MEI-05 §3.2).
+    // Mei Infinito (/guias-mei): só ativo na rota da guia, não em /mei-catalogo/* (spec CAT-MEI-05 §3.2).
     if (path === '/guias-mei') {
       return location.pathname === '/guias-mei';
     }

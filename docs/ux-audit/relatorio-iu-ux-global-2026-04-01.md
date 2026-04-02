@@ -119,7 +119,7 @@ Lista explícita para cumprimento do PRD (pode ser reordenada pelo PO):
 - `frontend/src/App.tsx` — guards MEI, rotas autenticadas.  
 - `frontend/src/Layout/Sidebar.tsx` — “Visão Geral”, “Configurações”.  
 - `frontend/src/components/BottomNavigation.tsx` — “Inicio”, “Mais”.  
-- `frontend/src/Layout/Layout.tsx` — FAB atalhos (Agenda, Meu MEI).
+- `frontend/src/Layout/Layout.tsx` — FAB atalhos (Agenda, Mei Infinito).
 
 ---
 

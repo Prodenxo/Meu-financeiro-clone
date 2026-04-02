@@ -1,4 +1,4 @@
-# Story — FR-UX-MEI (P0): Meu MEI — KPIs, tabs sem duplicação, visão geral e certificado
+# Story — FR-UX-MEI (P0): Mei Infinito — KPIs, tabs sem duplicação, visão geral e certificado
 
 **ID:** STORY-FR-UX-MEI-P0  
 **Prioridade:** P0 (Must — PRD onda 1)  
@@ -8,7 +8,7 @@
 
 ## User story
 
-**Como** utilizador na área **Meu MEI** (`/guias-mei`),  
+**Como** utilizador na área **Mei Infinito** (`/guias-mei`),  
 **quero** ver um resumo numérico claro sem repetição nos separadores, cartões da visão geral com estado e ações explícitas, e o certificado (incl. “servidor”) integrado ao fluxo,  
 **para** orientar-me rápido e saber o que é informativo versus o que posso clicar.
 

@@ -8,7 +8,7 @@
 **Relação com outros documentos**
 
 - **`docs/prd/PRD-meu-financeiro-produto-brownfield-2026-03-26.md`** — visão de produto e iniciativas transversais; este PRD **não** substitui requisitos fiscais nem contratos de API.
-- **`docs/prd/PRD-meu-mei-ui-ux-melhoria-2026-03-30.md`** — escopo **restrito** à rota `/guias-mei`. O presente PRD cobre **todo o site** (shell, núcleo financeiro, auth, settings, MEI além do guia quando aplicável). Evitar duplicação: melhorias já exigidas pelo PRD Meu MEI permanecem canónicas **nessa rota**; aqui referenciam-se apenas quando a auditoria global tocar a mesma página.
+- **`docs/prd/PRD-meu-mei-ui-ux-melhoria-2026-03-30.md`** — escopo **restrito** à rota `/guias-mei`. O presente PRD cobre **todo o site** (shell, núcleo financeiro, auth, settings, MEI além do guia quando aplicável). Evitar duplicação: melhorias já exigidas pelo PRD da área Mei Infinito permanecem canónicas **nessa rota**; aqui referenciam-se apenas quando a auditoria global tocar a mesma página.
 
 ---
 
@@ -61,7 +61,7 @@ Produto (aprovação e priorização), UX (auditoria e recomendações visuais),
 2. **Núcleo financeiro:** dashboard (`/`), transações (`/transacoes`), categorias (`/categorias`) — tarefa “registar movimento” e “ver resumo”.  
 3. **Planeamento:** orçamentos (`/orcamentos`), agenda (`/agenda`), recorrências (`/recorrencias`) — pelo menos navegação e um fluxo de criação/edição representativo por área.  
 4. **Conta:** definições (`/settings`) e, se aplicável, subrotas admin.  
-5. **MEI (quando elegível):** `/guias-mei`, `/mei-catalogo/clientes`, `/mei-catalogo/servicos-produtos` — alinhado ao PRD Meu MEI onde coincidente.  
+5. **MEI (quando elegível):** `/guias-mei`, `/mei-catalogo/clientes`, `/mei-catalogo/servicos-produtos` — alinhado ao PRD da área Mei Infinito onde coincidente.  
 6. **Shell:** `Layout` (header, sidebar, footer, bottom nav, painel de atualizações, atalhos móveis).
 
 ---
@@ -145,9 +145,9 @@ Produto (aprovação e priorização), UX (auditoria e recomendações visuais),
 | Risco | Impacto | Mitigação |
 |-------|---------|-----------|
 | Auditoria sem participantes | Viés de equipa | Mínimo n ≥ 5; recrutamento externo ou painel; PO aprova exceções. |
-| Redesenho total antes de evidência | Atraso e conflitos | Fase A obrigatória; ondas quick wins primeiro; PRD Meu MEI respeitado em `/guias-mei`. |
+| Redesenho total antes de evidência | Atraso e conflitos | Fase A obrigatória; ondas quick wins primeiro; PRD da área Mei Infinito respeitado em `/guias-mei`. |
 | Erros opacos só no backend | UI não consegue cumprir FR-UX-GLOBAL-B06 | Itens na matriz com dono **backend**; stories de mapeamento código → mensagem. |
-| Duplicação de trabalho com PRD Meu MEI | Conflito de aceite | Coordenação explícita: mesma página = requisitos do PRD Meu MEI + itens globais não contraditórios. |
+| Duplicação de trabalho com PRD da área Mei Infinito | Conflito de aceite | Coordenação explícita: mesma página = requisitos do PRD Mei Infinito (`PRD-meu-mei-ui-ux-melhoria-2026-03-30.md`) + itens globais não contraditórios. |
 
 ---
 

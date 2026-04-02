@@ -5,7 +5,7 @@ export type AccessBlockKind = 'mei-required' | 'admin-settings-restricted';
 
 export function meiRequiredAccessBlockProps(): Omit<AccessBlockedExplainerProps, 'onDismiss' | 'testId'> {
   return {
-    title: 'Área Meu MEI não disponível',
+    title: 'Área Mei Infinito não disponível',
     explanation:
       'A Guia MEI, o catálogo para NFS-e e as ferramentas associadas só ficam disponíveis quando o perfil MEI está ativo na tua conta.',
     nextStep:

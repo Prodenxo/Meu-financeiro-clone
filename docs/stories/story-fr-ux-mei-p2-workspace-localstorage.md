@@ -1,4 +1,4 @@
-# Story — FR-UX-MEI (P2): Meu MEI — Memorizar última área do fluxo
+# Story — FR-UX-MEI (P2): Mei Infinito — Memorizar última área do fluxo
 
 **ID:** STORY-FR-UX-MEI-P2  
 **Prioridade:** P2 (Could — PRD onda 3)  
@@ -8,7 +8,7 @@
 
 ## User story
 
-**Como** utilizador recorrente em Meu MEI,  
+**Como** utilizador recorrente em Mei Infinito,  
 **quero** que a aplicação relembre a última secção do fluxo que estava a usar (dentro do dispositivo),  
 **para** retomar o trabalho com menos cliques quando volto à página.
 
@@ -82,7 +82,7 @@ Cursor (implementação assistida)
 
 ### Change Log
 
-- **2026-03-30** — P2 FR-UX-MEI-07: persistência do último *workspace* Meu MEI em `localStorage` com fallbacks seguros.
+- **2026-03-30** — P2 FR-UX-MEI-07: persistência do último *workspace* Mei Infinito em `localStorage` com fallbacks seguros.
 - **2026-03-30** — Pós-QA: módulo `guidesMeiWorkspaceStorage.ts` + testes (observação QA sobre cobertura automatizada).
 
 ---

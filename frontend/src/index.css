@@ -114,7 +114,7 @@
     @apply bg-blue-600 text-white shadow-soft dark:text-white;
   }
 
-  /* Meu MEI — Fluxo do MEI: foco teclado + reforço do tab ativo em modo escuro (FR-UX-MEI-05) */
+  /* Mei Infinito — Fluxo do MEI: foco teclado + reforço do tab ativo em modo escuro (FR-UX-MEI-05) */
   .mei-fluxo-tab {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-blue-400 dark:focus-visible:ring-offset-slate-900;
   }

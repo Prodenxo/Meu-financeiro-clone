@@ -102,7 +102,7 @@ Cursor Agent (implementação)
 | Critério | Evidência | Resultado |
 |----------|-----------|-----------|
 | Rotas prioritárias com `Navigate` sem mensagem → padrão §4.4 ou destino explica | `App.tsx`: MEI (`/guias-mei`, `/mei-catalogo/clientes`, `/mei-catalogo/servicos-produtos`) → `/` com `state.accessBlock: 'mei-required'`; admin (`/settings/users`, `/settings/usuarios-dados`) → `/settings` com `admin-settings-restricted`. `Dashboard` / `Settings` renderizam **`AccessBlockedExplainer`** (título, explicação, `nextStep`, CTA + «Ocultar aviso»). | **OK** |
-| `usuario` + `mei=false`: `/guias-mei` e `/mei-catalogo/...` compreensíveis | Copy em `accessBlockPresets.ts` + asserções em `App.mei-gate.test.tsx` («Área Meu MEI não disponível»). | **OK** (automatizado); smoke manual com leitor de ecrã recomendado |
+| `usuario` + `mei=false`: `/guias-mei` e `/mei-catalogo/...` compreensíveis | Copy em `accessBlockPresets.ts` + asserções em `App.mei-gate.test.tsx` («Área Mei Infinito não disponível»). | **OK** (automatizado); smoke manual com leitor de ecrã recomendado |
 | Sem stack trace / JSON ao utilizador | Mensagens estáticas; sem propagação de erro de API neste fluxo. | **OK** |
 | `lint` / `typecheck` / `test`; `App.mei-gate.test.tsx` alinhado | `vitest`: `App.mei-gate.test.tsx` (11 testes) + `AccessBlockedExplainer.test.tsx` (1) **pass** nesta revisão; gates completos do repo assumidos alinhados à entrega Dev. | **OK** |
 

@@ -1,9 +1,9 @@
-# PRD — Melhoria de UI/UX: área **Meu MEI** (`/guias-mei`)
+# PRD — Melhoria de UI/UX: área **Mei Infinito** (`/guias-mei`)
 
 **Versão:** 1.0  
 **Data:** 2026-03-30  
 **Tipo:** Brownfield — evolução de experiência (frontend)  
-**Fontes:** Brief de UI/UX Meu MEI (analista / sessão produto 2026-03-30); implementação atual em `frontend/src/pages/GuidesMei.tsx`
+**Fontes:** Brief de UI/UX Mei Infinito (analista / sessão produto 2026-03-30); implementação atual em `frontend/src/pages/GuidesMei.tsx`
 
 **Relação com PRD principal:** complementa `docs/prd/PRD-meu-financeiro-produto-brownfield-2026-03-26.md` (fluxos MEI, DAS, NFS-e). Não altera regras fiscais nem contratos de API por si só; **presentation layer** e clareza de navegação, desde que dados já expostos pela aplicação sejam reutilizados.
 
@@ -11,7 +11,7 @@
 
 ## 1. Resumo executivo
 
-A página **Meu MEI** concentra certificado digital, DAS, NFS-e e parcelamentos, mas a estrutura atual (hero com KPIs, separadores **Fluxo do MEI** e secção **Visão geral operacional**) gera **redundância numérica**, **hierarquia visual pouco clara** e **cartões com baixa densidade de informação**, com risco de o utilizador não perceber o que é clicável nem qual o próximo passo.
+A página **Mei Infinito** concentra certificado digital, DAS, NFS-e e parcelamentos, mas a estrutura atual (hero com KPIs, separadores **Fluxo do MEI** e secção **Visão geral operacional**) gera **redundância numérica**, **hierarquia visual pouco clara** e **cartões com baixa densidade de informação**, com risco de o utilizador não perceber o que é clicável nem qual o próximo passo.
 
 Este PRD define **objetivos de experiência**, **escopo por onda (P0–P2)**, **requisitos funcionais de interface**, **métricas** e **critérios de release**, para execução em `GuidesMei.tsx` (e estilos associados) com gates de qualidade do repositório.
 
@@ -51,7 +51,7 @@ O MEI e o contador devem **orientar-se em poucos segundos**, ver **cada métrica
 ### 5.1 Dentro do escopo
 
 - Reorganização de **layout e copy** na rota `/guias-mei` (componente principal `GuidesMei.tsx`).
-- Redução de **redundância** entre bloco “Meu MEI”, separadores “Fluxo do MEI” e “Visão geral operacional”.
+- Redução de **redundância** entre bloco “Mei Infinito”, separadores “Fluxo do MEI” e “Visão geral operacional”.
 - **Preenchimento** dos cartões da visão geral com estado resumido, CTAs e *empty states* onde não houver dados.
 - Melhoria de **estado visual e acessibilidade** dos separadores tipo tab.
 - Integração **coerente** do controlo “Certificado do servidor” (ou equivalente) no fluxo visual, sem mudar a semântica de negócio sem story técnica.
@@ -61,7 +61,7 @@ O MEI e o contador devem **orientar-se em poucos segundos**, ver **cada métrica
 - Novos endpoints ou regras de negócio MEI/DAS/NFS-e não motivadas por limitação de dados já disponíveis na página.
 - Redesign global do *design system* ou troca de tema.
 - Funcionalidades novas de parcelamento ou integrações SERPRO além do que já existe.
-- Alterações profundas em `AdminUserData` / “Meu MEI (cliente)” além do necessário para **consistência de componentes reutilizados** (se aplicável).
+- Alterações profundas em `AdminUserData` / “Mei Infinito (cliente)” além do necessário para **consistência de componentes reutilizados** (se aplicável).
 
 ---
 
@@ -143,7 +143,7 @@ O MEI e o contador devem **orientar-se em poucos segundos**, ver **cada métrica
 - `docs/prd/PRD-meu-financeiro-produto-brownfield-2026-03-26.md` — contexto MEI/NFS-e  
 - `frontend/src/pages/GuidesMei.tsx` — implementação alvo  
 - `frontend/src/App.tsx` — rota `/guias-mei`  
-- Brief analista (UI/UX Meu MEI, 2026-03-30) — problemas, princípios e recomendações P0/P1/P2  
+- Brief analista (UI/UX Mei Infinito, 2026-03-30) — problemas, princípios e recomendações P0/P1/P2  
 
 ---
 

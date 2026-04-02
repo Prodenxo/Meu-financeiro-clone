@@ -137,7 +137,7 @@ describe('AppRoutes mei gate', () => {
 
     expect(container.textContent).toContain('DASHBOARD_PAGE');
     expect(container.textContent).not.toContain('GUIAS_MEI_PAGE');
-    expect(container.textContent).toContain('Área Meu MEI não disponível');
+    expect(container.textContent).toContain('Área Mei Infinito não disponível');
 
     await act(async () => {
       root.unmount();
@@ -213,7 +213,7 @@ describe('AppRoutes mei gate', () => {
 
     expect(container.textContent).toContain('DASHBOARD_PAGE');
     expect(container.textContent).not.toContain('MEI_CATALOGO_CLIENTES_PAGE');
-    expect(container.textContent).toContain('Área Meu MEI não disponível');
+    expect(container.textContent).toContain('Área Mei Infinito não disponível');
 
     await act(async () => {
       root.unmount();
@@ -261,7 +261,7 @@ describe('AppRoutes mei gate', () => {
 
     expect(container.textContent).toContain('DASHBOARD_PAGE');
     expect(container.textContent).not.toContain('MEI_CATALOGO_SERVICOS_PRODUTOS_PAGE');
-    expect(container.textContent).toContain('Área Meu MEI não disponível');
+    expect(container.textContent).toContain('Área Mei Infinito não disponível');
 
     await act(async () => {
       root.unmount();

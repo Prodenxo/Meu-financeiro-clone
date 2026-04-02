@@ -6,7 +6,7 @@
 **Requisitos de origem:** `docs/prd/PRD-mei-nfse-workspace-ui-ux-melhoria-2026-04-01.md`  
 **Implementação de referência:** `frontend/src/pages/GuidesMei.tsx` (painel `id="mei-panel-nfse"`, `role="tabpanel"`), tokens em `frontend/src/index.css`  
 
-**Relação com specs irmãs:** complementa `docs/specs/ux-spec-meu-mei-ui-2026-03-30.md` (L0–L2: hero, tabs Fluxo do MEI). Esta spec detalha **apenas L3 quando `activeWorkspace === 'nfse'`**. Em caso de conflito de tokens ou padrões globais, prevalece a spec Meu MEI; o workspace NFS-e **não** introduz tema novo.
+**Relação com specs irmãs:** complementa `docs/specs/ux-spec-meu-mei-ui-2026-03-30.md` (L0–L2: hero, tabs Fluxo do MEI). Esta spec detalha **apenas L3 quando `activeWorkspace === 'nfse'`**. Em caso de conflito de tokens ou padrões globais, prevalece a spec da área Mei Infinito (`ux-spec-meu-mei-ui-2026-03-30.md`); o workspace NFS-e **não** introduz tema novo.
 
 ---
 
@@ -43,7 +43,7 @@ Ordem de leitura **sempre** A → B → C em **RTL** e LTR; não inverter em mob
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
-│ [Link] Voltar ao Meu MEI                                                │
+│ [Link] Voltar ao Mei Infinito                                            │
 ├────────────────────────────────────────────────────────────────────────┤
 │ NFS-L1-A  ANTES DE EMITIR                                              │
 │ ┌────────────────────────────────────────────────────────────────────┐ │
@@ -90,7 +90,7 @@ Ordem de leitura **sempre** A → B → C em **RTL** e LTR; não inverter em mob
 
 ### 3.3 Contagens e hero (NFR-NFSE-05 / FR-UX-MEI-01)
 
-- O **hero** (quando visível na mesma vista) continua fonte canónica do número de notas exibidas no KPI, conforme spec Meu MEI.  
+- O **hero** (quando visível na mesma vista) continua fonte canónica do número de notas exibidas no KPI, conforme spec da área Mei Infinito (`ux-spec-meu-mei-ui-2026-03-30.md`).  
 - No cabeçalho da secção **Notas emitidas**, **não** mostrar `filteredNfseList.length` como grande destaque se isso **duplicar** o mesmo inteiro do hero **sem** novo contexto.  
 - **Permitido:** texto neutro — “Lista filtrada”, “Acompanhe as notas abaixo”, ou subtítulo fixo já existente.  
 - **Permitido:** número **diferente** do hero (ex.: “12 arquivadas” se o KPI do hero for só não arquivadas — só se o produto definir essa regra; caso contrário manter neutro).
@@ -263,7 +263,7 @@ Mapeamento UX → estado já presente em `GuidesMei.tsx` (referência para aceit
 
 ## 11. Responsividade
 
-- Largura máxima do painel: herda do contentor Meu MEI.  
+- Largura máxima do painel: herda do contentor da área Mei Infinito.  
 - Secções colapsáveis: cabeçalho com `min-height` ≥ 44 px área tocável.  
 - Menu “Mais” em mobile: painel full-width sob o cartão ou *bottom sheet* simplificado (lista de botões); evitar *popover* cortado.
 

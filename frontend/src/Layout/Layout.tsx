@@ -57,7 +57,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </Link>
             {canAccessMeiArea ? (
               <Link to="/guias-mei" className="planner-button-secondary-compact">
-                Meu MEI
+                Mei Infinito
               </Link>
             ) : null}
           </div>

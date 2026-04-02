@@ -29,7 +29,7 @@
 ## Fora de escopo
 
 - Reordenar itens do bottom nav ou adicionar MEI ao bottom (P2 / A07).  
-- Alterações em `/guias-mei` além do PRD Meu MEI canónico.
+- Alterações em `/guias-mei` além do PRD Mei Infinito canónico (`PRD-meu-mei-ui-ux-melhoria-2026-03-30.md`).
 
 ## File list (checklist implementação)
 

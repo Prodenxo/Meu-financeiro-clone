@@ -1981,7 +1981,7 @@ export default function GuidesMei() {
         <section className="admin-hero">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="admin-hero-title">Meu MEI</h1>
+              <h1 className="admin-hero-title">Mei Infinito</h1>
               <p className="admin-hero-subtitle">
                 {canViewNfse
                   ? 'Gerencie certificado, DAS e emissão de NFS-e (notas de serviço) no mesmo fluxo.'
@@ -2246,7 +2246,7 @@ export default function GuidesMei() {
               onClick={() => setActiveWorkspace('overview')}
               className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 underline"
             >
-              Voltar ao Meu MEI
+              Voltar ao Mei Infinito
             </button>
           </div>
           <div className="admin-section-header">
@@ -2686,7 +2686,7 @@ export default function GuidesMei() {
                 onClick={() => setActiveWorkspace('overview')}
                 className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 underline"
               >
-                Voltar ao Meu MEI
+                Voltar ao Mei Infinito
               </button>
             </div>
 
@@ -3510,7 +3510,7 @@ export default function GuidesMei() {
                 onClick={() => setActiveWorkspace('overview')}
                 className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 underline"
               >
-                Voltar ao Meu MEI
+                Voltar ao Mei Infinito
               </button>
             </div>
             <div className="admin-section-header">

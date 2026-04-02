@@ -40,7 +40,7 @@ Contrato de **experiência, estrutura, *copy*, acessibilidade e estados** para *
 
 ### 3.2 Navegação até ao catálogo
 
-O utilizador pode chegar às páginas de catálogo pelos **links contextuais** em Meu MEI / NFS-e (*Gerir clientes* / *Gerir serviços e produtos*) e URLs diretas, conforme implementação vigente. Esta spec **não** exige nova entrada global; apenas que o fluxo de exclusão seja **idêntico** em ambas as páginas de catálogo.
+O utilizador pode chegar às páginas de catálogo pelos **links contextuais** em Mei Infinito / NFS-e (*Gerir clientes* / *Gerir serviços e produtos*) e URLs diretas, conforme implementação vigente. Esta spec **não** exige nova entrada global; apenas que o fluxo de exclusão seja **idêntico** em ambas as páginas de catálogo.
 
 ---
 
@@ -207,7 +207,7 @@ Se a arquitectura adoptar `deleted_at`:
 2. Leitor de ecrã: título do diálogo e botões anunciados; rótulos das linhas distinguem qual registo se elimina.  
 3. Duplo clique rápido no confirmar: no máximo um efeito visível coerente (lista sem duplicar toasts estranhos).  
 4. Após sucesso, registo **desaparece** da lista sem *hard refresh*.  
-5. Em Meu MEI → NFS-e (fluxo acordado), registo eliminado **não** reaparece nos atalhos.  
+5. Em Mei Infinito → NFS-e (fluxo acordado), registo eliminado **não** reaparece nos atalhos.  
 6. Dark mode: diálogo legível; botão destrutivo não só a cor.  
 7. Copy de **não anular notas** visível no diálogo (FR-CAT-13).
 
