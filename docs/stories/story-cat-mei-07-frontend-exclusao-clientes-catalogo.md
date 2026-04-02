@@ -49,7 +49,7 @@
 
 ## Definition of Done
 
-- QA manual: excluir cliente de teste → desaparece da lista → Meu MEI → NFS-e não mostra atalho após refetch acordado.  
+- QA manual: excluir cliente de teste → desaparece da lista → Mei Infinito → NFS-e não mostra atalho após refetch acordado.  
 - Atualizar **story CAT-MEI-03** *Dev Agent Record* **não** é obrigatório aqui; remover referência “sem exclusão” apenas se editar secções autorizadas numa passagem de higiene (coordenar com PO).
 
 ## Qualidade / CodeRabbit
@@ -133,7 +133,7 @@ Cursor (implementação assistida)
 
 ### Observações (não bloqueantes)
 
-1. **FR-CAT-12 / `GuidesMei`:** implementação explícita fora de escopo; **DoD** pede QA manual (lista → Meu MEI → NFS-e sem atalho após refetch). Recomendado validar uma vez em ambiente integrado.
+1. **FR-CAT-12 / `GuidesMei`:** implementação explícita fora de escopo; **DoD** pede QA manual (lista → Mei Infinito → NFS-e sem atalho após refetch). Recomendado validar uma vez em ambiente integrado.
 2. **RTL:** coberto fluxo lista → confirmação; **modal → mesmo diálogo → DELETE** está desmembrado (callback `onRequestDelete` testado no modal; diálogo e API na página). Aceitável; E2E opcional se a equipa quiser prova única no fio.
 3. **`data-testid`:** uso legítimo para estabilidade após `cleanup` entre testes; não substitui `role`/`aria` no produto.
 

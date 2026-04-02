@@ -1,4 +1,4 @@
-# Especificação de front-end e UX — Meu MEI (`/guias-mei`)
+# Especificação de front-end e UX — Mei Infinito (`/guias-mei`)
 
 **Versão:** 1.0  
 **Data:** 2026-03-30  
@@ -21,7 +21,7 @@ Servir de **contrato de experiência e implementação** entre UX, produto e eng
 | Nível | Nome canónico | Função |
 |-------|----------------|--------|
 | L0 | Página | Rota `/guias-mei`; título de documento / *shell* existente do *layout*. |
-| L1 | **Hero Meu MEI** | Identidade da área, *value proposition* em uma linha, **fonte canónica de KPIs** (FR-UX-MEI-01). |
+| L1 | **Hero Mei Infinito** | Identidade da área, *value proposition* em uma linha, **fonte canónica de KPIs** (FR-UX-MEI-01). |
 | L2 | **Fluxo do MEI** (navegação contextual) | Seleção de *workspace*: `overview`, `das`, `nfse`, `parcelamentos`. |
 | L3 | **Área de trabalho** | Conteúdo varia por `activeWorkspace`; em `overview`, bloco **Visão geral operacional**. |
 
@@ -40,7 +40,7 @@ Servir de **contrato de experiência e implementação** entre UX, produto e eng
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│ [L1 HERO] Meu MEI                    [Badge status certificado]  │
+│ [L1 HERO] Mei Infinito               [Badge status certificado]  │
 │ Subtítulo (com/sem NFS-e)                                        │
 │ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐             │
 │ │ Períodos │ │ Pendênc. │ │ Notas*   │ │ Status   │  ← KPIs     │
@@ -100,7 +100,7 @@ Servir de **contrato de experiência e implementação** entre UX, produto e eng
 
 | Elemento | Classe / padrão | Comportamento |
 |----------|-----------------|---------------|
-| Título | `admin-hero-title` | Texto fixo: “Meu MEI”. |
+| Título | `admin-hero-title` | Texto fixo: “Mei Infinito”. |
 | Subtítulo | `admin-hero-subtitle` | Condicional `canViewNfse` (já existente). |
 | Badge de certificado | `admin-badge-success` / `primary` / `warning` | Mantém `certificateScopeLabel`; alinhado a FR-UX-MEI-04 (ver §5). |
 | *Stat cards* | `admin-stat-card` | **Somente leitura**; remover *hover* que sugira clicável se não houver `onClick` (hoje há `hover:-translate-y` — **especificação:** remover tradução/sombra de “cartão clicável” nos KPIs **ou** documentar como “inspeção visual” neutra, sem affordance de botão). |

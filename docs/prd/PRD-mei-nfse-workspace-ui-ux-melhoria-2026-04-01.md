@@ -98,7 +98,7 @@ A experiência deve **respeitar FR-UX-MEI-01**: não duplicar contagem de notas 
 | **NFR-NFSE-02** | Performance | Colapsáveis e reordenação de layout não devem degradar perceptivelmente interação na lista (ex.: evitar re-render completo desnecessário por linha). |
 | **NFR-NFSE-03** | Qualidade | `npm run lint`, `npm run typecheck`, `npm test` nos pacotes tocados; testes existentes da rota `/guias-mei` e `GuidesMei.permissions.test.tsx` (e afins) **permanecem verdes** ou atualizados de forma explícita. |
 | **NFR-NFSE-04** | Consistência visual | Reutilizar tokens/classes existentes (`planner-*`, `admin-*`); sem novo tema global. |
-| **NFR-NFSE-05** | Coerência com Meu MEI | Cumprir **FR-UX-MEI-01** no que diz respeito a **contagens de notas** no cabeçalho da lista vs hero (uma fonte canónica por viewport lógica). |
+| **NFR-NFSE-05** | Coerência com Mei Infinito | Cumprir **FR-UX-MEI-01** no que diz respeito a **contagens de notas** no cabeçalho da lista vs hero (uma fonte canónica por viewport lógica). |
 
 ---
 
@@ -120,7 +120,7 @@ A experiência deve **respeitar FR-UX-MEI-01**: não duplicar contagem de notas 
 | Menu “Mais” esconde ação crítica | Utilizador não encontra cancelar ou XML | FR-NFSE-UX-03: manter nas primárias as ações de maior frequência; QA valida paridade com lista atual. |
 | Acordeão oculta erros | Falha silenciosa na emissão | FR-NFSE-UX-04: expansão automática da secção com erro ao validar/emitir. |
 | Refactor monolítico | Merge e regressões | Extrair `MeiNfseEmitSection` / `MeiNfseListSection` (ou nomes equivalentes) em **PRs incrementais**; coordenar com outras stories em `GuidesMei.tsx`. |
-| Conflito com PRD Meu MEI global | KPIs duplicados | NFR-NFSE-05 + revisão conjunta com dono de FR-UX-MEI-01. |
+| Conflito com PRD da área Mei Infinito (`PRD-meu-mei-ui-ux-melhoria-2026-03-30.md`) | KPIs duplicados | NFR-NFSE-05 + revisão conjunta com dono de FR-UX-MEI-01. |
 
 ---
 
@@ -156,7 +156,7 @@ A experiência deve **respeitar FR-UX-MEI-01**: não duplicar contagem de notas 
 ## 13. Referências
 
 - `docs/brief/brief-mei-nfse-ui-ux-melhoria-2026-04-01.md` — origem e racional  
-- `docs/prd/PRD-meu-mei-ui-ux-melhoria-2026-03-30.md` — contexto página Meu MEI  
+- `docs/prd/PRD-meu-mei-ui-ux-melhoria-2026-03-30.md` — contexto da página Mei Infinito (`/guias-mei`)  
 - `docs/specs/ux-spec-meu-mei-ui-2026-03-30.md` — tokens e padrões globais  
 - `docs/operacao-mei-nfse.md` — escopo fiscal NFS-e na Guia MEI  
 - `frontend/src/pages/GuidesMei.tsx` — implementação alvo (`mei-panel-nfse`)  

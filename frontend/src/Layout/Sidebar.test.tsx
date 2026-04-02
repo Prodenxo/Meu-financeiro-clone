@@ -29,7 +29,7 @@ function renderSidebar(pathname: string) {
   );
 }
 
-describe('Sidebar (Meu MEI)', () => {
+describe('Sidebar (Mei Infinito)', () => {
   beforeEach(() => {
     authState.role = 'usuario';
     authState.mei = true;
@@ -39,33 +39,33 @@ describe('Sidebar (Meu MEI)', () => {
     cleanup();
   });
 
-  it('com canAccessMeiArea mostra Meu MEI e não lista catálogo na barra lateral', () => {
+  it('com canAccessMeiArea mostra Mei Infinito e não lista catálogo na barra lateral', () => {
     renderSidebar('/');
 
-    expect(screen.getByRole('link', { name: /Meu MEI/i }).getAttribute('href')).toBe('/guias-mei');
+    expect(screen.getByRole('link', { name: /Mei Infinito/i }).getAttribute('href')).toBe('/guias-mei');
     expect(screen.queryByRole('link', { name: /Catálogo — clientes/i })).toBeNull();
     expect(screen.queryByRole('link', { name: /Catálogo — serviços/i })).toBeNull();
   });
 
-  it('sem canAccessMeiArea (usuario mei=false) oculta Meu MEI', () => {
+  it('sem canAccessMeiArea (usuario mei=false) oculta Mei Infinito', () => {
     authState.mei = false;
 
     renderSidebar('/');
 
-    expect(screen.queryByRole('link', { name: /Meu MEI/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Mei Infinito/i })).toBeNull();
   });
 
-  it('em /mei-catalogo/clientes Meu MEI não fica ativo (rota fora do item da sidebar)', () => {
+  it('em /mei-catalogo/clientes Mei Infinito não fica ativo (rota fora do item da sidebar)', () => {
     renderSidebar('/mei-catalogo/clientes');
 
-    const meuMei = screen.getByRole('link', { name: /Meu MEI/i });
-    expect(meuMei.className).not.toMatch(/bg-blue-600/);
+    const meiInfinitoLink = screen.getByRole('link', { name: /Mei Infinito/i });
+    expect(meiInfinitoLink.className).not.toMatch(/bg-blue-600/);
   });
 
-  it('em /guias-mei Meu MEI fica ativo', () => {
+  it('em /guias-mei Mei Infinito fica ativo', () => {
     renderSidebar('/guias-mei');
 
-    const meuMei = screen.getByRole('link', { name: /Meu MEI/i });
-    expect(meuMei.className).toMatch(/bg-blue-600/);
+    const meiInfinitoLink = screen.getByRole('link', { name: /Mei Infinito/i });
+    expect(meiInfinitoLink.className).toMatch(/bg-blue-600/);
   });
 });

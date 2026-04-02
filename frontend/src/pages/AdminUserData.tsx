@@ -1031,14 +1031,14 @@ export default function AdminUserData() {
 
         {!selectedUserId ? (
           <div className="admin-empty-state">
-            Selecione um usuário para visualizar os dados e o Meu MEI.
+            Selecione um usuário para visualizar os dados da área Mei Infinito.
           </div>
         ) : (
           <>
             <div className="admin-section-card">
               <div className="admin-section-header">
                 <div>
-                  <h2 className="admin-section-title">Meu MEI (cliente)</h2>
+                  <h2 className="admin-section-title">Mei Infinito (cliente)</h2>
                   <p className="admin-section-subtitle">
                     Gere, baixe e envie a guia DAS do cliente selecionado.
                   </p>

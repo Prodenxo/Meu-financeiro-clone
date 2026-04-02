@@ -45,7 +45,7 @@
 
 ## Qualidade / CodeRabbit
 
-- Reutilizar classes/tokens existentes (`planner-*`, `admin-*`) — alinhado NFR do PRD Meu MEI onde sobreposto.  
+- Reutilizar classes/tokens existentes (`planner-*`, `admin-*`) — alinhado NFR do PRD da área Mei Infinito onde sobreposto.  
 - Não introduzir *spinners* sem nome acessível.
 
 ---

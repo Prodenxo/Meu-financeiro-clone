@@ -9,7 +9,7 @@ import { meiRequiredAccessBlockProps } from '../lib/accessBlockPresets';
 describe('AccessBlockedExplainer', () => {
   afterEach(() => cleanup());
 
-  it('expõe região de estado e copy MEI (UX-GLOBAL-04)', () => {
+  it('expõe região de estado e copy Mei Infinito (UX-GLOBAL-04)', () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AccessBlockedExplainer {...meiRequiredAccessBlockProps()} />
@@ -18,7 +18,7 @@ describe('AccessBlockedExplainer', () => {
 
     const region = screen.getByRole('status');
     expect(region).toBeTruthy();
-    expect(region.textContent).toContain('Área Meu MEI não disponível');
+    expect(region.textContent).toContain('Área Mei Infinito não disponível');
     expect(region.textContent).toContain('Ir às transações');
     expect(region.getAttribute('tabindex')).toBe('-1');
   });

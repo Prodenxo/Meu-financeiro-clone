@@ -68,7 +68,7 @@ Cursor (implementação assistida)
 
 ### Completion Notes List
 
-- Três secções: `mei-nfse-pre` (“Antes de emitir”), `mei-nfse-emit`, `mei-nfse-list`; *link* Voltar ao Meu MEI fora dos cartões.
+- Três secções: `mei-nfse-pre` (“Antes de emitir”), `mei-nfse-emit`, `mei-nfse-list`; *link* Voltar ao Mei Infinito fora dos cartões.
 - `nfseWorkspaceGuidance` (`useMemo`): prioridade emitente sem razão social → CTA Certificado e DAS; catálogo vazio (após load); `nfseCatalogLoading`; *fallback* com atalhos.
 - *Hint* obrigatório de campos movido para o início da secção emit (após catálogo), ordem §5.1 na zona pré.
 - Lista: vazio real vs filtro sem resultado; erro de listagem com lista vazia mostra `FiscalProviderErrorAlert` + “Tentar novamente”; `FiscalProviderErrorAlert` na secção emit só se `nfseList.length > 0` (evita duplicado).
@@ -104,7 +104,7 @@ Cursor (implementação assistida)
 
 | Critério | Veredicto | Evidência |
 |----------|-----------|-----------|
-| **FR-NFSE-UX-01** — Secções A→B→C com `id` | **OK** | `GuidesMei.tsx`: `section id="mei-nfse-pre"` + `h2#mei-nfse-pre-heading`; `id="mei-nfse-emit"` + `h2#mei-nfse-emit-heading`; `id="mei-nfse-list"` + `h2#mei-nfse-list-heading`; `aria-labelledby` coerente; botão “Voltar ao Meu MEI” fora dos cartões. |
+| **FR-NFSE-UX-01** — Secções A→B→C com `id` | **OK** | `GuidesMei.tsx`: `section id="mei-nfse-pre"` + `h2#mei-nfse-pre-heading`; `id="mei-nfse-emit"` + `h2#mei-nfse-emit-heading`; `id="mei-nfse-list"` + `h2#mei-nfse-list-heading`; `aria-labelledby` coerente; botão “Voltar ao Mei Infinito” fora dos cartões. |
 | **FR-NFSE-UX-07** — Linha dinâmica | **OK** | `nfseWorkspaceGuidance` (`useMemo`): (1) sem `razaoSocial` → CTA `setActiveWorkspace('das')`; (2) `nfseCatalogLoading`; (3) catálogo vazio; (4) *fallback*. Bloco com `role="status"` / `aria-live="polite"` em volta do conteúdo. |
 | **FR-NFSE-UX-02** — *Empty states* | **OK** | Lista: `nfseLoading` → loading; `nfseList.length===0` → erro `operation` + alerta + “Tentar novamente”, senão “Ainda não há…” + `scrollToNfseEmitSection`; `filteredNfseList.length===0` com lista não vazia → “Limpar filtros” (`resetNfseListFilters` inclui arquivadas). |
 | **§5.1** — Ordem zona pré | **OK com nota** | Ordem: aviso A1 → faixa emitente → mensagens sync emitente → atalhos/links → *loading* texto catálogo → `nfseCatalogError` → pré-prestador. As faixas sync não estão na tabela literal da spec mas são feedback do emitente — aceitável. |

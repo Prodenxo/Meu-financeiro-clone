@@ -1,4 +1,4 @@
-# Story — FR-UX-MEI (P1): Meu MEI — Acessibilidade dos tabs e microcopy
+# Story — FR-UX-MEI (P1): Mei Infinito — Acessibilidade dos tabs e microcopy
 
 **ID:** STORY-FR-UX-MEI-P1  
 **Prioridade:** P1 (Should — PRD onda 2)  
@@ -8,7 +8,7 @@
 
 ## User story
 
-**Como** utilizador (incl. teclado e leitor de ecrã) na área Meu MEI,  
+**Como** utilizador (incl. teclado e leitor de ecrã) na área Mei Infinito,  
 **quero** separadores do fluxo com estado ativo evidente e textos de apoio que me orientem sem contradizer os dados,  
 **para** navegar com confiança e cumprir objetivo de acessibilidade AA nos controlos principais.
 

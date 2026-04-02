@@ -22,7 +22,7 @@ Contrato de **experiência, estrutura de ecrã, comportamento, acessibilidade e 
 | Princípio | Aplicação |
 |-----------|-----------|
 | **Paridade mental** | Utilizador reconhece “cadastro de clientes” e “cadastro de serviços” como nos ERPs/emissores, sem jargão interno (`nfseCatalog*` só em código). |
-| **Uma fonte de verdade** | Lista e formulários refletem o mesmo catálogo que alimenta a emissão em Meu MEI (FR-CAT-07). |
+| **Uma fonte de verdade** | Lista e formulários refletem o mesmo catálogo que alimenta a emissão em Mei Infinito (FR-CAT-07). |
 | **Feedback previsível** | Carregar, vazio, erro e sucesso são sempre explícitos; após guardar, lista atualiza sem exigir *hard refresh* (salvo limitação documentada). |
 | **Consistência com o produto** | Reutilizar `PageShell`, `PageTitle`, botões `planner-button*`, toasts, padrão modal/lista de `Recorrencias.tsx` onde fizer sentido. |
 
@@ -43,18 +43,18 @@ Contrato de **experiência, estrutura de ecrã, comportamento, acessibilidade e 
 
 **Requisito PRD:** duas entradas **distintas** (FR-CAT-01).
 
-**Proposta A (MVP, sidebar plana):** após “Meu MEI”, inserir dois `Link`s condicionados ao mesmo `canAccessMeiArea` que hoje governa Meu MEI:
+**Proposta A (MVP, sidebar plana):** após “Mei Infinito”, inserir dois `Link`s condicionados ao mesmo `canAccessMeiArea` que hoje governa a entrada da área Mei Infinito:
 
 1. **Clientes** → `/mei-catalogo/clientes` (ícone sugerido: `Users` ou `ContactRound` do `lucide-react`).  
 2. **Serviços e produtos** → `/mei-catalogo/servicos-produtos` (ícone sugerido: `Package` ou `Briefcase`).
 
-**Proposta B (agrupamento visual):** se no futuro o sidebar suportar secções, agrupar sob rótulo **MEI / Notas** com os três destinos: Meu MEI, Clientes, Serviços e produtos. No MVP, se não houver componente de grupo, **Proposta A** cumpre o PRD.
+**Proposta B (agrupamento visual):** se no futuro o sidebar suportar secções, agrupar sob rótulo **MEI / Notas** com os três destinos: Mei Infinito, Clientes, Serviços e produtos. No MVP, se não houver componente de grupo, **Proposta A** cumpre o PRD.
 
-**Estado ativo:** `location.pathname.startsWith('/mei-catalogo')` deve realçar o item correspondente sem marcar “Meu MEI” como ativo (ajustar `isActive` se necessário para rotas irmãs).
+**Estado ativo:** `location.pathname.startsWith('/mei-catalogo')` deve realçar o item correspondente sem marcar “Mei Infinito” como ativo (ajustar `isActive` se necessário para rotas irmãs).
 
 ### 3.3 Ligação contextual com a emissão
 
-- Na página de **clientes** e na de **serviços/produtos**, bloco opcional (P1) no topo ou rodapé da `PageTitle`: texto do tipo *“Para emitir uma nota, use Meu MEI → NFS-e.”* com `Link` para `/guias-mei` (o utilizador escolhe o *tab* NFS-e no destino; não é obrigatório deep-link ao *tab* na v1 desta spec).  
+- Na página de **clientes** e na de **serviços/produtos**, bloco opcional (P1) no topo ou rodapé da `PageTitle`: texto do tipo *“Para emitir uma nota, use Mei Infinito → NFS-e.”* com `Link` para `/guias-mei` (o utilizador escolhe o *tab* NFS-e no destino; não é obrigatório deep-link ao *tab* na v1 desta spec).  
 - Em `GuidesMei`, na área de emissão onde hoje existem os selects de catálogo (P1): link discreto *“Gerir clientes”* / *“Gerir serviços e produtos”* abrindo a rota dedicada em nova vista (mesma aba).
 
 ---
@@ -80,7 +80,7 @@ Alinhado à decisão de produto do PRD (ocultar + bloquear):
 ┌─────────────────────────────────────────────────────────────────┐
 │ [PageTitle] Clientes para NFS-e                                  │
 │             Gerir tomadores usados na emissão de notas.           │
-│  [Opcional: link → Meu MEI]                                       │
+│  [Opcional: link → Mei Infinito]                                  │
 ├─────────────────────────────────────────────────────────────────┤
 │ [Busca……………………………] debounce 300ms              [+ Novo cliente]   │
 ├─────────────────────────────────────────────────────────────────┤
@@ -118,7 +118,7 @@ Alinhado à decisão de produto do PRD (ocultar + bloquear):
 ### 6.1 Shell e título
 
 - `PageShell` + `PageTitle` com `subtitle` explicativo (uma linha).  
-- Evitar títulos duplicados com “Meu MEI”; estes ecrãs são **satélites** do ecossistema MEI.
+- Evitar títulos duplicados com “Mei Infinito”; estes ecrãs são **satélites** do ecossistema MEI.
 
 ### 6.2 Busca
 
@@ -215,7 +215,7 @@ Ajustar tom com *content design* / PO se houver guia de voz.
 
 ## 10. Sincronização com emissão (`GuidesMei`)
 
-- Após `POST`/`PATCH` bem-sucedido, o utilizador ao voltar a Meu MEI → NFS-e deve ver o registo nos **selects** ou na **busca** de catálogo.  
+- Após `POST`/`PATCH` bem-sucedido, o utilizador ao voltar a Mei Infinito → NFS-e deve ver o registo nos **selects** ou na **busca** de catálogo.  
 - **Implementação recomendada (UX):** ao montar os selects na emissão, **refetch** do catálogo quando a página ganha foco (`visibilitychange` ou `useLocation` key) **ou** *cache* invalidado por evento global leve — a escolha é técnica; a spec exige **comportamento perceptível** sem F5 obrigatório.  
 - Se a única solução viável for refetch ao entrar no *tab* NFS-e, documentar na story como aceite.
 

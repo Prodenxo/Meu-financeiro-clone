@@ -7,7 +7,7 @@
 
 **Documentos relacionados (não substituídos por este brief):**
 
-- `docs/prd/PRD-meu-mei-ui-ux-melhoria-2026-03-30.md` — objetivos transversais Meu MEI (hero, tabs, visão geral).  
+- `docs/prd/PRD-meu-mei-ui-ux-melhoria-2026-03-30.md` — objetivos transversais da área Mei Infinito (hero, tabs, visão geral).  
 - `docs/specs/ux-spec-meu-mei-ui-2026-03-30.md` — contrato UX da página inteira.  
 - `docs/operacao-mei-nfse.md` — escopo fiscal (apenas NFS-e na UI; política emitente).  
 - Stories de catálogo / guards: `docs/stories/story-cat-mei-*.md`, `story-cat-mei-05-navegacao-guards-integracao-emissao-nfse.md`.
@@ -16,7 +16,7 @@
 
 ## 1. Resumo executivo
 
-O separador **NFS-e** concentra **emissão** (formulário extenso), **alertas de emitente/catálogo** e **lista de notas** com **múltiplas ações por linha**, tudo num **fluxo vertical único**. O utilizador MEI tende a **perder o fio** entre “preparar dados”, “emitir” e “acompanhar notas”; em mobile a densidade de botões por nota **sobrecarrega** a interface. Este brief propõe **reorganizar hierarquia, passos e affordances** dentro do workspace NFS-e, **reutilizando dados e APIs já existentes**, e alinhando-se ao PRD Meu MEI onde houver sobreposição (métricas canónicas, a11y de tabs, empty states).
+O separador **NFS-e** concentra **emissão** (formulário extenso), **alertas de emitente/catálogo** e **lista de notas** com **múltiplas ações por linha**, tudo num **fluxo vertical único**. O utilizador MEI tende a **perder o fio** entre “preparar dados”, “emitir” e “acompanhar notas”; em mobile a densidade de botões por nota **sobrecarrega** a interface. Este brief propõe **reorganizar hierarquia, passos e affordances** dentro do workspace NFS-e, **reutilizando dados e APIs já existentes**, e alinhando-se ao PRD da área Mei Infinito onde houver sobreposição (métricas canónicas, a11y de tabs, empty states).
 
 ---
 
@@ -70,7 +70,7 @@ O separador **NFS-e** concentra **emissão** (formulário extenso), **alertas de
 ### 6.1 Cabeçalho do workspace NFS-e
 
 - Título + **uma linha** de orientação dinâmica conforme estado: emitente não configurado → CTA para aba DAS/certificado; catálogo vazio → CTA para “Gerir clientes / serviços”; pronto → “Preencha tomador e serviço ou use os atalhos salvos.”  
-- Manter “Voltar ao Meu MEI” com o mesmo padrão visual dos outros workspaces.
+- Manter “Voltar ao Mei Infinito” com o mesmo padrão visual dos outros workspaces.
 
 ### 6.2 Zona “Pronto para emitir” (pré-formulário)
 
@@ -90,7 +90,7 @@ O separador **NFS-e** concentra **emissão** (formulário extenso), **alertas de
 - Empty state **condicional** ao `nfseList.length` vs `filteredNfseList.length`.  
 - Opcional (fase 2): vista **tabela** em desktop para utilizadores com muitas notas (sem remover vista cartão em mobile).
 
-### 6.5 Alinhamento com PRD Meu MEI
+### 6.5 Alinhamento com PRD da área Mei Infinito
 
 - Onde o hero já mostra contagem de notas, o cabeçalho da lista pode mostrar **“X notas (filtro atual)”** apenas se for a **fonte canónica** naquele viewport — caso contrário, texto neutro (“Lista filtrada”) conforme matriz FR-UX-MEI-01.
 
@@ -134,7 +134,7 @@ O separador **NFS-e** concentra **emissão** (formulário extenso), **alertas de
 1. **PO / UX:** validar prioridades P0–P2 e decisão “acordeão vs passos vs página única com âncoras”.  
 2. **UX (opcional):** wireframe de baixa fidelidade só do workspace NFS-e, anexado ou referenciado em `docs/specs/`.  
 3. **Engenharia:** *spike* de 0,5–1 d para medir impacto de extração de componentes e de menu de ações na lista.  
-4. **SM:** fatiar em story(ies) com checklist e *file list*; referenciar este brief e o PRD Meu MEI para evitar conflito de requisitos.
+4. **SM:** fatiar em story(ies) com checklist e *file list*; referenciar este brief e o PRD da área Mei Infinito para evitar conflito de requisitos.
 
 ---
 

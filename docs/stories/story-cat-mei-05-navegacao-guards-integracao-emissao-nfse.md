@@ -18,13 +18,13 @@
 
 ### Navegação e guards
 
-- `frontend/src/Layout/Sidebar.tsx`: adicionar **dois** `Link`s após “Meu MEI”, condicionados a `canAccessMeiArea` (igual a `/guias-mei`), com ícones sugeridos na spec §3.2 (`Users`/`ContactRound`, `Package`/`Briefcase`).
+- `frontend/src/Layout/Sidebar.tsx`: adicionar **dois** `Link`s após “Mei Infinito”, condicionados a `canAccessMeiArea` (igual a `/guias-mei`), com ícones sugeridos na spec §3.2 (`Users`/`ContactRound`, `Package`/`Briefcase`).
 - `frontend/src/App.tsx`: registar rotas `/mei-catalogo/clientes` e `/mei-catalogo/servicos-produtos` com o **mesmo gate** que `/guias-mei` (`canAccessMeiArea`); utilizador sem acesso → `Navigate to="/" replace` (ou equivalente já usado).
-- **Estado ativo** no sidebar: ajustar `isActive` para que `/mei-catalogo/...` realce o item correto **sem** marcar “Meu MEI” como ativo (spec §3.2).
+- **Estado ativo** no sidebar: ajustar `isActive` para que `/mei-catalogo/...` realce o item correto **sem** marcar “Mei Infinito” como ativo (spec §3.2).
 
 ### Testes
 
-- Estender `frontend/src/App.mei-gate.test.tsx`: utilizador `mei=false` e role `usuario` **não** acessa as novas rotas; `superadmin`/`admin` conforme regras atuais de Meu MEI.
+- Estender `frontend/src/App.mei-gate.test.tsx`: utilizador `mei=false` e role `usuario` **não** acessa as novas rotas; `superadmin`/`admin` conforme regras atuais de Mei Infinito.
 
 ### Integração emissão (FR-CAT-07)
 
@@ -42,12 +42,12 @@
 - [ ] **FR-CAT-01:** Existem duas entradas distintas no menu (Clientes; Serviços e produtos) visíveis só com `canAccessMeiArea`.
 - [ ] **Guard:** URL direta bloqueada para quem não tem acesso MEI, comportamento alinhado a `/guias-mei`.
 - [ ] **Testes:** novos casos em `App.mei-gate.test.tsx` passam.
-- [ ] **FR-CAT-07:** Cenário E2E manual documentado no Dev Agent Record: criar ou editar cliente/produto nas páginas dedicadas → ir a Meu MEI → NFS-e → registo visível/selecionável **sem** F5 obrigatório.
+- [ ] **FR-CAT-07:** Cenário E2E manual documentado no Dev Agent Record: criar ou editar cliente/produto nas páginas dedicadas → ir a Mei Infinito → NFS-e → registo visível/selecionável **sem** F5 obrigatório.
 - [ ] Sidebar: item ativo correto para cada rota sob `/mei-catalogo/`.
 
 ### Opcional (marcar na implementação)
 
-- [ ] Links contextuais spec §3.3 (catálogo ↔ Meu MEI).
+- [ ] Links contextuais spec §3.3 (catálogo ↔ Mei Infinito).
 
 ## Fora de escopo
 
@@ -86,11 +86,11 @@ Cursor (implementação assistida)
 ### Completion Notes List
 
 - **`App.tsx`:** rotas `/mei-catalogo/*` já existiam com `canAccessMeiArea` — mantidas alinhadas a `/guias-mei`.
-- **`Sidebar.tsx`:** após “Meu MEI”, entradas **Catálogo — clientes** e **Catálogo — serviços** (`Users`, `Package`), visíveis só com `canAccessMeiArea`. **`isActive`:** `/guias-mei` só com pathname exato (evita realçar Meu MEI em `/mei-catalogo/...`); restantes com match exato ou sub-rota.
+- **`Sidebar.tsx`:** após “Mei Infinito”, entradas **Catálogo — clientes** e **Catálogo — serviços** (`Users`, `Package`), visíveis só com `canAccessMeiArea`. **`isActive`:** `/guias-mei` só com pathname exato (evita realçar Mei Infinito em `/mei-catalogo/...`); restantes com match exato ou sub-rota.
 - **`GuidesMei.tsx` (FR-CAT-07 / NFR-CAT-02):** refetch de catálogo **sem** loop em todo render — (1) `loadNfseCatalog` no mount como hoje; (2) ao **mudar** para workspace `nfse` vindo de outro tab (`prevMeiWorkspaceRef`); (3) `visibilitychange` → `visible` quando `activeWorkspace === 'nfse'`. Links §3.3 discretos (“Gerir clientes” / “Gerir serviços e produtos”) junto aos selects de atalho, com `Link` ou `<a>` como no hero.
 - **Testes:** `App.mei-gate.test.tsx` — superadmin e admin acedem às rotas de catálogo com `mei=false`; `GuidesMei.nfse-catalog-refetch.test.tsx` — nova chamada a `listarCatalogoNfse*` ao reabrir separador NFS-e após DAS.
-- **Checklist E2E manual (aceite FR-CAT-07):** com sessão MEI ativa, criar ou editar cliente/produto em `/mei-catalogo/...` → navegar a **Meu MEI** → separador **NFS-e** → confirmar novo/editado **selecionável** nos atalhos sem depender de F5 (refetch ao separador + visibilidade cobre regressão).
-- **Pós-QA (Quinn):** `Sidebar.test.tsx` (RTL) — presença/absência dos links de catálogo conforme `canAccessMeiArea`, `href` e estado ativo por rota. **`Header.tsx` (viewport `md:hidden`):** atalhos textuais “Meu MEI”, “Catálogo clientes”, “Catálogo serviços” quando `canAccessMeiArea`, para paridade com sidebar desktop (nota mobile do QA).
+- **Checklist E2E manual (aceite FR-CAT-07):** com sessão MEI ativa, criar ou editar cliente/produto em `/mei-catalogo/...` → navegar a **Mei Infinito** → separador **NFS-e** → confirmar novo/editado **selecionável** nos atalhos sem depender de F5 (refetch ao separador + visibilidade cobre regressão).
+- **Pós-QA (Quinn):** `Sidebar.test.tsx` (RTL) — presença/absência dos links de catálogo conforme `canAccessMeiArea`, `href` e estado ativo por rota. **`Header.tsx` (viewport `md:hidden`):** atalhos textuais “Mei Infinito”, “Catálogo clientes”, “Catálogo serviços” quando `canAccessMeiArea`, para paridade com sidebar desktop (nota mobile do QA).
 
 ### File List (implementação)
 
@@ -136,12 +136,12 @@ Cursor (implementação assistida)
 
 | Critério | Verificação |
 |----------|-------------|
-| **FR-CAT-01** — duas entradas no menu só com `canAccessMeiArea` | `Sidebar.tsx`: após “Meu MEI”, rotas `/mei-catalogo/clientes` e `/mei-catalogo/servicos-produtos` com ícones `Users` e `Package`; mesmo predicado `canAccessMeiArea` que `/guias-mei`. |
+| **FR-CAT-01** — duas entradas no menu só com `canAccessMeiArea` | `Sidebar.tsx`: após “Mei Infinito”, rotas `/mei-catalogo/clientes` e `/mei-catalogo/servicos-produtos` com ícones `Users` e `Package`; mesmo predicado `canAccessMeiArea` que `/guias-mei`. |
 | **Guard** — URL direta bloqueada | `App.tsx` + testes: `Navigate to="/"` quando `!canAccessMeiArea`, espelhando `/guias-mei`. |
 | **Testes** `App.mei-gate.test.tsx` | Casos existentes + novos superadmin/admin nas rotas de catálogo. |
 | **FR-CAT-07** — sem F5 obrigatório | `GuidesMei.tsx`: refetch em (1) mount via `loadNfseCatalog`; (2) transição para workspace `nfse`; (3) `visibilitychange` + `activeWorkspace === 'nfse'`. Dev Agent Record documenta checklist E2E manual. |
-| **Sidebar ativo** em `/mei-catalogo/...` | `isActive('/guias-mei')` com pathname **exato**; demais rotas com match exato ou prefixo `path/` — evita realçar “Meu MEI” no catálogo. |
-| **Opcional §3.3** | Zona emissão: links “Gerir clientes” / “Gerir serviços e produtos”. Páginas dedicadas já tinham “Voltar ao Meu MEI” (CAT-MEI-03/04); alinhado ao opcional. |
+| **Sidebar ativo** em `/mei-catalogo/...` | `isActive('/guias-mei')` com pathname **exato**; demais rotas com match exato ou prefixo `path/` — evita realçar “Mei Infinito” no catálogo. |
+| **Opcional §3.3** | Zona emissão: links “Gerir clientes” / “Gerir serviços e produtos”. Páginas dedicadas já tinham “Voltar ao Mei Infinito” (CAT-MEI-03/04); alinhado ao opcional. |
 
 ### Observações (não bloqueantes)
 
