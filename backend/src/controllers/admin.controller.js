@@ -7,11 +7,13 @@ import * as meiGuideDasBase64Service from '../services/mei-guide-das-base64.serv
 import * as meiNotasService from '../services/mei-notas.service.js';
 import * as n8nWhatsappService from '../services/n8n-whatsapp.service.js';
 import { badRequest, forbidden } from '../utils/errors.js';
-import { sendSuccess } from '../utils/response.js';
+import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
+import { sendCreated, sendSuccess } from '../utils/response.js';
 
 let meiDasServiceRef = meiDasService;
 let meiGuideServiceRef = meiGuideService;
 let meiGuideDasBase64ServiceRef = meiGuideDasBase64Service;
+let meiNotasServiceRef = meiNotasService;
 let n8nWhatsappServiceRef = n8nWhatsappService;
 let usersServiceRef = usersService;
 
@@ -33,6 +35,10 @@ export const __setN8nWhatsappServiceForTests = (service) => {
 
 export const __setUsersServiceForTests = (service) => {
   usersServiceRef = service || usersService;
+};
+
+export const __setMeiNotasServiceForTests = (service) => {
+  meiNotasServiceRef = service || meiNotasService;
 };
 
 const ensureCanViewUser = async (accessToken, targetUserId) => {
@@ -246,7 +252,7 @@ export const listAdminUserMeiNfse = async (req, res, next) => {
     const limit = req.query?.limit ? Number(req.query.limit) : undefined;
     const documentType = req.query?.documentType || undefined;
     const includeArchived = req.query?.includeArchived !== 'false';
-    const data = await meiNotasService.listNotasByUserId(userId, {
+    const data = await meiNotasServiceRef.listNotasByUserId(userId, {
       limit,
       documentType,
       includeArchived
@@ -257,11 +263,75 @@ export const listAdminUserMeiNfse = async (req, res, next) => {
   }
 };
 
+export const listAdminUserMeiCatalogoClientes = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    const q = String(req.query?.q || '').trim();
+    const limit = parseCatalogLimit(req.query?.limit);
+    const documentType = String(req.query?.documentType || '').trim() || undefined;
+    const data = await meiNotasServiceRef.listarCatalogoClientes(userId, { q, limit, documentType });
+    return sendSuccess(res, data, 'Catálogo de clientes listado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listAdminUserMeiCatalogoProdutos = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    const q = String(req.query?.q || '').trim();
+    const limit = parseCatalogLimit(req.query?.limit);
+    const documentType = String(req.query?.documentType || '').trim() || undefined;
+    const data = await meiNotasServiceRef.listarCatalogoProdutos(userId, { q, limit, documentType });
+    return sendSuccess(res, data, 'Catálogo de produtos listado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const createAdminUserMeiCatalogoCliente = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
+    const data = await meiNotasServiceRef.criarCatalogoCliente(userId, req.body);
+    return sendCreated(res, data, 'Cliente do catálogo registado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const updateAdminUserMeiCatalogoCliente = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
+    const data = await meiNotasServiceRef.atualizarCatalogoCliente(userId, req.params.id, req.body);
+    return sendSuccess(res, data, 'Cliente do catálogo atualizado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const deleteAdminUserMeiCatalogoCliente = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
+    await meiNotasServiceRef.eliminarCatalogoCliente(userId, req.params.id);
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const emitirNotaAsAdmin = async (req, res, next) => {
   try {
     const userId = req.params.userId;
     await ensureCanViewUser(req.accessToken, userId);
-    const data = await meiNotasService.emitirNota(userId, req.body);
+    const data = await meiNotasServiceRef.emitirNota(userId, req.body);
     return sendSuccess(res, data, 'Nota fiscal enviada para emissão');
   } catch (error) {
     return next(error);

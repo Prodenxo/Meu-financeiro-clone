@@ -1,7 +1,14 @@
 import { apiClient } from './apiClient';
 import type { Transaction } from './transactionService';
 import type { Category, CategoryBudgetSummary, CategoryBudgetYearly } from './categoryService';
-import type { EmitirNotaInput, NfseRecord } from './meiNotasService';
+import type {
+  AtualizarCatalogoNfseClienteInput,
+  CriarCatalogoNfseClienteInput,
+  EmitirNotaInput,
+  NfseCatalogCliente,
+  NfseCatalogProduto,
+  NfseRecord
+} from './meiNotasService';
 
 export interface AdminBalance {
   balance: number;
@@ -250,4 +257,87 @@ export async function fetchAdminUserMeiNfse(
 
 export async function emitirNotaAsAdmin(userId: string, payload: EmitirNotaInput): Promise<NfseRecord> {
   return apiClient.post<NfseRecord>(`/admin/users/${userId}/mei-nfse/emitir`, payload);
+}
+
+export async function fetchAdminMeiCatalogoClientes(
+  userId: string,
+  options?: { q?: string; limit?: number; documentType?: string }
+): Promise<NfseCatalogCliente[]> {
+  const params = new URLSearchParams();
+  if (options?.q != null && options.q !== '') params.set('q', options.q);
+  if (options?.limit != null) params.set('limit', String(options.limit));
+  if (options?.documentType) params.set('documentType', options.documentType);
+  const query = params.toString();
+  return apiClient.get<NfseCatalogCliente[]>(
+    `/admin/users/${userId}/mei-catalogo/clientes${query ? `?${query}` : ''}`
+  );
+}
+
+export async function fetchAdminMeiCatalogoProdutos(
+  userId: string,
+  options?: { q?: string; limit?: number; documentType?: string }
+): Promise<NfseCatalogProduto[]> {
+  const params = new URLSearchParams();
+  if (options?.q != null && options.q !== '') params.set('q', options.q);
+  if (options?.limit != null) params.set('limit', String(options.limit));
+  if (options?.documentType) params.set('documentType', options.documentType);
+  const query = params.toString();
+  return apiClient.get<NfseCatalogProduto[]>(
+    `/admin/users/${userId}/mei-catalogo/produtos${query ? `?${query}` : ''}`
+  );
+}
+
+const normalizeCatalogDocumento = (value: string) => String(value || '').replace(/\D/g, '');
+
+export async function createAdminMeiCatalogoCliente(
+  userId: string,
+  input: CriarCatalogoNfseClienteInput
+): Promise<NfseCatalogCliente> {
+  const documento = normalizeCatalogDocumento(input.documento);
+  const body: Record<string, unknown> = {
+    nome: input.nome.trim(),
+    documento
+  };
+  if (input.email !== undefined && input.email !== null && String(input.email).trim()) {
+    body.email = String(input.email).trim();
+  } else if (input.email === null) {
+    body.email = null;
+  }
+  if (input.documentType) {
+    body.documentType = input.documentType;
+  }
+  if (input.metadata_json !== undefined) {
+    body.metadata_json = input.metadata_json;
+  }
+  return apiClient.post<NfseCatalogCliente>(
+    `/admin/users/${encodeURIComponent(userId)}/mei-catalogo/clientes`,
+    body
+  );
+}
+
+export async function updateAdminMeiCatalogoCliente(
+  userId: string,
+  clienteId: string,
+  input: AtualizarCatalogoNfseClienteInput
+): Promise<NfseCatalogCliente> {
+  const body: Record<string, unknown> = {};
+  if (input.nome !== undefined) {
+    body.nome = input.nome.trim();
+  }
+  if (input.email !== undefined) {
+    body.email = input.email === null || input.email === '' ? null : String(input.email).trim();
+  }
+  if (input.metadata_json !== undefined) {
+    body.metadata_json = input.metadata_json;
+  }
+  return apiClient.patch<NfseCatalogCliente>(
+    `/admin/users/${encodeURIComponent(userId)}/mei-catalogo/clientes/${encodeURIComponent(clienteId)}`,
+    body
+  );
+}
+
+export async function deleteAdminMeiCatalogoCliente(userId: string, clienteId: string): Promise<void> {
+  await apiClient.delete<unknown>(
+    `/admin/users/${encodeURIComponent(userId)}/mei-catalogo/clientes/${encodeURIComponent(clienteId)}`
+  );
 }

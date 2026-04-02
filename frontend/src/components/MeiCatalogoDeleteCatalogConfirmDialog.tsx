@@ -18,6 +18,8 @@ export interface MeiCatalogoDeleteCatalogConfirmDialogProps {
   errorMessage: string | null;
   onCancel: () => void;
   onConfirm: () => void;
+  /** Pilha modal/drawer (ex.: admin NFSe). Default `z-[60]`. */
+  overlayZIndexClass?: string;
 }
 
 export default function MeiCatalogoDeleteCatalogConfirmDialog({
@@ -33,7 +35,8 @@ export default function MeiCatalogoDeleteCatalogConfirmDialog({
   isDeleting,
   errorMessage,
   onCancel,
-  onConfirm
+  onConfirm,
+  overlayZIndexClass = 'z-[60]'
 }: MeiCatalogoDeleteCatalogConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
 
@@ -47,7 +50,7 @@ export default function MeiCatalogoDeleteCatalogConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+      className={`fixed inset-0 ${overlayZIndexClass} flex items-center justify-center bg-black/50`}
       onClick={isDeleting ? undefined : onCancel}
       role="presentation"
     >

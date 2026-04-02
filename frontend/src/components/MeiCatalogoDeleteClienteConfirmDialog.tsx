@@ -17,6 +17,7 @@ export interface MeiCatalogoDeleteClienteConfirmDialogProps {
   errorMessage: string | null;
   onCancel: () => void;
   onConfirm: () => void;
+  overlayZIndexClass?: string;
 }
 
 export default function MeiCatalogoDeleteClienteConfirmDialog({
@@ -25,7 +26,8 @@ export default function MeiCatalogoDeleteClienteConfirmDialog({
   isDeleting,
   errorMessage,
   onCancel,
-  onConfirm
+  onConfirm,
+  overlayZIndexClass
 }: MeiCatalogoDeleteClienteConfirmDialogProps) {
   if (!open || !cliente) return null;
 
@@ -48,6 +50,7 @@ export default function MeiCatalogoDeleteClienteConfirmDialog({
       errorMessage={errorMessage}
       onCancel={onCancel}
       onConfirm={onConfirm}
+      overlayZIndexClass={overlayZIndexClass}
     />
   );
 }
