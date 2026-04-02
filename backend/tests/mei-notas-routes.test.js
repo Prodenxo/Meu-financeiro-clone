@@ -28,6 +28,7 @@ test('rotas autenticadas de mei-notas exigem requireMeiEnabled', () => {
     { method: 'get', path: '/setup/plugnotas/empresa' },
     { method: 'patch', path: '/setup/plugnotas/empresa' },
     { method: 'get', path: '/' },
+    { method: 'get', path: '/limite-faturamento' },
     { method: 'get', path: '/relatorio/nfe' },
     { method: 'get', path: '/catalogo/clientes' },
     { method: 'post', path: '/catalogo/clientes' },

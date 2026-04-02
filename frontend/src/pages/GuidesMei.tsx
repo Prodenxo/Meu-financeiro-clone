@@ -7,7 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode
 } from 'react';
-import { Link, useInRouterContext } from 'react-router-dom';
+import { useInRouterContext } from 'react-router-dom';
 import {
   downloadMeiGuide,
   downloadParcelamentoPdf,
@@ -34,6 +34,7 @@ import {
   consultarEmpresaEmissaoNf,
   cancelarNfse,
   emitirNfse,
+  fetchLimiteFaturamentoMei,
   listarCatalogoNfseClientes,
   listarCatalogoNfseProdutos,
   listarNfse,
@@ -57,6 +58,7 @@ import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/p
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
+import { MeiLimiteFaturamentoBlock } from '../components/MeiLimiteFaturamentoBlock';
 import { MeiNfseCatalogManageActions } from '../components/MeiNfseCatalogManageActions';
 import { MeiNfseListRowActions } from '../components/MeiNfseListRowActions';
 import {
@@ -82,6 +84,12 @@ import {
   mergeNfsePrestadorPrefillIntoForm
 } from '../utils/nfsePrestadorPrefillMerge';
 import { fetchNfsePrestadorPrefill } from '../services/meiPrestadorPrefillService';
+import {
+  computeMeiLimiteProgresso,
+  nfsePeriodoChaveBrFromCreatedAt,
+  nfseStatusKeyParaLimite
+} from '../utils/meiLimiteFaturamento';
+import { getVigenciaLabelParaAno } from '../utils/meiLimiteFaturamentoConfig';
 
 function formatMeiFiscalErr(error: unknown, fallback: string): string {
   return formatFiscalError(
@@ -169,17 +177,7 @@ const triggerFileDownload = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(downloadUrl);
 };
 
-const getNfseStatusKey = (status?: string | null) => {
-  const text = String(status || '').toLowerCase();
-  if (!text) return 'processando';
-  if (text.includes('cancelamento_pendente')) return 'cancelamento_pendente';
-  if (text.includes('concluido') || text.includes('autoriz')) return 'concluido';
-  if (text.includes('process')) return 'processando';
-  if (text.includes('rejeit')) return 'rejeitado';
-  if (text.includes('cancel')) return 'cancelado';
-  if (text.includes('interromp')) return 'interrompido';
-  return text;
-};
+const getNfseStatusKey = (status?: string | null) => nfseStatusKeyParaLimite(status);
 
 const formatNfseStatus = (status?: string | null) => {
   const key = getNfseStatusKey(status);
@@ -233,12 +231,7 @@ const toNfseMetadata = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
-const toNfsePeriodKey = (value?: string | null) => {
-  if (!value) return '';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '';
-  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`;
-};
+const toNfsePeriodKey = nfsePeriodoChaveBrFromCreatedAt;
 
 const formatDasCompetenciaLabel = (value?: string | null) => {
   if (!value) return '---';
@@ -557,6 +550,13 @@ export default function GuidesMei() {
   const [nfseError, setNfseError] = useState<string | null>(null);
   const [nfseErrorKind, setNfseErrorKind] = useState<'emission' | 'operation' | null>(null);
   const [nfseSuccess, setNfseSuccess] = useState<string | null>(null);
+  /** Soma do limite MEI a partir da coluna `payload_json` (GET /mei-notas/limite-faturamento). */
+  const [meiLimiteServidor, setMeiLimiteServidor] = useState<{
+    totalUtilizadoReais: number;
+    notasConsideradas: number;
+  } | null>(null);
+  const [meiLimiteServidorReady, setMeiLimiteServidorReady] = useState(false);
+  const [meiLimiteServidorLoading, setMeiLimiteServidorLoading] = useState(false);
 
   const clearNfseErrorState = useCallback(() => {
     setNfseError(null);
@@ -779,6 +779,7 @@ export default function GuidesMei() {
     try {
       const list = await listarNfse({
         includeArchived: nfseShowArchived,
+        limit: 1000,
         ...(nfseDocumentTypeFilter !== 'all' ? { documentType: nfseDocumentTypeFilter } : {})
       });
       setNfseList(list);
@@ -788,6 +789,29 @@ export default function GuidesMei() {
       setNfseLoading(false);
     }
   }, [canViewNfse, clearNfseErrorState, nfseDocumentTypeFilter, nfseShowArchived, setOperationNfseError]);
+
+  const loadMeiLimiteServidor = useCallback(async () => {
+    if (!canViewNfse) {
+      setMeiLimiteServidor(null);
+      setMeiLimiteServidorReady(false);
+      setMeiLimiteServidorLoading(false);
+      return;
+    }
+    setMeiLimiteServidorLoading(true);
+    try {
+      const ano = new Date().getFullYear();
+      const data = await fetchLimiteFaturamentoMei({ year: ano });
+      setMeiLimiteServidor({
+        totalUtilizadoReais: data.totalUtilizadoReais,
+        notasConsideradas: data.notasConsideradas
+      });
+    } catch {
+      setMeiLimiteServidor(null);
+    } finally {
+      setMeiLimiteServidorReady(true);
+      setMeiLimiteServidorLoading(false);
+    }
+  }, [canViewNfse]);
 
   const loadNfseCatalog = useCallback(async () => {
     if (!canViewNfse) {
@@ -915,6 +939,10 @@ export default function GuidesMei() {
   useEffect(() => {
     void loadNfseList();
   }, [loadNfseList]);
+
+  useEffect(() => {
+    void loadMeiLimiteServidor();
+  }, [loadMeiLimiteServidor]);
 
   useEffect(() => {
     void loadNfseCatalog();
@@ -1558,7 +1586,7 @@ export default function GuidesMei() {
           ? `${docLabel} enviada. Protocolo ${created.protocol}.`
           : `${docLabel} enviada. Acompanhe o status na lista.`
       );
-      await Promise.all([loadNfseList(), loadNfseCatalog()]);
+      await Promise.all([loadNfseList(), loadNfseCatalog(), loadMeiLimiteServidor()]);
       setSelectedCatalogClienteId('');
       setSelectedCatalogProdutoId('');
     } catch (error) {
@@ -1653,11 +1681,12 @@ export default function GuidesMei() {
     clearNfseErrorState();
     setNfseSuccess(null);
     try {
-      const updated = await cancelarNfse(record.id, {
+      await cancelarNfse(record.id, {
         ...(reason.trim() ? { reason: reason.trim() } : {})
       });
-      setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
       setNfseSuccess('Solicitação de cancelamento processada.');
+      /** LIM-MEI-03 / FR-LIM-08: mesmo estado que alimenta o limite — refetch da lista (e do indicador). */
+      await Promise.all([loadNfseList(), loadMeiLimiteServidor()]);
     } catch (error) {
       setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao cancelar nota fiscal.'));
     } finally {
@@ -1677,6 +1706,7 @@ export default function GuidesMei() {
     try {
       const updated = await arquivarNfse(record.id, { archived: !isArchived });
       setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
+      await loadMeiLimiteServidor();
       setNfseSuccess(!isArchived ? 'Nota fiscal arquivada com sucesso.' : 'Nota fiscal desarquivada com sucesso.');
     } catch (error) {
       setOperationNfseError(
@@ -1723,6 +1753,20 @@ export default function GuidesMei() {
       return true;
     });
   }, [nfseDocumentTypeFilter, nfseList, nfsePeriodFilter, nfseStatusFilter]);
+
+  const meiLimiteBundle = useMemo(() => {
+    const anoCivil = new Date().getFullYear();
+    const agregadoServidor =
+      meiLimiteServidorReady && meiLimiteServidor !== null ? meiLimiteServidor : undefined;
+    return {
+      anoCivil,
+      progresso: computeMeiLimiteProgresso(nfseList, {
+        anoCivil,
+        ...(agregadoServidor !== undefined ? { agregadoServidor } : {})
+      }),
+      vigenciaLabel: getVigenciaLabelParaAno(anoCivil)
+    };
+  }, [nfseList, meiLimiteServidor, meiLimiteServidorReady]);
 
   const resetNfseListFilters = useCallback(() => {
     setNfseStatusFilter('all');
@@ -1922,6 +1966,17 @@ export default function GuidesMei() {
     return tabs;
   }, [canViewNfse, dasPendentesCount, parcelamentosList.length]);
 
+  /** LIM-MEI-03 variante B (UX §3): hero sem utilizado/limite/%; atalho para o bloco canónico em Visão geral (L3). */
+  const goToMeiLimiteBlock = useCallback(() => {
+    setActiveWorkspace('overview');
+    requestAnimationFrame(() => {
+      document.getElementById('mei-limite-faturamento-anchor')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    });
+  }, []);
+
   const handleDownloadClick = async () => {
     if (isDownloadingGuide) return;
     if (!normalizedContribuinte) {
@@ -2022,6 +2077,22 @@ export default function GuidesMei() {
               )}
             </div>
           </div>
+          {canViewNfse ? (
+            <div className="mt-3 flex max-w-3xl flex-col gap-2 rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-3 dark:border-slate-700/80 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Limite de faturamento (MEI): indicador completo na{' '}
+                <span className="font-medium text-slate-700 dark:text-slate-300">Visão geral</span>
+                — aqui não repetimos valores em R$ nem percentagem (FR-UX-MEI-01).
+              </p>
+              <button
+                type="button"
+                className="planner-button-secondary-compact min-h-[44px] shrink-0 self-start px-4 py-2 text-sm sm:self-center"
+                onClick={goToMeiLimiteBlock}
+              >
+                Abrir limite na Visão geral
+              </button>
+            </div>
+          ) : null}
           {dasPendentesCount > 0 ? (
             <p className="mt-3 max-w-2xl text-sm text-amber-800 dark:text-amber-100/95">
               Há períodos DAS em aberto — abra{' '}
@@ -2093,6 +2164,19 @@ export default function GuidesMei() {
                 </p>
               </div>
             </div>
+            {canViewNfse ? (
+              <div id="mei-limite-faturamento-anchor" className="scroll-mt-4">
+                <MeiLimiteFaturamentoBlock
+                  anoCivil={meiLimiteBundle.anoCivil}
+                  progresso={meiLimiteBundle.progresso}
+                  vigenciaLabel={meiLimiteBundle.vigenciaLabel}
+                  loading={nfseLoading || meiLimiteServidorLoading}
+                  errorMessage={nfseError && nfseErrorKind === 'operation' ? nfseError : null}
+                  canViewNfse
+                  onIrParaNfse={() => setActiveWorkspace('nfse')}
+                />
+              </div>
+            ) : null}
             <div className="grid gap-3 md:grid-cols-2">
               <div className="admin-toolbar flex flex-col gap-3 text-left">
                 <div>
@@ -3241,7 +3325,7 @@ export default function GuidesMei() {
                 id="nfse-list-atualizar"
                 type="button"
                 className="planner-button-secondary-compact w-full sm:w-auto"
-                onClick={() => void loadNfseList()}
+                onClick={() => void Promise.all([loadNfseList(), loadMeiLimiteServidor()])}
                 disabled={nfseLoading}
               >
                 {nfseLoading ? 'Atualizando...' : 'Atualizar lista'}
@@ -3262,7 +3346,7 @@ export default function GuidesMei() {
                   <button
                     type="button"
                     className="planner-button-secondary-compact"
-                    onClick={() => void loadNfseList()}
+                    onClick={() => void Promise.all([loadNfseList(), loadMeiLimiteServidor()])}
                   >
                     Tentar novamente
                   </button>

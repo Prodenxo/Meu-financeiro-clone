@@ -63,8 +63,32 @@ export const listar = async (req, res, next) => {
   try {
     const includeArchived = String(req.query?.includeArchived || '').toLowerCase() === 'true';
     const documentType = String(req.query?.documentType || '').trim() || undefined;
-    const data = await meiNotasService.listarNotas(req.user.id, { includeArchived, documentType });
+    const limitRaw = req.query?.limit;
+    const limit =
+      limitRaw !== undefined && limitRaw !== null && String(limitRaw).trim() !== ''
+        ? Number(limitRaw)
+        : undefined;
+    const data = await meiNotasService.listarNotas(req.user.id, {
+      includeArchived,
+      documentType,
+      limit
+    });
     return sendSuccess(res, data, 'Notas fiscais listadas');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const limiteFaturamento = async (req, res, next) => {
+  try {
+    const raw = req.query?.year ?? req.query?.ano;
+    const defaultYear = new Date().getFullYear();
+    const anoCivil =
+      raw !== undefined && raw !== null && String(raw).trim() !== ''
+        ? Number(raw)
+        : defaultYear;
+    const data = await meiNotasService.agregarLimiteFaturamento(req.user.id, anoCivil);
+    return sendSuccess(res, data, 'Limite de faturamento agregado');
   } catch (error) {
     return next(error);
   }
