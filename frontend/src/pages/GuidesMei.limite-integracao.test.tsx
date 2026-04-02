@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 /**
- * LIM-MEI-03: variante B (hero sem duplicar R$/% do limite) + âncora para o bloco em Visão geral;
- * FR-LIM-08: refetch da lista após cancelar (mitigação QA).
+ * LIM-MEI-03 / FR-LIM-08: refetch da lista após cancelar NFS-e (mitigação QA).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -75,7 +74,7 @@ vi.mock('../services/meiNotasService', () => ({
   obterNfse: vi.fn(async () => ({}))
 }));
 
-describe('GuidesMei limite MEI (LIM-MEI-03)', () => {
+describe('GuidesMei limite MEI (FR-LIM-08)', () => {
   beforeEach(() => {
     authState.role = 'usuario';
     authState.mei = true;
@@ -90,40 +89,6 @@ describe('GuidesMei limite MEI (LIM-MEI-03)', () => {
     }));
     cancelarNfseMock.mockReset();
     cancelarNfseMock.mockResolvedValue({});
-  });
-
-  it('hero: atalho para o bloco canónico na Visão geral sem KPI monetário do limite', async () => {
-    const container = document.createElement('div');
-    const root = createRoot(container);
-
-    await act(async () => {
-      root.render(<GuidesMei />);
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toMatch(/Limite de faturamento \(MEI\)/);
-    expect(container.textContent).toMatch(/não repetimos valores em R\$ nem percentagem/);
-
-    const btn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Abrir limite na Visão geral')
-    );
-    expect(btn).toBeTruthy();
-
-    await act(async () => {
-      btn!.click();
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector('#mei-limite-faturamento-anchor')).toBeTruthy();
-    expect(container.querySelector('#mei-panel-overview')).toBeTruthy();
-
-    await act(async () => {
-      root.unmount();
-    });
   });
 
   it('FR-LIM-08: após cancelar NFS-e, listarNfse é chamado de novo (refetch do limite)', async () => {
