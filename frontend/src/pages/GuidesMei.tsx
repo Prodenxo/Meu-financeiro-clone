@@ -1183,11 +1183,8 @@ export default function GuidesMei() {
       } else {
         setCertificateConnectivityAlert(false);
         const rawMessage = error instanceof Error ? error.message : 'Erro ao enviar certificado.';
-        const isInscricaoMunicipalError = /inscri[cç][aã]o\s*municipal/i.test(rawMessage);
         const fiscalCode = getFiscalErrorCode(error);
-        const fallbackMessage = isInscricaoMunicipalError
-          ? 'Seu município exige inscrição municipal para emissão de NFS-e. Preencha o campo "Inscrição municipal" no formulário acima e tente novamente.'
-          : formatFiscalError(rawMessage, fiscalCode);
+        const fallbackMessage = formatFiscalError(rawMessage, fiscalCode);
         setCertificateErrorFiscalCode(fiscalCode);
         setCertificateError(
           uploadedToMei
@@ -2343,7 +2340,7 @@ export default function GuidesMei() {
                     Dados mínimos para emissão de NFS-e
                   </p>
                   <p className="admin-field-hint mb-2">
-                    Campos com * são obrigatórios para a configuração inicial. A inscrição estadual não é solicitada (política MEI). A inscrição municipal é opcional — preencha apenas se o seu município exigir para emissão de NFS-e.
+                    Campos com * são obrigatórios para a configuração inicial. A inscrição estadual não é solicitada (política MEI).
                   </p>
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
@@ -2366,13 +2363,6 @@ export default function GuidesMei() {
                       value={nfEmissionCompanyForm.email}
                       onChange={(event) => updateNfEmissionCompanyForm({ email: event.target.value })}
                       placeholder="Email fiscal (opcional)"
-                    />
-                    <input
-                      className="planner-input-compact"
-                      type="text"
-                      value={nfEmissionCompanyForm.inscricaoMunicipal}
-                      onChange={(event) => updateNfEmissionCompanyForm({ inscricaoMunicipal: event.target.value })}
-                      placeholder="Inscrição municipal (se exigida pelo município)"
                     />
                     <select
                       className="planner-input-compact"

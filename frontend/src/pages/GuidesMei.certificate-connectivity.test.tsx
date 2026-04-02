@@ -533,7 +533,6 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
       'Razão social *',
       'Nome fantasia (opcional)',
       'Email fiscal (opcional)',
-      'Inscrição municipal (se exigida pelo município)',
       '__select__',
       'CEP *',
       'Tipo logradouro',
