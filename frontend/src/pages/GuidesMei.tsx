@@ -57,6 +57,7 @@ import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/p
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
+import { MeiNfseCatalogManageActions } from '../components/MeiNfseCatalogManageActions';
 import { MeiNfseListRowActions } from '../components/MeiNfseListRowActions';
 import {
   EmissaoFiscalErrorAlert,
@@ -497,8 +498,6 @@ export default function GuidesMei() {
     || role === 'admin'
     || (role === 'usuario' && mei !== false);
   const inRouter = useInRouterContext();
-  const catalogoClientesLinkClass =
-    'font-medium text-blue-600 underline decoration-blue-600/80 underline-offset-2 hover:text-blue-700 dark:text-blue-400 dark:decoration-blue-400/80 dark:hover:text-blue-300';
   const [contribuinteDoc, setContribuinteDoc] = useState('');
   const [activeWorkspace, setActiveWorkspace] = useState<GuidesMeiWorkspace>(() =>
     resolveInitialWorkspace(readWorkspaceFromStorage(), canViewNfse)
@@ -1766,32 +1765,8 @@ export default function GuidesMei() {
     if (nfseCatalogClientes.length === 0 && nfseCatalogProdutos.length === 0) {
       return (
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Cadastre clientes e serviços para usar atalhos, ou preencha o formulário abaixo manualmente.{' '}
-          {inRouter ? (
-            <>
-              <Link to="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
-                Gerir clientes
-              </Link>
-              <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                {' · '}
-              </span>
-              <Link to="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
-                Gerir serviços e produtos
-              </Link>
-            </>
-          ) : (
-            <>
-              <a href="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
-                Gerir clientes
-              </a>
-              <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                {' · '}
-              </span>
-              <a href="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
-                Gerir serviços e produtos
-              </a>
-            </>
-          )}
+          Cadastre clientes e serviços para usar atalhos, ou preencha o formulário abaixo manualmente. Use os botões de
+          gestão na secção &quot;Antes de emitir&quot; para abrir o catálogo.
         </p>
       );
     }
@@ -1801,8 +1776,6 @@ export default function GuidesMei() {
       </p>
     );
   }, [
-    catalogoClientesLinkClass,
-    inRouter,
     nfEmissionCompanyForm.razaoSocial,
     nfseCatalogClientes.length,
     nfseCatalogLoading,
@@ -1988,33 +1961,14 @@ export default function GuidesMei() {
                   : 'Gerencie certificado e DAS no mesmo fluxo.'}
               </p>
               {canViewNfse ? (
-                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                  {inRouter ? (
-                    <>
-                      <Link to="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
-                        Catálogo de clientes (NFS-e)
-                      </Link>
-                      <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                        ·
-                      </span>
-                      <Link to="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
-                        Serviços e produtos (NFS-e)
-                      </Link>
-                    </>
-                  ) : (
-                    <>
-                      <a href="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
-                        Catálogo de clientes (NFS-e)
-                      </a>
-                      <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                        ·
-                      </span>
-                      <a href="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
-                        Serviços e produtos (NFS-e)
-                      </a>
-                    </>
-                  )}
-                </p>
+                <div className="mt-2 max-w-xl">
+                  <MeiNfseCatalogManageActions
+                    inRouter={inRouter}
+                    showHint={false}
+                    clienteLabel="Catálogo de clientes (NFS-e)"
+                    produtoLabel="Serviços e produtos (NFS-e)"
+                  />
+                </div>
               ) : null}
               {hasServerCertificate && !hasUserCertificate ? (
                 <p className="mt-2 max-w-xl text-sm text-slate-600 dark:text-slate-400">
@@ -2768,33 +2722,14 @@ export default function GuidesMei() {
                 </select>
               </div>
             </div>
-            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-              {inRouter ? (
-                <>
-                  <Link to="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
-                    Gerir clientes
-                  </Link>
-                  <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                    ·
-                  </span>
-                  <Link to="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
-                    Gerir serviços e produtos
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <a href="/mei-catalogo/clientes" className={catalogoClientesLinkClass}>
-                    Gerir clientes
-                  </a>
-                  <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                    ·
-                  </span>
-                  <a href="/mei-catalogo/servicos-produtos" className={catalogoClientesLinkClass}>
-                    Gerir serviços e produtos
-                  </a>
-                </>
-              )}
-            </p>
+            <MeiNfseCatalogManageActions
+              inRouter={inRouter}
+              catalogEmpty={
+                !nfseCatalogLoading
+                && nfseCatalogClientes.length === 0
+                && nfseCatalogProdutos.length === 0
+              }
+            />
 
             {nfseCatalogLoading && !nfEmissionCompanyForm.razaoSocial?.trim() ? (
               <p className="text-xs text-slate-500 dark:text-slate-400">
