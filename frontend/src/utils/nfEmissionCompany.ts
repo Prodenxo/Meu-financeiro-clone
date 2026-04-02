@@ -27,7 +27,6 @@ export type NfEmissionCompanyForm = {
   email: string;
   regimeTributario: NfEmissionRegimeTributario;
   simplesNacional: boolean;
-  inscricaoMunicipal: string;
   cep: string;
   tipoLogradouro: string;
   logradouro: string;
@@ -45,7 +44,6 @@ export const getDefaultNfEmissionCompanyForm = (): NfEmissionCompanyForm => ({
   email: '',
   regimeTributario: '1',
   simplesNacional: true,
-  inscricaoMunicipal: '',
   cep: '',
   tipoLogradouro: 'Rua',
   logradouro: '',
@@ -120,9 +118,6 @@ export const buildNfEmissionEmpresaPayload = ({
   };
   if (form.email.trim()) {
     payload.email = form.email.trim();
-  }
-  if (form.inscricaoMunicipal.trim()) {
-    payload.inscricaoMunicipal = form.inscricaoMunicipal.trim();
   }
 
   const trimmedCert = certificadoId?.trim();
