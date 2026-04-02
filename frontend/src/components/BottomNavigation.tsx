@@ -1,7 +1,9 @@
 import { Link, useLocation } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { Home, List, Grid3x3, Settings, Wallet } from 'lucide-react';
+import { Home, List, Grid3x3, Settings, Wallet, LayoutDashboard } from 'lucide-react';
 import { useThemeStore } from '../store/themeStore';
+import { useAuthStore } from '../store/authStore';
+import { hasRole } from '../lib/roles';
 
 type BottomNavItem = {
   path: string;
@@ -14,23 +16,50 @@ type BottomNavItem = {
 export default function BottomNavigation() {
   const location = useLocation();
   const { isDarkMode } = useThemeStore();
+  const { role } = useAuthStore();
+  const showAdminPanel = hasRole(role, ['admin']);
 
-  const navItems: BottomNavItem[] = [
+  const baseNavItems: BottomNavItem[] = [
     { path: '/', label: 'Início', icon: Home },
     { path: '/transacoes', label: 'Transações', icon: List },
     { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
     { path: '/categorias', label: 'Categorias', icon: Grid3x3 },
-    {
-      path: '/settings',
-      label: 'Mais',
-      icon: Settings,
-      ariaLabel: 'Mais — conta, tema e outras opções',
-    },
   ];
+  const maisItem: BottomNavItem = {
+    path: '/settings',
+    label: 'Mais',
+    icon: Settings,
+    ariaLabel: 'Mais — conta, tema e outras opções',
+  };
+  const adminPanelItem: BottomNavItem = {
+    path: '/settings/usuarios-dados',
+    label: 'Painel',
+    icon: LayoutDashboard,
+    ariaLabel: 'Painel Admin',
+  };
+
+  const navItems: BottomNavItem[] = showAdminPanel
+    ? [...baseNavItems, adminPanelItem, maisItem]
+    : [...baseNavItems, maisItem];
 
   const isActive = (path: string) => {
     if (path === '/') {
       return location.pathname === '/';
+    }
+    if (path === '/settings/usuarios-dados') {
+      return (
+        location.pathname === '/settings/usuarios-dados' ||
+        location.pathname.startsWith('/settings/usuarios-dados/')
+      );
+    }
+    if (path === '/settings') {
+      if (
+        location.pathname === '/settings/usuarios-dados' ||
+        location.pathname.startsWith('/settings/usuarios-dados/')
+      ) {
+        return false;
+      }
+      return location.pathname.startsWith('/settings');
     }
     return location.pathname.startsWith(path);
   };
@@ -44,19 +73,28 @@ export default function BottomNavigation() {
           : 'bg-white/80 border-slate-200/70'
       } md:hidden`}
     >
-      <div className="grid grid-cols-5 items-center h-16 px-1">
+      <div
+        className={`grid items-center h-16 ${
+          showAdminPanel
+            ? 'grid-cols-6 gap-px px-0.5 sm:gap-0.5 sm:px-1'
+            : 'grid-cols-5 gap-0 px-1'
+        }`}
+      >
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
+          const iconSize = showAdminPanel ? 18 : 20;
+          const linkTitle = item.ariaLabel ?? item.label;
           return (
             <Link
               key={item.path}
               to={item.path}
               aria-current={active ? 'page' : undefined}
+              title={linkTitle}
               {...(item.ariaLabel
-                ? { 'aria-label': item.ariaLabel, title: item.ariaLabel }
+                ? { 'aria-label': item.ariaLabel }
                 : {})}
-              className={`flex flex-col items-center justify-center h-12 rounded-2xl transition-colors ${
+              className={`flex min-w-0 flex-col items-center justify-center h-12 rounded-2xl px-0.5 transition-colors ${
                 active
                   ? 'text-blue-700 dark:text-blue-200 bg-blue-600/10 dark:bg-blue-500/15'
                   : isDarkMode
@@ -64,8 +102,15 @@ export default function BottomNavigation() {
                   : 'text-slate-500'
               }`}
             >
-              <Icon size={20} className="mb-1" aria-hidden />
-              <span className="text-xs font-medium">{item.label}</span>
+              <Icon size={iconSize} className="mb-0.5 shrink-0" aria-hidden />
+              <span
+                className={`w-full truncate text-center font-medium leading-tight ${
+                  showAdminPanel ? 'text-[10px] sm:text-xs' : 'text-xs'
+                }`}
+                title={item.label}
+              >
+                {item.label}
+              </span>
             </Link>
           );
         })}

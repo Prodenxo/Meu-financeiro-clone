@@ -11,6 +11,36 @@ router.get('/users/:userId/budgets/summary', requireAuth, requireAdmin, controll
 router.get('/users/:userId/budgets/yearly', requireAuth, requireAdmin, controller.listUserBudgetsYearly);
 router.get('/users/:userId/balance', requireAuth, requireAdmin, controller.getUserBalance);
 router.get('/users/:userId/mei-nfse', requireAuth, requireAdmin, controller.listAdminUserMeiNfse);
+router.get(
+  '/users/:userId/mei-catalogo/clientes',
+  requireAuth,
+  requireAdmin,
+  controller.listAdminUserMeiCatalogoClientes
+);
+router.get(
+  '/users/:userId/mei-catalogo/produtos',
+  requireAuth,
+  requireAdmin,
+  controller.listAdminUserMeiCatalogoProdutos
+);
+router.post(
+  '/users/:userId/mei-catalogo/clientes',
+  requireAuth,
+  requireAdmin,
+  controller.createAdminUserMeiCatalogoCliente
+);
+router.patch(
+  '/users/:userId/mei-catalogo/clientes/:id',
+  requireAuth,
+  requireAdmin,
+  controller.updateAdminUserMeiCatalogoCliente
+);
+router.delete(
+  '/users/:userId/mei-catalogo/clientes/:id',
+  requireAuth,
+  requireAdmin,
+  controller.deleteAdminUserMeiCatalogoCliente
+);
 router.post('/users/:userId/mei-nfse/emitir', requireAuth, requireAdmin, controller.emitirNotaAsAdmin);
 router.get('/das/status', requireAuth, requireAdmin, controller.listDasStatus);
 router.get('/das/pending', requireAuth, requireAdmin, controller.listPendingDas);

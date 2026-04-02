@@ -4,10 +4,17 @@ import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-li
 
 const criarMock = vi.fn();
 const atualizarMock = vi.fn();
+const createAdminMock = vi.fn();
+const updateAdminMock = vi.fn();
 
 vi.mock('../services/meiNotasService', () => ({
   criarCatalogoNfseCliente: (...args: unknown[]) => criarMock(...args),
   atualizarCatalogoNfseCliente: (...args: unknown[]) => atualizarMock(...args)
+}));
+
+vi.mock('../services/adminUserDataService', () => ({
+  createAdminMeiCatalogoCliente: (...args: unknown[]) => createAdminMock(...args),
+  updateAdminMeiCatalogoCliente: (...args: unknown[]) => updateAdminMock(...args)
 }));
 
 import MeiCatalogoClienteModal from './MeiCatalogoClienteModal';
@@ -17,6 +24,8 @@ describe('MeiCatalogoClienteModal', () => {
     vi.clearAllMocks();
     criarMock.mockReset();
     atualizarMock.mockReset();
+    createAdminMock.mockReset();
+    updateAdminMock.mockReset();
   });
 
   afterEach(() => {
@@ -103,6 +112,48 @@ describe('MeiCatalogoClienteModal', () => {
     expect(alert.textContent).toMatch(/Operação fiscal/i);
     expect(alert.textContent).toContain('Não foi possível concluir o pedido');
     expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it('com catalogAdminUserId cria via API admin (não mei-notas)', async () => {
+    createAdminMock.mockResolvedValue({
+      id: 'new-id',
+      nome: 'Acme',
+      documento: '12345678000199'
+    });
+    const onSaved = vi.fn();
+
+    render(
+      <MeiCatalogoClienteModal
+        open
+        editing={null}
+        onClose={vi.fn()}
+        onSaved={onSaved}
+        catalogAdminUserId="target-user-1"
+      />
+    );
+
+    const dialog = screen.getAllByRole('dialog')[0]!;
+    fireEvent.change(within(dialog).getByLabelText(/Nome ou razão social/i), {
+      target: { value: 'Acme' }
+    });
+    fireEvent.change(within(dialog).getByLabelText(/CPF ou CNPJ/i), {
+      target: { value: '12.345.678/0001-99' }
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Guardar$/i }));
+
+    await waitFor(() => {
+      expect(createAdminMock).toHaveBeenCalledWith(
+        'target-user-1',
+        expect.objectContaining({
+          nome: 'Acme',
+          documentType: 'NFSE'
+        })
+      );
+    });
+    expect(criarMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalledWith('create');
+    });
   });
 
   it('edição chama PATCH com nome e email', async () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Users } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
 import { listUsers, type ManagedUser } from '../services/usersService';
@@ -30,6 +30,9 @@ import {
 import type { Transaction } from '../services/transactionService';
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import type { Category, CategoryBudgetSummary } from '../services/categoryService';
+import { AdminMeiCatalogClienteCombobox } from '../components/admin/AdminMeiCatalogClienteCombobox';
+import { AdminMeiCatalogProdutoCombobox } from '../components/admin/AdminMeiCatalogProdutoCombobox';
+import { AdminUserMeiClientesDrawer } from '../components/admin/AdminUserMeiClientesDrawer';
 import { EmissaoFiscalErrorAlertModal } from '../components/FiscalIntegrationErrorAlert';
 import { formatPlugnotasIntegrationError } from '../utils/plugnotasIntegrationErrorMessage';
 
@@ -200,6 +203,10 @@ export default function AdminUserData() {
   const [parcelamentoPdfLoadingNumero, setParcelamentoPdfLoadingNumero] = useState<string | null>(null);
   const [parcelamentoPdfError, setParcelamentoPdfError] = useState<string | null>(null);
   const [showEmitirNotaModal, setShowEmitirNotaModal] = useState(false);
+  const [emitirModalInstance, setEmitirModalInstance] = useState(0);
+  const [showMeiClientesDrawer, setShowMeiClientesDrawer] = useState(false);
+  const [meiCatalogRefresh, setMeiCatalogRefresh] = useState(0);
+  const gerirMeiCatalogBtnRef = useRef<HTMLButtonElement>(null);
   const [emitirNotaSubmitting, setEmitirNotaSubmitting] = useState(false);
   const [emitirNotaError, setEmitirNotaError] = useState<string | null>(null);
   const [emitirNotaSuccess, setEmitirNotaSuccess] = useState<string | null>(null);
@@ -1328,6 +1335,8 @@ export default function AdminUserData() {
                 <button
                   type="button"
                   onClick={() => {
+                    setEmitirModalInstance((n) => n + 1);
+                    setShowMeiClientesDrawer(false);
                     setShowEmitirNotaModal(true);
                     setEmitirNotaError(null);
                     setEmitirNotaSuccess(null);
@@ -1405,105 +1414,223 @@ export default function AdminUserData() {
 
             {showEmitirNotaModal && (
               <div
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="emitir-nota-modal-title"
               >
-                <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                  <h2 id="emitir-nota-modal-title" className="text-lg font-semibold dark:text-white">
-                    Emitir NFSe
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Emissão em nome do usuário selecionado (NFSe). Preencha tomador e serviço.
-                    Rejeições após o envio refletem o retorno do provedor de emissão fiscal.
-                  </p>
-                  {emitirNotaError ? (
-                    <EmissaoFiscalErrorAlertModal documentTypeLabel="NFSe" message={emitirNotaError} />
-                  ) : null}
-                  {emitirNotaSuccess && (
-                    <div className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-                      {emitirNotaSuccess}
-                    </div>
-                  )}
-                  <div className="mt-4 space-y-3">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        CPF/CNPJ do tomador
-                      </label>
-                      <input
-                        type="text"
-                        value={emitirNotaForm.tomadorCpfCnpj}
-                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, tomadorCpfCnpj: formatDocument(e.target.value) }))}
-                        placeholder="00.000.000/0001-00 ou 000.000.000-00"
-                        className="planner-input-compact w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Razão social do tomador
-                      </label>
-                      <input
-                        type="text"
-                        value={emitirNotaForm.tomadorRazaoSocial}
-                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, tomadorRazaoSocial: e.target.value }))}
-                        placeholder="Nome ou razão social"
-                        className="planner-input-compact w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        E-mail do tomador (opcional)
-                      </label>
-                      <input
-                        type="email"
-                        value={emitirNotaForm.tomadorEmail}
-                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, tomadorEmail: e.target.value }))}
-                        placeholder="email@exemplo.com"
-                        className="planner-input-compact w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Código do serviço (NFSe)
-                      </label>
-                      <input
-                        type="text"
-                        value={emitirNotaForm.servicoCodigo}
-                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, servicoCodigo: e.target.value }))}
-                        placeholder="Mín. 6 caracteres alfanum. sem máscara (ex.: 01.02.03)"
-                        className="planner-input-compact w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Descrição do serviço
-                      </label>
-                      <input
-                        type="text"
-                        value={emitirNotaForm.servicoDiscriminacao}
-                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, servicoDiscriminacao: e.target.value }))}
-                        placeholder="Ex.: Desenvolvimento de software"
-                        className="planner-input-compact w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Valor do serviço (R$)
-                      </label>
-                      <input
-                        type="text"
-                        value={emitirNotaForm.servicoValorServico}
-                        onChange={(e) => setEmitirNotaForm((prev) => ({ ...prev, servicoValorServico: e.target.value.replace(',', '.') }))}
-                        placeholder="0,00"
-                        className="planner-input-compact w-full"
-                      />
+                <div className="my-auto flex w-full max-w-2xl max-h-[min(92vh,880px)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                  <div className="shrink-0 border-b border-slate-200 px-4 pb-3 pt-4 dark:border-slate-700 sm:px-6">
+                    <h2 id="emitir-nota-modal-title" className="text-lg font-semibold dark:text-white">
+                      Emitir NFSe
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      Emissão em nome de{' '}
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {selectedUser ? getUserLabel(selectedUser) : 'este usuário'}
+                      </span>
+                      . Catálogos (cliente e serviço) são os mesmos do Guia MEI deste utilizador. Rejeições refletem o
+                      retorno do provedor fiscal.
+                    </p>
+                    {selectedUser?.mei === false ? (
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        Com MEI desativado para este utilizador, os catálogos não aparecem — use preenchimento manual.
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6">
+                    {emitirNotaError ? (
+                      <EmissaoFiscalErrorAlertModal documentTypeLabel="NFSe" message={emitirNotaError} />
+                    ) : null}
+                    {emitirNotaSuccess ? (
+                      <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        {emitirNotaSuccess}
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-3">
+                      <div>
+                        <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-400">Tomador</p>
+                        {selectedUserId ? (
+                          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                            <div className="min-w-0 flex-1 sm:min-w-[12rem]">
+                              <AdminMeiCatalogClienteCombobox
+                                key={`emit-catalog-${selectedUserId}-${emitirModalInstance}`}
+                                userId={selectedUserId}
+                                meiEnabled={selectedUser?.mei !== false}
+                                formatDocument={formatDocument}
+                                catalogRefreshToken={meiCatalogRefresh}
+                                onApplyCliente={(fields) =>
+                                  setEmitirNotaForm((prev) => ({ ...prev, ...fields }))
+                                }
+                              />
+                            </div>
+                            {selectedUser?.mei !== false ? (
+                              <button
+                                ref={gerirMeiCatalogBtnRef}
+                                type="button"
+                                className="planner-button-secondary-compact inline-flex w-full shrink-0 items-center justify-center gap-1 sm:w-auto"
+                                disabled={!selectedUserId.trim()}
+                                onClick={() => setShowMeiClientesDrawer(true)}
+                              >
+                                <Users className="h-4 w-4 shrink-0" aria-hidden />
+                                Gerir clientes deste utilizador
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="sm:col-span-1">
+                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                              CPF/CNPJ do tomador
+                            </label>
+                            <input
+                              type="text"
+                              value={emitirNotaForm.tomadorCpfCnpj}
+                              onChange={(e) =>
+                                setEmitirNotaForm((prev) => ({
+                                  ...prev,
+                                  tomadorCpfCnpj: formatDocument(e.target.value)
+                                }))
+                              }
+                              placeholder="00.000.000/0001-00 ou 000.000.000-00"
+                              className="planner-input-compact w-full"
+                            />
+                          </div>
+                          <div className="sm:col-span-1">
+                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                              Razão social do tomador
+                            </label>
+                            <input
+                              type="text"
+                              value={emitirNotaForm.tomadorRazaoSocial}
+                              onChange={(e) =>
+                                setEmitirNotaForm((prev) => ({ ...prev, tomadorRazaoSocial: e.target.value }))
+                              }
+                              placeholder="Nome ou razão social"
+                              className="planner-input-compact w-full"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                              E-mail do tomador (opcional)
+                            </label>
+                            <input
+                              type="email"
+                              value={emitirNotaForm.tomadorEmail}
+                              onChange={(e) =>
+                                setEmitirNotaForm((prev) => ({ ...prev, tomadorEmail: e.target.value }))
+                              }
+                              placeholder="email@exemplo.com"
+                              className="planner-input-compact w-full"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
+                        <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-400">Serviço</p>
+                        {selectedUserId ? (
+                          <div className="mb-3">
+                            <AdminMeiCatalogProdutoCombobox
+                              key={`emit-prod-${selectedUserId}-${emitirModalInstance}`}
+                              userId={selectedUserId}
+                              meiEnabled={selectedUser?.mei !== false}
+                              catalogRefreshToken={meiCatalogRefresh}
+                              onApplyServico={(fields) =>
+                                setEmitirNotaForm((prev) => ({
+                                  ...prev,
+                                  servicoCodigo: fields.servicoCodigo || prev.servicoCodigo,
+                                  servicoCnae:
+                                    fields.servicoCnae.trim() !== ''
+                                      ? fields.servicoCnae.trim()
+                                      : prev.servicoCnae,
+                                  servicoDiscriminacao:
+                                    fields.servicoDiscriminacao || prev.servicoDiscriminacao,
+                                  servicoValorServico:
+                                    fields.servicoValorServico !== ''
+                                      ? fields.servicoValorServico
+                                      : prev.servicoValorServico
+                                }))
+                              }
+                            />
+                          </div>
+                        ) : null}
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                              Código do serviço (NFSe)
+                            </label>
+                            <input
+                              type="text"
+                              value={emitirNotaForm.servicoCodigo}
+                              onChange={(e) =>
+                                setEmitirNotaForm((prev) => ({ ...prev, servicoCodigo: e.target.value }))
+                              }
+                              placeholder="Ex.: 01.01.01 (mín. 6 alfanum.)"
+                              className="planner-input-compact w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                              CNAE (LC 116)
+                            </label>
+                            <input
+                              type="text"
+                              value={emitirNotaForm.servicoCnae}
+                              onChange={(e) =>
+                                setEmitirNotaForm((prev) => ({ ...prev, servicoCnae: e.target.value }))
+                              }
+                              placeholder="Ex.: 6201501"
+                              className="planner-input-compact w-full"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                              Descrição do serviço
+                            </label>
+                            <input
+                              type="text"
+                              value={emitirNotaForm.servicoDiscriminacao}
+                              onChange={(e) =>
+                                setEmitirNotaForm((prev) => ({
+                                  ...prev,
+                                  servicoDiscriminacao: e.target.value
+                                }))
+                              }
+                              placeholder="Ex.: Desenvolvimento de software"
+                              className="planner-input-compact w-full"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                              Valor do serviço (R$)
+                            </label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={emitirNotaForm.servicoValorServico}
+                              onChange={(e) =>
+                                setEmitirNotaForm((prev) => ({
+                                  ...prev,
+                                  servicoValorServico: e.target.value.replace(',', '.')
+                                }))
+                              }
+                              placeholder="0,00"
+                              className="planner-input-compact w-full"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="mt-6 flex gap-3 justify-end">
+
+                  <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 sm:px-6">
                     <button
                       type="button"
                       onClick={() => {
+                        setShowMeiClientesDrawer(false);
                         setShowEmitirNotaModal(false);
                         setEmitirNotaError(null);
                         setEmitirNotaSuccess(null);
@@ -1566,6 +1693,7 @@ export default function AdminUserData() {
                           const list = await fetchAdminUserMeiNfse(selectedUserId);
                           setMeiNfseList(list || []);
                           setTimeout(() => {
+                            setShowMeiClientesDrawer(false);
                             setShowEmitirNotaModal(false);
                             setEmitirNotaSuccess(null);
                           }, 1500);
@@ -1587,6 +1715,19 @@ export default function AdminUserData() {
                 </div>
               </div>
             )}
+
+            {showEmitirNotaModal && showMeiClientesDrawer && selectedUserId && selectedUser ? (
+              <AdminUserMeiClientesDrawer
+                open={showMeiClientesDrawer}
+                onClose={() => setShowMeiClientesDrawer(false)}
+                userId={selectedUserId}
+                userDisplayName={getUserLabel(selectedUser)}
+                meiEnabled={selectedUser.mei !== false}
+                formatDocument={formatDocument}
+                returnFocusRef={gerirMeiCatalogBtnRef}
+                onInvalidateCatalog={() => setMeiCatalogRefresh((n) => n + 1)}
+              />
+            ) : null}
 
             <div className="space-y-3">
               <div className="planner-card overflow-hidden">

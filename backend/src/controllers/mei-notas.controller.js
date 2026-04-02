@@ -7,6 +7,7 @@ import {
   consultarEmpresaPlugNotas
 } from '../services/plugnotas/empresa.service.js';
 import { unauthorized } from '../utils/errors.js';
+import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendSuccess } from '../utils/response.js';
 
 const firstValue = (value) => (Array.isArray(value) ? value[0] : value);
@@ -19,13 +20,6 @@ const parseBooleanLike = (value, fallback = false) => {
   if (['1', 'true', 'yes', 'sim'].includes(text)) return true;
   if (['0', 'false', 'no', 'nao', 'não'].includes(text)) return false;
   return fallback;
-};
-const parseLimit = (value, fallback = 20, max = 50) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  const normalized = Math.trunc(parsed);
-  if (normalized <= 0) return fallback;
-  return Math.min(normalized, max);
 };
 
 const ensureWebhookToken = (req) => {
@@ -165,7 +159,7 @@ export const atualizarPlugNotasEmpresa = async (req, res, next) => {
 export const listarCatalogoClientes = async (req, res, next) => {
   try {
     const q = String(req.query?.q || '').trim();
-    const limit = parseLimit(req.query?.limit);
+    const limit = parseCatalogLimit(req.query?.limit);
     const documentType = String(req.query?.documentType || '').trim() || undefined;
     const data = await meiNotasService.listarCatalogoClientes(req.user.id, { q, limit, documentType });
     return sendSuccess(res, data, 'Catálogo de clientes listado');
@@ -177,7 +171,7 @@ export const listarCatalogoClientes = async (req, res, next) => {
 export const listarCatalogoProdutos = async (req, res, next) => {
   try {
     const q = String(req.query?.q || '').trim();
-    const limit = parseLimit(req.query?.limit);
+    const limit = parseCatalogLimit(req.query?.limit);
     const documentType = String(req.query?.documentType || '').trim() || undefined;
     const data = await meiNotasService.listarCatalogoProdutos(req.user.id, { q, limit, documentType });
     return sendSuccess(res, data, 'Catálogo de produtos listado');

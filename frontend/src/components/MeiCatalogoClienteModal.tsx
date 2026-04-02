@@ -4,6 +4,10 @@ import {
   criarCatalogoNfseCliente,
   atualizarCatalogoNfseCliente
 } from '../services/meiNotasService';
+import {
+  createAdminMeiCatalogoCliente,
+  updateAdminMeiCatalogoCliente
+} from '../services/adminUserDataService';
 import { formatCpfCnpjPtBr, onlyDigits } from '../lib/formatCpfCnpjPtBr';
 import {
   MEI_CATALOGO_DELETE_CLIENTE_DANGER_CTA,
@@ -22,6 +26,10 @@ export interface MeiCatalogoClienteModalProps {
   editing: NfseCatalogCliente | null;
   /** Modo edição: abre o diálogo de confirmação de exclusão (controlado pelo pai). */
   onRequestDelete?: () => void;
+  /** Quando definido, grava no catálogo do utilizador alvo (rotas admin). */
+  catalogAdminUserId?: string | null;
+  /** z-index acima do drawer admin “Gerir clientes”. */
+  elevatedStack?: boolean;
 }
 
 type FieldKey = 'nome' | 'documento' | 'email';
@@ -31,7 +39,9 @@ export default function MeiCatalogoClienteModal({
   onClose,
   onSaved,
   editing,
-  onRequestDelete
+  onRequestDelete,
+  catalogAdminUserId = null,
+  elevatedStack = false
 }: MeiCatalogoClienteModalProps) {
   const [nome, setNome] = useState('');
   const [documento, setDocumento] = useState('');
@@ -103,7 +113,21 @@ export default function MeiCatalogoClienteModal({
     setApiError(null);
     setSaving(true);
     try {
-      if (isEdit && editing) {
+      if (catalogAdminUserId) {
+        if (isEdit && editing) {
+          await updateAdminMeiCatalogoCliente(catalogAdminUserId, editing.id, {
+            nome: nome.trim(),
+            email: email.trim() ? email.trim() : null
+          });
+        } else {
+          await createAdminMeiCatalogoCliente(catalogAdminUserId, {
+            nome: nome.trim(),
+            documento,
+            email: email.trim() ? email.trim() : undefined,
+            documentType: 'NFSE'
+          });
+        }
+      } else if (isEdit && editing) {
         await atualizarCatalogoNfseCliente(editing.id, {
           nome: nome.trim(),
           email: email.trim() ? email.trim() : null
@@ -131,9 +155,11 @@ export default function MeiCatalogoClienteModal({
 
   const errId = 'mei-catalogo-cliente-api-err';
 
+  const overlayZ = elevatedStack ? 'z-[70]' : 'z-50';
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      className={`fixed inset-0 ${overlayZ} flex items-center justify-center bg-black/40`}
       onClick={onClose}
       role="presentation"
     >
