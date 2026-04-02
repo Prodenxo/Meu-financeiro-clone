@@ -1966,17 +1966,6 @@ export default function GuidesMei() {
     return tabs;
   }, [canViewNfse, dasPendentesCount, parcelamentosList.length]);
 
-  /** LIM-MEI-03 variante B (UX §3): hero sem utilizado/limite/%; atalho para o bloco canónico em Visão geral (L3). */
-  const goToMeiLimiteBlock = useCallback(() => {
-    setActiveWorkspace('overview');
-    requestAnimationFrame(() => {
-      document.getElementById('mei-limite-faturamento-anchor')?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    });
-  }, []);
-
   const handleDownloadClick = async () => {
     if (isDownloadingGuide) return;
     if (!normalizedContribuinte) {
@@ -2077,22 +2066,6 @@ export default function GuidesMei() {
               )}
             </div>
           </div>
-          {canViewNfse ? (
-            <div className="mt-3 flex max-w-3xl flex-col gap-2 rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-3 dark:border-slate-700/80 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Limite de faturamento (MEI): indicador completo na{' '}
-                <span className="font-medium text-slate-700 dark:text-slate-300">Visão geral</span>
-                — aqui não repetimos valores em R$ nem percentagem (FR-UX-MEI-01).
-              </p>
-              <button
-                type="button"
-                className="planner-button-secondary-compact min-h-[44px] shrink-0 self-start px-4 py-2 text-sm sm:self-center"
-                onClick={goToMeiLimiteBlock}
-              >
-                Abrir limite na Visão geral
-              </button>
-            </div>
-          ) : null}
           {dasPendentesCount > 0 ? (
             <p className="mt-3 max-w-2xl text-sm text-amber-800 dark:text-amber-100/95">
               Há períodos DAS em aberto — abra{' '}
