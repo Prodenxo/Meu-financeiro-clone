@@ -24,6 +24,7 @@ Não grave secrets, tokens nem dados pessoais.
 
 ## Decisões de arquitetura
 
+- **2026-04-02 — Limite de faturamento MEI (LIM-MEI-01):** agregado MVP no cliente a partir de `NfseRecord[]` (`listarNfse`); ADR `docs/technical/mei-limite-faturamento-agregado-2026-04-02.md`; helpers `frontend/src/utils/meiLimiteFaturamento.ts` + `meiLimiteFaturamentoConfig.ts`.
 - Dados mínimos NFS-e do emitente: colunas em `user_mei_certificates` (migrações `20260326140000_*` e `20260326150000_add_tipo_logradouro_user_mei_certificates.sql` para tipo de via); gravação via `POST /mei-guide/certificate` (multipart) e `PATCH /mei-guide/certificate/emitente-nfse`; leitura em `GET /mei-guide/certificate/status` no campo `nfseEmitente`.
 
 ## Supabase — ambientes e deploy (CORR-02)
@@ -76,6 +77,7 @@ GitHub Actions: `.github/workflows/corr03-smoke-backend.yml` executa o mesmo smo
 
 ## Última atualização
 
+- **2026-04-02** — LIM-MEI-01: limite MEI — agregado cliente + ADR + config por ano (`meiLimiteFaturamento*`).
 - **2026-03-26** — CORR-03 pós-QA: workflow `corr03-smoke-backend.yml` (smoke `qa:corr03-smoke-backend` em PRs relevantes); PATCH/UI/evidência §4 permanecem manuais.
 - **2026-03-26** — CORR-03: roteiro QA `docs/runbook/corr-03-validacao-guia-mei-nfse.md` (API + UI + evidência ticket).
 - **2026-03-26** — CORR-02: runbook `docs/runbook/supabase-ambientes-e-deploy.md`, mapeamento + gate de deploy; template de PR em `.github/pull_request_template.md`; pós-QA: `docs/runbook/gitlab-merge-request-template.md` + workflow `migrations-pr-reminder.yml`.

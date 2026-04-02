@@ -35,9 +35,25 @@ import {
   emitirNfce
 } from './plugnotas/nfce.service.js';
 import { isPlugnotasDebugExplicitlyEnabled } from './plugnotas/plugnotas-debug-env.js';
+import { agregarLimiteMeiDasLinhas } from '../utils/meiLimitePayloadSum.js';
+
+/**
+ * Intervalo [início, fim) em ISO UTC para o ano civil Y em America/Sao_Paulo.
+ * Assume UTC−3 o ano todo (sem DST em SP desde 2019).
+ */
+const civilYearCreatedAtBoundsUtcIso = (y) => {
+  const startMs = Date.UTC(y, 0, 1, 3, 0, 0, 0);
+  const endExclusiveMs = Date.UTC(y + 1, 0, 1, 3, 0, 0, 0);
+  return {
+    startIso: new Date(startMs).toISOString(),
+    endExclusiveIso: new Date(endExclusiveMs).toISOString()
+  };
+};
 import crypto from 'node:crypto';
 
 const TABLE = 'mei_nfse';
+/** Limite de linhas lidas para o agregado (notas mais recentes primeiro). */
+const MEI_LIMITE_AGG_QUERY_LIMIT = 5000;
 const CLIENTS_TABLE = 'mei_nfse_clientes';
 const PRODUCTS_TABLE = 'mei_nfse_produtos';
 const DOCUMENT_TYPE_NFSE = 'NFSE';
@@ -216,15 +232,22 @@ const pickCandidateValue = (candidates, accessor) => {
   return null;
 };
 
+const stripDiacritics = (value) => String(value || '')
+  .normalize('NFD')
+  .replace(/\p{M}/gu, '');
+
 const normalizeStatus = (value) => {
-  const text = String(value || '').toUpperCase();
-  if (!text) return 'processando';
-  if (text.includes('CONCLUIDO') || text.includes('AUTORIZ')) return 'concluido';
-  if (text.includes('PROCESS')) return 'processando';
-  if (text.includes('REJEIT')) return 'rejeitado';
-  if (text.includes('CANCEL')) return 'cancelado';
-  if (text.includes('INTERROMP')) return 'interrompido';
-  return text.toLowerCase();
+  const ascii = stripDiacritics(String(value || '')).toUpperCase();
+  if (!ascii) return 'processando';
+  if (ascii.includes('CANCELAMENTO_PENDENTE') || (ascii.includes('CANCELAMENTO') && ascii.includes('PENDENTE'))) {
+    return 'cancelamento_pendente';
+  }
+  if (ascii.includes('CONCLUIDO') || ascii.includes('CONCLUIDA') || ascii.includes('AUTORIZ')) return 'concluido';
+  if (ascii.includes('PROCESS')) return 'processando';
+  if (ascii.includes('REJEIT')) return 'rejeitado';
+  if (ascii.includes('CANCEL')) return 'cancelado';
+  if (ascii.includes('INTERROMP')) return 'interrompido';
+  return String(value || '').toLowerCase();
 };
 
 const prune = (value) => {
@@ -1008,17 +1031,24 @@ export const emitirNota = async (userId, input) => {
   return created;
 };
 
+const clampListarNotasLimit = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 500;
+  return Math.min(Math.max(Math.trunc(n), 1), 1000);
+};
+
 export const listarNotas = async (
   userId,
-  { includeArchived = false, documentType } = {}
+  { includeArchived = false, documentType, limit: limitOpt } = {}
 ) => {
+  const safeLimit = clampListarNotasLimit(limitOpt);
   const dbClient = getDb();
   let query = dbClient
     .from(TABLE)
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(50);
+    .limit(safeLimit);
   if (documentType) {
     query = query.eq('document_type', normalizeDocumentType(documentType));
   }
@@ -1028,6 +1058,48 @@ export const listarNotas = async (
   const { data, error } = await query;
   if (error) throw badRequest(error.message);
   return data || [];
+};
+
+const clampAnoCivilLimite = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const y = Math.trunc(n);
+  if (y < 2000 || y > 2100) return null;
+  return y;
+};
+
+/**
+ * Agrega faturamento MEI no ano civil a partir de `payload_json` na tabela `mei_nfse`
+ * (paridade com o cliente em `meiLimiteFaturamento.ts`).
+ * @param {string} userId
+ * @param {number} anoCivil
+ * @returns {Promise<{ anoCivil: number, totalUtilizadoReais: number, notasConsideradas: number }>}
+ */
+export const agregarLimiteFaturamento = async (userId, anoCivil) => {
+  const safeYear = clampAnoCivilLimite(anoCivil);
+  if (safeYear === null) {
+    throw badRequest('Ano civil inválido para o limite de faturamento');
+  }
+  const dbClient = getDb();
+  const { startIso, endExclusiveIso } = civilYearCreatedAtBoundsUtcIso(safeYear);
+  let query = dbClient
+    .from(TABLE)
+    .select('payload_json, response_json, status, created_at, document_type, archived_at')
+    .eq('user_id', userId)
+    .is('archived_at', null)
+    .gte('created_at', startIso)
+    .lt('created_at', endExclusiveIso)
+    .order('created_at', { ascending: false })
+    .limit(MEI_LIMITE_AGG_QUERY_LIMIT);
+  query = query.or(`document_type.eq.${DOCUMENT_TYPE_NFSE},document_type.is.null`);
+  const { data, error } = await query;
+  if (error) throw badRequest(error.message);
+  const { total, notasConsideradas } = agregarLimiteMeiDasLinhas(data || [], safeYear);
+  return {
+    anoCivil: safeYear,
+    totalUtilizadoReais: total,
+    notasConsideradas
+  };
 };
 
 /**

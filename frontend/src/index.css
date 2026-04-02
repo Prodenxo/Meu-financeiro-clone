@@ -286,6 +286,15 @@
   .admin-user-card {
     @apply rounded-2xl border border-slate-200/70 bg-gradient-to-br from-white/90 via-white/70 to-slate-50/60 p-4 md:p-5 dark:border-slate-800/70 dark:from-slate-900/70 dark:via-slate-900/60 dark:to-slate-950/50 transition duration-200 hover:shadow-soft;
   }
+
+  /** Bloco limite MEI (LIM-MEI-02) — trilho da barra; preenchimento usa utilitários Tailwind no TSX */
+  .admin-limit-progress-track {
+    @apply h-2.5 w-full min-w-0 overflow-hidden rounded-full bg-slate-200/90 dark:bg-slate-700/80;
+  }
+
+  .admin-limit-progress-fill {
+    @apply min-w-0 min-h-[0.625rem];
+  }
 }
 
 /* Estilos para react-big-calendar no modo escuro (7A: variáveis CSS) */

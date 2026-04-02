@@ -22,6 +22,7 @@ import {
   criarCatalogoNfseProduto,
   atualizarCatalogoNfseProduto,
   eliminarCatalogoNfseProduto,
+  fetchLimiteFaturamentoMei,
   listarNotas,
   listarNfse,
   obterNota,
@@ -204,6 +205,27 @@ describe('meiNotasService', () => {
 
     expect(mockedApiClient.get).toHaveBeenCalledWith('/mei-notas?documentType=NFE');
     expect(result).toEqual(response);
+  });
+
+  it('lista notas com limite na query quando informado', async () => {
+    mockedApiClient.get.mockResolvedValueOnce([]);
+
+    await listarNotas({ limit: 1000, documentType: 'NFSE' });
+
+    expect(mockedApiClient.get).toHaveBeenCalledWith('/mei-notas?documentType=NFSE&limit=1000');
+  });
+
+  it('fetchLimiteFaturamentoMei chama GET /mei-notas/limite-faturamento com year opcional', async () => {
+    const body = { anoCivil: 2026, totalUtilizadoReais: 42, notasConsideradas: 2 };
+    mockedApiClient.get.mockResolvedValueOnce(body);
+
+    const r0 = await fetchLimiteFaturamentoMei();
+    expect(mockedApiClient.get).toHaveBeenLastCalledWith('/mei-notas/limite-faturamento');
+    expect(r0).toEqual(body);
+
+    mockedApiClient.get.mockResolvedValueOnce(body);
+    await fetchLimiteFaturamentoMei({ year: 2025 });
+    expect(mockedApiClient.get).toHaveBeenLastCalledWith('/mei-notas/limite-faturamento?year=2025');
   });
 
   it('lista catálogo de clientes e produtos com query params', async () => {

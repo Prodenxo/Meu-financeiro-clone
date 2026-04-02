@@ -136,8 +136,11 @@ export interface NfseRecord {
   cnpj_prestador?: string | null;
   cnpj_tomador?: string | null;
   metadata_json?: Record<string, unknown> | null;
-  payload_json?: Record<string, unknown> | unknown[] | null;
-  response_json?: Record<string, unknown> | unknown[] | null;
+  /** Coluna DB `payload_json`; em alguns clientes pode vir como `payloadJson`. */
+  payload_json?: Record<string, unknown> | unknown[] | string | null;
+  payloadJson?: Record<string, unknown> | unknown[] | string | null;
+  response_json?: Record<string, unknown> | unknown[] | string | null;
+  responseJson?: Record<string, unknown> | unknown[] | string | null;
   pdf_url?: string | null;
   xml_url?: string | null;
   created_at?: string;
@@ -194,6 +197,8 @@ export interface ListarCatalogoNfseInput {
 export interface ListarNotasInput {
   includeArchived?: boolean;
   documentType?: DocumentType;
+  /** Limite de linhas (backend: 1–1000, omissão ≈ 500). Necessário para somatório limite MEI no ano. */
+  limit?: number;
 }
 
 export interface CadastrarEmissaoNfCertificadoInput {
@@ -235,7 +240,10 @@ const buildCatalogSuffix = (options: ListarCatalogoNfseInput = {}) => {
 const buildListSuffix = (options: ListarNotasInput = {}) => {
   const query = new URLSearchParams({
     ...(options.includeArchived ? { includeArchived: 'true' } : {}),
-    ...(options.documentType ? { documentType: options.documentType } : {})
+    ...(options.documentType ? { documentType: options.documentType } : {}),
+    ...(typeof options.limit === 'number' && Number.isFinite(options.limit)
+      ? { limit: String(Math.trunc(options.limit)) }
+      : {})
   });
   const text = query.toString();
   return text ? `?${text}` : '';
@@ -350,6 +358,23 @@ export async function atualizarEmpresaEmissaoNf(
 export async function listarNotas(options: ListarNotasInput = {}): Promise<NfseRecord[]> {
   const suffix = buildListSuffix(options);
   return await apiClient.get<NfseRecord[]>(`/mei-notas${suffix}`);
+}
+
+export interface LimiteFaturamentoMeiResponse {
+  anoCivil: number;
+  totalUtilizadoReais: number;
+  notasConsideradas: number;
+}
+
+export async function fetchLimiteFaturamentoMei(options?: {
+  year?: number;
+}): Promise<LimiteFaturamentoMeiResponse> {
+  const params = new URLSearchParams();
+  if (options?.year != null) params.set('year', String(options.year));
+  const q = params.toString();
+  return await apiClient.get<LimiteFaturamentoMeiResponse>(
+    `/mei-notas/limite-faturamento${q ? `?${q}` : ''}`
+  );
 }
 
 export async function listarNfse(options: ListarNotasInput = {}): Promise<NfseRecord[]> {
