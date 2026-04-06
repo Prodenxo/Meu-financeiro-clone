@@ -1,6 +1,17 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest } from '../utils/errors.js';
 
+/** Cliente Supabase (service role) para leituras de orçamentos/resumo DRE; substituível em testes de paridade. */
+let getCategoriesBudgetReadClient = () => createSupabaseClient({ useServiceRole: true });
+
+export const __setCategoriesBudgetReadClientForTests = (fn) => {
+  const prev = getCategoriesBudgetReadClient;
+  getCategoriesBudgetReadClient = fn;
+  return () => {
+    getCategoriesBudgetReadClient = prev;
+  };
+};
+
 const normalizeTipo = (tipo) => {
   if (!tipo) return tipo;
   return tipo === 'saída' ? 'saida' : tipo;
@@ -92,6 +103,30 @@ const getMonthRangeFromInput = (year, month) => {
   const startDate = start.toISOString().split('T')[0];
   const endDate = end.toISOString().split('T')[0];
   return { startDate, endDate, start };
+};
+
+/** Mês civil 1–12 a partir de `data` em lançamento (YYYY-MM-DD ou ISO). */
+export const parseMonthFromLancamentoDate = (dataValue) => {
+  if (!dataValue) return null;
+  const s = String(dataValue);
+  const ymd = s.length >= 10 ? s.slice(0, 10) : s;
+  const parts = ymd.split('-');
+  if (parts.length < 2) return null;
+  const month = Number.parseInt(parts[1], 10);
+  if (Number.isNaN(month) || month < 1 || month > 12) return null;
+  return month;
+};
+
+/** Mês civil 1–12 a partir de `date` de linha em orçamentos (início do mês). */
+export const parseMonthFromBudgetDate = (dateValue) => {
+  if (!dateValue) return null;
+  const s = String(dateValue);
+  const ymd = s.length >= 10 ? s.slice(0, 10) : s;
+  const parts = ymd.split('-');
+  if (parts.length < 2) return null;
+  const month = Number.parseInt(parts[1], 10);
+  if (Number.isNaN(month) || month < 1 || month > 12) return null;
+  return month;
 };
 
 const ensureUserCategory = async (dbClient, userId, categoriaId) => {
@@ -266,7 +301,7 @@ export const upsertCategoryBudget = async (userId, payload) => {
 };
 
 export const listCategoryBudgetsSummary = async (userId, { year, month } = {}) => {
-  const dbClient = createSupabaseClient({ useServiceRole: true });
+  const dbClient = getCategoriesBudgetReadClient();
 
   const { data: userCategories, error: userError } = await dbClient
     .from('categorias_id')
@@ -438,4 +473,127 @@ export const listCategoryBudgetsYearly = async (userId, year) => {
     valor_orcado: budget.valor_orçado ?? null,
     month: Number(String(budget.date).split('-')[1]) - 1
   }));
+};
+
+/**
+ * Matriz orçado × realizado por categoria e mês (1–12) num ano.
+ * Semântica alinhada a `listCategoryBudgetsSummary` por mês.
+ * Células omitidas quando não há linha de orçamento naquele mês e gasto/recebido são 0.
+ */
+export const listCategoryBudgetsDreMatrix = async (userId, year) => {
+  const y = Number(year);
+  if (year === undefined || year === null || Number.isNaN(y)) {
+    throw badRequest('Ano inválido');
+  }
+  if (!Number.isInteger(y) || y < 1900 || y > 2100) {
+    throw badRequest('Ano inválido');
+  }
+
+  const dbClient = getCategoriesBudgetReadClient();
+  const { startDate, endDate } = getYearMonthRange(y);
+
+  const { data: userCategories, error: userError } = await dbClient
+    .from('categorias_id')
+    .select('id, nome, tipo, user_id')
+    .eq('user_id', userId);
+
+  if (userError) throw badRequest(userError.message);
+
+  const { data: globalCategories, error: globalError } = await dbClient
+    .from('categorias_id')
+    .select('id, nome, tipo, user_id')
+    .is('user_id', null);
+
+  if (globalError) throw badRequest(globalError.message);
+
+  const allCategories = [
+    ...(userCategories || []),
+    ...(globalCategories || [])
+  ];
+
+  const { data: budgetRows, error: budgetsError } = await dbClient
+    .from('orçamentos')
+    .select('categorias_id, valor_orçado, date')
+    .eq('user_id', userId)
+    .gte('date', startDate)
+    .lte('date', endDate);
+
+  if (budgetsError) throw badRequest(budgetsError.message);
+
+  const { data: transactions, error: transactionsError } = await dbClient
+    .from('lancamentos_id')
+    .select('classificacao, valor, tipo, data')
+    .eq('user_id', userId)
+    .in('tipo', ['saida', 'saída'])
+    .gte('data', startDate)
+    .lte('data', endDate);
+
+  if (transactionsError) throw badRequest(transactionsError.message);
+
+  const { data: receivedTransactions, error: receivedError } = await dbClient
+    .from('lancamentos_id')
+    .select('classificacao, valor, tipo, data, status')
+    .eq('user_id', userId)
+    .eq('status', 'recebido')
+    .eq('tipo', 'entrada')
+    .gte('data', startDate)
+    .lte('data', endDate);
+
+  if (receivedError) throw badRequest(receivedError.message);
+
+  const budgetMap = new Map();
+  (budgetRows || []).forEach((row) => {
+    const month = parseMonthFromBudgetDate(row.date);
+    if (!month) return;
+    const key = `${row.categorias_id}_${month}`;
+    budgetMap.set(key, row.valor_orçado ?? null);
+  });
+
+  const spentMap = new Map();
+  (transactions || []).forEach((transaction) => {
+    if (!transaction?.classificacao) return;
+    const month = parseMonthFromLancamentoDate(transaction.data);
+    if (!month) return;
+    const nameKey = normalizeCategoryName(transaction.classificacao);
+    const cellKey = `${nameKey}_${month}`;
+    const current = spentMap.get(cellKey) || 0;
+    spentMap.set(cellKey, current + Number(transaction.valor || 0));
+  });
+
+  const receivedMap = new Map();
+  (receivedTransactions || []).forEach((transaction) => {
+    if (!transaction?.classificacao) return;
+    const month = parseMonthFromLancamentoDate(transaction.data);
+    if (!month) return;
+    const nameKey = normalizeCategoryName(transaction.classificacao);
+    const cellKey = `${nameKey}_${month}`;
+    const current = receivedMap.get(cellKey) || 0;
+    receivedMap.set(cellKey, current + Number(transaction.valor || 0));
+  });
+
+  const results = [];
+  for (const categoria of allCategories) {
+    const nomeKey = normalizeCategoryName(categoria.nome);
+    for (let month = 1; month <= 12; month += 1) {
+      const budgetKey = `${categoria.id}_${month}`;
+      const hasBudget = budgetMap.has(budgetKey);
+      const valorOrcado = hasBudget ? budgetMap.get(budgetKey) : null;
+      const valorGasto = spentMap.get(`${nomeKey}_${month}`) || 0;
+      const valorRecebido = receivedMap.get(`${nomeKey}_${month}`) || 0;
+
+      const include =
+        hasBudget || valorGasto !== 0 || valorRecebido !== 0;
+      if (!include) continue;
+
+      results.push({
+        categorias_id: categoria.id,
+        month,
+        valor_orcado: valorOrcado,
+        valor_gasto: valorGasto,
+        valor_recebido: valorRecebido
+      });
+    }
+  }
+
+  return results;
 };

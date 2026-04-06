@@ -76,6 +76,16 @@ export const listCategoryBudgetsYearly = async (req, res, next) => {
   }
 };
 
+export const listCategoryBudgetsDreMatrix = async (req, res, next) => {
+  try {
+    const year = Number(req.query?.year);
+    const data = await categoriesService.listCategoryBudgetsDreMatrix(req.user.id, year);
+    return sendSuccess(res, data, 'Matriz DRE de orçamento listada');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const duplicateMonthlyBudgets = async (req, res, next) => {
   try {
     const { year, month } = req.body || {};
