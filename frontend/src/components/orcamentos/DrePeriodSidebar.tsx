@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import type { DrePeriod } from '../../utils/dreMatrix';
+import type { DreUiSelection } from '../../utils/dreMatrix';
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -9,30 +9,37 @@ const MONTHS = [
 /** 12 meses + Total anual */
 const PERIOD_COUNT = 13;
 
+const TITLE_ANUAL_DISABLED =
+  'Para ver o total anual, deixe só um mês selecionado ou desmarque meses até ficar com um.';
+
 export interface DrePeriodSidebarProps {
-  period: DrePeriod;
-  onPeriodChange: (p: DrePeriod) => void;
+  selection: DreUiSelection;
+  maxMonths: number;
+  onToggleMonth: (month: number) => void;
+  onSelectAnnual: () => void;
+  /** Em modo anual, clicar num mês passa a mês único. */
+  onMonthFromAnnual: (month: number) => void;
 }
 
-function isSamePeriod(a: DrePeriod, b: DrePeriod): boolean {
-  if (a.kind !== b.kind) return false;
-  if (a.kind === 'annual' && b.kind === 'annual') return true;
-  if (a.kind === 'month' && b.kind === 'month') return a.month === b.month;
-  return false;
+function rovingIndexFromSelection(s: DreUiSelection): number {
+  if (s.mode === 'annual') return 12;
+  return Math.min(11, Math.max(0, s.months[0] - 1));
 }
 
-function periodToIndex(p: DrePeriod): number {
-  if (p.kind === 'annual') return 12;
-  return p.month - 1;
-}
-
-export default function DrePeriodSidebar({ period, onPeriodChange }: DrePeriodSidebarProps) {
-  const [rovingIndex, setRovingIndex] = useState(() => periodToIndex(period));
+export default function DrePeriodSidebar({
+  selection,
+  maxMonths: _maxMonths /* API estável; limite aplicado no painel */,
+  onToggleMonth,
+  onSelectAnnual,
+  onMonthFromAnnual
+}: DrePeriodSidebarProps) {
+  void _maxMonths;
+  const [rovingIndex, setRovingIndex] = useState(() => rovingIndexFromSelection(selection));
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
-    setRovingIndex(periodToIndex(period));
-  }, [period]);
+    setRovingIndex(rovingIndexFromSelection(selection));
+  }, [selection]);
 
   const [isLg, setIsLg] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : false
@@ -85,6 +92,8 @@ export default function DrePeriodSidebar({ period, onPeriodChange }: DrePeriodSi
     btnRefs.current[idx] = el;
   };
 
+  const annualDisabled = selection.mode === 'months' && selection.months.length >= 2;
+
   return (
     <nav
       className="flex flex-row lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 lg:w-44 shrink-0 lg:border-r border-slate-200/70 dark:border-slate-800/60 lg:pr-4"
@@ -92,8 +101,8 @@ export default function DrePeriodSidebar({ period, onPeriodChange }: DrePeriodSi
     >
       {MONTHS.map((label, idx) => {
         const m = idx + 1;
-        const p: DrePeriod = { kind: 'month', month: m };
-        const selected = isSamePeriod(period, p);
+        const pressed = selection.mode === 'months' && selection.months.includes(m);
+        const activeStyle = pressed;
         return (
           <button
             key={label}
@@ -104,11 +113,16 @@ export default function DrePeriodSidebar({ period, onPeriodChange }: DrePeriodSi
             onKeyDown={(e) => handleKeyDown(e, idx)}
             onClick={() => {
               setRovingIndex(idx);
-              onPeriodChange(p);
+              if (selection.mode === 'annual') {
+                onMonthFromAnnual(m);
+              } else {
+                onToggleMonth(m);
+              }
             }}
-            aria-current={selected ? true : undefined}
+            aria-pressed={selection.mode === 'months' ? pressed : false}
+            aria-current={undefined}
             className={`min-h-[44px] lg:min-h-0 text-left px-3 py-2.5 lg:py-2 rounded-lg text-sm whitespace-nowrap transition shrink-0 ${
-              selected
+              activeStyle
                 ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-l-2 border-emerald-500 font-semibold'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 border-l-2 border-transparent'
             }`}
@@ -125,14 +139,20 @@ export default function DrePeriodSidebar({ period, onPeriodChange }: DrePeriodSi
         onFocus={() => setRovingIndex(12)}
         onKeyDown={(e) => handleKeyDown(e, 12)}
         onClick={() => {
+          if (annualDisabled) return;
           setRovingIndex(12);
-          onPeriodChange({ kind: 'annual' });
+          onSelectAnnual();
         }}
-        aria-current={period.kind === 'annual' ? true : undefined}
+        disabled={annualDisabled}
+        aria-disabled={annualDisabled}
+        aria-pressed={selection.mode === 'annual'}
+        title={annualDisabled ? TITLE_ANUAL_DISABLED : undefined}
         className={`min-h-[44px] lg:min-h-0 text-left px-3 py-2.5 lg:py-2 rounded-lg text-sm font-semibold whitespace-nowrap shrink-0 ${
-          period.kind === 'annual'
-            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-l-2 border-emerald-500'
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 border-l-2 border-transparent'
+          annualDisabled
+            ? 'opacity-50 cursor-not-allowed text-slate-400 dark:text-slate-500 border-l-2 border-transparent'
+            : selection.mode === 'annual'
+              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-l-2 border-emerald-500'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 border-l-2 border-transparent'
         }`}
       >
         Total anual

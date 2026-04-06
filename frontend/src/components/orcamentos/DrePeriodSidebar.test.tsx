@@ -17,7 +17,7 @@ function setMatchMedia(matches: boolean) {
   });
 }
 
-describe('DrePeriodSidebar (a11y QA — roving tabindex + setas)', () => {
+describe('DrePeriodSidebar (a11y — roving tabindex + setas)', () => {
   beforeEach(() => {
     setMatchMedia(true);
   });
@@ -27,8 +27,16 @@ describe('DrePeriodSidebar (a11y QA — roving tabindex + setas)', () => {
     vi.restoreAllMocks();
   });
 
-  it('roving tabindex: apenas um botão com tabIndex 0 alinhado ao período selecionado', () => {
-    render(<DrePeriodSidebar period={{ kind: 'month', month: 3 }} onPeriodChange={() => {}} />);
+  it('roving tabindex: um botão com tabIndex 0 no primeiro mês da seleção', () => {
+    render(
+      <DrePeriodSidebar
+        selection={{ mode: 'months', months: [3] }}
+        maxMonths={4}
+        onToggleMonth={() => {}}
+        onSelectAnnual={() => {}}
+        onMonthFromAnnual={() => {}}
+      />
+    );
     const buttons = screen.getAllByRole('button');
     const tabStops = buttons.filter((b) => b.tabIndex === 0);
     expect(tabStops).toHaveLength(1);
@@ -36,7 +44,15 @@ describe('DrePeriodSidebar (a11y QA — roving tabindex + setas)', () => {
   });
 
   it('layout desktop (lg): ArrowDown move o foco para o mês seguinte', async () => {
-    render(<DrePeriodSidebar period={{ kind: 'month', month: 3 }} onPeriodChange={() => {}} />);
+    render(
+      <DrePeriodSidebar
+        selection={{ mode: 'months', months: [3] }}
+        maxMonths={4}
+        onToggleMonth={() => {}}
+        onSelectAnnual={() => {}}
+        onMonthFromAnnual={() => {}}
+      />
+    );
     const marco = screen.getByRole('button', { name: 'Março' });
     marco.focus();
     fireEvent.keyDown(marco, { key: 'ArrowDown' });
@@ -47,7 +63,15 @@ describe('DrePeriodSidebar (a11y QA — roving tabindex + setas)', () => {
 
   it('layout mobile: ArrowRight move o foco para o período seguinte', async () => {
     setMatchMedia(false);
-    render(<DrePeriodSidebar period={{ kind: 'month', month: 1 }} onPeriodChange={() => {}} />);
+    render(
+      <DrePeriodSidebar
+        selection={{ mode: 'months', months: [1] }}
+        maxMonths={2}
+        onToggleMonth={() => {}}
+        onSelectAnnual={() => {}}
+        onMonthFromAnnual={() => {}}
+      />
+    );
     const jan = screen.getByRole('button', { name: 'Janeiro' });
     jan.focus();
     fireEvent.keyDown(jan, { key: 'ArrowRight' });
@@ -57,7 +81,15 @@ describe('DrePeriodSidebar (a11y QA — roving tabindex + setas)', () => {
   });
 
   it('Home e End movem o foco para primeiro e último período', async () => {
-    render(<DrePeriodSidebar period={{ kind: 'month', month: 6 }} onPeriodChange={() => {}} />);
+    render(
+      <DrePeriodSidebar
+        selection={{ mode: 'months', months: [6] }}
+        maxMonths={4}
+        onToggleMonth={() => {}}
+        onSelectAnnual={() => {}}
+        onMonthFromAnnual={() => {}}
+      />
+    );
     const junho = screen.getByRole('button', { name: 'Junho' });
     junho.focus();
     fireEvent.keyDown(junho, { key: 'Home' });
@@ -68,5 +100,34 @@ describe('DrePeriodSidebar (a11y QA — roving tabindex + setas)', () => {
     await waitFor(() => {
       expect(document.activeElement?.textContent).toBe('Total anual');
     });
+  });
+
+  it('Total anual desabilitado com 2+ meses', () => {
+    render(
+      <DrePeriodSidebar
+        selection={{ mode: 'months', months: [1, 3] }}
+        maxMonths={4}
+        onToggleMonth={() => {}}
+        onSelectAnnual={() => {}}
+        onMonthFromAnnual={() => {}}
+      />
+    );
+    const anual = screen.getByRole('button', { name: 'Total anual' }) as HTMLButtonElement;
+    expect(anual.disabled).toBe(true);
+  });
+
+  it('modo anual: roving no botão Total anual', () => {
+    render(
+      <DrePeriodSidebar
+        selection={{ mode: 'annual' }}
+        maxMonths={4}
+        onToggleMonth={() => {}}
+        onSelectAnnual={() => {}}
+        onMonthFromAnnual={() => {}}
+      />
+    );
+    const anual = screen.getByRole('button', { name: 'Total anual' });
+    expect(anual.tabIndex).toBe(0);
+    expect(anual.getAttribute('aria-pressed')).toBe('true');
   });
 });

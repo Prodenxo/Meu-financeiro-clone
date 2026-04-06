@@ -1,10 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Wallet } from 'lucide-react';
 import EmptyState from '../EmptyState';
 import FetchErrorBanner from '../FetchErrorBanner';
 import LoadingOverlay from '../LoadingOverlay';
+import { useMediaQueryMinLg } from '../../hooks/useMediaQueryMinLg';
 import { useDreMatrix } from '../../hooks/useDreMatrix';
-import { buildDreMatrixViewModel, type DrePeriod } from '../../utils/dreMatrix';
+import {
+  buildDreMatrixViewModel,
+  toggleMonthInSelection,
+  type DreUiSelection
+} from '../../utils/dreMatrix';
 import DreMatrixTable from './DreMatrixTable';
 import DrePeriodSidebar from './DrePeriodSidebar';
 
@@ -19,6 +24,11 @@ const TOOLTIPS = {
   pctReceita:
     'Peso desta linha sobre a receita total realizada no período (soma das categorias de entrada).'
 };
+
+function defaultMonthForYear(y: number): number {
+  const now = new Date();
+  return y === now.getFullYear() ? now.getMonth() + 1 : 1;
+}
 
 export interface DreBudgetPanelProps {
   userId: string;
@@ -35,14 +45,120 @@ export default function DreBudgetPanel({
   yearOptions,
   onGoToMonthTab
 }: DreBudgetPanelProps) {
-  const now = new Date();
-  const [period, setPeriod] = useState<DrePeriod>({ kind: 'month', month: now.getMonth() + 1 });
+  const [dreSelection, setDreSelection] = useState<DreUiSelection>(() => ({
+    mode: 'months',
+    months: [defaultMonthForYear(year)]
+  }));
+  const [statusMessage, setStatusMessage] = useState('');
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevIsLgRef = useRef<boolean | null>(null);
+
+  const isLg = useMediaQueryMinLg();
+  const maxMonths = isLg ? 4 : 2;
+
+  const announce = useCallback((msg: string) => {
+    setStatusMessage(msg);
+    if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+    clearTimerRef.current = setTimeout(() => setStatusMessage(''), 8000);
+  }, []);
+
+  useEffect(() => {
+    setDreSelection({ mode: 'months', months: [defaultMonthForYear(year)] });
+  }, [year]);
+
+  useEffect(() => {
+    const wasLg = prevIsLgRef.current;
+    prevIsLgRef.current = isLg;
+    if (wasLg === true && isLg === false) {
+      setDreSelection((prev) => {
+        if (prev.mode !== 'months' || prev.months.length <= 2) return prev;
+        const sorted = [...prev.months].sort((a, b) => a - b);
+        const next = sorted.slice(0, 2);
+        const names = next.map((m) => MESES[m - 1]).join(' e ');
+        queueMicrotask(() =>
+          announce(
+            `Ecrã estreito: a comparação ficou limitada a dois meses. Mantidos: ${names}.`
+          )
+        );
+        return { mode: 'months', months: next };
+      });
+    }
+  }, [isLg, announce]);
+
+  const handleToggleMonth = useCallback(
+    (month: number) => {
+      setDreSelection((prev) => {
+        if (prev.mode === 'annual') return prev;
+        const { next, rejected } = toggleMonthInSelection(prev.months, month, maxMonths);
+        if (rejected) {
+          queueMicrotask(() =>
+            announce(
+              `Limite de ${maxMonths} meses para comparação neste ecrã. Desmarque um mês para adicionar outro.`
+            )
+          );
+          return prev;
+        }
+        return { mode: 'months', months: next };
+      });
+    },
+    [maxMonths, announce]
+  );
+
+  const handleSelectAnnual = useCallback(() => {
+    setDreSelection({ mode: 'annual' });
+  }, []);
+
+  const handleMonthFromAnnual = useCallback((month: number) => {
+    setDreSelection({ mode: 'months', months: [month] });
+  }, []);
+
   const { categories, cells, loading, error, refetch } = useDreMatrix(userId, year);
 
-  const model = useMemo(
-    () => buildDreMatrixViewModel(categories, cells, year, period, MESES),
-    [categories, cells, year, period]
-  );
+  const { tableVariant, models, compareMonths, tableTitle, descriptionId } = useMemo(() => {
+    if (dreSelection.mode === 'annual') {
+      const m = buildDreMatrixViewModel(categories, cells, year, { kind: 'annual' }, MESES);
+      return {
+        tableVariant: 'single' as const,
+        models: [m],
+        compareMonths: [] as number[],
+        tableTitle: m.periodLabel,
+        descriptionId: undefined as string | undefined
+      };
+    }
+    const months = dreSelection.months;
+    if (months.length === 1) {
+      const m = buildDreMatrixViewModel(
+        categories,
+        cells,
+        year,
+        { kind: 'month', month: months[0] },
+        MESES
+      );
+      return {
+        tableVariant: 'single' as const,
+        models: [m],
+        compareMonths: months,
+        tableTitle: m.periodLabel,
+        descriptionId: undefined as string | undefined
+      };
+    }
+    const sorted = [...months].sort((a, b) => a - b);
+    const ms = sorted.map((month) =>
+      buildDreMatrixViewModel(categories, cells, year, { kind: 'month', month }, MESES)
+    );
+    const list = sorted.map((m) => MESES[m - 1]).join(', ');
+    const title = `Comparando ${sorted.length} meses: ${list}.`;
+    return {
+      tableVariant: 'compare' as const,
+      models: ms,
+      compareMonths: sorted,
+      tableTitle: title,
+      descriptionId: 'dre-compare-desc'
+    };
+  }, [categories, cells, year, dreSelection]);
+
+  const model = models[0];
+  const isEmptyView = model?.isEmpty ?? true;
 
   const yearIndex = yearOptions.indexOf(year);
   const canPrev = yearIndex > 0;
@@ -55,6 +171,10 @@ export default function DreBudgetPanel({
       <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-3xl">
         Visão de resultado pessoal com base nas categorias e movimentos da app. Não substitui
         demonstrações contabilísticas ou obrigações fiscais.
+      </p>
+
+      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {statusMessage}
       </p>
 
       {error ? <FetchErrorBanner message={error} onRetry={() => void refetch()} /> : null}
@@ -101,7 +221,7 @@ export default function DreBudgetPanel({
         </div>
       ) : null}
 
-      {!initialLoad && !error && model.isEmpty ? (
+      {!initialLoad && !error && isEmptyView ? (
         <EmptyState
           icon={Wallet}
           title="Sem dados para este ano"
@@ -114,7 +234,7 @@ export default function DreBudgetPanel({
         />
       ) : null}
 
-      {!initialLoad && !model.isEmpty ? (
+      {!initialLoad && !isEmptyView ? (
         <div className="planner-card p-4 md:p-6 relative">
           {loading ? (
             <div
@@ -126,8 +246,23 @@ export default function DreBudgetPanel({
             </div>
           ) : null}
           <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-            <DrePeriodSidebar period={period} onPeriodChange={setPeriod} />
-            <DreMatrixTable model={model} tooltips={TOOLTIPS} />
+            <DrePeriodSidebar
+              selection={dreSelection}
+              maxMonths={maxMonths}
+              onToggleMonth={handleToggleMonth}
+              onSelectAnnual={handleSelectAnnual}
+              onMonthFromAnnual={handleMonthFromAnnual}
+            />
+            <DreMatrixTable
+              variant={tableVariant}
+              models={models}
+              tableTitle={tableTitle}
+              tableDescriptionId={descriptionId}
+              tooltips={TOOLTIPS}
+              monthNames={MESES}
+              year={year}
+              compareMonths={compareMonths}
+            />
           </div>
         </div>
       ) : null}

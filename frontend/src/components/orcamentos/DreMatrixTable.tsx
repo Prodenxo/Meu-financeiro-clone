@@ -1,13 +1,20 @@
-import { useId, useState, type ReactNode } from 'react';
+import { Fragment, useId, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { DreHighlight, DreMatrixViewModel, DreRowViewModel, DreSubtotalViewModel } from '../../utils/dreMatrix';
 import { formatDreCurrency } from '../../utils/dreMatrix';
 
 function highlightClass(h: DreHighlight): string {
-  if (h === 'rose') return 'text-rose-500 dark:text-rose-400 font-semibold';
-  if (h === 'amber') return 'text-amber-500 dark:text-amber-400 font-semibold';
+  if (h === 'rose') return 'text-rose-600 dark:text-rose-400 font-semibold';
+  if (h === 'amber') return 'text-amber-600 dark:text-amber-400 font-semibold';
   if (h === 'emerald') return 'text-emerald-600 dark:text-emerald-400 font-semibold';
   return '';
+}
+
+/** P1 UX: resultado negativo distinguível do positivo (cor + título; não só cor). */
+function resultadoRealizadoCellClass(value: number): string {
+  const base = 'py-3 px-2 text-right tabular-nums text-lg font-semibold';
+  if (value < 0) return `${base} text-rose-600 dark:text-rose-400`;
+  return `${base} text-emerald-600 dark:text-emerald-400`;
 }
 
 function MetricCell({
@@ -24,12 +31,29 @@ function MetricCell({
   const h = highlightClass(highlight);
   return (
     <td
-      className={`py-2 px-2 ${align === 'right' ? 'text-right tabular-nums' : ''} ${h || 'text-slate-700 dark:text-slate-200'}`}
+      className={`py-2 px-2 min-w-[88px] ${align === 'right' ? 'text-right tabular-nums' : ''} ${h || 'text-slate-700 dark:text-slate-200'}`}
       title={title}
     >
       {children}
     </td>
   );
+}
+
+function rowByCategoryId(rows: DreRowViewModel[], id: number): DreRowViewModel | undefined {
+  return rows.find((r) => r.categorias_id === id);
+}
+
+function emptyRow(id: number, nome: string): DreRowViewModel {
+  return {
+    categorias_id: id,
+    nome,
+    planejado: 0,
+    realizado: 0,
+    atingimentoLabel: '—',
+    pctReceitaLabel: '—',
+    highlightRealizado: 'none',
+    highlightAtingimento: 'none'
+  };
 }
 
 function SubtotalRow({
@@ -44,14 +68,52 @@ function SubtotalRow({
       <th scope="row" className="py-2 px-2 text-left text-slate-800 dark:text-slate-100">
         Subtotal
       </th>
-      <td className="py-2 px-2 text-right tabular-nums">{formatDreCurrency(sub.planejado)}</td>
-      <td className="py-2 px-2 text-right tabular-nums">{formatDreCurrency(sub.realizado)}</td>
-      <td className="py-2 px-2 text-right tabular-nums" title={tooltips.atingimento}>
+      <td className="py-2 px-2 text-right tabular-nums min-w-[100px] text-slate-700 dark:text-slate-200">
+        {formatDreCurrency(sub.planejado)}
+      </td>
+      <MetricCell highlight={sub.highlightRealizado}>{formatDreCurrency(sub.realizado)}</MetricCell>
+      <MetricCell highlight={sub.highlightAtingimento} title={tooltips.atingimento}>
         {sub.atingimentoLabel}
-      </td>
-      <td className="py-2 px-2 text-right tabular-nums" title={tooltips.pctReceita}>
+      </MetricCell>
+      <MetricCell highlight="none" title={tooltips.pctReceita}>
         {sub.pctReceitaLabel}
-      </td>
+      </MetricCell>
+    </tr>
+  );
+}
+
+function SubtotalRowCompare({
+  subs,
+  tooltips
+}: {
+  subs: DreSubtotalViewModel[];
+  tooltips: { atingimento: string; pctReceita: string };
+}) {
+  return (
+    <tr className="border-t border-slate-200/80 dark:border-slate-700/60 font-semibold bg-slate-50/50 dark:bg-slate-900/30">
+      <th
+        scope="row"
+        className="py-2 px-2 text-left text-slate-800 dark:text-slate-100 sticky left-0 bg-slate-50/90 dark:bg-slate-900/40 z-[1] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] dark:shadow-none"
+      >
+        Subtotal
+      </th>
+      {subs.flatMap((sub, mi) => [
+        <td
+          key={`${mi}-p`}
+          className={`py-2 px-2 text-right tabular-nums min-w-[100px] text-slate-700 dark:text-slate-200 ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
+        >
+          {formatDreCurrency(sub.planejado)}
+        </td>,
+        <MetricCell key={`${mi}-r`} highlight={sub.highlightRealizado}>
+          {formatDreCurrency(sub.realizado)}
+        </MetricCell>,
+        <MetricCell key={`${mi}-a`} highlight={sub.highlightAtingimento} title={tooltips.atingimento}>
+          {sub.atingimentoLabel}
+        </MetricCell>,
+        <MetricCell key={`${mi}-pct`} highlight="none" title={tooltips.pctReceita}>
+          {sub.pctReceitaLabel}
+        </MetricCell>
+      ])}
     </tr>
   );
 }
@@ -70,10 +132,13 @@ function DataRows({
           key={row.categorias_id}
           className="border-b border-slate-200/50 dark:border-slate-800/40 hover:bg-slate-100/40 dark:hover:bg-slate-900/20"
         >
-          <th scope="row" className="py-2 px-2 text-left font-medium text-slate-800 dark:text-slate-100 sticky left-0 bg-white dark:bg-slate-950 z-[1] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] dark:shadow-none">
+          <th
+            scope="row"
+            className="py-2 px-2 text-left font-medium text-slate-800 dark:text-slate-100 sticky left-0 bg-white dark:bg-slate-950 z-[1] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] dark:shadow-none"
+          >
             {row.nome}
           </th>
-          <td className="py-2 px-2 text-right tabular-nums text-slate-700 dark:text-slate-200">
+          <td className="py-2 px-2 text-right tabular-nums text-slate-700 dark:text-slate-200 min-w-[100px]">
             {formatDreCurrency(row.planejado)}
           </td>
           <MetricCell highlight={row.highlightRealizado}>{formatDreCurrency(row.realizado)}</MetricCell>
@@ -89,12 +154,78 @@ function DataRows({
   );
 }
 
-export interface DreMatrixTableProps {
-  model: DreMatrixViewModel;
+function DataRowsCompare({
+  models,
+  section,
+  tooltips
+}: {
+  models: DreMatrixViewModel[];
+  section: 'receitas' | 'despesas';
   tooltips: { atingimento: string; pctReceita: string };
+}) {
+  const baseRows = models[0][section].rows;
+  return (
+    <>
+      {baseRows.map((base) => (
+        <tr
+          key={base.categorias_id}
+          className="border-b border-slate-200/50 dark:border-slate-800/40 hover:bg-slate-100/40 dark:hover:bg-slate-900/20"
+        >
+          <th
+            scope="row"
+            className="py-2 px-2 text-left font-medium text-slate-800 dark:text-slate-100 sticky left-0 bg-white dark:bg-slate-950 z-[1] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] dark:shadow-none"
+          >
+            {base.nome}
+          </th>
+          {models.flatMap((model, mi) => {
+            const row =
+              rowByCategoryId(model[section].rows, base.categorias_id) ?? emptyRow(base.categorias_id, base.nome);
+            return [
+              <td
+                key={`${mi}-p`}
+                className={`py-2 px-2 text-right tabular-nums text-slate-700 dark:text-slate-200 min-w-[100px] ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
+              >
+                {formatDreCurrency(row.planejado)}
+              </td>,
+              <MetricCell key={`${mi}-r`} highlight={row.highlightRealizado}>
+                {formatDreCurrency(row.realizado)}
+              </MetricCell>,
+              <MetricCell key={`${mi}-a`} highlight={row.highlightAtingimento} title={tooltips.atingimento}>
+                {row.atingimentoLabel}
+              </MetricCell>,
+              <MetricCell key={`${mi}-pct`} highlight="none" title={tooltips.pctReceita}>
+                {row.pctReceitaLabel}
+              </MetricCell>
+            ];
+          })}
+        </tr>
+      ))}
+    </>
+  );
 }
 
-export default function DreMatrixTable({ model, tooltips }: DreMatrixTableProps) {
+export interface DreMatrixTableProps {
+  variant: 'single' | 'compare';
+  models: DreMatrixViewModel[];
+  tableTitle: string;
+  tableDescriptionId?: string;
+  tooltips: { atingimento: string; pctReceita: string };
+  monthNames: string[];
+  year: number;
+  /** Índices 1–12 na ordem das colunas (modo compare). */
+  compareMonths: number[];
+}
+
+export default function DreMatrixTable({
+  variant,
+  models,
+  tableTitle,
+  tableDescriptionId,
+  tooltips,
+  monthNames,
+  year,
+  compareMonths
+}: DreMatrixTableProps) {
   const [openReceitas, setOpenReceitas] = useState(true);
   const [openDespesas, setOpenDespesas] = useState(true);
   const rid = useId().replace(/:/g, '');
@@ -102,26 +233,32 @@ export default function DreMatrixTable({ model, tooltips }: DreMatrixTableProps)
   const bodyReceitas = `dre-data-rec-${rid}`;
   const bodyDespesas = `dre-data-desp-${did}`;
 
+  const n = models.length;
+  const compareColSpan = 1 + 4 * n;
+  const minTableWidth = variant === 'compare' ? Math.max(520, 200 + n * 376) : 520;
+
   const GroupHeader = ({
     label,
     open,
     onToggle,
-    variant,
-    controlsId
+    variant: v,
+    controlsId,
+    colSpan
   }: {
     label: string;
     open: boolean;
     onToggle: () => void;
     variant: 'receitas' | 'despesas';
     controlsId: string;
+    colSpan: number;
   }) => {
     const bg =
-      variant === 'receitas'
+      v === 'receitas'
         ? 'bg-emerald-50/80 dark:bg-emerald-950/30'
         : 'bg-slate-100/80 dark:bg-slate-800/50';
     return (
       <tr className={bg}>
-        <th scope="colgroup" colSpan={5} className="py-2 px-2 text-left">
+        <th scope="colgroup" colSpan={colSpan} className="py-2 px-2 text-left">
           <button
             type="button"
             onClick={onToggle}
@@ -137,71 +274,227 @@ export default function DreMatrixTable({ model, tooltips }: DreMatrixTableProps)
     );
   };
 
+  if (variant === 'single') {
+    const model = models[0];
+    return (
+      <div className="min-w-0 flex-1">
+        <h3 className="text-base font-semibold text-slate-800 dark:text-white mb-3">{tableTitle}</h3>
+        <div className="overflow-x-auto rounded-lg border border-slate-200/70 dark:border-slate-800/60">
+          <table className="w-full text-sm min-w-[520px]">
+            <thead>
+              <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200/70 dark:border-slate-800/60">
+                <th scope="col" className="py-3 px-2 font-medium sticky left-0 bg-white dark:bg-slate-950 z-[2]">
+                  Categoria
+                </th>
+                <th scope="col" className="py-3 px-2 font-medium text-right min-w-[100px]">
+                  Planejado
+                </th>
+                <th scope="col" className="py-3 px-2 font-medium text-right min-w-[100px]">
+                  Realizado
+                </th>
+                <th scope="col" className="py-3 px-2 font-medium text-right min-w-[88px]" title={tooltips.atingimento}>
+                  Atingimento
+                </th>
+                <th scope="col" className="py-3 px-2 font-medium text-right min-w-[88px]" title={tooltips.pctReceita}>
+                  % Receita
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <GroupHeader
+                label="Receitas"
+                open={openReceitas}
+                onToggle={() => setOpenReceitas((x) => !x)}
+                variant="receitas"
+                controlsId={bodyReceitas}
+                colSpan={5}
+              />
+            </tbody>
+            <tbody id={bodyReceitas} hidden={!openReceitas}>
+              <DataRows rows={model.receitas.rows} tooltips={tooltips} />
+            </tbody>
+            <tbody>
+              <SubtotalRow sub={model.receitas.subtotal} tooltips={tooltips} />
+            </tbody>
+            <tbody>
+              <GroupHeader
+                label="Despesas"
+                open={openDespesas}
+                onToggle={() => setOpenDespesas((x) => !x)}
+                variant="despesas"
+                controlsId={bodyDespesas}
+                colSpan={5}
+              />
+            </tbody>
+            <tbody id={bodyDespesas} hidden={!openDespesas}>
+              <DataRows rows={model.despesas.rows} tooltips={tooltips} />
+            </tbody>
+            <tbody>
+              <SubtotalRow sub={model.despesas.subtotal} tooltips={tooltips} />
+            </tbody>
+            <tbody>
+              <tr className="border-t-2 border-emerald-500/40 bg-slate-50/90 dark:bg-slate-900/50 font-semibold">
+                <th scope="row" className="py-3 px-2 text-left text-slate-900 dark:text-white">
+                  Resultado (realizado)
+                </th>
+                <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
+                <td
+                  className={resultadoRealizadoCellClass(model.resultadoRealizado)}
+                  title={
+                    model.resultadoRealizado < 0
+                      ? 'Saldo negativo: despesas realizadas superam receitas neste período.'
+                      : undefined
+                  }
+                >
+                  {formatDreCurrency(model.resultadoRealizado)}
+                </td>
+                <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
+                <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  const monthHeaderLabels = compareMonths.map((m) => `${monthNames[m - 1]} ${year}`);
+
   return (
     <div className="min-w-0 flex-1">
-      <h3 className="text-base font-semibold text-slate-800 dark:text-white mb-3">{model.periodLabel}</h3>
+      <h3
+        className="text-base font-semibold text-slate-800 dark:text-white mb-3"
+        id={tableDescriptionId}
+      >
+        {tableTitle}
+      </h3>
       <div className="overflow-x-auto rounded-lg border border-slate-200/70 dark:border-slate-800/60">
-        <table className="w-full text-sm min-w-[520px]">
+        <table
+          className="w-full text-sm"
+          style={{ minWidth: minTableWidth }}
+          aria-describedby={tableDescriptionId}
+        >
           <thead>
             <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200/70 dark:border-slate-800/60">
-              <th scope="col" className="py-3 px-2 font-medium sticky left-0 bg-white dark:bg-slate-950 z-[2]">
+              <th
+                scope="col"
+                rowSpan={2}
+                className="py-3 px-2 font-medium sticky left-0 bg-white dark:bg-slate-950 z-[2] align-bottom min-w-[200px]"
+              >
                 Categoria
               </th>
-              <th scope="col" className="py-3 px-2 font-medium text-right">
-                Planejado
-              </th>
-              <th scope="col" className="py-3 px-2 font-medium text-right">
-                Realizado
-              </th>
-              <th scope="col" className="py-3 px-2 font-medium text-right" title={tooltips.atingimento}>
-                Atingimento
-              </th>
-              <th scope="col" className="py-3 px-2 font-medium text-right" title={tooltips.pctReceita}>
-                % Receita
-              </th>
+              {monthHeaderLabels.map((label, i) => (
+                <th
+                  key={i}
+                  scope="colgroup"
+                  colSpan={4}
+                  className={`py-3 px-2 font-medium text-center ${i > 0 ? 'border-l border-slate-200/70 dark:border-slate-800/60' : ''}`}
+                >
+                  {label}
+                </th>
+              ))}
+            </tr>
+            <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200/70 dark:border-slate-800/60">
+              {models.map((_, mi) => (
+                <Fragment key={mi}>
+                  <th
+                    scope="col"
+                    className={`py-2 px-2 font-medium text-right min-w-[100px] ${mi > 0 ? 'border-l border-slate-200/70 dark:border-slate-800/40' : ''}`}
+                  >
+                    Planejado
+                  </th>
+                  <th scope="col" className="py-2 px-2 font-medium text-right min-w-[100px]">
+                    Realizado
+                  </th>
+                  <th
+                    scope="col"
+                    className="py-2 px-2 font-medium text-right min-w-[88px]"
+                    title={tooltips.atingimento}
+                  >
+                    Atingimento
+                  </th>
+                  <th
+                    scope="col"
+                    className="py-2 px-2 font-medium text-right min-w-[88px]"
+                    title={tooltips.pctReceita}
+                  >
+                    % Receita
+                  </th>
+                </Fragment>
+              ))}
             </tr>
           </thead>
           <tbody>
             <GroupHeader
               label="Receitas"
               open={openReceitas}
-              onToggle={() => setOpenReceitas((v) => !v)}
+              onToggle={() => setOpenReceitas((x) => !x)}
               variant="receitas"
               controlsId={bodyReceitas}
+              colSpan={compareColSpan}
             />
           </tbody>
           <tbody id={bodyReceitas} hidden={!openReceitas}>
-            <DataRows rows={model.receitas.rows} tooltips={tooltips} />
+            <DataRowsCompare models={models} section="receitas" tooltips={tooltips} />
           </tbody>
           <tbody>
-            <SubtotalRow sub={model.receitas.subtotal} tooltips={tooltips} />
+            <SubtotalRowCompare
+              subs={models.map((m) => m.receitas.subtotal)}
+              tooltips={tooltips}
+            />
           </tbody>
           <tbody>
             <GroupHeader
               label="Despesas"
               open={openDespesas}
-              onToggle={() => setOpenDespesas((v) => !v)}
+              onToggle={() => setOpenDespesas((x) => !x)}
               variant="despesas"
               controlsId={bodyDespesas}
+              colSpan={compareColSpan}
             />
           </tbody>
           <tbody id={bodyDespesas} hidden={!openDespesas}>
-            <DataRows rows={model.despesas.rows} tooltips={tooltips} />
+            <DataRowsCompare models={models} section="despesas" tooltips={tooltips} />
           </tbody>
           <tbody>
-            <SubtotalRow sub={model.despesas.subtotal} tooltips={tooltips} />
+            <SubtotalRowCompare
+              subs={models.map((m) => m.despesas.subtotal)}
+              tooltips={tooltips}
+            />
           </tbody>
           <tbody>
             <tr className="border-t-2 border-emerald-500/40 bg-slate-50/90 dark:bg-slate-900/50 font-semibold">
-              <th scope="row" className="py-3 px-2 text-left text-slate-900 dark:text-white">
+              <th
+                scope="row"
+                className="py-3 px-2 text-left text-slate-900 dark:text-white sticky left-0 bg-slate-50/90 dark:bg-slate-900/50 z-[1]"
+              >
                 Resultado (realizado)
               </th>
-              <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
-              <td className="py-3 px-2 text-right tabular-nums text-lg text-emerald-600 dark:text-emerald-400">
-                {formatDreCurrency(model.resultadoRealizado)}
-              </td>
-              <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
-              <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
+              {models.flatMap((model, mi) => [
+                <td
+                  key={`${mi}-rp`}
+                  className={`py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400 ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
+                >
+                  —
+                </td>,
+                <td
+                  key={`${mi}-rr`}
+                  className={resultadoRealizadoCellClass(model.resultadoRealizado)}
+                  title={
+                    model.resultadoRealizado < 0
+                      ? 'Saldo negativo: despesas realizadas superam receitas neste período.'
+                      : undefined
+                  }
+                >
+                  {formatDreCurrency(model.resultadoRealizado)}
+                </td>,
+                <td key={`${mi}-ra`} className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                  —
+                </td>,
+                <td key={`${mi}-rpc`} className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                  —
+                </td>
+              ])}
             </tr>
           </tbody>
         </table>

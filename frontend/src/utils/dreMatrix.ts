@@ -2,6 +2,44 @@ import type { Category, DreMatrixCell } from '../services/categoryService';
 
 export type DrePeriod = { kind: 'month'; month: number } | { kind: 'annual' };
 
+/** Seleção na UI DRE: total anual **ou** conjunto de meses (1..K), exclusivos (PRD multi-mês). */
+export type DreUiSelection =
+  | { mode: 'annual' }
+  | { mode: 'months'; months: number[] };
+
+/** Meses únicos, ordenados, filtrados 1–12, truncados a maxK. */
+export function normalizeDreMonths(months: number[], maxK: number): number[] {
+  const u = [...new Set(months)]
+    .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12)
+    .sort((a, b) => a - b);
+  return u.slice(0, Math.max(0, maxK));
+}
+
+/**
+ * Toggle de mês na seleção. Não remove o último mês restante.
+ * Se já há maxK meses e o utilizador tenta adicionar outro → rejected.
+ */
+export function toggleMonthInSelection(
+  months: number[],
+  month: number,
+  maxK: number
+): { next: number[]; rejected: boolean } {
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    return { next: normalizeDreMonths(months, maxK), rejected: false };
+  }
+  const sorted = normalizeDreMonths(months, maxK);
+  if (sorted.includes(month)) {
+    if (sorted.length <= 1) {
+      return { next: sorted, rejected: false };
+    }
+    return { next: normalizeDreMonths(sorted.filter((m) => m !== month), maxK), rejected: false };
+  }
+  if (sorted.length >= maxK) {
+    return { next: sorted, rejected: true };
+  }
+  return { next: normalizeDreMonths([...sorted, month], maxK), rejected: false };
+}
+
 export type DreHighlight = 'none' | 'rose' | 'amber' | 'emerald';
 
 export interface DreRowViewModel {
@@ -20,6 +58,9 @@ export interface DreSubtotalViewModel {
   realizado: number;
   atingimentoLabel: string;
   pctReceitaLabel: string;
+  /** Mesmas regras que `rowHighlights` nas linhas (§5.6 / FR-DRE-MUL-08). */
+  highlightRealizado: DreHighlight;
+  highlightAtingimento: DreHighlight;
 }
 
 export interface DreMatrixViewModel {
@@ -209,22 +250,28 @@ export function buildDreMatrixViewModel(
   const sr = sumRows(receitaRows);
   const sd = sumRows(despesaRows);
 
+  const recHl = rowHighlights('entrada', sr.planejado, sr.realizado);
   const subReceitas: DreSubtotalViewModel = {
     planejado: sr.planejado,
     realizado: sr.realizado,
     atingimentoLabel: formatAtingimento(computeAtingimentoPercent(sr.planejado, sr.realizado)),
     pctReceitaLabel: formatPctReceita(
       totalReceitaRealizada > 0 ? 100 : null
-    )
+    ),
+    highlightRealizado: recHl.highlightRealizado,
+    highlightAtingimento: recHl.highlightAtingimento
   };
 
+  const despHl = rowHighlights('saida', sd.planejado, sd.realizado);
   const subDespesas: DreSubtotalViewModel = {
     planejado: sd.planejado,
     realizado: sd.realizado,
     atingimentoLabel: formatAtingimento(computeAtingimentoPercent(sd.planejado, sd.realizado)),
     pctReceitaLabel: formatPctReceita(
       computePctReceitaLine(sd.realizado, totalReceitaRealizada)
-    )
+    ),
+    highlightRealizado: despHl.highlightRealizado,
+    highlightAtingimento: despHl.highlightAtingimento
   };
 
   const resultadoRealizado = sr.realizado - sd.realizado;
