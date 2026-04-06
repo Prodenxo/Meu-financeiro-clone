@@ -65,6 +65,34 @@ export const emptyNfsePrestadorEndereco = (): NonNullable<EmitirNfseInput['prest
   descricaoCidade: ''
 });
 
+/** Estado inicial do formulário de emissão NFS-e (reset após troca de tipo fiscal / testes). */
+export function createInitialEmitirNfseInput(): EmitirNfseInput {
+  return {
+    prestadorCpfCnpj: '',
+    prestadorRazaoSocial: '',
+    prestadorEmail: '',
+    prestadorEndereco: emptyNfsePrestadorEndereco(),
+    tomadorCpfCnpj: '',
+    tomadorRazaoSocial: '',
+    tomadorEmail: '',
+    servico: {
+      codigo: '',
+      discriminacao: '',
+      cnae: '',
+      valorServico: ''
+    },
+    cidadePrestacao: {
+      codigo: '',
+      descricao: '',
+      estado: ''
+    },
+    idIntegracao: '',
+    enviarEmail: false,
+    descricao: '',
+    informacoesComplementares: ''
+  };
+}
+
 /**
  * Substitui o bloco prestador da NFS-e pelos valores do snapshot (ação explícita do utilizador,
  * ex.: após PATCH emitente — mitigação QA FR-AP-02).

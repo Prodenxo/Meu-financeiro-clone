@@ -120,7 +120,7 @@ describe('GuidesMei limite MEI (FR-LIM-08)', () => {
     expect(callsAfterMount).toBeGreaterThanOrEqual(1);
 
     const notasTab = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('NFS-e')
+      b.textContent?.includes('Emissão fiscal')
     );
     expect(notasTab).toBeTruthy();
     await act(async () => {

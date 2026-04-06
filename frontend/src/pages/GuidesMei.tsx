@@ -33,6 +33,8 @@ import {
   cadastrarEmpresaEmissaoNf,
   consultarEmpresaEmissaoNf,
   cancelarNfse,
+  emitirNfe,
+  emitirNfce,
   emitirNfse,
   fetchLimiteFaturamentoMei,
   listarCatalogoNfseClientes,
@@ -75,6 +77,7 @@ import {
   resolveInitialWorkspace
 } from './guidesMeiWorkspaceStorage';
 import {
+  createInitialEmitirNfseInput,
   emptyNfsePrestadorEndereco,
   mergeEmitenteSnapshotIntoNfseForm,
   replacePrestadorFromEmitenteSnapshot
@@ -90,6 +93,30 @@ import {
   nfseStatusKeyParaLimite
 } from '../utils/meiLimiteFaturamento';
 import { getVigenciaLabelParaAno } from '../utils/meiLimiteFaturamentoConfig';
+import {
+  meiFiscalDocumentTypeBadgeClass,
+  meiFiscalDocumentTypeShortLabel,
+  meiFiscalListFilterEmptyMessage,
+  type MeiFiscalListDocumentFilter
+} from '../utils/meiFiscalDocumentTypeUi';
+import {
+  buildPrefilledNfeLikeFormSnapshot,
+  createEmptyMeiNfeLikeFormState,
+  serializeMeiNfeLikeFormForDirty,
+  type MeiNfeLikeFormState
+} from '../utils/meiNfeLikeFormState';
+import { buildNfeLikePayloadFromMeiForm } from '../utils/meiNfeLikePayloadBuilder';
+import { validateMeiNfeLikeForm } from '../utils/meiNfeLikeClientValidation';
+import { MeiFiscalChangeEmissionTypeDialog } from '../components/mei/MeiFiscalChangeEmissionTypeDialog';
+import {
+  MeiFiscalEmissionTypeSegmented,
+  meiFiscalEmissionHelpLine,
+  type MeiFiscalEmissionDocumentType
+} from '../components/mei/MeiFiscalEmissionTypeSegmented';
+import { MeiFiscalCapabilityCallout } from '../components/mei/MeiFiscalCapabilityCallout';
+import { MeiNfeLikeEmitForm } from '../components/mei/MeiNfeLikeEmitForm';
+import { useMeiPlugnotasFiscalCapability } from '../hooks/useMeiPlugnotasFiscalCapability';
+import { isNfeLikeEmissionBlockedByCapabilities } from '../utils/plugnotasEmpresaCapabilities';
 
 function formatMeiFiscalErr(error: unknown, fallback: string): string {
   return formatFiscalError(
@@ -274,7 +301,7 @@ const parseDecimalInput = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-/** Rótulo curto na UI do workspace fiscal (Guia MEI só NFS-e — US-MEI-NFS-03). */
+/** Rótulo curto na pilha de feedback quando o tipo activo é NFS-e (emitir NFSe). */
 const GUIA_MEI_NFSE_DOCUMENT_LABEL = 'NFSe';
 
 /** Story 2.3 — paridade mobile (MeiScreen NFSe). */
@@ -519,30 +546,64 @@ export default function GuidesMei() {
   const [meiPeriodsLoading, setMeiPeriodsLoading] = useState(false);
   const [meiPeriodsError, setMeiPeriodsError] = useState<string | null>(null);
   const hasCertificate = hasUserCertificate;
-  const [nfseForm, setNfseForm] = useState<EmitirNfseInput>({
-    prestadorCpfCnpj: '',
-    prestadorRazaoSocial: '',
-    prestadorEmail: '',
-    prestadorEndereco: emptyNfsePrestadorEndereco(),
-    tomadorCpfCnpj: '',
-    tomadorRazaoSocial: '',
-    tomadorEmail: '',
-    servico: {
-      codigo: '',
-      discriminacao: '',
-      cnae: '',
-      valorServico: ''
-    },
-    cidadePrestacao: {
-      codigo: '',
-      descricao: '',
-      estado: ''
-    },
-    idIntegracao: '',
-    enviarEmail: false,
-    descricao: '',
-    informacoesComplementares: ''
-  });
+  const [nfseForm, setNfseForm] = useState<EmitirNfseInput>(() => createInitialEmitirNfseInput());
+  const [emissionDocumentType, setEmissionDocumentType] = useState<MeiFiscalEmissionDocumentType>('NFSE');
+  const [nfeLikeForm, setNfeLikeForm] = useState<MeiNfeLikeFormState>(() => createEmptyMeiNfeLikeFormState());
+  const [nfeLikeSubmitting, setNfeLikeSubmitting] = useState(false);
+  const [nfeLikeFieldErrors, setNfeLikeFieldErrors] = useState<Record<string, string>>({});
+  const [nfeLikeFlashOpenSection, setNfeLikeFlashOpenSection] = useState<
+    'emitente' | 'destinatario' | 'itens' | null
+  >(null);
+  const [emissionTypeChangeDialogOpen, setEmissionTypeChangeDialogOpen] = useState(false);
+  const [pendingEmissionDocumentType, setPendingEmissionDocumentType] =
+    useState<MeiFiscalEmissionDocumentType | null>(null);
+
+  const nfseFormBaselineRef = useRef(JSON.stringify(createInitialEmitirNfseInput()));
+  const nfeLikeBaselineRef = useRef(serializeMeiNfeLikeFormForDirty(createEmptyMeiNfeLikeFormState()));
+
+  const cnpjParaFiscalCapability = useMemo(() => {
+    const fromEmit = normalizeDoc(nfeLikeForm.emitenteCnpj || '');
+    if (fromEmit.length === 14) return fromEmit;
+    const fromContrib = normalizeDoc(contribuinteDoc);
+    if (fromContrib.length === 14) return fromContrib;
+    const fromPrestador = normalizeDoc(nfseForm.prestadorCpfCnpj || '');
+    if (fromPrestador.length === 14) return fromPrestador;
+    return '';
+  }, [nfeLikeForm.emitenteCnpj, contribuinteDoc, nfseForm.prestadorCpfCnpj]);
+
+  const fiscalCapabilityFetchEnabled = Boolean(canViewNfse && activeWorkspace === 'nfse');
+  const { loading: fiscalCapabilityLoading, error: fiscalCapabilityError, capabilities: fiscalCapabilities } =
+    useMeiPlugnotasFiscalCapability({
+      cnpjDigits: cnpjParaFiscalCapability,
+      emissionDocumentType,
+      fetchEnabled: fiscalCapabilityFetchEnabled
+    });
+
+  const nfeLikeEmitterBlockedByProvider = useMemo(() => {
+    if (emissionDocumentType === 'NFE') {
+      return isNfeLikeEmissionBlockedByCapabilities('NFE', fiscalCapabilities);
+    }
+    if (emissionDocumentType === 'NFCE') {
+      return isNfeLikeEmissionBlockedByCapabilities('NFCE', fiscalCapabilities);
+    }
+    return false;
+  }, [emissionDocumentType, fiscalCapabilities]);
+
+  const nfeLikeEmissionLocked = useMemo(() => {
+    if (emissionDocumentType === 'NFSE' || !canViewNfse) return false;
+    if (cnpjParaFiscalCapability.length !== 14) return false;
+    return (
+      fiscalCapabilityLoading || Boolean(fiscalCapabilityError) || nfeLikeEmitterBlockedByProvider
+    );
+  }, [
+    emissionDocumentType,
+    canViewNfse,
+    cnpjParaFiscalCapability,
+    fiscalCapabilityLoading,
+    fiscalCapabilityError,
+    nfeLikeEmitterBlockedByProvider
+  ]);
+
   const [nfseList, setNfseList] = useState<NfseRecord[]>([]);
   const [nfseLoading, setNfseLoading] = useState(false);
   const [nfseSubmitting, setNfseSubmitting] = useState(false);
@@ -588,7 +649,7 @@ export default function GuidesMei() {
   const [nfseStatusFilter, setNfseStatusFilter] = useState('all');
   const [nfsePeriodFilter, setNfsePeriodFilter] = useState('all');
   const [nfseShowArchived, setNfseShowArchived] = useState(false);
-  const [nfseDocumentTypeFilter, setNfseDocumentTypeFilter] = useState<'all' | 'NFSE'>('all');
+  const [nfseDocumentTypeFilter, setNfseDocumentTypeFilter] = useState<MeiFiscalListDocumentFilter>('all');
   const [certificateSuccess, setCertificateSuccess] = useState<string | null>(null);
   const [nfEmissionCompanyForm, setNfEmissionCompanyForm] = useState<NfEmissionCompanyForm>(() => (
     getDefaultNfEmissionCompanyForm()
@@ -1589,12 +1650,127 @@ export default function GuidesMei() {
       await Promise.all([loadNfseList(), loadNfseCatalog(), loadMeiLimiteServidor()]);
       setSelectedCatalogClienteId('');
       setSelectedCatalogProdutoId('');
+      nfseFormBaselineRef.current = JSON.stringify(nfseForm);
     } catch (error) {
       setEmissionNfseError(formatMeiFiscalErr(error, 'Erro ao emitir nota fiscal.'));
     } finally {
       setNfseSubmitting(false);
     }
   };
+
+  const performEmissionTypeSwitch = useCallback(
+    (newType: MeiFiscalEmissionDocumentType) => {
+      const prev = emissionDocumentType;
+
+      if (prev === 'NFSE' && newType !== 'NFSE') {
+        const prefill = buildPrefilledNfeLikeFormSnapshot(nfseForm, nfEmissionCompanyForm.razaoSocial || '');
+        setNfseForm(createInitialEmitirNfseInput());
+        nfseFormBaselineRef.current = JSON.stringify(createInitialEmitirNfseInput());
+        setEmissionDocumentType(newType);
+        setNfeLikeForm(prefill);
+        nfeLikeBaselineRef.current = serializeMeiNfeLikeFormForDirty(prefill);
+      } else if (prev !== 'NFSE' && newType === 'NFSE') {
+        setNfeLikeForm(createEmptyMeiNfeLikeFormState());
+        nfeLikeBaselineRef.current = serializeMeiNfeLikeFormForDirty(createEmptyMeiNfeLikeFormState());
+        setEmissionDocumentType(newType);
+        nfseFormBaselineRef.current = JSON.stringify(nfseForm);
+      } else if (prev !== 'NFSE' && newType !== 'NFSE') {
+        const prefill: MeiNfeLikeFormState = {
+          ...createEmptyMeiNfeLikeFormState(),
+          emitenteCnpj: nfeLikeForm.emitenteCnpj,
+          emitenteRazao: nfeLikeForm.emitenteRazao
+        };
+        setNfeLikeForm(prefill);
+        nfeLikeBaselineRef.current = serializeMeiNfeLikeFormForDirty(prefill);
+        setEmissionDocumentType(newType);
+      }
+
+      setNfeLikeFieldErrors({});
+      setNfeLikeFlashOpenSection(null);
+      clearNfseErrorState();
+      setNfseSuccess(null);
+    },
+    [emissionDocumentType, nfseForm, nfeLikeForm, nfEmissionCompanyForm.razaoSocial, clearNfseErrorState]
+  );
+
+  const requestEmissionDocumentTypeChange = useCallback(
+    (newType: MeiFiscalEmissionDocumentType) => {
+      if (newType === emissionDocumentType) return;
+      const dirty =
+        emissionDocumentType === 'NFSE'
+          ? JSON.stringify(nfseForm) !== nfseFormBaselineRef.current
+          : serializeMeiNfeLikeFormForDirty(nfeLikeForm) !== nfeLikeBaselineRef.current;
+      if (dirty) {
+        setPendingEmissionDocumentType(newType);
+        setEmissionTypeChangeDialogOpen(true);
+        return;
+      }
+      performEmissionTypeSwitch(newType);
+    },
+    [emissionDocumentType, nfseForm, nfeLikeForm, performEmissionTypeSwitch]
+  );
+
+  const handleCancelEmissionTypeDialog = useCallback(() => {
+    setEmissionTypeChangeDialogOpen(false);
+    setPendingEmissionDocumentType(null);
+  }, []);
+
+  const handleConfirmEmissionTypeChange = useCallback(() => {
+    if (pendingEmissionDocumentType) {
+      performEmissionTypeSwitch(pendingEmissionDocumentType);
+    }
+    setEmissionTypeChangeDialogOpen(false);
+    setPendingEmissionDocumentType(null);
+  }, [pendingEmissionDocumentType, performEmissionTypeSwitch]);
+
+  const handleEmitNfeLike = useCallback(async () => {
+    if (nfeLikeSubmitting) return;
+    if (emissionDocumentType !== 'NFE' && emissionDocumentType !== 'NFCE') return;
+    if (nfeLikeEmissionLocked) return;
+    clearNfseErrorState();
+    setNfseSuccess(null);
+    const docShort = emissionDocumentType === 'NFE' ? 'NF-e' : 'NFC-e';
+    const validation = validateMeiNfeLikeForm(nfeLikeForm, docShort);
+    if (!validation.ok) {
+      setNfeLikeFieldErrors(validation.errors);
+      if (validation.firstSection) {
+        setNfeLikeFlashOpenSection(validation.firstSection);
+      }
+      return;
+    }
+    setNfeLikeFieldErrors({});
+    setNfeLikeFlashOpenSection(null);
+    setNfeLikeSubmitting(true);
+    try {
+      const payload = buildNfeLikePayloadFromMeiForm(nfeLikeForm);
+      const created =
+        emissionDocumentType === 'NFE' ? await emitirNfe(payload) : await emitirNfce(payload);
+      setNfseSuccess(
+        created?.protocol
+          ? `${docShort}: nota enviada. Protocolo ${created.protocol}.`
+          : `${docShort}: nota enviada. Acompanhe o status na lista.`
+      );
+      await Promise.all([loadNfseList(), loadNfseCatalog(), loadMeiLimiteServidor()]);
+      const nextForm = buildPrefilledNfeLikeFormSnapshot(nfseForm, nfEmissionCompanyForm.razaoSocial || '');
+      setNfeLikeForm(nextForm);
+      nfeLikeBaselineRef.current = serializeMeiNfeLikeFormForDirty(nextForm);
+    } catch (error) {
+      setEmissionNfseError(formatMeiFiscalErr(error, `Erro ao emitir ${docShort}.`));
+    } finally {
+      setNfeLikeSubmitting(false);
+    }
+  }, [
+    nfeLikeSubmitting,
+    emissionDocumentType,
+    nfeLikeForm,
+    nfseForm,
+    nfEmissionCompanyForm.razaoSocial,
+    clearNfseErrorState,
+    loadNfseList,
+    loadNfseCatalog,
+    loadMeiLimiteServidor,
+    nfeLikeEmissionLocked
+  ]);
 
   const handleSyncNfse = async (id: string) => {
     const actionKey = `${id}:sync`;
@@ -1738,11 +1914,12 @@ export default function GuidesMei() {
 
   const filteredNfseList = useMemo(() => {
     return nfseList.filter((item) => {
-      if (
-        nfseDocumentTypeFilter !== 'all'
-        && String(item.document_type || '').toUpperCase() !== nfseDocumentTypeFilter
-      ) {
-        return false;
+      if (nfseDocumentTypeFilter !== 'all') {
+        const raw = String(item.document_type || '').trim().toUpperCase();
+        const effective = raw || 'NFSE';
+        if (effective !== nfseDocumentTypeFilter) {
+          return false;
+        }
       }
       if (nfseStatusFilter !== 'all' && getNfseStatusKey(item.status) !== nfseStatusFilter) {
         return false;
@@ -1773,6 +1950,10 @@ export default function GuidesMei() {
     setNfsePeriodFilter('all');
     setNfseDocumentTypeFilter('all');
     setNfseShowArchived(false);
+  }, []);
+
+  const clearNfseDocumentTypeFilterOnly = useCallback(() => {
+    setNfseDocumentTypeFilter('all');
   }, []);
 
   const scrollToNfseEmitSection = useCallback(() => {
@@ -1950,8 +2131,8 @@ export default function GuidesMei() {
     if (canViewNfse) {
       tabs.push({
         id: 'nfse',
-        label: 'NFS-e',
-        description: 'Notas de serviço: emissão e acompanhamento',
+        label: 'Emissão fiscal',
+        description: 'NFS-e, NF-e e NFC-e: emitir e acompanhar',
         badge: 'Emitir e filtrar'
       });
     }
@@ -1989,8 +2170,25 @@ export default function GuidesMei() {
     }
   };
 
+  const emissionFeedbackDocumentLabel = useMemo(() => {
+    if (emissionDocumentType === 'NFSE') return GUIA_MEI_NFSE_DOCUMENT_LABEL;
+    if (emissionDocumentType === 'NFE') return 'NF-e';
+    return 'NFC-e';
+  }, [emissionDocumentType]);
+
+  const nfeLikeFirstValidationError = useMemo(() => {
+    const keys = Object.keys(nfeLikeFieldErrors);
+    if (!keys.length) return null;
+    return nfeLikeFieldErrors[keys[0]!];
+  }, [nfeLikeFieldErrors]);
+
   return (
     <>
+      <MeiFiscalChangeEmissionTypeDialog
+        open={emissionTypeChangeDialogOpen}
+        onCancel={handleCancelEmissionTypeDialog}
+        onConfirm={handleConfirmEmissionTypeChange}
+      />
       <div className="admin-page-shell">
         <section className="admin-hero">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -1998,7 +2196,7 @@ export default function GuidesMei() {
               <h1 className="admin-hero-title">Mei Infinito</h1>
               <p className="admin-hero-subtitle">
                 {canViewNfse
-                  ? 'Gerencie certificado, DAS e emissão de NFS-e (notas de serviço) no mesmo fluxo.'
+                  ? 'Gerencie certificado, DAS e emissão de notas fiscais (NFS-e, NF-e e NFC-e) no mesmo fluxo.'
                   : 'Gerencie certificado e DAS no mesmo fluxo.'}
               </p>
               {canViewNfse ? (
@@ -2810,26 +3008,78 @@ export default function GuidesMei() {
             <section id="mei-nfse-emit" className="admin-section-card" aria-labelledby="mei-nfse-emit-heading">
           <div className="admin-section-header">
             <div>
-              <h2 id="mei-nfse-emit-heading" className="admin-section-title">{`Emitir ${GUIA_MEI_NFSE_DOCUMENT_LABEL}`}</h2>
+              <h2 id="mei-nfse-emit-heading" className="admin-section-title">
+                Emitir nota
+              </h2>
               <p className="admin-section-subtitle">
                 Preencha os dados fiscais para emissão pelo sistema integrado.
                 Após o envio, mensagens de rejeição ou validação costumam vir do provedor de emissão fiscal, não deste aplicativo.
               </p>
-              <div className="mt-3 border-t border-slate-200/80 pt-3 dark:border-slate-700/80" role="status" aria-live="polite">
-                {nfseWorkspaceGuidance}
+              <div className="mt-4 max-w-2xl">
+                <MeiFiscalEmissionTypeSegmented
+                  value={emissionDocumentType}
+                  onChange={requestEmissionDocumentTypeChange}
+                  disabled={nfseSubmitting || nfeLikeSubmitting}
+                />
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                  {meiFiscalEmissionHelpLine(emissionDocumentType)}
+                </p>
               </div>
+              <div className="mt-3 border-t border-slate-200/80 pt-3 dark:border-slate-700/80" role="status" aria-live="polite">
+                {emissionDocumentType === 'NFSE' ? (
+                  nfseWorkspaceGuidance
+                ) : (
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    Preencha emitente, destinatário e itens. A validação do servidor é a referência final antes da
+                    emissão.
+                  </p>
+                )}
+              </div>
+              {canViewNfse && emissionDocumentType !== 'NFSE' ? (
+                <div className="mt-4 max-w-2xl">
+                  {fiscalCapabilityLoading && cnpjParaFiscalCapability.length === 14 ? (
+                    <MeiFiscalCapabilityCallout
+                      documentLabel={emissionDocumentType === 'NFE' ? 'NF-e' : 'NFC-e'}
+                      mode="loading"
+                    />
+                  ) : null}
+                  {!fiscalCapabilityLoading && fiscalCapabilityError ? (
+                    <MeiFiscalCapabilityCallout
+                      documentLabel={emissionDocumentType === 'NFE' ? 'NF-e' : 'NFC-e'}
+                      mode="fetch_error"
+                      errorMessage={fiscalCapabilityError}
+                      onRevisarConfiguracao={() => setActiveWorkspace('das')}
+                    />
+                  ) : null}
+                  {!fiscalCapabilityLoading
+                  && !fiscalCapabilityError
+                  && cnpjParaFiscalCapability.length === 14
+                  && nfeLikeEmitterBlockedByProvider ? (
+                    <MeiFiscalCapabilityCallout
+                      documentLabel={emissionDocumentType === 'NFE' ? 'NF-e' : 'NFC-e'}
+                      mode="blocked"
+                      onRevisarConfiguracao={() => setActiveWorkspace('das')}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
 
-          <MeiNfseAjudaFiscalCollapsible
-            open={nfseEmitDisclosure.ajudaFiscal}
-            onToggle={() => toggleNfseEmitSection('ajudaFiscal')}
-          >
-            <p className="admin-field-hint text-xs leading-relaxed">
-              Campos obrigatórios: CNPJ e endereço mínimo do prestador, CPF/CNPJ e razão social do tomador, código do serviço, CNAE, valor e discriminação. MEI no Simples Nacional: não se informa alíquota ISS — a prefeitura/provedor aplicam a regra.
-            </p>
-          </MeiNfseAjudaFiscalCollapsible>
+          {emissionDocumentType === 'NFSE' ? (
+            <MeiNfseAjudaFiscalCollapsible
+              open={nfseEmitDisclosure.ajudaFiscal}
+              onToggle={() => toggleNfseEmitSection('ajudaFiscal')}
+            >
+              <p className="admin-field-hint text-xs leading-relaxed">
+                Campos obrigatórios: CNPJ e endereço mínimo do prestador, CPF/CNPJ e razão social do tomador, código do
+                serviço, CNAE, valor e discriminação. MEI no Simples Nacional: não se informa alíquota ISS — a
+                prefeitura/provedor aplicam a regra.
+              </p>
+            </MeiNfseAjudaFiscalCollapsible>
+          ) : null}
 
+          {emissionDocumentType === 'NFSE' ? (
           <div className="space-y-3">
             <MeiNfseEmitCollapsible
               section="prestador"
@@ -3169,16 +3419,49 @@ export default function GuidesMei() {
           </div>
             </MeiNfseEmitCollapsible>
           </div>
+          ) : (
+            <MeiNfeLikeEmitForm
+              documentLabel={emissionDocumentType === 'NFE' ? 'NF-e' : 'NFC-e'}
+              value={nfeLikeForm}
+              onChange={setNfeLikeForm}
+              errors={nfeLikeFieldErrors}
+              flashOpenSection={nfeLikeFlashOpenSection}
+              onFlashOpenConsumed={() => setNfeLikeFlashOpenSection(null)}
+              fieldsDisabled={nfeLikeEmissionLocked}
+            />
+          )}
 
           <div className="admin-actions">
             <button
               type="button"
               className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={handleEmitNfse}
-              disabled={nfseSubmitting}
-              aria-invalid={Boolean(nfseValidationMessage)}
+              onClick={() => {
+                if (emissionDocumentType === 'NFSE') {
+                  void handleEmitNfse();
+                } else {
+                  void handleEmitNfeLike();
+                }
+              }}
+              disabled={
+                nfseSubmitting
+                || nfeLikeSubmitting
+                || (emissionDocumentType !== 'NFSE' && nfeLikeEmissionLocked)
+              }
+              aria-invalid={
+                emissionDocumentType === 'NFSE' ? Boolean(nfseValidationMessage) : Boolean(nfeLikeFirstValidationError)
+              }
             >
-              {nfseSubmitting ? 'Enviando...' : `Emitir ${GUIA_MEI_NFSE_DOCUMENT_LABEL}`}
+              {emissionDocumentType === 'NFSE'
+                ? nfseSubmitting
+                  ? 'Enviando...'
+                  : `Emitir ${GUIA_MEI_NFSE_DOCUMENT_LABEL}`
+                : nfeLikeSubmitting
+                  ? 'Enviando...'
+                  : fiscalCapabilityLoading && cnpjParaFiscalCapability.length === 14
+                    ? 'A verificar…'
+                    : emissionDocumentType === 'NFE'
+                      ? 'Emitir NF-e'
+                      : 'Emitir NFC-e'}
             </button>
           </div>
 
@@ -3186,10 +3469,10 @@ export default function GuidesMei() {
             id="mei-nfse-emit-feedback"
             className="mt-4 space-y-3"
             role="region"
-            aria-label={`Feedback de emissão de ${GUIA_MEI_NFSE_DOCUMENT_LABEL}`}
+            aria-label={`Feedback de emissão de ${emissionFeedbackDocumentLabel}`}
           >
             {nfseEmitFeedbackTier1}
-            {nfseValidationMessage ? (
+            {emissionDocumentType === 'NFSE' && nfseValidationMessage ? (
               <div
                 className="admin-alert-warning space-y-1"
                 role="status"
@@ -3201,9 +3484,17 @@ export default function GuidesMei() {
                 <LongFiscalErrorMessage message={nfseValidationMessage} tone="warning" />
               </div>
             ) : null}
+            {emissionDocumentType !== 'NFSE' && nfeLikeFirstValidationError ? (
+              <div className="admin-alert-warning space-y-1" role="status" data-nfse-feedback-tier="validation-nfe">
+                <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">
+                  Ajuste os dados antes de enviar ({emissionFeedbackDocumentLabel})
+                </p>
+                <LongFiscalErrorMessage message={nfeLikeFirstValidationError} tone="warning" />
+              </div>
+            ) : null}
             {nfseError && nfseErrorKind === 'emission' ? (
               <div data-nfse-feedback-tier="emission-error">
-                <EmissaoFiscalErrorAlert documentTypeLabel={GUIA_MEI_NFSE_DOCUMENT_LABEL} message={nfseError} />
+                <EmissaoFiscalErrorAlert documentTypeLabel={emissionFeedbackDocumentLabel} message={nfseError} />
               </div>
             ) : null}
             {nfseError && nfseErrorKind === 'operation' ? (
@@ -3233,16 +3524,20 @@ export default function GuidesMei() {
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               <div>
                 <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-filter-lista-tipo">
-                  Tipo na lista
+                  Tipo de nota
                 </label>
                 <select
                   id="nfse-filter-lista-tipo"
                   className="planner-input-compact w-full"
                   value={nfseDocumentTypeFilter}
-                  onChange={(event) => setNfseDocumentTypeFilter(event.target.value as 'all' | 'NFSE')}
+                  onChange={(event) =>
+                    setNfseDocumentTypeFilter(event.target.value as MeiFiscalListDocumentFilter)
+                  }
                 >
-                  <option value="all">Todas (histórico)</option>
-                  <option value="NFSE">Somente NFSe</option>
+                  <option value="all">Todas</option>
+                  <option value="NFSE">NFS-e</option>
+                  <option value="NFE">NF-e</option>
+                  <option value="NFCE">NFC-e</option>
                 </select>
               </div>
               <div>
@@ -3336,11 +3631,26 @@ export default function GuidesMei() {
           ) : filteredNfseList.length === 0 ? (
             <div className="admin-empty-state space-y-3">
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Nenhuma nota corresponde aos filtros atuais.
+                {nfseDocumentTypeFilter !== 'all' &&
+                nfseStatusFilter === 'all' &&
+                nfsePeriodFilter === 'all'
+                  ? meiFiscalListFilterEmptyMessage(nfseDocumentTypeFilter)
+                  : 'Nenhuma nota corresponde aos filtros atuais.'}
               </p>
-              <button type="button" className="planner-button-secondary-compact" onClick={resetNfseListFilters}>
-                Limpar filtros
-              </button>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {nfseDocumentTypeFilter !== 'all' ? (
+                  <button
+                    type="button"
+                    className="planner-button-secondary-compact"
+                    onClick={clearNfseDocumentTypeFilterOnly}
+                  >
+                    Mostrar todas
+                  </button>
+                ) : null}
+                <button type="button" className="planner-button-secondary-compact" onClick={resetNfseListFilters}>
+                  Limpar filtros
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -3360,11 +3670,13 @@ export default function GuidesMei() {
                           </p>
                           <p className="text-xs text-slate-500 dark:text-gray-400">
                             Emitida em {formatDateTime(item.created_at)}
-                            {item.document_type ? ` • Tipo ${item.document_type}` : ''}
                             {item.protocol ? ` • Protocolo ${item.protocol}` : ''}
                           </p>
                         </div>
                         <div className="admin-actions">
+                          <span className={meiFiscalDocumentTypeBadgeClass(item.document_type)}>
+                            {meiFiscalDocumentTypeShortLabel(item.document_type)}
+                          </span>
                           <span className={getNfseStatusBadgeClass(item.status)}>
                             {formatNfseStatus(item.status)}
                           </span>
@@ -3403,6 +3715,7 @@ export default function GuidesMei() {
                         <tr>
                           <th className="admin-table-cell text-left">ID / Integração</th>
                           <th className="admin-table-cell text-left">Data</th>
+                          <th className="admin-table-cell text-left">Tipo</th>
                           <th className="admin-table-cell text-left">Status</th>
                           <th className="admin-table-cell text-right">Ações</th>
                         </tr>
@@ -3428,12 +3741,11 @@ export default function GuidesMei() {
                               </td>
                               <td className="admin-table-cell align-top text-xs text-slate-600 dark:text-slate-300">
                                 {formatDateTime(item.created_at)}
-                                {item.document_type ? (
-                                  <>
-                                    <br />
-                                    <span className="text-slate-500">{item.document_type}</span>
-                                  </>
-                                ) : null}
+                              </td>
+                              <td className="admin-table-cell align-top">
+                                <span className={meiFiscalDocumentTypeBadgeClass(item.document_type)}>
+                                  {meiFiscalDocumentTypeShortLabel(item.document_type)}
+                                </span>
                               </td>
                               <td className="admin-table-cell align-top">
                                 <div className="flex flex-wrap gap-1">
