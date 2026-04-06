@@ -248,10 +248,28 @@ export const generateAndStoreDasForUser = async ({
 
 const listActiveUsersWithEmpresa = async () => {
   const supabase = createSupabaseClient({ useServiceRole: true });
+
+  const { data: certRows, error: certError } = await supabase
+    .from('user_mei_certificates')
+    .select('user_id, cert_document')
+    .not('cert_document', 'is', null);
+  if (certError) {
+    throw badRequest(certError.message || 'Falha ao consultar certificados MEI');
+  }
+
+  const validUserIds = new Set(
+    (certRows || [])
+      .filter((row) => normalizeDoc(row.cert_document).length === 14)
+      .map((row) => row.user_id)
+  );
+
+  if (validUserIds.size === 0) return [];
+
   const { data, error } = await supabase
     .from('role_x_user_x_empresa')
     .select('user_id, empresas_id, status')
-    .eq('status', true);
+    .eq('status', true)
+    .in('user_id', Array.from(validUserIds));
   if (error) {
     throw badRequest(error.message || 'Falha ao listar usuários ativos');
   }
