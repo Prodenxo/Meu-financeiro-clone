@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { waitFor } from '@testing-library/react';
+import { fireEvent, waitFor } from '@testing-library/react';
 
 import GuidesMei from './GuidesMei';
 import { MEI_WORKSPACE_STORAGE_KEY } from './guidesMeiWorkspaceStorage';
@@ -17,6 +17,10 @@ const listarNfseMock = vi.hoisted(() => vi.fn(async () => [] as {
   created_at?: string;
   archived_at?: string | null;
 }[]));
+
+const emitirNfeMock = vi.hoisted(() => vi.fn(async () => ({ id: 'nfe-1', protocol: 'P-NFE' })));
+const emitirNfceMock = vi.hoisted(() => vi.fn(async () => ({ id: 'nfce-1', protocol: 'P-NFC' })));
+const consultarEmpresaEmissaoNfMock = vi.hoisted(() => vi.fn(async () => ({ message: 'ok', data: {} })));
 
 const { useAuthStoreMock, authState } = vi.hoisted(() => {
   const state = {
@@ -63,9 +67,11 @@ vi.mock('../services/meiNotasService', () => ({
   baixarNfseXml: vi.fn(async () => ({ blob: new Blob(), filename: 'nota.xml' })),
   cadastrarCertificadoEmissaoNf: vi.fn(async () => ({ id: 'cert-1', message: 'ok' })),
   cadastrarEmpresaEmissaoNf: vi.fn(async () => ({ cnpj: '12345678000190', message: 'ok' })),
-  consultarEmpresaEmissaoNf: vi.fn(async () => ({ message: 'ok', data: {} })),
+  consultarEmpresaEmissaoNf: (...args: unknown[]) => consultarEmpresaEmissaoNfMock(...args),
   cancelarNfse: vi.fn(async () => ({})),
   emitirNfse: vi.fn(async () => ({ id: 'nfse-1', protocol: 'P-1' })),
+  emitirNfe: (...args: unknown[]) => emitirNfeMock(...args),
+  emitirNfce: (...args: unknown[]) => emitirNfceMock(...args),
   listarCatalogoNfseClientes: vi.fn(async () => []),
   listarCatalogoNfseProdutos: vi.fn(async () => []),
   listarNfse: (...args: unknown[]) => listarNfseMock(...args),
@@ -78,6 +84,9 @@ describe('GuidesMei permissões NFSe', () => {
     authState.mei = true;
     localStorage.removeItem(MEI_WORKSPACE_STORAGE_KEY);
     listarNfseMock.mockImplementation(async () => []);
+    emitirNfeMock.mockClear();
+    emitirNfceMock.mockClear();
+    consultarEmpresaEmissaoNfMock.mockImplementation(async () => ({ message: 'ok', data: {} }));
   });
 
   it('oculta elementos de NFSe para usuário com mei=false', async () => {
@@ -156,7 +165,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
   });
 
-  it('workspace fiscal não expõe NF-e/NFC-e nem tipo de documento (US-MEI-NFS-03)', async () => {
+  it('workspace fiscal: filtro da lista inclui NFS-e, NF-e e NFC-e (FR-GUIA-FISC-05); emissão sem formulário NF-e dedicado', async () => {
     authState.role = 'superadmin';
     authState.mei = false;
 
@@ -168,17 +177,460 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     const notasTab = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.includes('NFS-e')
+      (b) => b.textContent?.includes('Emissão fiscal')
     );
     expect(notasTab).toBeTruthy();
     await act(async () => {
       notasTab!.click();
     });
 
-    expect(container.textContent).not.toContain('Tipo de documento');
-    expect(container.querySelector('option[value="NFE"]')).toBeNull();
-    expect(container.querySelector('option[value="NFCE"]')).toBeNull();
+    expect(container.querySelector('#nfse-filter-lista-tipo')).toBeTruthy();
+    expect(container.querySelector('option[value="NFSE"]')).toBeTruthy();
+    expect(container.querySelector('option[value="NFE"]')).toBeTruthy();
+    expect(container.querySelector('option[value="NFCE"]')).toBeTruthy();
+    expect(container.textContent).toContain('Tipo de nota');
     expect(container.textContent).not.toContain('CNPJ do emitente');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('FR-GUIA-FISC-05 / QA: ao mudar o filtro Tipo de nota, listarNfse é chamado com documentType NFE e NFCE', async () => {
+    listarNfseMock.mockClear();
+    listarNfseMock.mockImplementation(async () => []);
+
+    authState.role = 'superadmin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    const notasTab = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Emissão fiscal')
+    );
+    expect(notasTab).toBeTruthy();
+    await act(async () => {
+      notasTab!.click();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#nfse-filter-lista-tipo')).toBeTruthy();
+    });
+
+    const tipoSelect = container.querySelector('#nfse-filter-lista-tipo') as HTMLSelectElement;
+    expect(tipoSelect).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(tipoSelect, { target: { value: 'NFE' } });
+    });
+
+    await waitFor(() => {
+      expect(listarNfseMock).toHaveBeenCalledWith(
+        expect.objectContaining({ documentType: 'NFE', limit: 1000 })
+      );
+    });
+
+    await act(async () => {
+      fireEvent.change(tipoSelect, { target: { value: 'NFCE' } });
+    });
+
+    await waitFor(() => {
+      expect(listarNfseMock).toHaveBeenCalledWith(
+        expect.objectContaining({ documentType: 'NFCE', limit: 1000 })
+      );
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('Guia MEI (QA): NFS-e suja → troca para NF-e abre modal §5.3', async () => {
+    authState.role = 'superadmin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    const notasTab = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Emissão fiscal')
+    );
+    expect(notasTab).toBeTruthy();
+    await act(async () => {
+      notasTab!.click();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#nfse-tomador-doc')).toBeTruthy();
+    });
+
+    const tomador = container.querySelector('#nfse-tomador-doc') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(tomador, { target: { value: '1' } });
+    });
+
+    const nfeRadio = container.querySelector('#mei-fiscal-emission-type-NFE') as HTMLInputElement;
+    expect(nfeRadio).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(nfeRadio);
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('Alterar tipo de nota');
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('Guia MEI (QA): submit NF-e válido chama emitirNfe', async () => {
+    emitirNfeMock.mockClear();
+    authState.role = 'superadmin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    const notasTab = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Emissão fiscal')
+    );
+    await act(async () => {
+      notasTab!.click();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#mei-fiscal-emission-type-NFE')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(container.querySelector('#mei-fiscal-emission-type-NFE')!);
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#mei-nfe-emitente-cnpj')).toBeTruthy();
+    });
+
+    const addItem = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Adicionar item')
+    );
+    expect(addItem).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(addItem!);
+    });
+
+    await act(async () => {
+      fireEvent.change(container.querySelector('#mei-nfe-emitente-cnpj')!, {
+        target: { value: '11.222.333/0001-81' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-emitente-razao')!, {
+        target: { value: 'Emitente Teste' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-dest-doc')!, {
+        target: { value: '529.982.247-25' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-dest-razao')!, {
+        target: { value: 'Cliente Teste' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-codigo')!, { target: { value: 'SKU1' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-descricao')!, { target: { value: 'Produto' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-ncm')!, { target: { value: '12345678' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-cfop')!, { target: { value: '5102' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-qtd')!, { target: { value: '2' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-vu')!, { target: { value: '10,50' } });
+    });
+
+    const emitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Emitir NF-e')
+    );
+    expect(emitBtn).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(emitBtn!);
+    });
+
+    await waitFor(() => {
+      expect(emitirNfeMock).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('FR-GUIA-FISC-07: NF-e inactiva no emissor bloqueia submit (callout + botão desactivado)', async () => {
+    consultarEmpresaEmissaoNfMock.mockImplementation(async () => ({
+      message: 'OK',
+      data: {
+        nfe: { ativo: false, tipoContrato: 0 },
+        nfce: { ativo: false, tipoContrato: 0 }
+      }
+    }));
+    emitirNfeMock.mockClear();
+    authState.role = 'superadmin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    const notasTab = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Emissão fiscal')
+    );
+    await act(async () => {
+      notasTab!.click();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#mei-fiscal-emission-type-NFE')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(container.querySelector('#mei-fiscal-emission-type-NFE')!);
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#mei-nfe-emitente-cnpj')).toBeTruthy();
+    });
+
+    const addItem = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Adicionar item')
+    );
+    expect(addItem).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(addItem!);
+    });
+
+    await act(async () => {
+      fireEvent.change(container.querySelector('#mei-nfe-emitente-razao')!, {
+        target: { value: 'Emitente Teste' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-dest-doc')!, {
+        target: { value: '529.982.247-25' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-dest-razao')!, {
+        target: { value: 'Cliente Teste' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-codigo')!, { target: { value: 'SKU1' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-descricao')!, { target: { value: 'Produto' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-ncm')!, { target: { value: '12345678' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-cfop')!, { target: { value: '5102' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-qtd')!, { target: { value: '2' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-vu')!, { target: { value: '10,50' } });
+      fireEvent.change(container.querySelector('#mei-nfe-emitente-cnpj')!, {
+        target: { value: '11.222.333/0001-81' }
+      });
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-mei-fiscal-capability="blocked"]')).toBeTruthy();
+    });
+
+    const emitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Emitir NF-e')
+    );
+    expect(emitBtn).toBeTruthy();
+    expect((emitBtn as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => {
+      fireEvent.click(emitBtn!);
+    });
+    expect(emitirNfeMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('FR-GUIA-FISC-07 (QA): NFC-e inactiva com NF-e activa bloqueia só NFC-e; emitirNfce não é chamado', async () => {
+    consultarEmpresaEmissaoNfMock.mockImplementation(async () => ({
+      message: 'OK',
+      data: {
+        nfe: { ativo: true, tipoContrato: 0 },
+        nfce: { ativo: false, tipoContrato: 0 }
+      }
+    }));
+    emitirNfceMock.mockClear();
+    authState.role = 'superadmin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    const notasTab = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Emissão fiscal')
+    );
+    await act(async () => {
+      notasTab!.click();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#mei-fiscal-emission-type-NFCE')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(container.querySelector('#mei-fiscal-emission-type-NFCE')!);
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#mei-nfe-emitente-cnpj')).toBeTruthy();
+    });
+
+    const addItem = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Adicionar item')
+    );
+    expect(addItem).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(addItem!);
+    });
+
+    await act(async () => {
+      fireEvent.change(container.querySelector('#mei-nfe-emitente-razao')!, {
+        target: { value: 'Emitente Teste' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-dest-doc')!, {
+        target: { value: '529.982.247-25' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-dest-razao')!, {
+        target: { value: 'Cliente Teste' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-codigo')!, { target: { value: 'SKU1' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-descricao')!, { target: { value: 'Produto' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-ncm')!, { target: { value: '12345678' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-cfop')!, { target: { value: '5102' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-qtd')!, { target: { value: '2' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-vu')!, { target: { value: '10,50' } });
+      fireEvent.change(container.querySelector('#mei-nfe-emitente-cnpj')!, {
+        target: { value: '11.222.333/0001-81' }
+      });
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-mei-fiscal-capability="blocked"]')).toBeTruthy();
+    });
+    expect(container.textContent).toContain('Emissão de NFC-e não disponível');
+
+    const emitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Emitir NFC-e')
+    );
+    expect(emitBtn).toBeTruthy();
+    expect((emitBtn as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => {
+      fireEvent.click(emitBtn!);
+    });
+    expect(emitirNfceMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('FR-GUIA-FISC-07 (QA): NF-e activa com NFC-e inactiva não bloqueia submit NF-e', async () => {
+    consultarEmpresaEmissaoNfMock.mockImplementation(async () => ({
+      message: 'OK',
+      data: {
+        nfe: { ativo: true, tipoContrato: 0 },
+        nfce: { ativo: false, tipoContrato: 0 }
+      }
+    }));
+    emitirNfeMock.mockClear();
+    authState.role = 'superadmin';
+    authState.mei = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    const notasTab = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Emissão fiscal')
+    );
+    await act(async () => {
+      notasTab!.click();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#mei-fiscal-emission-type-NFE')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(container.querySelector('#mei-fiscal-emission-type-NFE')!);
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#mei-nfe-emitente-cnpj')).toBeTruthy();
+    });
+
+    const addItem = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Adicionar item')
+    );
+    expect(addItem).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(addItem!);
+    });
+
+    await act(async () => {
+      fireEvent.change(container.querySelector('#mei-nfe-emitente-cnpj')!, {
+        target: { value: '11.222.333/0001-81' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-emitente-razao')!, {
+        target: { value: 'Emitente Teste' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-dest-doc')!, {
+        target: { value: '529.982.247-25' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-dest-razao')!, {
+        target: { value: 'Cliente Teste' }
+      });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-codigo')!, { target: { value: 'SKU1' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-descricao')!, { target: { value: 'Produto' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-ncm')!, { target: { value: '12345678' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-cfop')!, { target: { value: '5102' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-qtd')!, { target: { value: '2' } });
+      fireEvent.change(container.querySelector('#mei-nfe-item-0-vu')!, { target: { value: '10,50' } });
+    });
+
+    await waitFor(() => {
+      expect(consultarEmpresaEmissaoNfMock).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-mei-fiscal-capability="blocked"]')).toBeNull();
+    });
+
+    const emitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Emitir NF-e')
+    );
+    expect(emitBtn).toBeTruthy();
+    expect((emitBtn as HTMLButtonElement).disabled).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(emitBtn!);
+    });
+
+    await waitFor(() => {
+      expect(emitirNfeMock).toHaveBeenCalled();
+    });
 
     await act(async () => {
       root.unmount();
@@ -197,7 +649,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     const notasTab = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.includes('NFS-e')
+      (b) => b.textContent?.includes('Emissão fiscal')
     );
     expect(notasTab).toBeTruthy();
     await act(async () => {
@@ -242,7 +694,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     const notasTab = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.includes('NFS-e')
+      (b) => b.textContent?.includes('Emissão fiscal')
     );
     expect(notasTab).toBeTruthy();
     await act(async () => {
@@ -291,7 +743,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     const notasTab = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.includes('NFS-e')
+      (b) => b.textContent?.includes('Emissão fiscal')
     );
     await act(async () => {
       notasTab!.click();
@@ -330,7 +782,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     const notasTab = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.includes('NFS-e')
+      (b) => b.textContent?.includes('Emissão fiscal')
     );
     await act(async () => {
       notasTab!.click();
@@ -386,7 +838,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     const notasTab = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.includes('NFS-e')
+      (b) => b.textContent?.includes('Emissão fiscal')
     );
     await act(async () => {
       notasTab!.click();
@@ -470,7 +922,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     const notasTab = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.includes('NFS-e')
+      (b) => b.textContent?.includes('Emissão fiscal')
     );
     await act(async () => {
       notasTab!.click();
@@ -528,7 +980,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     const notasTab = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.includes('NFS-e')
+      (b) => b.textContent?.includes('Emissão fiscal')
     );
     await act(async () => {
       notasTab!.click();

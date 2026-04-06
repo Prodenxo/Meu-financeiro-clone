@@ -35,6 +35,21 @@ import { AdminMeiCatalogProdutoCombobox } from '../components/admin/AdminMeiCata
 import { AdminUserMeiClientesDrawer } from '../components/admin/AdminUserMeiClientesDrawer';
 import { EmissaoFiscalErrorAlertModal } from '../components/FiscalIntegrationErrorAlert';
 import { formatPlugnotasIntegrationError } from '../utils/plugnotasIntegrationErrorMessage';
+import {
+  MeiFiscalEmissionTypeSegmented,
+  meiFiscalEmissionHelpLine,
+  type MeiFiscalEmissionDocumentType
+} from '../components/mei/MeiFiscalEmissionTypeSegmented';
+import { MeiNfeLikeEmitForm } from '../components/mei/MeiNfeLikeEmitForm';
+import { formatCpfCnpjPtBr, onlyDigits } from '../lib/formatCpfCnpjPtBr';
+import {
+  createEmptyMeiNfeLikeFormState,
+  createEmptyMeiNfeLikeItem,
+  prefilledMeiNfeLikeFormState,
+  type MeiNfeLikeFormState
+} from '../utils/meiNfeLikeFormState';
+import { validateMeiNfeLikeForm } from '../utils/meiNfeLikeClientValidation';
+import { buildNfeLikePayloadFromMeiForm } from '../utils/meiNfeLikePayloadBuilder';
 
 const formatCurrency = (value: number) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -143,6 +158,39 @@ const getMeiStatusClasses = (status?: AdminMeiPeriod['status'] | null) => {
   return 'admin-badge-warning';
 };
 
+function buildAdminNfeFormFromCertificate(certificateDoc?: string | null): MeiNfeLikeFormState {
+  const digits = onlyDigits(String(certificateDoc || '')).slice(0, 14);
+  if (digits.length === 14) {
+    return prefilledMeiNfeLikeFormState({
+      emitenteCnpj: formatCpfCnpjPtBr(digits),
+      emitenteRazao: ''
+    });
+  }
+  return createEmptyMeiNfeLikeFormState();
+}
+
+function mergeTomadorIntoAdminNfeForm(
+  base: MeiNfeLikeFormState,
+  tomadorCpfCnpj: string,
+  tomadorRazaoSocial: string,
+  tomadorEmail: string
+): MeiNfeLikeFormState {
+  const raw = onlyDigits(tomadorCpfCnpj);
+  const docFormatted =
+    raw.length === 14
+      ? formatCpfCnpjPtBr(raw)
+      : raw.length === 11
+        ? formatCpfCnpjPtBr(raw)
+        : tomadorCpfCnpj.trim();
+  return {
+    ...base,
+    destinatarioDoc: docFormatted,
+    destinatarioRazao: tomadorRazaoSocial.trim(),
+    destinatarioEmail: tomadorEmail.trim(),
+    itens: base.itens.length ? base.itens : [createEmptyMeiNfeLikeItem()]
+  };
+}
+
 const getDefaultDasCompetencia = () => {
   const now = new Date();
   const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -210,8 +258,15 @@ export default function AdminUserData() {
   const [emitirNotaSubmitting, setEmitirNotaSubmitting] = useState(false);
   const [emitirNotaError, setEmitirNotaError] = useState<string | null>(null);
   const [emitirNotaSuccess, setEmitirNotaSuccess] = useState<string | null>(null);
+  const [adminEmitDocumentType, setAdminEmitDocumentType] = useState<MeiFiscalEmissionDocumentType>('NFSE');
+  const [adminNfeLikeForm, setAdminNfeLikeForm] = useState<MeiNfeLikeFormState>(() =>
+    createEmptyMeiNfeLikeFormState()
+  );
+  const [adminNfeLikeErrors, setAdminNfeLikeErrors] = useState<Record<string, string>>({});
+  const [adminNfeLikeFlashSection, setAdminNfeLikeFlashSection] = useState<
+    'emitente' | 'destinatario' | 'itens' | null
+  >(null);
   const [emitirNotaForm, setEmitirNotaForm] = useState({
-    documentType: 'NFSE' as const,
     tomadorCpfCnpj: '',
     tomadorRazaoSocial: '',
     tomadorEmail: '',
@@ -262,6 +317,52 @@ export default function AdminUserData() {
 
   const getUserLabel = (user: ManagedUser) =>
     user.displayName || user.email || 'Usuário sem nome';
+
+  const handleAdminEmitDocumentTypeChange = useCallback(
+    (newType: MeiFiscalEmissionDocumentType) => {
+      if (newType === adminEmitDocumentType) return;
+      setAdminNfeLikeErrors({});
+      setAdminNfeLikeFlashSection(null);
+      const prev = adminEmitDocumentType;
+      if (newType === 'NFSE') {
+        setAdminEmitDocumentType('NFSE');
+        return;
+      }
+      if (prev === 'NFSE') {
+        const base = buildAdminNfeFormFromCertificate(meiCertificateStatus?.documento);
+        setAdminNfeLikeForm(
+          mergeTomadorIntoAdminNfeForm(
+            base,
+            emitirNotaForm.tomadorCpfCnpj,
+            emitirNotaForm.tomadorRazaoSocial,
+            emitirNotaForm.tomadorEmail
+          )
+        );
+        setAdminEmitDocumentType(newType);
+        return;
+      }
+      if ((prev === 'NFE' && newType === 'NFCE') || (prev === 'NFCE' && newType === 'NFE')) {
+        setAdminNfeLikeForm((f) => ({
+          ...f,
+          itens: f.itens.length ? f.itens : [createEmptyMeiNfeLikeItem()]
+        }));
+        setAdminEmitDocumentType(newType);
+        return;
+      }
+      setAdminEmitDocumentType(newType);
+    },
+    [adminEmitDocumentType, emitirNotaForm, meiCertificateStatus?.documento]
+  );
+
+  const adminNfeSubmitReady = useMemo(() => {
+    if (adminEmitDocumentType === 'NFE') {
+      return validateMeiNfeLikeForm(adminNfeLikeForm, 'NF-e').ok;
+    }
+    if (adminEmitDocumentType === 'NFCE') {
+      return validateMeiNfeLikeForm(adminNfeLikeForm, 'NFC-e').ok;
+    }
+    return true;
+  }, [adminEmitDocumentType, adminNfeLikeForm]);
 
   const sortedUsers = useMemo(() => {
     return [...users].sort((userA, userB) => {
@@ -1328,8 +1429,9 @@ export default function AdminUserData() {
                 <div>
                   <h2 className="admin-section-title">Notas fiscais</h2>
                   <p className="admin-section-subtitle">
-                    A lista pode trazer NFSe, NF-e ou NFC-e conforme o histórico no emissor; o envio por este painel é
-                    apenas NFSe. Status indica criação, cancelamento ou erro.
+                    A lista pode trazer NFS-e, NF-e ou NFC-e conforme o histórico no emissor; por este painel pode
+                    emitir nos três formatos em nome do utilizador seleccionado. Status indica criação, cancelamento
+                    ou erro.
                   </p>
                 </div>
                 <button
@@ -1340,8 +1442,11 @@ export default function AdminUserData() {
                     setShowEmitirNotaModal(true);
                     setEmitirNotaError(null);
                     setEmitirNotaSuccess(null);
+                    setAdminEmitDocumentType('NFSE');
+                    setAdminNfeLikeForm(buildAdminNfeFormFromCertificate(meiCertificateStatus?.documento));
+                    setAdminNfeLikeErrors({});
+                    setAdminNfeLikeFlashSection(null);
                     setEmitirNotaForm({
-                      documentType: 'NFSE',
                       tomadorCpfCnpj: '',
                       tomadorRazaoSocial: '',
                       tomadorEmail: '',
@@ -1353,7 +1458,7 @@ export default function AdminUserData() {
                   }}
                   className="planner-button w-full sm:w-auto"
                 >
-                  Emitir NFSe
+                  Emitir nota fiscal
                 </button>
               </div>
               {meiNfseError && (
@@ -1419,18 +1524,20 @@ export default function AdminUserData() {
                 aria-modal="true"
                 aria-labelledby="emitir-nota-modal-title"
               >
-                <div className="my-auto flex w-full max-w-2xl max-h-[min(92vh,880px)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                <div className="my-auto flex w-full max-w-3xl max-h-[min(92vh,920px)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
                   <div className="shrink-0 border-b border-slate-200 px-4 pb-3 pt-4 dark:border-slate-700 sm:px-6">
                     <h2 id="emitir-nota-modal-title" className="text-lg font-semibold dark:text-white">
-                      Emitir NFSe
+                      Emitir nota fiscal
                     </h2>
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                       Emissão em nome de{' '}
                       <span className="font-medium text-slate-700 dark:text-slate-300">
                         {selectedUser ? getUserLabel(selectedUser) : 'este usuário'}
                       </span>
-                      . Catálogos (cliente e serviço) são os mesmos do Guia MEI deste utilizador. Rejeições refletem o
-                      retorno do provedor fiscal.
+                      . O pedido segue o mesmo contrato do Guia MEI (NFS-e com campos planos; NF-e/NFC-e com{' '}
+                      <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">documentType</code> +{' '}
+                      <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">payload</code>). Catálogos de
+                      cliente e serviço aplicam-se à NFS-e. Rejeições refletem o retorno do provedor fiscal.
                     </p>
                     {selectedUser?.mei === false ? (
                       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
@@ -1441,7 +1548,16 @@ export default function AdminUserData() {
 
                   <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6">
                     {emitirNotaError ? (
-                      <EmissaoFiscalErrorAlertModal documentTypeLabel="NFSe" message={emitirNotaError} />
+                      <EmissaoFiscalErrorAlertModal
+                        documentTypeLabel={
+                          adminEmitDocumentType === 'NFSE'
+                            ? 'NFSe'
+                            : adminEmitDocumentType === 'NFE'
+                              ? 'NF-e'
+                              : 'NFC-e'
+                        }
+                        message={emitirNotaError}
+                      />
                     ) : null}
                     {emitirNotaSuccess ? (
                       <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
@@ -1449,7 +1565,24 @@ export default function AdminUserData() {
                       </div>
                     ) : null}
 
+                    <div className="mb-4 space-y-2">
+                      <MeiFiscalEmissionTypeSegmented
+                        idPrefix="admin-user-emit-fiscal"
+                        value={adminEmitDocumentType}
+                        onChange={handleAdminEmitDocumentTypeChange}
+                      />
+                      <p className="text-xs text-slate-600 dark:text-slate-400">
+                        {meiFiscalEmissionHelpLine(adminEmitDocumentType)}
+                      </p>
+                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                        Todas as opções acima emitem <span className="underline decoration-slate-400">em nome do utilizador</span>{' '}
+                        seleccionado no painel (não em nome da sua sessão de administrador).
+                      </p>
+                    </div>
+
                     <div className="space-y-3">
+                      {adminEmitDocumentType === 'NFSE' ? (
+                      <>
                       <div>
                         <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-400">Tomador</p>
                         {selectedUserId ? (
@@ -1623,6 +1756,17 @@ export default function AdminUserData() {
                           </div>
                         </div>
                       </div>
+                      </>
+                      ) : (
+                        <MeiNfeLikeEmitForm
+                          documentLabel={adminEmitDocumentType === 'NFE' ? 'NF-e' : 'NFC-e'}
+                          value={adminNfeLikeForm}
+                          onChange={setAdminNfeLikeForm}
+                          errors={adminNfeLikeErrors}
+                          flashOpenSection={adminNfeLikeFlashSection}
+                          onFlashOpenConsumed={() => setAdminNfeLikeFlashSection(null)}
+                        />
+                      )}
                     </div>
                   </div>
 
@@ -1644,52 +1788,100 @@ export default function AdminUserData() {
                       type="button"
                       disabled={
                         emitirNotaSubmitting
-                        || !emitirNotaForm.tomadorCpfCnpj.trim()
-                        || !emitirNotaForm.tomadorRazaoSocial.trim()
-                        || !emitirNotaForm.servicoCodigo.trim()
-                        || !emitirNotaForm.servicoDiscriminacao.trim()
-                        || !emitirNotaForm.servicoValorServico.trim()
-                        || Boolean(getNfseServicoCodigoValidationError(emitirNotaForm.servicoCodigo))
+                        || !selectedUserId.trim()
+                        || (adminEmitDocumentType === 'NFSE'
+                          ? !emitirNotaForm.tomadorCpfCnpj.trim()
+                            || !emitirNotaForm.tomadorRazaoSocial.trim()
+                            || !emitirNotaForm.servicoCodigo.trim()
+                            || !emitirNotaForm.servicoDiscriminacao.trim()
+                            || !emitirNotaForm.servicoValorServico.trim()
+                            || Boolean(getNfseServicoCodigoValidationError(emitirNotaForm.servicoCodigo))
+                          : !adminNfeSubmitReady)
                       }
                       onClick={async () => {
                         setEmitirNotaError(null);
                         setEmitirNotaSuccess(null);
-                        const doc = normalizeDoc(emitirNotaForm.tomadorCpfCnpj);
-                        if (doc.length !== 11 && doc.length !== 14) {
-                          setEmitirNotaError('CPF deve ter 11 dígitos ou CNPJ 14 dígitos.');
+                        setAdminNfeLikeErrors({});
+                        setAdminNfeLikeFlashSection(null);
+
+                        if (adminEmitDocumentType === 'NFSE') {
+                          const doc = normalizeDoc(emitirNotaForm.tomadorCpfCnpj);
+                          if (doc.length !== 11 && doc.length !== 14) {
+                            setEmitirNotaError('CPF deve ter 11 dígitos ou CNPJ 14 dígitos.');
+                            return;
+                          }
+                          if (!emitirNotaForm.servicoCodigo.trim()) {
+                            setEmitirNotaError('Informe o código do serviço.');
+                            return;
+                          }
+                          const codigoServicoErro = getNfseServicoCodigoValidationError(emitirNotaForm.servicoCodigo);
+                          if (codigoServicoErro) {
+                            setEmitirNotaError(codigoServicoErro);
+                            return;
+                          }
+                          const valor = Number(String(emitirNotaForm.servicoValorServico).replace(',', '.'));
+                          if (Number.isNaN(valor) || valor <= 0) {
+                            setEmitirNotaError('Valor do serviço deve ser um número positivo.');
+                            return;
+                          }
+                          setEmitirNotaSubmitting(true);
+                          try {
+                            const prestadorCpfCnpj = meiCertificateStatus?.documento
+                              ? String(meiCertificateStatus.documento).replace(/\D/g, '')
+                              : undefined;
+                            await emitirNotaAsAdmin(selectedUserId, {
+                              documentType: 'NFSE',
+                              ...(prestadorCpfCnpj ? { prestadorCpfCnpj } : {}),
+                              tomadorCpfCnpj: doc,
+                              tomadorRazaoSocial: emitirNotaForm.tomadorRazaoSocial.trim(),
+                              ...(emitirNotaForm.tomadorEmail.trim()
+                                ? { tomadorEmail: emitirNotaForm.tomadorEmail.trim() }
+                                : {}),
+                              servico: {
+                                codigo: emitirNotaForm.servicoCodigo,
+                                discriminacao: emitirNotaForm.servicoDiscriminacao.trim(),
+                                cnae: emitirNotaForm.servicoCnae,
+                                valorServico: String(valor)
+                              }
+                            });
+                            setEmitirNotaSuccess('NFS-e enviada para emissão.');
+                            const list = await fetchAdminUserMeiNfse(selectedUserId);
+                            setMeiNfseList(list || []);
+                            setTimeout(() => {
+                              setShowMeiClientesDrawer(false);
+                              setShowEmitirNotaModal(false);
+                              setEmitirNotaSuccess(null);
+                            }, 1500);
+                          } catch (err) {
+                            setEmitirNotaError(
+                              formatPlugnotasIntegrationError(
+                                err instanceof Error ? err.message : 'Erro ao enviar nota para emissão.'
+                              )
+                            );
+                          } finally {
+                            setEmitirNotaSubmitting(false);
+                          }
                           return;
                         }
-                        if (!emitirNotaForm.servicoCodigo.trim()) {
-                          setEmitirNotaError('Informe o código do serviço.');
+
+                        const docShort = adminEmitDocumentType === 'NFE' ? 'NF-e' : 'NFC-e';
+                        const validation = validateMeiNfeLikeForm(adminNfeLikeForm, docShort);
+                        if (!validation.ok) {
+                          setAdminNfeLikeErrors(validation.errors);
+                          if (validation.firstSection) {
+                            setAdminNfeLikeFlashSection(validation.firstSection);
+                          }
                           return;
                         }
-                        const codigoServicoErro = getNfseServicoCodigoValidationError(emitirNotaForm.servicoCodigo);
-                        if (codigoServicoErro) {
-                          setEmitirNotaError(codigoServicoErro);
-                          return;
-                        }
-                        const valor = Number(String(emitirNotaForm.servicoValorServico).replace(',', '.'));
-                        if (Number.isNaN(valor) || valor <= 0) {
-                          setEmitirNotaError('Valor do serviço deve ser um número positivo.');
-                          return;
-                        }
+
                         setEmitirNotaSubmitting(true);
                         try {
-                          const prestadorCpfCnpj = meiCertificateStatus?.documento ? String(meiCertificateStatus.documento).replace(/\D/g, '') : undefined;
+                          const payload = buildNfeLikePayloadFromMeiForm(adminNfeLikeForm);
                           await emitirNotaAsAdmin(selectedUserId, {
-                            documentType: 'NFSE',
-                            ...(prestadorCpfCnpj ? { prestadorCpfCnpj } : {}),
-                            tomadorCpfCnpj: doc,
-                            tomadorRazaoSocial: emitirNotaForm.tomadorRazaoSocial.trim(),
-                            ...(emitirNotaForm.tomadorEmail.trim() ? { tomadorEmail: emitirNotaForm.tomadorEmail.trim() } : {}),
-                            servico: {
-                              codigo: emitirNotaForm.servicoCodigo,
-                              discriminacao: emitirNotaForm.servicoDiscriminacao.trim(),
-                              cnae: emitirNotaForm.servicoCnae,
-                              valorServico: String(valor)
-                            }
+                            documentType: adminEmitDocumentType,
+                            payload
                           });
-                          setEmitirNotaSuccess('Nota enviada para emissão.');
+                          setEmitirNotaSuccess(`${docShort}: nota enviada para emissão.`);
                           const list = await fetchAdminUserMeiNfse(selectedUserId);
                           setMeiNfseList(list || []);
                           setTimeout(() => {

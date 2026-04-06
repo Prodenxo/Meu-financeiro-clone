@@ -73,7 +73,7 @@ function collectFeedbackTiers(region: Element): string[] {
 
 async function openNfseTab(container: HTMLElement) {
   const notasTab = Array.from(container.querySelectorAll('button')).find((b) =>
-    b.textContent?.includes('NFS-e')
+    b.textContent?.includes('Emissão fiscal')
   );
   expect(notasTab).toBeTruthy();
   await act(async () => {
