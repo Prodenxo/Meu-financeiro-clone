@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Wallet } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import DreBudgetPanel from '../components/orcamentos/DreBudgetPanel';
 import {
   fetchCategories,
   fetchCategoryBudgetsSummary,
@@ -22,8 +23,11 @@ const meses = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ];
 
+type BudgetViewTab = 'month' | 'dre';
+
 export default function Orcamentos() {
   const { userId } = useAuthStore();
+  const [budgetTab, setBudgetTab] = useState<BudgetViewTab>('month');
   const [categories, setCategories] = useState<Category[]>([]);
   const [summary, setSummary] = useState<CategoryBudgetSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +42,14 @@ export default function Orcamentos() {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+
+  const yearOptions = useMemo(() => {
+    const y = new Date().getFullYear();
+    return Array.from({ length: 5 }, (_, idx) => y - 2 + idx);
+  }, []);
+
+  const monthTabRef = useRef<HTMLButtonElement>(null);
+  const dreTabRef = useRef<HTMLButtonElement>(null);
 
   const loadBudgetPage = useCallback(async () => {
     if (!userId) return;
@@ -235,8 +247,87 @@ export default function Orcamentos() {
   return (
     <PageShell>
       <PageTitle subtitle="Acompanhe seu planejamento financeiro e compare com o realizado.">
-        Orçamento Mensal
+        Orçamentos
       </PageTitle>
+
+      <div
+        role="tablist"
+        aria-label="Vista de orçamentos"
+        className="flex gap-1 border-b border-slate-200/80 dark:border-slate-800/80 mb-6"
+      >
+        <button
+          ref={monthTabRef}
+          type="button"
+          role="tab"
+          id="orcamentos-tab-month"
+          aria-selected={budgetTab === 'month'}
+          aria-controls="orcamentos-panel-month"
+          tabIndex={budgetTab === 'month' ? 0 : -1}
+          className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition min-h-[44px] ${
+            budgetTab === 'month'
+              ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300'
+              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+          }`}
+          onClick={() => setBudgetTab('month')}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowRight') {
+              e.preventDefault();
+              setBudgetTab('dre');
+              queueMicrotask(() => dreTabRef.current?.focus());
+            }
+          }}
+        >
+          Por mês
+        </button>
+        <button
+          ref={dreTabRef}
+          type="button"
+          role="tab"
+          id="orcamentos-tab-dre"
+          aria-selected={budgetTab === 'dre'}
+          aria-controls="orcamentos-panel-dre"
+          tabIndex={budgetTab === 'dre' ? 0 : -1}
+          className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition min-h-[44px] ${
+            budgetTab === 'dre'
+              ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300'
+              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+          }`}
+          onClick={() => setBudgetTab('dre')}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') {
+              e.preventDefault();
+              setBudgetTab('month');
+              queueMicrotask(() => monthTabRef.current?.focus());
+            }
+          }}
+        >
+          DRE (visão anual)
+        </button>
+      </div>
+
+      <div
+        role="tabpanel"
+        id="orcamentos-panel-dre"
+        aria-labelledby="orcamentos-tab-dre"
+        hidden={budgetTab !== 'dre'}
+      >
+        {userId ? (
+          <DreBudgetPanel
+            userId={userId}
+            year={selectedYear}
+            onYearChange={setSelectedYear}
+            yearOptions={yearOptions}
+            onGoToMonthTab={() => setBudgetTab('month')}
+          />
+        ) : null}
+      </div>
+
+      <div
+        role="tabpanel"
+        id="orcamentos-panel-month"
+        aria-labelledby="orcamentos-tab-month"
+        hidden={budgetTab !== 'month'}
+      >
       {loadError ? (
         <FetchErrorBanner message={loadError} onRetry={() => void loadBudgetPage()} />
       ) : null}
@@ -256,10 +347,9 @@ export default function Orcamentos() {
             value={selectedYear}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
           >
-            {Array.from({ length: 5 }).map((_, idx) => {
-              const year = now.getFullYear() - 2 + idx;
-              return <option key={year} value={year}>{year}</option>;
-            })}
+            {yearOptions.map((year) => (
+              <option key={year} value={year}>{year}</option>
+            ))}
           </select>
           <div className="flex items-center gap-2">
             <Link to="/categorias" className="planner-button-secondary">
@@ -466,6 +556,7 @@ export default function Orcamentos() {
           </div>
         </div>
       )}
+      </div>
     </PageShell>
   );
 }

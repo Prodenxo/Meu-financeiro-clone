@@ -30,6 +30,15 @@ export interface CategoryBudgetYearly {
   month: number;
 }
 
+/** Célula da matriz DRE (GET /categories/budgets/dre-matrix) */
+export interface DreMatrixCell {
+  categorias_id: number;
+  month: number;
+  valor_orcado: number | null;
+  valor_gasto: number;
+  valor_recebido: number;
+}
+
 function normalizeTipo (tipo: CreateCategoryInput['tipo']): 'entrada' | 'saida' | 'saída' {
   if (tipo === 'saída') return 'saida'
   return tipo
@@ -152,5 +161,13 @@ export async function fetchCategoryBudgetsYearly(
   year: number
 ): Promise<CategoryBudgetYearly[]> {
   const data = await apiClient.get<CategoryBudgetYearly[]>(`/categories/budgets/yearly?year=${year}`);
+  return data || [];
+}
+
+export async function fetchCategoryBudgetsDreMatrix(
+  _userId: string,
+  year: number
+): Promise<DreMatrixCell[]> {
+  const data = await apiClient.get<DreMatrixCell[]>(`/categories/budgets/dre-matrix?year=${year}`);
   return data || [];
 }
