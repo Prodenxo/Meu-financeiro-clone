@@ -57,4 +57,21 @@ describe('useDreMatrix — regressão fetch (QA: um pedido por ano, sem N por m�
     });
     expect(fetchCategoryBudgetsDreMatrix).toHaveBeenLastCalledWith('user-1', 2026);
   });
+
+  it('incrementar dataRevision dispara novo fetch com o mesmo userId e ano (paridade DRE pós-mutação)', async () => {
+    const { rerender } = renderHook(
+      ({ rev }: { rev: number }) => useDreMatrix('user-1', 2026, rev),
+      { initialProps: { rev: 0 } }
+    );
+
+    await waitFor(() => {
+      expect(fetchCategoryBudgetsDreMatrix).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({ rev: 1 });
+    await waitFor(() => {
+      expect(fetchCategoryBudgetsDreMatrix).toHaveBeenCalledTimes(2);
+    });
+    expect(fetchCategoryBudgetsDreMatrix).toHaveBeenLastCalledWith('user-1', 2026);
+  });
 });

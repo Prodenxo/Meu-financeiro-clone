@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Wallet } from 'lucide-react';
+import { Pencil, Trash2, Wallet } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import DreBudgetPanel from '../components/orcamentos/DreBudgetPanel';
 import {
   fetchCategories,
   fetchCategoryBudgetsSummary,
   duplicateMonthlyBudgets,
+  removeCategoryBudgetPlanning,
   saveCategoryBudget,
   type Category,
   type CategoryBudgetSummary,
@@ -17,6 +18,18 @@ import PageTitle from '../components/PageTitle';
 import EmptyState from '../components/EmptyState';
 import LoadingOverlay from '../components/LoadingOverlay';
 import FetchErrorBanner from '../components/FetchErrorBanner';
+import OrcamentoRemovePlanningConfirmDialog from '../components/OrcamentoRemovePlanningConfirmDialog';
+import {
+  ariaLabelEditarPlanejamento,
+  ariaLabelRemoverPlanejamento,
+  buildOrcamentoRemovePlanningBodyParagraphs,
+  buildOrcamentoRemovePlanningSummaryLine,
+  ORCAMENTO_REMOVE_PLANNING_CANCEL_BUTTON,
+  ORCAMENTO_REMOVE_PLANNING_CONFIRM_BUTTON,
+  ORCAMENTO_REMOVE_PLANNING_ERROR_TOAST,
+  ORCAMENTO_REMOVE_PLANNING_TITLE,
+  ORCAMENTO_REMOVE_PLANNING_TOAST_SUCCESS,
+} from '../copy/orcamentosRemovePlanning';
 
 const meses = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -39,9 +52,19 @@ export default function Orcamentos() {
   const [addBudgetOpen, setAddBudgetOpen] = useState(false);
   const [newBudgetCategoryId, setNewBudgetCategoryId] = useState<number | null>(null);
   const [newBudgetValue, setNewBudgetValue] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; nome: string } | null>(null);
+  const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null);
+  const [deleteDialogError, setDeleteDialogError] = useState<string | null>(null);
+  const budgetInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
+  const lastDeleteButtonRef = useRef<HTMLButtonElement | null>(null);
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  /** Incrementado após mutações no modo mensal para invalidar cache da DRE (FR-ORC-ACT-10 / AC-ORC-ACT-07). */
+  const [dreMatrixDataRevision, setDreMatrixDataRevision] = useState(0);
+  const bumpDreMatrixData = useCallback(() => {
+    setDreMatrixDataRevision((n) => n + 1);
+  }, []);
 
   const yearOptions = useMemo(() => {
     const y = new Date().getFullYear();
@@ -198,6 +221,7 @@ export default function Orcamentos() {
       setSavingBudgetByCategory((prev) => ({ ...prev, [categoriaId]: true }));
       await saveCategoryBudget(userId, categoriaId, parsed, getMonthStartDate());
       await refreshSummary();
+      bumpDreMatrixData();
       toast.success('Orçamento salvo com sucesso!');
     } catch (error: any) {
       console.error('Erro ao salvar orçamento:', error);
@@ -218,6 +242,7 @@ export default function Orcamentos() {
     try {
       await saveCategoryBudget(userId, newBudgetCategoryId, parsed, getMonthStartDate());
       await refreshSummary();
+      bumpDreMatrixData();
       setAddBudgetOpen(false);
       setNewBudgetCategoryId(null);
       setNewBudgetValue('');
@@ -235,6 +260,7 @@ export default function Orcamentos() {
       await duplicateMonthlyBudgets(userId, selectedYear, selectedMonth + 1);
       const budgets = await fetchCategoryBudgetsSummary(userId, { year: selectedYear, month: selectedMonth + 1 });
       setSummary(budgets);
+      bumpDreMatrixData();
       toast.success('Orçamentos duplicados com sucesso!');
     } catch (error: any) {
       console.error('Erro ao duplicar orçamentos:', error);
@@ -243,6 +269,42 @@ export default function Orcamentos() {
       setDuplicating(false);
     }
   };
+
+  const focusBudgetInput = (categoriaId: number) => {
+    const input = budgetInputRefs.current.get(categoriaId);
+    input?.focus();
+    if (typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches) {
+      input?.select();
+    }
+  };
+
+  const closeRemoveDialog = useCallback(() => {
+    setDeleteTarget(null);
+    setDeleteDialogError(null);
+    queueMicrotask(() => lastDeleteButtonRef.current?.focus());
+  }, []);
+
+  const handleConfirmRemovePlanning = async () => {
+    if (!userId || !deleteTarget) return;
+    setDeleteDialogError(null);
+    setDeletingCategoryId(deleteTarget.id);
+    try {
+      await removeCategoryBudgetPlanning(userId, deleteTarget.id, getMonthStartDate());
+      await refreshSummary();
+      bumpDreMatrixData();
+      toast.success(ORCAMENTO_REMOVE_PLANNING_TOAST_SUCCESS);
+      setDeleteTarget(null);
+      lastDeleteButtonRef.current = null;
+    } catch (error: unknown) {
+      console.error('Erro ao remover planejamento:', error);
+      setDeleteDialogError(ORCAMENTO_REMOVE_PLANNING_ERROR_TOAST);
+      toast.error(ORCAMENTO_REMOVE_PLANNING_ERROR_TOAST);
+    } finally {
+      setDeletingCategoryId(null);
+    }
+  };
+
+  const mesExtensoAtual = meses[selectedMonth];
 
   return (
     <PageShell>
@@ -318,6 +380,7 @@ export default function Orcamentos() {
             onYearChange={setSelectedYear}
             yearOptions={yearOptions}
             onGoToMonthTab={() => setBudgetTab('month')}
+            matrixDataRevision={dreMatrixDataRevision}
           />
         ) : null}
       </div>
@@ -442,14 +505,27 @@ export default function Orcamentos() {
                   <th className="pb-3">Diferença</th>
                   <th className="pb-3">Progresso</th>
                   <th className="pb-3">Status</th>
+                  <th className="pb-3 text-right whitespace-nowrap">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {rows.map((row) => {
+                  const rowSaving = !!savingBudgetByCategory[row.id];
+                  const rowDeleting = deletingCategoryId === row.id;
+                  const dialogOpenForRow = deleteTarget?.id === row.id;
+                  const inputLocked =
+                    rowSaving || rowDeleting || dialogOpenForRow;
+                  const actionsLocked =
+                    addBudgetOpen || rowSaving || rowDeleting || deleteTarget !== null;
+                  return (
                   <tr key={row.id} className="border-b border-slate-200/70 dark:border-slate-800/40 hover:bg-slate-100/60 dark:hover:bg-slate-900/40 transition">
                     <td className="py-3 font-semibold dark:text-white">{row.nome}</td>
                     <td className="py-3">
                       <input
+                        ref={(el) => {
+                          if (el) budgetInputRefs.current.set(row.id, el);
+                          else budgetInputRefs.current.delete(row.id);
+                        }}
                         className="planner-input w-24 md:w-28 px-2 py-1 text-sm text-right"
                         placeholder="R$ 0,00"
                         inputMode="numeric"
@@ -464,7 +540,7 @@ export default function Orcamentos() {
                             (e.target as HTMLInputElement).blur();
                           }
                         }}
-                        disabled={!!savingBudgetByCategory[row.id]}
+                        disabled={inputLocked}
                         aria-label={`Orçamento da categoria ${row.nome}`}
                       />
                     </td>
@@ -494,13 +570,64 @@ export default function Orcamentos() {
                         {row.status}
                       </span>
                     </td>
+                    <td className="py-3 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center justify-end gap-0.5">
+                        <button
+                          type="button"
+                          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100/60 hover:text-slate-800 disabled:pointer-events-none disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-100"
+                          disabled={actionsLocked}
+                          aria-label={ariaLabelEditarPlanejamento(row.nome)}
+                          onClick={() => focusBudgetInput(row.id)}
+                        >
+                          <Pencil className="h-5 w-5 shrink-0" aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50 hover:text-rose-700 disabled:pointer-events-none disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
+                          disabled={actionsLocked}
+                          aria-label={ariaLabelRemoverPlanejamento(row.nome, mesExtensoAtual, selectedYear)}
+                          onClick={(e) => {
+                            lastDeleteButtonRef.current = e.currentTarget;
+                            setDeleteDialogError(null);
+                            setDeleteTarget({ id: row.id, nome: row.nome });
+                          }}
+                        >
+                          <Trash2 className="h-5 w-5 shrink-0" aria-hidden />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+      <OrcamentoRemovePlanningConfirmDialog
+        open={deleteTarget !== null}
+        title={ORCAMENTO_REMOVE_PLANNING_TITLE}
+        bodyParagraphs={
+          deleteTarget
+            ? buildOrcamentoRemovePlanningBodyParagraphs(
+                deleteTarget.nome,
+                mesExtensoAtual,
+                selectedYear
+              )
+            : []
+        }
+        summaryLine={
+          deleteTarget
+            ? buildOrcamentoRemovePlanningSummaryLine(deleteTarget.nome, mesExtensoAtual, selectedYear)
+            : ''
+        }
+        confirmButtonLabel={ORCAMENTO_REMOVE_PLANNING_CONFIRM_BUTTON}
+        cancelButtonLabel={ORCAMENTO_REMOVE_PLANNING_CANCEL_BUTTON}
+        isDeleting={deletingCategoryId !== null}
+        errorMessage={deleteDialogError}
+        onCancel={closeRemoveDialog}
+        onConfirm={() => void handleConfirmRemovePlanning()}
+      />
       {addBudgetOpen && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"

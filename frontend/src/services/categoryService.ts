@@ -124,6 +124,15 @@ export async function saveCategoryBudget(
   return data;
 }
 
+/** Remove o valor planejado da categoria no mês indicado (`valor_orcado` → null). */
+export async function removeCategoryBudgetPlanning(
+  userId: string,
+  categoriasId: number,
+  monthStartDate: string
+): Promise<CategoryBudget> {
+  return saveCategoryBudget(userId, categoriasId, null, monthStartDate);
+}
+
 /**
  * Busca o resumo de orçamento vs gasto do mês atual
  */
