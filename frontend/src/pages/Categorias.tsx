@@ -89,8 +89,8 @@ function CategoriaModal({ open, onClose, onSave, categoria }: { open: boolean, o
 export default function Categorias() {
   const [categorias, setCategorias] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [budgetLoadError, setBudgetLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown | null>(null);
+  const [budgetLoadError, setBudgetLoadError] = useState<unknown | null>(null);
   const [spentByCategory, setSpentByCategory] = useState<Record<number, number>>({});
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategoria, setEditingCategoria] = useState<Category | null>(null);
@@ -112,9 +112,7 @@ export default function Categorias() {
       setCategorias(data);
     } catch (error: unknown) {
       console.error('Erro ao carregar categorias:', error);
-      setLoadError(
-        'Não foi possível carregar as categorias. Verifique a ligação à internet e tente novamente.'
-      );
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -137,9 +135,7 @@ export default function Categorias() {
       setSpentByCategory(spentMapped);
     } catch (error: unknown) {
       console.error('Erro ao carregar orçamentos:', error);
-      setBudgetLoadError(
-        'Não foi possível carregar os totais gastos por categoria (orçamento). Verifique a ligação e tente novamente.'
-      );
+      setBudgetLoadError(error);
     }
   }
 
@@ -276,13 +272,13 @@ export default function Categorias() {
       </PageTitle>
 
       {loadError && !loading ? (
-        <FetchErrorBanner message={loadError} onRetry={() => void loadCategorias()} />
+        <FetchErrorBanner error={loadError} onRetry={() => void loadCategorias()} surfaceId="categorias.load" />
       ) : null}
       {budgetLoadError ? (
         <FetchErrorBanner
-          title="Totais por categoria (orçamento)"
-          message={budgetLoadError}
+          error={budgetLoadError}
           onRetry={() => void loadBudgetSummary()}
+          surfaceId="categorias.budgetSummary"
         />
       ) : null}
 

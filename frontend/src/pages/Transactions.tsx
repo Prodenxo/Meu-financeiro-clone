@@ -11,6 +11,8 @@ import PageTitle from '../components/PageTitle';
 import EmptyState from '../components/EmptyState';
 import LoadingOverlay from '../components/LoadingOverlay';
 import FetchErrorBanner from '../components/FetchErrorBanner';
+import UserFacingErrorBlock from '../components/UserFacingErrorBlock';
+import { mapUnknownErrorToUserFacing, userFacingToastSummary } from '../lib/mapUnknownErrorToUserFacing';
 import ButtonSpinner from '../components/ButtonSpinner';
 import RecorrenciaModal from '../components/RecorrenciaModal';
 import RecorrenciaDeleteModal from '../components/RecorrenciaDeleteModal';
@@ -58,13 +60,29 @@ const parseCurrency = (value: string): number => {
   return parsedValue;
 };
 
-function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: { 
-  open: boolean, 
-  onClose: () => void, 
-  onSave: (transacao: { tipo: 'entrada' | 'saída', valor: number, classificacao: string, data: string, status: string, obs?: string }) => void,
-  saving?: boolean,
-  error?: string | null,
-  success?: boolean
+function NovaTransacaoModal({
+  open,
+  onClose,
+  onSave,
+  saving,
+  validationError,
+  apiError,
+  success
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (transacao: {
+    tipo: 'entrada' | 'saída';
+    valor: number;
+    classificacao: string;
+    data: string;
+    status: string;
+    obs?: string;
+  }) => void;
+  saving?: boolean;
+  validationError?: string | null;
+  apiError?: unknown | null;
+  success?: boolean;
 }) {
   const [tipo, setTipo] = useState<'entrada' | 'saída'>('saída');
   const [valor, setValor] = useState('');
@@ -189,10 +207,23 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
           </div>
         </div>
         </div>
-        {error ? (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200" role="alert">
-            {error}
+        {validationError ? (
+          <div
+            className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+            role="alert"
+          >
+            {validationError}
           </div>
+        ) : null}
+        {apiError != null ? (
+          <UserFacingErrorBlock
+            {...mapUnknownErrorToUserFacing(apiError, {
+              variant: 'modal_body',
+              surfaceId: 'transacoes.nova.modal',
+              className:
+                'mb-4 mt-0 border-0 bg-transparent p-0 shadow-none dark:bg-transparent',
+            })}
+          />
         ) : null}
         {success ? (
           <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-200" role="alert">
@@ -345,11 +376,20 @@ function NovaTransacaoModal({ open, onClose, onSave, saving, error, success }: {
   );
 }
 
-function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
-  open: boolean,
-  onClose: () => void,
-  transacao: any,
-  onSave: (transacao: any) => void
+function EditarTransacaoModal({
+  open,
+  onClose,
+  transacao,
+  onSave,
+  apiError,
+  saving,
+}: {
+  open: boolean;
+  onClose: () => void;
+  transacao: any;
+  onSave: (transacao: any) => Promise<void>;
+  apiError?: unknown | null;
+  saving?: boolean;
 }) {
   const [tipo, setTipo] = useState<'entrada' | 'saída'>(
     transacao?.tipo === 'saida' ? 'saída' : (transacao?.tipo || 'saída')
@@ -437,7 +477,7 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
     setClassificacao(e.target.value);
   };
 
-  if (!open) return null;
+  if (!open || !transacao) return null;
 
   return (
     <div
@@ -457,18 +497,30 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
           ×
         </button>
         <h2 className="text-xl font-bold mb-4 dark:text-white">Editar Transação</h2>
-        <form onSubmit={e => {
-          e.preventDefault();
-          onSave({
-            ...transacao,
-            tipo,
-            valor: parseCurrency(valor),
-            classificacao,
-            data,
-            status,
-            obs: obs.trim() || undefined
-          });
-        }}>
+        {apiError != null ? (
+          <UserFacingErrorBlock
+            {...mapUnknownErrorToUserFacing(apiError, {
+              variant: 'modal_body',
+              surfaceId: 'transacoes.editar.modal',
+              className:
+                'mb-4 mt-0 border-0 bg-transparent p-0 shadow-none dark:bg-transparent',
+            })}
+          />
+        ) : null}
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            await onSave({
+              ...transacao,
+              tipo,
+              valor: parseCurrency(valor),
+              classificacao,
+              data,
+              status,
+              obs: obs.trim() || undefined,
+            });
+          }}
+        >
           <div className="mb-4">
             <label className="block mb-2 font-medium dark:text-gray-200">Tipo</label>
             <div className="flex gap-3">
@@ -556,9 +608,10 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
           </div>
           <button
             type="submit"
-            className="planner-button w-full"
+            disabled={saving}
+            className={`planner-button w-full ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            Salvar Alterações
+            {saving ? 'Salvando...' : 'Salvar Alterações'}
           </button>
         </form>
       </div>
@@ -566,13 +619,22 @@ function EditarTransacaoModal({ open, onClose, transacao, onSave }: {
   );
 }
 
-function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, loading }: {
-  open: boolean,
-  onClose: () => void,
-  transacao: any,
-  onDelete: (id: any) => void,
-  error?: string | null,
-  loading?: boolean
+function ExcluirTransacaoModal({
+  open,
+  onClose,
+  transacao,
+  onDelete,
+  localError,
+  apiError,
+  loading
+}: {
+  open: boolean;
+  onClose: () => void;
+  transacao: any;
+  onDelete: (id: any) => void;
+  localError?: string | null;
+  apiError?: unknown | null;
+  loading?: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -627,10 +689,23 @@ function ExcluirTransacaoModal({ open, onClose, transacao, onDelete, error, load
             <h2 id="excluir-transacao-title" className="text-xl font-bold text-red-600 dark:text-red-400">Confirmar Exclusão</h2>
           </div>
         </div>
-        {error ? (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200" role="alert">
-            {error}
+        {localError ? (
+          <div
+            className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+            role="alert"
+          >
+            {localError}
           </div>
+        ) : null}
+        {apiError != null ? (
+          <UserFacingErrorBlock
+            {...mapUnknownErrorToUserFacing(apiError, {
+              variant: 'modal_body',
+              surfaceId: 'transacoes.excluir.modal',
+              className:
+                'mb-4 mt-0 border-0 bg-transparent p-0 shadow-none dark:bg-transparent',
+            })}
+          />
         ) : null}
         <div className="mb-4 rounded-xl border border-slate-200/70 bg-slate-100/70 p-4 text-sm text-slate-700 dark:border-slate-800/70 dark:bg-slate-900/50 dark:text-slate-200">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -950,18 +1025,22 @@ export default function Transactions() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingTransacao, setEditingTransacao] = useState<any>(null);
+  const [editSaveApiError, setEditSaveApiError] = useState<unknown | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletingTransacao, setDeletingTransacao] = useState<any>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteLocalError, setDeleteLocalError] = useState<string | null>(null);
+  const [deleteApiError, setDeleteApiError] = useState<unknown | null>(null);
   const [deletingTransaction, setDeletingTransaction] = useState(false);
   const [savingTransaction, setSavingTransaction] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveValidationError, setSaveValidationError] = useState<string | null>(null);
+  const [saveApiError, setSaveApiError] = useState<unknown | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [recModalOpen, setRecModalOpen] = useState(false);
   const [recEditing, setRecEditing] = useState<Recorrencia | null>(null);
   const [recSaving, setRecSaving] = useState(false);
-  const [recSaveError, setRecSaveError] = useState<string | null>(null);
+  const [recSaveApiError, setRecSaveApiError] = useState<unknown | null>(null);
   const [recDeleteModalOpen, setRecDeleteModalOpen] = useState(false);
   const [recDeleting, setRecDeleting] = useState<Recorrencia | null>(null);
   const [recDeletingInProgress, setRecDeletingInProgress] = useState(false);
@@ -1020,133 +1099,149 @@ export default function Transactions() {
     if (!transacao.valor || transacao.valor <= 0) {
       const errorMsg = 'O valor deve ser maior que zero';
       console.error('[Transactions] Erro de validação:', errorMsg);
-      setSaveError(errorMsg);
-      setTimeout(() => setSaveError(null), 5000);
+      setSaveApiError(null);
+      setSaveValidationError(errorMsg);
+      setTimeout(() => setSaveValidationError(null), 5000);
       return;
     }
 
     if (!transacao.classificacao || transacao.classificacao.trim() === '') {
       const errorMsg = 'A categoria é obrigatória';
       console.error('[Transactions] Erro de validação:', errorMsg);
-      setSaveError(errorMsg);
-      setTimeout(() => setSaveError(null), 5000);
+      setSaveApiError(null);
+      setSaveValidationError(errorMsg);
+      setTimeout(() => setSaveValidationError(null), 5000);
       return;
     }
 
     if (!transacao.data) {
       const errorMsg = 'A data é obrigatória';
       console.error('[Transactions] Erro de validação:', errorMsg);
-      setSaveError(errorMsg);
-      setTimeout(() => setSaveError(null), 5000);
+      setSaveApiError(null);
+      setSaveValidationError(errorMsg);
+      setTimeout(() => setSaveValidationError(null), 5000);
       return;
     }
 
     setSavingTransaction(true);
-    setSaveError(null);
+    setSaveValidationError(null);
+    setSaveApiError(null);
     setSaveSuccess(false);
 
     try {
       console.log('[Transactions] Chamando addTransaction do store...');
       const result = await addTransaction(transacao);
-      
+
       if (result?.error) {
-        const errorMsg = result.error;
-        console.error('[Transactions] ❌ Erro ao salvar transação:', errorMsg);
-        setSaveError(errorMsg);
+        console.error('[Transactions] ❌ Erro ao salvar transação:', result.error);
+        setSaveApiError(result.error);
         setSavingTransaction(false);
-        setTimeout(() => setSaveError(null), 5000);
         return;
       }
-      
+
       console.log('[Transactions] ✅ Transação salva com sucesso na tabela lancamentos_id:', result?.data || transacao);
-      
+
       setSaveSuccess(true);
-      // Limpar campos após salvar com sucesso
       setTimeout(() => {
         setModalOpen(false);
         setSaveSuccess(false);
         setSavingTransaction(false);
-        // Os campos serão limpos quando o modal fechar (useEffect no modal)
       }, 1500);
-    } catch (error: any) {
-      const errorMsg = error?.message || 'Erro ao salvar transação. Tente novamente.';
+    } catch (error: unknown) {
       console.error('[Transactions] ❌ Erro ao salvar transação:', {
         error,
-        message: error?.message,
-        stack: error?.stack,
         transacao
       });
-      setSaveError(errorMsg);
+      setSaveApiError(error);
       setSavingTransaction(false);
-      setTimeout(() => setSaveError(null), 5000);
     }
   };
 
   const handleEditTransacao = (transacao: any) => {
     setEditingTransacao(transacao);
+    setEditSaveApiError(null);
     setEditModalOpen(true);
   };
 
   const handleSaveEditTransacao = async (transacao: any) => {
-    // Garante que classificacao seja igual ao campo de descrição
     const transacaoAtualizada = { ...transacao, classificacao: transacao.classificacao };
-    const result = await updateTransaction(transacao.id, transacaoAtualizada);
-    console.log('Resultado do update Supabase:', result);
-    if (result && result.error) {
-      console.error('Erro ao atualizar lançamento:', result.error);
-    } else {
-      console.log('Lançamento atualizado com sucesso:', result?.data || transacaoAtualizada);
+    setEditSaving(true);
+    setEditSaveApiError(null);
+    try {
+      const result = await updateTransaction(transacao.id, transacaoAtualizada);
+      if (result?.error) {
+        console.error('Erro ao atualizar lançamento:', result.error);
+        setEditSaveApiError(result.error);
+        toast.error(
+          userFacingToastSummary(result.error, 'Não foi possível atualizar a transação.')
+        );
+        return;
+      }
+      setEditModalOpen(false);
+      setEditingTransacao(null);
+      setEditSaveApiError(null);
+    } catch (err: unknown) {
+      console.error('Erro ao atualizar lançamento:', err);
+      setEditSaveApiError(err);
+      toast.error(
+        userFacingToastSummary(err, 'Não foi possível atualizar a transação.')
+      );
+    } finally {
+      setEditSaving(false);
     }
-    setEditModalOpen(false);
-    setEditingTransacao(null);
   };
 
   const handleDeleteTransacao = (transacao: any) => {
     setDeletingTransacao(transacao);
-    setDeleteError(null);
+    setDeleteLocalError(null);
+    setDeleteApiError(null);
     setDeleteModalOpen(true);
   };
 
   const handleConfirmDeleteTransacao = async (id: any) => {
     setDeletingTransaction(true);
-    setDeleteError(null);
+    setDeleteLocalError(null);
+    setDeleteApiError(null);
     if (!id) {
       const errorMsg = 'ID da transação inválido.';
-      setDeleteError(errorMsg);
-      toast.error(errorMsg);
+      setDeleteLocalError(errorMsg);
+      toast.error(userFacingToastSummary(new Error(errorMsg), errorMsg));
       setDeletingTransaction(false);
       return;
     }
     const result = await deleteTransaction(id);
     console.log('Resultado da exclusão Supabase:', result);
     if (result?.error) {
-      const errorMsg = result.error || 'Não foi possível excluir a transação.';
-      setDeleteError(errorMsg);
-      toast.error(errorMsg);
+      setDeleteApiError(result.error);
+      toast.error(
+        userFacingToastSummary(result.error, 'Não foi possível excluir a transação.')
+      );
       setDeletingTransaction(false);
       return;
     }
     setDeletingTransaction(false);
     setDeleteModalOpen(false);
     setDeletingTransacao(null);
+    setDeleteLocalError(null);
+    setDeleteApiError(null);
     toast.success('Transação excluída com sucesso.');
   };
 
   const handleSaveRecorrencia = async (payload: CreateRecorrenciaInput | UpdateRecorrenciaInput) => {
-    setRecSaveError(null);
+    setRecSaveApiError(null);
     setRecSaving(true);
     try {
       if (recEditing) {
         const result = await updateRecorrencia(recEditing.id, payload as UpdateRecorrenciaInput);
         if (result.error) {
-          setRecSaveError(result.error);
+          setRecSaveApiError(result.error);
           return;
         }
         toast.success('Recorrência atualizada.');
       } else {
         const result = await addRecorrencia(payload as CreateRecorrenciaInput);
         if (result.error) {
-          setRecSaveError(result.error);
+          setRecSaveApiError(result.error);
           return;
         }
         toast.success('Recorrência criada. O lançamento será gerado no dia marcado de cada mês.');
@@ -1164,7 +1259,9 @@ export default function Transactions() {
     try {
       const result = await removeRecorrencia(recDeleting.id);
       if (result.error) {
-        toast.error(result.error);
+        toast.error(
+          userFacingToastSummary(result.error, 'Não foi possível remover a recorrência.')
+        );
         return;
       }
       toast.success('Recorrência removida.');
@@ -1179,7 +1276,7 @@ export default function Transactions() {
 
   const openNewRecorrenciaFromMenu = () => {
     setRecEditing(null);
-    setRecSaveError(null);
+    setRecSaveApiError(null);
     setRecModalOpen(true);
     closeRecMenu();
   };
@@ -1272,7 +1369,7 @@ export default function Transactions() {
                       className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline focus-visible:ring-2 focus-visible:ring-blue-500"
                       onClick={() => {
                         setRecEditing(r);
-                        setRecSaveError(null);
+                        setRecSaveApiError(null);
                         setRecModalOpen(true);
                         closeRecMenu();
                       }}
@@ -1366,26 +1463,45 @@ export default function Transactions() {
 
   return (
     <>
-      <NovaTransacaoModal 
-        open={modalOpen} 
+      <NovaTransacaoModal
+        open={modalOpen}
         onClose={() => {
           setModalOpen(false);
-          setSaveError(null);
+          setSaveValidationError(null);
+          setSaveApiError(null);
           setSaveSuccess(false);
           setSavingTransaction(false);
-        }} 
+        }}
         onSave={handleSaveTransacao}
         saving={savingTransaction}
-        error={saveError}
+        validationError={saveValidationError}
+        apiError={saveApiError}
         success={saveSuccess}
       />
-      <EditarTransacaoModal open={editModalOpen} onClose={() => setEditModalOpen(false)} transacao={editingTransacao} onSave={handleSaveEditTransacao} />
+      <EditarTransacaoModal
+        open={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingTransacao(null);
+          setEditSaveApiError(null);
+          setEditSaving(false);
+        }}
+        transacao={editingTransacao}
+        onSave={handleSaveEditTransacao}
+        apiError={editSaveApiError}
+        saving={editSaving}
+      />
       <ExcluirTransacaoModal
         open={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setDeleteLocalError(null);
+          setDeleteApiError(null);
+        }}
         transacao={deletingTransacao}
         onDelete={handleConfirmDeleteTransacao}
-        error={deleteError}
+        localError={deleteLocalError}
+        apiError={deleteApiError}
         loading={deletingTransaction}
       />
 
@@ -1394,12 +1510,12 @@ export default function Transactions() {
         onClose={() => {
           setRecModalOpen(false);
           setRecEditing(null);
-          setRecSaveError(null);
+          setRecSaveApiError(null);
         }}
         onSave={handleSaveRecorrencia}
         recorrencia={recEditing}
         saving={recSaving}
-        error={recSaveError}
+        error={recSaveApiError}
       />
       <RecorrenciaDeleteModal
         open={recDeleteModalOpen}
@@ -1414,7 +1530,8 @@ export default function Transactions() {
 
       {transactionsError ? (
         <FetchErrorBanner
-          message={transactionsError}
+          error={transactionsError}
+          surfaceId="transacoes.list"
           onRetry={() => void fetchTransactions()}
         />
       ) : null}
@@ -1618,7 +1735,7 @@ export default function Transactions() {
           </div>
           <button
             className="planner-button"
-            onClick={() => { setSaveError(null); setModalOpen(true); }}
+            onClick={() => { setSaveValidationError(null); setSaveApiError(null); setModalOpen(true); }}
           >
             + Nova Transação
           </button>
@@ -1805,7 +1922,7 @@ export default function Transactions() {
               <button
                 type="button"
                 className="planner-button inline-flex items-center gap-2"
-                onClick={() => { setSaveError(null); setModalOpen(true); }}
+                onClick={() => { setSaveValidationError(null); setSaveApiError(null); setModalOpen(true); }}
               >
                 <PlusCircle size={18} />
                 Nova transação
@@ -1820,7 +1937,7 @@ export default function Transactions() {
       {/* Botão flutuante mobile */}
       <button
         className="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-blue-600 text-white rounded-full shadow-soft flex items-center justify-center z-40 hover:bg-blue-500 transition"
-        onClick={() => { setSaveError(null); setModalOpen(true); }}
+        onClick={() => { setSaveValidationError(null); setSaveApiError(null); setModalOpen(true); }}
         title="Nova Transação"
         aria-label="Nova transação"
       >

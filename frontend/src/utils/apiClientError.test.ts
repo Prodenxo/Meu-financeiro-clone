@@ -15,6 +15,11 @@ describe('ApiClientError', () => {
     expect(err).toBeInstanceOf(ApiClientError);
     expect(err.plugnotasCode).toBe('certificado_409_sem_id');
     expect(err.message).toContain('Falha');
+    expect(err.payload).toMatchObject({
+      success: false,
+      message: 'Falha ao cadastrar',
+      errors: { plugnotasCode: 'certificado_409_sem_id' },
+    });
   });
 
   it('getPlugnotasCodeFromUnknownError lê ApiClientError', () => {

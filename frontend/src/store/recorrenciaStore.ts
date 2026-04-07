@@ -10,19 +10,21 @@ import {
 } from '../services/recorrenciaService';
 import { useAuthStore } from './authStore';
 
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
-};
+const SESSION_ERROR = new Error('401 Unauthorized');
 
 interface RecorrenciaState {
   recorrencias: Recorrencia[];
   loading: boolean;
-  error: string | null;
+  error: unknown | null;
   fetchRecorrencias: () => Promise<void>;
-  addRecorrencia: (payload: CreateRecorrenciaInput) => Promise<{ data: Recorrencia | null; error: string | null }>;
-  updateRecorrencia: (id: string, payload: UpdateRecorrenciaInput) => Promise<{ data: Recorrencia | null; error: string | null }>;
-  removeRecorrencia: (id: string) => Promise<{ error: string | null }>;
+  addRecorrencia: (
+    payload: CreateRecorrenciaInput
+  ) => Promise<{ data: Recorrencia | null; error: unknown | null }>;
+  updateRecorrencia: (
+    id: string,
+    payload: UpdateRecorrenciaInput
+  ) => Promise<{ data: Recorrencia | null; error: unknown | null }>;
+  removeRecorrencia: (id: string) => Promise<{ error: unknown | null }>;
 }
 
 export const useRecorrenciaStore = create<RecorrenciaState>((set, get) => ({
@@ -33,7 +35,7 @@ export const useRecorrenciaStore = create<RecorrenciaState>((set, get) => ({
   fetchRecorrencias: async () => {
     const userId = useAuthStore.getState().userId;
     if (!userId) {
-      set({ error: 'Usuário não autenticado' });
+      set({ error: SESSION_ERROR });
       return;
     }
     set({ loading: true, error: null });
@@ -41,58 +43,55 @@ export const useRecorrenciaStore = create<RecorrenciaState>((set, get) => ({
       const data = await fetchRecorrenciasService();
       set({ recorrencias: data ?? [], loading: false });
     } catch (error: unknown) {
-      set({ error: getErrorMessage(error, 'Erro ao carregar recorrências'), loading: false });
+      set({ error, loading: false });
     }
   },
 
   addRecorrencia: async (payload) => {
     const userId = useAuthStore.getState().userId;
     if (!userId) {
-      set({ error: 'Usuário não autenticado' });
-      return { data: null, error: 'Usuário não autenticado' };
+      set({ error: SESSION_ERROR });
+      return { data: null, error: SESSION_ERROR };
     }
     try {
       const data = await createRecorrenciaService(payload);
       await get().fetchRecorrencias();
       return { data, error: null };
     } catch (error: unknown) {
-      const msg = getErrorMessage(error, 'Erro ao criar recorrência');
-      set({ error: msg });
-      return { data: null, error: msg };
+      set({ error });
+      return { data: null, error };
     }
   },
 
   updateRecorrencia: async (id, payload) => {
     const userId = useAuthStore.getState().userId;
     if (!userId) {
-      set({ error: 'Usuário não autenticado' });
-      return { data: null, error: 'Usuário não autenticado' };
+      set({ error: SESSION_ERROR });
+      return { data: null, error: SESSION_ERROR };
     }
     try {
       const data = await updateRecorrenciaService(id, payload);
       await get().fetchRecorrencias();
       return { data, error: null };
     } catch (error: unknown) {
-      const msg = getErrorMessage(error, 'Erro ao atualizar recorrência');
-      set({ error: msg });
-      return { data: null, error: msg };
+      set({ error });
+      return { data: null, error };
     }
   },
 
   removeRecorrencia: async (id) => {
     const userId = useAuthStore.getState().userId;
     if (!userId) {
-      set({ error: 'Usuário não autenticado' });
-      return { error: 'Usuário não autenticado' };
+      set({ error: SESSION_ERROR });
+      return { error: SESSION_ERROR };
     }
     try {
       await deleteRecorrenciaService(id);
       await get().fetchRecorrencias();
       return { error: null };
     } catch (error: unknown) {
-      const msg = getErrorMessage(error, 'Erro ao remover recorrência');
-      set({ error: msg });
-      return { error: msg };
+      set({ error });
+      return { error };
     }
   },
 }));

@@ -535,7 +535,11 @@ export default function Dashboard() {
     <PageShell>
       <PageTitle subtitle="Resumo das suas finanças e transações">Início</PageTitle>
       {error ? (
-        <FetchErrorBanner message={error} onRetry={() => void fetchTransactions()} />
+        <FetchErrorBanner
+          error={error}
+          onRetry={() => void fetchTransactions()}
+          surfaceId="dashboard.transactions"
+        />
       ) : null}
       {showMeiAccessBlock ? (
         <AccessBlockedExplainer

@@ -4,6 +4,7 @@ import { ArrowLeft, Pencil, PlusCircle, Trash2, Users } from 'lucide-react';
 import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
 import EmptyState from '../components/EmptyState';
+import FetchErrorBanner from '../components/FetchErrorBanner';
 import MeiCatalogoClienteModal from '../components/MeiCatalogoClienteModal';
 import MeiCatalogoDeleteClienteConfirmDialog from '../components/MeiCatalogoDeleteClienteConfirmDialog';
 import {
@@ -13,7 +14,7 @@ import {
 } from '../services/meiNotasService';
 import { formatDocumentoListaPtBr } from '../lib/formatCpfCnpjPtBr';
 import { toast } from '../lib/toast';
-import { meiFiscalToastMessage } from '../lib/fiscalUserError';
+import { userFacingToastSummary } from '../lib/mapUnknownErrorToUserFacing';
 
 const SEARCH_DEBOUNCE_MS = 300;
 const LIST_LIMIT = 50;
@@ -29,7 +30,7 @@ export default function MeiCatalogoClientes() {
   const [debouncedQ, setDebouncedQ] = useState('');
   const [rows, setRows] = useState<NfseCatalogCliente[]>([]);
   const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
+  const [listError, setListError] = useState<unknown | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<NfseCatalogCliente | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<NfseCatalogCliente | null>(null);
@@ -54,7 +55,7 @@ export default function MeiCatalogoClientes() {
       });
       setRows(data);
     } catch (err) {
-      setListError(meiFiscalToastMessage(err, 'Erro ao carregar clientes.'));
+      setListError(err);
     } finally {
       setLoading(false);
     }
@@ -88,7 +89,7 @@ export default function MeiCatalogoClientes() {
       setEditing(null);
       void loadClientes();
     } catch (err) {
-      const msg = meiFiscalToastMessage(err, 'Não foi possível eliminar o cliente.');
+      const msg = userFacingToastSummary(err, 'Não foi possível eliminar o cliente.');
       setDeleteError(msg);
       toast.error(msg);
     } finally {
@@ -125,14 +126,13 @@ export default function MeiCatalogoClientes() {
         Clientes do catálogo
       </PageTitle>
 
-      {listError && (
-        <div
-          className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-          role="alert"
-        >
-          {listError}
-        </div>
-      )}
+      {listError != null ? (
+        <FetchErrorBanner
+          error={listError}
+          onRetry={() => void loadClientes()}
+          surfaceId="mei_catalogo.clientes.page"
+        />
+      ) : null}
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 flex-1 sm:max-w-md">

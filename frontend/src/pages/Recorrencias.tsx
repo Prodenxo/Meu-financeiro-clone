@@ -10,6 +10,7 @@ import FetchErrorBanner from '../components/FetchErrorBanner';
 import RecorrenciaModal from '../components/RecorrenciaModal';
 import RecorrenciaDeleteModal from '../components/RecorrenciaDeleteModal';
 import { toast } from '../lib/toast';
+import { userFacingToastSummary } from '../lib/mapUnknownErrorToUserFacing';
 
 const formatValor = (v: number) =>
   Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -27,7 +28,7 @@ export default function Recorrencias() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Recorrencia | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveApiError, setSaveApiError] = useState<unknown | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState<Recorrencia | null>(null);
   const [deletingInProgress, setDeletingInProgress] = useState(false);
@@ -37,20 +38,20 @@ export default function Recorrencias() {
   }, [fetchRecorrencias]);
 
   const handleSave = async (payload: CreateRecorrenciaInput | UpdateRecorrenciaInput) => {
-    setSaveError(null);
+    setSaveApiError(null);
     setSaving(true);
     try {
       if (editing) {
         const result = await updateRecorrencia(editing.id, payload as UpdateRecorrenciaInput);
         if (result.error) {
-          setSaveError(result.error);
+          setSaveApiError(result.error);
           return;
         }
         toast.success('Recorrência atualizada.');
       } else {
         const result = await addRecorrencia(payload as CreateRecorrenciaInput);
         if (result.error) {
-          setSaveError(result.error);
+          setSaveApiError(result.error);
           return;
         }
         toast.success('Recorrência criada. O lançamento será gerado no dia marcado de cada mês.');
@@ -68,7 +69,7 @@ export default function Recorrencias() {
     try {
       const result = await removeRecorrencia(deleting.id);
       if (result.error) {
-        toast.error(result.error);
+        toast.error(userFacingToastSummary(result.error, 'Erro ao remover recorrência.'));
         return;
       }
       toast.success('Recorrência removida.');
@@ -88,7 +89,11 @@ export default function Recorrencias() {
       </PageTitle>
 
       {error ? (
-        <FetchErrorBanner message={error} onRetry={() => void fetchRecorrencias()} />
+        <FetchErrorBanner
+          error={error}
+          onRetry={() => void fetchRecorrencias()}
+          surfaceId="recorrencias.list"
+        />
       ) : null}
 
       <div className="mb-4 flex justify-end">
@@ -97,7 +102,7 @@ export default function Recorrencias() {
           className="planner-button flex items-center gap-2"
           onClick={() => {
             setEditing(null);
-            setSaveError(null);
+            setSaveApiError(null);
             setModalOpen(true);
           }}
         >
@@ -145,7 +150,7 @@ export default function Recorrencias() {
                   className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                   onClick={() => {
                     setEditing(r);
-                    setSaveError(null);
+                    setSaveApiError(null);
                     setModalOpen(true);
                   }}
                 >
@@ -173,12 +178,12 @@ export default function Recorrencias() {
         onClose={() => {
           setModalOpen(false);
           setEditing(null);
-          setSaveError(null);
+          setSaveApiError(null);
         }}
         onSave={handleSave}
         recorrencia={editing}
         saving={saving}
-        error={saveError}
+        error={saveApiError}
       />
 
       <RecorrenciaDeleteModal

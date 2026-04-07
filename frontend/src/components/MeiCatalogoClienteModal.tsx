@@ -14,7 +14,8 @@ import {
   MEI_CATALOGO_DELETE_CLIENTE_DANGER_HEADING,
   MEI_CATALOGO_DELETE_CLIENTE_DANGER_HINT
 } from '../copy/meiCatalogoClienteDelete';
-import { formatMeiFiscalMappedForAlert, mapMeiFiscalErrorFromUnknown } from '../lib/fiscalUserError';
+import UserFacingErrorBlock from './UserFacingErrorBlock';
+import { mapMeiCatalogApiErrorToUserFacing } from '../lib/mapMeiCatalogApiErrorToUserFacing';
 
 const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -47,7 +48,7 @@ export default function MeiCatalogoClienteModal({
   const [documento, setDocumento] = useState('');
   const [email, setEmail] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<unknown | null>(null);
   const [saving, setSaving] = useState(false);
 
   const nomeRef = useRef<HTMLInputElement>(null);
@@ -143,9 +144,7 @@ export default function MeiCatalogoClienteModal({
       onSaved(isEdit ? 'edit' : 'create');
       onClose();
     } catch (err) {
-      setApiError(
-        formatMeiFiscalMappedForAlert(mapMeiFiscalErrorFromUnknown(err, 'Erro ao guardar.'))
-      );
+      setApiError(err);
     } finally {
       setSaving(false);
     }
@@ -185,15 +184,13 @@ export default function MeiCatalogoClienteModal({
           Clientes usados como tomadores na NFS-e. O documento não pode ser alterado após criar o registo.
         </p>
 
-        {apiError && (
-          <div
-            id={errId}
-            className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-            role="alert"
-          >
-            <span className="whitespace-pre-wrap break-words">{apiError}</span>
+        {apiError != null ? (
+          <div id={errId} className="mb-4" role="alert">
+            <UserFacingErrorBlock
+              {...mapMeiCatalogApiErrorToUserFacing(apiError, 'Erro ao guardar.', 'mei_catalogo.clientes.modal')}
+            />
           </div>
-        )}
+        ) : null}
 
         <form
           onSubmit={handleSubmit}

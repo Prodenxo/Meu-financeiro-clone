@@ -9,6 +9,7 @@ import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
+import FetchErrorBanner from '../components/FetchErrorBanner';
 import { AccessBlockedExplainer } from '../components/AccessBlockedExplainer';
 import {
   adminSettingsRestrictedAccessBlockProps,
@@ -28,7 +29,7 @@ export default function Settings() {
   const [isGoogleAuthenticated, setIsGoogleAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<unknown | null>(null);
   const [success, setSuccess] = useState('');
   
   const [editPhone, setEditPhone] = useState(phone || '');
@@ -51,12 +52,12 @@ export default function Settings() {
 
   const handleUpdatePhone = async () => {
     if (!editPhone) {
-      setError('Telefone é obrigatório');
+      setError(new Error('Telefone é obrigatório'));
       return;
     }
-    
+
     setLoading(true);
-    setError('');
+    setError(null);
     setSuccess('');
     
     try {
@@ -64,7 +65,7 @@ export default function Settings() {
       setSuccess('Telefone atualizado com sucesso!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Erro ao atualizar telefone');
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -72,15 +73,15 @@ export default function Settings() {
 
   const handleUpdateDisplayName = async () => {
     setLoading(true);
-    setError('');
+    setError(null);
     setSuccess('');
-    
+
     try {
       await updateDisplayName(editDisplayName);
       setSuccess('Nome atualizado com sucesso!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Erro ao atualizar nome');
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -88,18 +89,18 @@ export default function Settings() {
 
   const handleGoogleAuth = async () => {
     setLoading(true);
-    setError('');
-    
+    setError(null);
+
     try {
       await initiateGoogleAuthFlow();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Erro ao iniciar autenticação Google');
+      setError(err);
       setLoading(false);
     }
   };
 
   const handleDisconnectGoogle = async () => {
-    setError('Funcionalidade de desconexão ainda não implementada');
+    setError(new Error('Funcionalidade de desconexão ainda não implementada'));
   };
 
   const handleSignOut = async () => {
@@ -107,7 +108,7 @@ export default function Settings() {
       await signOut();
       navigate('/login');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Erro ao fazer logout');
+      setError(err);
     }
   };
 
@@ -125,11 +126,9 @@ export default function Settings() {
         />
       ) : null}
 
-        {error && (
-          <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded">
-            {error}
-          </div>
-        )}
+        {error != null ? (
+          <FetchErrorBanner error={error} surfaceId="settings.profile" className="mb-4" />
+        ) : null}
 
         {success && (
           <div className="bg-green-100 dark:bg-green-900 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 px-4 py-3 rounded">

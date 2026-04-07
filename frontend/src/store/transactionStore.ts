@@ -11,20 +11,23 @@ import {
 import { useAuthStore } from './authStore';
 import { createEventFromTransaction, checkGoogleAuth } from '../lib/google-calendar';
 
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
-};
+/** Sessão ausente — mapeado para copy canónica `sessao` via `mapUnknownErrorToUserFacing`. */
+const SESSION_ERROR = new Error('401 Unauthorized');
 
 interface TransactionState {
   transactions: Transaction[];
   loading: boolean;
-  error: string | null;
+  error: unknown | null;
   googleAuthRequired: boolean;
   fetchTransactions: () => Promise<void>;
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'criado_em' | 'user_id'>) => Promise<{ data: Transaction | null; error: string | null }>;
-  updateTransaction: (id: number, transaction: Partial<Transaction>) => Promise<{ data: Transaction | null; error: string | null }>;
-  deleteTransaction: (id: number) => Promise<{ data: null; error: string | null }>;
+  addTransaction: (
+    transaction: Omit<Transaction, 'id' | 'criado_em' | 'user_id'>
+  ) => Promise<{ data: Transaction | null; error: unknown | null }>;
+  updateTransaction: (
+    id: number,
+    transaction: Partial<Transaction>
+  ) => Promise<{ data: Transaction | null; error: unknown | null }>;
+  deleteTransaction: (id: number) => Promise<{ data: null; error: unknown | null }>;
   clearGoogleAuthRequired: () => void;
 }
 
@@ -37,7 +40,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   fetchTransactions: async () => {
     const userId = useAuthStore.getState().userId;
     if (!userId) {
-      set({ error: 'Usuário não autenticado' });
+      set({ error: SESSION_ERROR });
       return;
     }
 
@@ -47,17 +50,16 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       const filteredTransactions = transactions.filter((t) => t.user_id === userId);
       set({ transactions: filteredTransactions, loading: false });
     } catch (error: unknown) {
-      set({ error: getErrorMessage(error, 'Erro ao carregar transações'), loading: false });
+      set({ error, loading: false });
     }
   },
 
   addTransaction: async (transaction) => {
     const userId = useAuthStore.getState().userId;
     if (!userId) {
-      const errorMsg = 'Usuário não autenticado';
-      console.error('[TransactionStore] Erro:', errorMsg);
-      set({ error: errorMsg });
-      return { data: null, error: errorMsg };
+      console.error('[TransactionStore] Erro: utilizador não autenticado');
+      set({ error: SESSION_ERROR });
+      return { data: null, error: SESSION_ERROR };
     }
 
     console.log('[TransactionStore] Adicionando transação:', {
@@ -68,8 +70,8 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         classificacao: transaction.classificacao,
         data: transaction.data,
         status: transaction.status,
-        obs: transaction.obs
-      }
+        obs: transaction.obs,
+      },
     });
 
     try {
@@ -77,7 +79,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       const data = await createTransactionService(userId, transaction as CreateTransactionInput);
       console.log('[TransactionStore] ✅ Transação criada com sucesso:', data);
 
-      // Criar evento no Google Calendar se status for a_receber ou a_pagar
       if (transaction.status === 'a_receber' || transaction.status === 'a_pagar') {
         console.log('[TransactionStore] Verificando autenticação Google Calendar...');
         const { authenticated } = await checkGoogleAuth();
@@ -88,7 +89,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
             console.log('[TransactionStore] ✅ Evento criado no Google Calendar');
           } catch (calendarError: unknown) {
             console.error('[TransactionStore] Erro ao criar evento no Google Calendar:', calendarError);
-            // Não falhar a transação se o evento não for criado
           }
         } else {
           console.log('[TransactionStore] Google Calendar não autenticado, marcando como necessário');
@@ -101,23 +101,21 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       console.log('[TransactionStore] ✅ Lista de transações atualizada');
       return { data, error: null };
     } catch (error: unknown) {
-      const errorMsg = getErrorMessage(error, 'Erro desconhecido ao adicionar transação');
       console.error('[TransactionStore] ❌ Erro ao adicionar transação:', {
         error,
-        message: errorMsg,
         stack: error instanceof Error ? error.stack : undefined,
-        transaction
+        transaction,
       });
-      set({ error: errorMsg });
-      return { data: null, error: errorMsg };
+      set({ error });
+      return { data: null, error };
     }
   },
 
   updateTransaction: async (id, transaction) => {
     const userId = useAuthStore.getState().userId;
     if (!userId) {
-      set({ error: 'Usuário não autenticado' });
-      return { data: null, error: 'Usuário não autenticado' };
+      set({ error: SESSION_ERROR });
+      return { data: null, error: SESSION_ERROR };
     }
 
     try {
@@ -125,17 +123,16 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       await get().fetchTransactions();
       return { data, error: null };
     } catch (error: unknown) {
-      const errorMsg = getErrorMessage(error, 'Erro ao atualizar transação');
-      set({ error: errorMsg });
-      return { data: null, error: errorMsg };
+      set({ error });
+      return { data: null, error };
     }
   },
 
   deleteTransaction: async (id) => {
     const userId = useAuthStore.getState().userId;
     if (!userId) {
-      set({ error: 'Usuário não autenticado' });
-      return { data: null, error: 'Usuário não autenticado' };
+      set({ error: SESSION_ERROR });
+      return { data: null, error: SESSION_ERROR };
     }
 
     try {
@@ -143,9 +140,8 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       await get().fetchTransactions();
       return { data: null, error: null };
     } catch (error: unknown) {
-      const errorMsg = getErrorMessage(error, 'Erro ao remover transação');
-      set({ error: errorMsg });
-      return { data: null, error: errorMsg };
+      set({ error });
+      return { data: null, error };
     }
   },
 

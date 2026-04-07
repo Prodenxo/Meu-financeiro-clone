@@ -4,6 +4,7 @@ import { ArrowLeft, Package, Pencil, PlusCircle, Trash2 } from 'lucide-react';
 import PageShell from '../components/PageShell';
 import PageTitle from '../components/PageTitle';
 import EmptyState from '../components/EmptyState';
+import FetchErrorBanner from '../components/FetchErrorBanner';
 import MeiCatalogoProdutoModal from '../components/MeiCatalogoProdutoModal';
 import MeiCatalogoDeleteProdutoConfirmDialog from '../components/MeiCatalogoDeleteProdutoConfirmDialog';
 import {
@@ -13,7 +14,7 @@ import {
 } from '../services/meiNotasService';
 import { formatBrlDisplay } from '../lib/formatMoneyPtBr';
 import { toast } from '../lib/toast';
-import { meiFiscalToastMessage } from '../lib/fiscalUserError';
+import { userFacingToastSummary } from '../lib/mapUnknownErrorToUserFacing';
 
 const SEARCH_DEBOUNCE_MS = 300;
 const LIST_LIMIT = 50;
@@ -41,7 +42,7 @@ export default function MeiCatalogoServicosProdutos() {
   const [debouncedQ, setDebouncedQ] = useState('');
   const [rows, setRows] = useState<NfseCatalogProduto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
+  const [listError, setListError] = useState<unknown | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<NfseCatalogProduto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<NfseCatalogProduto | null>(null);
@@ -68,7 +69,7 @@ export default function MeiCatalogoServicosProdutos() {
       });
       setRows(data);
     } catch (err) {
-      setListError(meiFiscalToastMessage(err, 'Erro ao carregar itens do catálogo.'));
+      setListError(err);
     } finally {
       setLoading(false);
     }
@@ -103,7 +104,7 @@ export default function MeiCatalogoServicosProdutos() {
       setEditing(null);
       void loadProdutos();
     } catch (err) {
-      const msg = meiFiscalToastMessage(err, 'Não foi possível eliminar o item.');
+      const msg = userFacingToastSummary(err, 'Não foi possível eliminar o item.');
       setDeleteError(msg);
       toast.error(msg);
     } finally {
@@ -141,14 +142,13 @@ export default function MeiCatalogoServicosProdutos() {
         Catálogo — serviços e produtos
       </PageTitle>
 
-      {listError && (
-        <div
-          className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-          role="alert"
-        >
-          {listError}
-        </div>
-      )}
+      {listError != null ? (
+        <FetchErrorBanner
+          error={listError}
+          onRetry={() => void loadProdutos()}
+          surfaceId="mei_catalogo.produtos.page"
+        />
+      ) : null}
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 flex-1 sm:max-w-md">

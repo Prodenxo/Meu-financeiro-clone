@@ -12,7 +12,13 @@ import {
   getGuiaMeiConnectivityHelpHref,
   GUIMEI_CONNECTIVITY_CERTIFICATE_MESSAGE
 } from '../utils/guiaMeiConnectivityUserMessage';
-import { CERTIFICADO_EMISSOR_409_SEM_ID_DOC_ANCHOR } from '../lib/fiscalUserError';
+import {
+  CERTIFICADO_EMISSOR_409_SEM_ID_DOC_ANCHOR,
+  FISCAL_ERROR_LONG_THRESHOLD,
+  mapMeiFiscalErrorToCopy
+} from '../lib/fiscalUserError';
+import { meiFiscalUserCopyToUserFacing } from '../lib/meiFiscalUserCopyToUserFacing';
+import UserFacingErrorBlock from './UserFacingErrorBlock';
 import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
 
 const meiOperacaoNfseDocUrl =
@@ -39,9 +45,6 @@ function getMeiEmpresaPlugnotasCadastroHelpHref(): string {
   }
   return `/guia-mei-nfce-cadastro.html#${MEI_EMPRESA_PLUGNOTAS_DOC_ANCHOR}`;
 }
-
-/** Alinhado à Story 6.3: acima disso, exige ação explícita ou área rolável (sem truncar só com reticências). */
-export const FISCAL_ERROR_LONG_THRESHOLD = 300;
 
 export type LongFiscalErrorTone = 'danger' | 'rose' | 'warning';
 
@@ -146,6 +149,7 @@ const providerHintClass = 'text-xs leading-snug text-rose-800/90 dark:text-rose-
 type EmissaoFiscalErrorAlertProps = {
   documentTypeLabel: string;
   message: string;
+  plugnotasCode?: string | null;
 };
 
 type NfseNacionalDocHintLinkTone = Extract<LongFiscalErrorTone, 'danger' | 'rose'>;
@@ -177,20 +181,26 @@ function NfseNacionalOperacaoDocHint({ linkTone = 'danger' }: NfseNacionalOperac
   );
 }
 
-/** Erro no fluxo de emissão: tipo de documento visível + mensagem completa + copy do provedor. */
-export function EmissaoFiscalErrorAlert({ documentTypeLabel, message }: EmissaoFiscalErrorAlertProps) {
+/** Erro no fluxo de emissão: tipo de documento visível + {@link UserFacingErrorBlock} (provedor fiscal) + dicas. */
+export function EmissaoFiscalErrorAlert({
+  documentTypeLabel,
+  message,
+  plugnotasCode = null
+}: EmissaoFiscalErrorAlertProps) {
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode });
+  const facing = meiFiscalUserCopyToUserFacing(copy, {
+    variant: 'inline',
+    rawMessage: message,
+    plugnotasCode
+  });
   const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message);
   return (
-    <div className="admin-alert-danger space-y-2" role="alert">
+    <div className="space-y-2">
       <p className="text-xs font-semibold uppercase tracking-wide text-rose-900 dark:text-rose-100">
         Falha ao emitir{' '}
         <span className="normal-case tracking-normal">{documentTypeLabel}</span>
       </p>
-      <LongFiscalErrorMessage message={message} tone="danger" />
-      <p className={providerHintClass}>
-        A mensagem acima foi retornada pelo provedor de emissão fiscal, não pelo aplicativo em si.
-        Ajuste os dados conforme o texto e envie novamente.
-      </p>
+      <UserFacingErrorBlock {...facing} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint /> : null}
     </div>
   );
@@ -199,40 +209,53 @@ export function EmissaoFiscalErrorAlert({ documentTypeLabel, message }: EmissaoF
 type PlugnotasIntegrationErrorAlertProps = {
   message: string;
   title?: string;
+  plugnotasCode?: string | null;
 };
 
-/** Outras operações (lista, download, cancelamento): mensagem completa + mesma orientação sobre o provedor. */
-export function PlugnotasIntegrationErrorAlert({ message, title }: PlugnotasIntegrationErrorAlertProps) {
+/** Outras operações (lista, download, cancelamento): bloco unificado + dica NFS-e Nacional quando aplicável. */
+export function PlugnotasIntegrationErrorAlert({
+  message,
+  title,
+  plugnotasCode = null
+}: PlugnotasIntegrationErrorAlertProps) {
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode });
+  const facing = meiFiscalUserCopyToUserFacing(copy, {
+    variant: 'inline',
+    rawMessage: message,
+    plugnotasCode
+  });
   const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message);
   return (
-    <div className="admin-alert-danger space-y-2" role="alert">
+    <div className="space-y-2">
       {title ? (
         <p className="text-xs font-semibold text-rose-900 dark:text-rose-100">{title}</p>
       ) : null}
-      <LongFiscalErrorMessage message={message} tone="danger" />
-      <p className={providerHintClass}>
-        Se a mensagem citar validação ou rejeição, ela costuma vir do provedor de emissão fiscal, não deste app.
-      </p>
+      <UserFacingErrorBlock {...facing} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint /> : null}
     </div>
   );
 }
 
-/** Variante compacta para modais admin (mesmas regras de texto longo). */
-export function EmissaoFiscalErrorAlertModal({ documentTypeLabel, message }: EmissaoFiscalErrorAlertProps) {
+/** Variante compacta para modais admin (mesmo mapeamento fiscal + {@link UserFacingErrorBlock} `modal_body`). */
+export function EmissaoFiscalErrorAlertModal({
+  documentTypeLabel,
+  message,
+  plugnotasCode = null
+}: EmissaoFiscalErrorAlertProps) {
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode });
+  const facing = meiFiscalUserCopyToUserFacing(copy, {
+    variant: 'modal_body',
+    rawMessage: message,
+    plugnotasCode,
+    className: 'mt-0 border-0 bg-transparent p-0 shadow-none dark:bg-transparent'
+  });
   const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message);
   return (
-    <div
-      className="mt-3 space-y-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 dark:border-rose-800 dark:bg-rose-950/40"
-      role="alert"
-    >
+    <div className="mt-3 space-y-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 dark:border-rose-800 dark:bg-rose-950/40">
       <p className="text-xs font-semibold text-rose-900 dark:text-rose-100">
         Falha ao emitir {documentTypeLabel}
       </p>
-      <LongFiscalErrorMessage message={message} tone="rose" />
-      <p className={providerHintClass}>
-        Mensagem do provedor de emissão fiscal. Corrija os dados e tente de novo.
-      </p>
+      <UserFacingErrorBlock {...facing} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint linkTone="rose" /> : null}
     </div>
   );
@@ -331,8 +354,20 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = nu
     ? 'abra a documentação de operação'
     : 'abra o guia rápido de cadastro';
 
+  const copy = mapMeiFiscalErrorToCopy({
+    rawMessage: message,
+    plugnotasCode: fiscalErrorCode
+  });
+  const facing = meiFiscalUserCopyToUserFacing(copy, {
+    variant: 'inline',
+    rawMessage: message,
+    plugnotasCode: fiscalErrorCode,
+    embedRawAsTechnicalDetail: false
+  });
+
   return (
     <div className="admin-alert-danger space-y-2" role="alert">
+      <UserFacingErrorBlock {...facing} />
       <LongFiscalErrorMessage message={message} tone="danger" />
       {showCert409 ? <GuiaMeiCertificado409SemIdChecklist /> : null}
       {showNfceHint ? (
