@@ -69,6 +69,10 @@ Serve para critérios de aceite, *file list* e QA; **não** substitui a story ne
 7. **Acções primárias** — **Emitir** (estado *loading* / *disabled* conforme pré-requisitos).  
 8. **Lista / histórico** — com filtro por tipo (§7).
 
+### 3.3 Erro ao utilizador (padrão transversal)
+
+A pilha de feedback de emissão (item 6) e os alertas de integração fiscal devem alinhar-se ao contrato de experiência e *copy* de [`ux-spec-mensagens-erro-usuario-final-2026-04-07.md`](ux-spec-mensagens-erro-usuario-final-2026-04-07.md) (título humano, descrição, fonte do serviço de notas quando aplicável, detalhe colapsável, CTAs). Até à migração completa (**stories FR-ERR-P0-***), manter paridade funcional com `GuidesMei.tsx` e com os alertas fiscais existentes, evitando regressão na hierarquia definida no workspace NFS-e (bloqueio → validação → erro de servidor/provedor → sucesso).
+
 ---
 
 ## 4. Seletor de tipo de documento (**FR-GUIA-FISC-01**)

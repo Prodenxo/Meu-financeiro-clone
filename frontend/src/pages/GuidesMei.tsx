@@ -66,6 +66,7 @@ import {
 import { fetchEmpresaJsonWithMeiCache, invalidateMeiEmpresaGetCache } from '../utils/guiaMeiEmpresaGetCache';
 import { isFetchConnectivityFailure } from '../utils/isFetchConnectivityFailure';
 import { getPlugnotasCodeFromUnknownError as getFiscalErrorCode } from '../utils/apiClientError';
+import { mapMeiFiscalErrorToCopy } from '../lib/fiscalUserError';
 import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
@@ -152,6 +153,12 @@ function formatMeiFiscalErr(error: unknown, fallback: string): string {
     error instanceof Error ? error.message : fallback,
     getFiscalErrorCode(error)
   );
+}
+
+function nfseErrorSummaryLine(rawMessage: string, plugnotasCode: string | null): string {
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage, plugnotasCode });
+  const line = `${copy.title}: ${copy.description}`.replace(/\s+/g, ' ').trim();
+  return line.length > 200 ? `${line.slice(0, 197)}…` : line;
 }
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
@@ -637,7 +644,10 @@ export default function GuidesMei() {
   const [nfseLoading, setNfseLoading] = useState(false);
   const [nfseSubmitting, setNfseSubmitting] = useState(false);
   const [nfseActionMap, setNfseActionMap] = useState<Record<string, boolean>>({});
-  const [nfseError, setNfseError] = useState<string | null>(null);
+  const [nfseError, setNfseError] = useState<{
+    rawMessage: string;
+    plugnotasCode: string | null;
+  } | null>(null);
   const [nfseErrorKind, setNfseErrorKind] = useState<'emission' | 'operation' | null>(null);
   const [nfseSuccess, setNfseSuccess] = useState<string | null>(null);
   /** Soma do limite MEI a partir da coluna `payload_json` (GET /mei-notas/limite-faturamento). */
@@ -653,13 +663,15 @@ export default function GuidesMei() {
     setNfseErrorKind(null);
   }, []);
 
-  const setEmissionNfseError = useCallback((msg: string) => {
-    setNfseError(msg);
+  const setEmissionNfseError = useCallback((error: unknown, fallback: string) => {
+    const raw = error instanceof Error ? error.message : fallback;
+    setNfseError({ rawMessage: (raw || fallback).trim(), plugnotasCode: getFiscalErrorCode(error) });
     setNfseErrorKind('emission');
   }, []);
 
-  const setOperationNfseError = useCallback((msg: string) => {
-    setNfseError(msg);
+  const setOperationNfseError = useCallback((error: unknown, fallback: string) => {
+    const raw = error instanceof Error ? error.message : fallback;
+    setNfseError({ rawMessage: (raw || fallback).trim(), plugnotasCode: getFiscalErrorCode(error) });
     setNfseErrorKind('operation');
   }, []);
   const [nfseCatalogLoading, setNfseCatalogLoading] = useState(false);
@@ -999,7 +1011,7 @@ export default function GuidesMei() {
       });
       setNfseList(list);
     } catch (error) {
-      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao listar NFSe.'));
+      setOperationNfseError(error, 'Erro ao listar NFSe.');
     } finally {
       setNfseLoading(false);
     }
@@ -1926,7 +1938,7 @@ export default function GuidesMei() {
       setSelectedCatalogProdutoId('');
       nfseFormBaselineRef.current = JSON.stringify(nfseForm);
     } catch (error) {
-      setEmissionNfseError(formatMeiFiscalErr(error, 'Erro ao emitir nota fiscal.'));
+      setEmissionNfseError(error, 'Erro ao emitir nota fiscal.');
     } finally {
       setNfseSubmitting(false);
     }
@@ -2029,7 +2041,7 @@ export default function GuidesMei() {
       setNfeLikeForm(nextForm);
       nfeLikeBaselineRef.current = serializeMeiNfeLikeFormForDirty(nextForm);
     } catch (error) {
-      setEmissionNfseError(formatMeiFiscalErr(error, `Erro ao emitir ${docShort}.`));
+      setEmissionNfseError(error, `Erro ao emitir ${docShort}.`);
     } finally {
       setNfeLikeSubmitting(false);
     }
@@ -2040,6 +2052,7 @@ export default function GuidesMei() {
     nfseForm,
     nfEmissionCompanyForm.razaoSocial,
     clearNfseErrorState,
+    setEmissionNfseError,
     loadNfseList,
     loadNfseCatalog,
     loadMeiLimiteServidor,
@@ -2057,7 +2070,7 @@ export default function GuidesMei() {
       setNfseList((current) => current.map((item) => (item.id === id ? updated : item)));
       setNfseSuccess('Status da NFSe atualizado com sucesso.');
     } catch (error) {
-      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao atualizar NFSe.'));
+      setOperationNfseError(error, 'Erro ao atualizar NFSe.');
     } finally {
       finishNfseAction(actionKey);
     }
@@ -2074,7 +2087,7 @@ export default function GuidesMei() {
       triggerFileDownload(blob, filename || `nfse-${record.id}.pdf`);
       setNfseSuccess('Download do PDF iniciado.');
     } catch (error) {
-      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao baixar PDF da NFSe.'));
+      setOperationNfseError(error, 'Erro ao baixar PDF da NFSe.');
     } finally {
       finishNfseAction(actionKey);
     }
@@ -2091,7 +2104,7 @@ export default function GuidesMei() {
       triggerFileDownload(blob, filename || `nfse-${record.id}.xml`);
       setNfseSuccess('Download do XML iniciado.');
     } catch (error) {
-      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao baixar XML da NFSe.'));
+      setOperationNfseError(error, 'Erro ao baixar XML da NFSe.');
     } finally {
       finishNfseAction(actionKey);
     }
@@ -2115,7 +2128,7 @@ export default function GuidesMei() {
       setNfseList((current) => current.map((item) => (item.id === record.id ? updated : item)));
       setNfseSuccess(!reviewRequested ? 'NFSe marcada para revisão.' : 'Marcação de revisão removida.');
     } catch (error) {
-      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao atualizar NFSe.'));
+      setOperationNfseError(error, 'Erro ao atualizar NFSe.');
     } finally {
       finishNfseAction(actionKey);
     }
@@ -2138,7 +2151,7 @@ export default function GuidesMei() {
       /** LIM-MEI-03 / FR-LIM-08: mesmo estado que alimenta o limite — refetch da lista (e do indicador). */
       await Promise.all([loadNfseList(), loadMeiLimiteServidor()]);
     } catch (error) {
-      setOperationNfseError(formatMeiFiscalErr(error, 'Erro ao cancelar nota fiscal.'));
+      setOperationNfseError(error, 'Erro ao cancelar nota fiscal.');
     } finally {
       finishNfseAction(actionKey);
     }
@@ -2159,9 +2172,7 @@ export default function GuidesMei() {
       await loadMeiLimiteServidor();
       setNfseSuccess(!isArchived ? 'Nota fiscal arquivada com sucesso.' : 'Nota fiscal desarquivada com sucesso.');
     } catch (error) {
-      setOperationNfseError(
-        formatMeiFiscalErr(error, 'Erro ao atualizar arquivamento da nota fiscal.')
-      );
+      setOperationNfseError(error, 'Erro ao atualizar arquivamento da nota fiscal.');
     } finally {
       finishNfseAction(actionKey);
     }
@@ -2643,7 +2654,11 @@ export default function GuidesMei() {
                   progresso={meiLimiteBundle.progresso}
                   vigenciaLabel={meiLimiteBundle.vigenciaLabel}
                   loading={nfseLoading || meiLimiteServidorLoading}
-                  errorMessage={nfseError && nfseErrorKind === 'operation' ? nfseError : null}
+                  errorMessage={
+                    nfseError && nfseErrorKind === 'operation'
+                      ? nfseErrorSummaryLine(nfseError.rawMessage, nfseError.plugnotasCode)
+                      : null
+                  }
                   canViewNfse
                   onIrParaNfse={() => setActiveWorkspace('nfse')}
                 />
@@ -3931,12 +3946,19 @@ export default function GuidesMei() {
             ) : null}
             {nfseError && nfseErrorKind === 'emission' ? (
               <div data-nfse-feedback-tier="emission-error">
-                <EmissaoFiscalErrorAlert documentTypeLabel={emissionFeedbackDocumentLabel} message={nfseError} />
+                <EmissaoFiscalErrorAlert
+                  documentTypeLabel={emissionFeedbackDocumentLabel}
+                  message={nfseError.rawMessage}
+                  plugnotasCode={nfseError.plugnotasCode}
+                />
               </div>
             ) : null}
             {nfseError && nfseErrorKind === 'operation' ? (
               <div data-nfse-feedback-tier="provider-error">
-                <FiscalProviderErrorAlert message={nfseError} />
+                <FiscalProviderErrorAlert
+                  message={nfseError.rawMessage}
+                  plugnotasCode={nfseError.plugnotasCode}
+                />
               </div>
             ) : null}
             {nfseSuccess ? (

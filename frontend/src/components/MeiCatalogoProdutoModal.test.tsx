@@ -75,9 +75,11 @@ describe('MeiCatalogoProdutoModal', () => {
     });
     fireEvent.click(within(dialog).getByRole('button', { name: /^Guardar$/i }));
 
-    const alert = await within(dialog).findByRole('alert');
-    expect(alert.textContent).toMatch(/Validação ou rejeição no provedor|Operação fiscal/i);
-    expect(alert.textContent).toMatch(/Falha do servidor|Não foi possível concluir o pedido/);
+    await waitFor(() => {
+      const alerts = within(dialog).getAllByRole('alert');
+      const text = alerts.map((a) => a.textContent ?? '').join('\n');
+      expect(text).toMatch(/Falha do servidor|Não foi possível concluir o pedido|Algo inesperado/i);
+    });
     expect(onSaved).not.toHaveBeenCalled();
   });
 

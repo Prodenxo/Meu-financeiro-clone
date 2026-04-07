@@ -180,6 +180,8 @@ Quando várias regiões podem mostrar mensagem em simultâneo, **renderizar nest
 
 Dentro da lista (zona C), mensagens de lista (`nfseLoading`, erros de lista) **não** misturar com pilha de emissão; manter C autónomo.
 
+**Padrão transversal de erro ao utilizador:** mensagens de falha visíveis ao utilizador final (título em linguagem simples, descrição, indicação de **fonte** quando o aviso vem do emissor fiscal, detalhe técnico ou texto longo do provedor em painel secundário ou colapsável, CTAs de recuperação) seguem o contrato de [`ux-spec-mensagens-erro-usuario-final-2026-04-07.md`](ux-spec-mensagens-erro-usuario-final-2026-04-07.md), nas stories **FR-ERR-P0-***. No código, o módulo é **`frontend/src/components/FiscalIntegrationErrorAlert.tsx`**, que exporta entre outros `EmissaoFiscalErrorAlert`, `PlugnotasIntegrationErrorAlert` e `LongFiscalErrorMessage`; na documentação use o **caminho do ficheiro** quando a equipa precisar de localizar a implementação, e o **nome do export** quando for o identificador React. Os componentes actuais e o *banner* de lista devem **convergir** para esse modelo **sem** alterar a **ordem de prioridade** definida acima (bloqueio → validação cliente → erro servidor/provedor → sucesso).
+
 ---
 
 ## 8. Lista “Notas emitidas”

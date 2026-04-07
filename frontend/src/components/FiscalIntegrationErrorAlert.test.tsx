@@ -6,11 +6,11 @@ import { createRoot } from 'react-dom/client';
 import {
   EmissaoFiscalErrorAlert,
   EmissaoFiscalErrorAlertModal,
-  FISCAL_ERROR_LONG_THRESHOLD,
   GuiaMeiEmpresaCadastroErrorPanel,
   LongFiscalErrorMessage,
   PlugnotasIntegrationErrorAlert
 } from './FiscalIntegrationErrorAlert';
+import { FISCAL_ERROR_LONG_THRESHOLD } from '../lib/fiscalUserError';
 import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
 
 const globalWithActFlag = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
@@ -52,8 +52,9 @@ describe('EmissaoFiscalErrorAlert', () => {
     expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
   });
 
-  it('mensagem longa oferece expansão e depois mostra texto completo', async () => {
-    const longBody = 'x'.repeat(FISCAL_ERROR_LONG_THRESHOLD + 40);
+  it('mensagem longa oferece expansão técnica e depois mostra texto completo', async () => {
+    const inner = 'x'.repeat(FISCAL_ERROR_LONG_THRESHOLD + 40);
+    const longBody = JSON.stringify({ success: false, message: inner, errors: { code: 'x' } });
     const root = createRoot(container);
     await act(async () => {
       root.render(
@@ -61,17 +62,19 @@ describe('EmissaoFiscalErrorAlert', () => {
       );
     });
     const btn = container.querySelector('button');
-    expect(btn?.textContent).toContain('Ver detalhes completos');
+    expect(btn?.textContent).toContain('Ver detalhes técnicos');
     expect(btn?.getAttribute('aria-expanded')).toBe('false');
-    expect(btn?.hasAttribute('aria-controls')).toBe(false);
+    expect(btn?.getAttribute('aria-controls')).toBeTruthy();
 
     await act(async () => {
       btn?.click();
     });
 
     expect(container.textContent).toContain(longBody);
-    expect(container.textContent).toContain('Ocultar detalhes');
-    const hideBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Ocultar'));
+    expect(container.textContent).toContain('Ocultar detalhes técnicos');
+    const hideBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Ocultar detalhes técnicos')
+    );
     expect(hideBtn?.getAttribute('aria-controls')).toBeTruthy();
   });
 

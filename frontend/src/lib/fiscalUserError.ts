@@ -1,6 +1,9 @@
 import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
 import { getPlugnotasCodeFromUnknownError } from '../utils/apiClientError';
 
+/** Alinhado à Story 6.3 / Guia MEI: acima disto, mensagem longa exige expansão ou área rolável. */
+export const FISCAL_ERROR_LONG_THRESHOLD = 300;
+
 /** Fallback global (spec UX-GLOBAL-06 / FR-UX-GLOBAL-B06) — sem corpo técnico ao utilizador. */
 export const MEI_FISCAL_ERROR_FALLBACK_DESCRIPTION =
   'Não foi possível concluir o pedido. Tenta de novo. Se persistir, contacta o suporte.';

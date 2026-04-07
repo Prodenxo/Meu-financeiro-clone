@@ -1,34 +1,49 @@
-interface FetchErrorBannerProps {
-  /** Título curto visível e para leitores de ecrã */
-  title?: string;
-  message: string;
-  onRetry?: () => void;
-  retryLabel?: string;
-  className?: string;
-}
+import UserFacingErrorBlock from './UserFacingErrorBlock';
+import { mapUnknownErrorToUserFacing } from '../lib/mapUnknownErrorToUserFacing';
+
+export type FetchErrorBannerProps =
+  | {
+      error: unknown;
+      onRetry?: () => void;
+      retryLabel?: string;
+      className?: string;
+      surfaceId?: string;
+    }
+  | {
+      message: string;
+      title?: string;
+      onRetry?: () => void;
+      retryLabel?: string;
+      className?: string;
+      surfaceId?: string;
+    };
 
 /**
- * Erro de rede/API com mensagem humana e CTA opcional de repetir (spec UX §5.2).
+ * Erro de rede/API: *wrapper* fino sobre {@link UserFacingErrorBlock} (FR-ERR-P0-B).
  */
-export default function FetchErrorBanner({
-  title = 'Não foi possível carregar os dados',
-  message,
-  onRetry,
-  retryLabel = 'Tentar novamente',
-  className = '',
-}: FetchErrorBannerProps) {
-  return (
-    <div
-      role="alert"
-      className={`mb-4 rounded-xl border border-rose-200/90 bg-rose-50/95 px-4 py-3 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-100 ${className}`.trim()}
-    >
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <p className="mt-1 text-sm opacity-90">{message}</p>
-      {onRetry ? (
-        <button type="button" className="planner-button mt-3" onClick={onRetry}>
-          {retryLabel}
-        </button>
-      ) : null}
-    </div>
-  );
+export default function FetchErrorBanner(props: FetchErrorBannerProps) {
+  const onRetry = props.onRetry;
+  const retryLabel = props.retryLabel ?? 'Tentar novamente';
+  const className = props.className ?? '';
+  const surfaceId = props.surfaceId;
+
+  const mapped =
+    'error' in props
+      ? mapUnknownErrorToUserFacing(props.error, {
+          variant: 'page_banner',
+          onRetry,
+          retryLabel,
+          surfaceId,
+        })
+      : mapUnknownErrorToUserFacing(props.message, {
+          variant: 'page_banner',
+          onRetry,
+          retryLabel,
+          surfaceId,
+        });
+
+  const merged =
+    'error' in props ? mapped : props.title ? { ...mapped, title: props.title } : mapped;
+
+  return <UserFacingErrorBlock {...merged} className={[merged.className, className].filter(Boolean).join(' ')} />;
 }

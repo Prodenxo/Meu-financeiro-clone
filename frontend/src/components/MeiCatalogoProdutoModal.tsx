@@ -11,7 +11,8 @@ import {
   MEI_CATALOGO_DELETE_PRODUTO_DANGER_HEADING,
   MEI_CATALOGO_DELETE_PRODUTO_DANGER_HINT
 } from '../copy/meiCatalogoProdutoDelete';
-import { formatMeiFiscalMappedForAlert, mapMeiFiscalErrorFromUnknown } from '../lib/fiscalUserError';
+import UserFacingErrorBlock from './UserFacingErrorBlock';
+import { mapMeiCatalogApiErrorToUserFacing } from '../lib/mapMeiCatalogApiErrorToUserFacing';
 
 export interface MeiCatalogoProdutoModalProps {
   open: boolean;
@@ -50,7 +51,7 @@ export default function MeiCatalogoProdutoModal({
   const [aliquotaStr, setAliquotaStr] = useState('');
   const [valorCentDigits, setValorCentDigits] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<unknown | null>(null);
   const [saving, setSaving] = useState(false);
 
   const discRef = useRef<HTMLTextAreaElement>(null);
@@ -146,9 +147,7 @@ export default function MeiCatalogoProdutoModal({
       onSaved(isEdit ? 'edit' : 'create');
       onClose();
     } catch (err) {
-      setApiError(
-        formatMeiFiscalMappedForAlert(mapMeiFiscalErrorFromUnknown(err, 'Erro ao guardar.'))
-      );
+      setApiError(err);
     } finally {
       setSaving(false);
     }
@@ -187,15 +186,13 @@ export default function MeiCatalogoProdutoModal({
           Itens reutilizáveis na emissão de NFS-e (discriminação, CNAE, valores sugeridos).
         </p>
 
-        {apiError && (
-          <div
-            id={errId}
-            className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-            role="alert"
-          >
-            <span className="whitespace-pre-wrap break-words">{apiError}</span>
+        {apiError != null ? (
+          <div id={errId} className="mb-4" role="alert">
+            <UserFacingErrorBlock
+              {...mapMeiCatalogApiErrorToUserFacing(apiError, 'Erro ao guardar.', 'mei_catalogo.produtos.modal')}
+            />
           </div>
-        )}
+        ) : null}
 
         <form
           onSubmit={handleSubmit}

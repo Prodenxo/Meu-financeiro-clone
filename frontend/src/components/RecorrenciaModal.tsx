@@ -3,6 +3,8 @@ import type { Recorrencia, CreateRecorrenciaInput, UpdateRecorrenciaInput } from
 import { fetchCategoriesByType, type Category } from '../services/categoryService';
 import { useAuthStore } from '../store/authStore';
 import { toast } from '../lib/toast';
+import UserFacingErrorBlock from './UserFacingErrorBlock';
+import { mapUnknownErrorToUserFacing } from '../lib/mapUnknownErrorToUserFacing';
 
 export interface RecorrenciaModalProps {
   open: boolean;
@@ -10,7 +12,7 @@ export interface RecorrenciaModalProps {
   onSave: (payload: CreateRecorrenciaInput | UpdateRecorrenciaInput) => void;
   recorrencia?: Recorrencia | null;
   saving?: boolean;
-  error?: string | null;
+  error?: unknown | null;
 }
 
 export default function RecorrenciaModal({
@@ -160,14 +162,16 @@ export default function RecorrenciaModal({
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
           Todo mês, no dia escolhido, um lançamento será criado automaticamente na lista de transações.
         </p>
-        {error && (
-          <div
-            className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-            role="alert"
-          >
-            {error}
-          </div>
-        )}
+        {error != null ? (
+          <UserFacingErrorBlock
+            {...mapUnknownErrorToUserFacing(error, {
+              variant: 'modal_body',
+              surfaceId: 'recorrencias.modal',
+              className:
+                'mb-4 mt-0 border-0 bg-transparent p-0 shadow-none dark:bg-transparent',
+            })}
+          />
+        ) : null}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block mb-2 font-medium dark:text-gray-200">Dia do mês (1–31)</label>
