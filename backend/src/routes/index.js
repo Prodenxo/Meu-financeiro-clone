@@ -10,6 +10,7 @@ import recorrenciasRoutes from './recorrencias.routes.js';
 import adminRoutes from './admin.routes.js';
 import healthRoutes from './health.routes.js';
 import empresaInvitesRoutes from './empresa-invites.routes.js';
+import cronRoutes from './cron.routes.js';
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use('/mei-guide', meiGuideRoutes);
 router.use('/mei-notas', meiNotasRoutes);
 router.use('/notas', meiNotasRoutes);
 router.use('/recorrencias', recorrenciasRoutes);
+router.use('/cron', cronRoutes);
 
 export default router;
