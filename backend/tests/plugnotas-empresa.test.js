@@ -69,6 +69,142 @@ test('empresa service cria empresa com POST /empresa', async () => {
   }
 });
 
+test('POST com documentosAtivos só NFSe equivale ao default e não envia campo interno ao Plugnotas (CR-CAD-DOC-01)', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return createJsonResponse(200, {
+      message: 'OK',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await cadastrarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      certificado: 'cert-1',
+      razaoSocial: 'Empresa Teste',
+      documentosAtivos: { nfse: true, nfe: false, nfce: false }
+    });
+    const sent = JSON.parse(calls[0].options.body);
+    assert.equal('documentosAtivos' in sent, false);
+    assert.equal(sent.nfce.ativo, false);
+    assert.equal('config' in sent.nfce, false);
+    assert.equal(sent.nfe.ativo, false);
+    assert.equal(sent.nfse?.nacional, true);
+    assert.equal(sent.inscricaoEstadual, 'ISENTO');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('POST com documentosAtivos inválido (todos false) → 400', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  await assert.rejects(
+    () => cadastrarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      certificado: 'cert-1',
+      documentosAtivos: { nfse: false, nfe: false, nfce: false }
+    }),
+    /pelo menos um tipo de documento/
+  );
+});
+
+test('POST com documentosAtivos só nfce true (nfse false) monta nfce ativo e nfse inativo sem config', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return createJsonResponse(200, {
+      message: 'OK',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await cadastrarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      certificado: 'cert-1',
+      documentosAtivos: { nfse: false, nfe: false, nfce: true }
+    });
+    const sent = JSON.parse(calls[0].options.body);
+    assert.equal(sent.nfse.ativo, false);
+    assert.equal('nacional' in sent.nfse, false);
+    assert.equal(sent.nfce.ativo, true);
+    assert.ok(sent.nfce.config);
+    assert.equal(sent.nfe.ativo, false);
+    assert.equal('config' in sent.nfe, false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('POST com documentosAtivos nfe true envia bloco nfe ativo com config mínimo', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return createJsonResponse(200, {
+      message: 'OK',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await cadastrarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      certificado: 'cert-1',
+      documentosAtivos: { nfse: true, nfe: true, nfce: false }
+    });
+    const sent = JSON.parse(calls[0].options.body);
+    assert.equal('documentosAtivos' in sent, false);
+    assert.equal(sent.nfe.ativo, true);
+    assert.ok(sent.nfe.config);
+    assert.equal(sent.nfe.config.producao, true);
+    assert.equal(sent.nfce.ativo, false);
+    assert.equal('config' in sent.nfce, false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('PATCH com documentosAtivos não força nfe/nfce inativos por engano (FR-CAD-DOC-05)', async () => {
+  const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options, body: options.body });
+    return createJsonResponse(200, {
+      message: 'Empresa atualizada',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await atualizarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      razaoSocial: 'Empresa Teste',
+      documentosAtivos: { nfse: true, nfe: false, nfce: true }
+    });
+    const sent = JSON.parse(calls[0].body);
+    assert.equal('documentosAtivos' in sent, false);
+    assert.equal(sent.nfce.ativo, true);
+    assert.ok(sent.nfce.config);
+    assert.equal(sent.nfe.ativo, false);
+    assert.equal('config' in sent.nfe, false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('empresa service POST modo apenas NFSe: inativa nfce/nfe sem config mesmo se cliente envia NFC-e ativa', async () => {
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;

@@ -14,7 +14,8 @@ import {
   getCertificateDocument,
   getCertificateValidity,
   patchEmitenteNfseFields,
-  getEmitenteNfseSnapshot
+  getEmitenteNfseSnapshot,
+  getDocumentosAtivosMirror
 } from './mei-certificate-store.js';
 import {
   isCompetenciaPaid,
@@ -1207,13 +1208,20 @@ export const getCertificateStatus = async (userId) => {
   } catch {
     nfseEmitente = null;
   }
+  let documentosAtivos = null;
+  try {
+    documentosAtivos = await getDocumentosAtivosMirror(userId);
+  } catch {
+    documentosAtivos = null;
+  }
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
     documento: docFromCache || docFromDb || null,
     certValidFrom: certValidFrom || null,
     certValidTo: certValidTo || null,
-    nfseEmitente
+    nfseEmitente,
+    documentosAtivos
   };
 };
 

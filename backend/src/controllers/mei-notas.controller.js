@@ -1,5 +1,6 @@
 import { env } from '../config/env.js';
 import * as meiNotasService from '../services/mei-notas.service.js';
+import { persistDocumentosAtivosMirrorAfterEmpresa } from '../services/mei-notas-documentos-mirror.js';
 import {
   atualizarEmpresaPlugNotas,
   cadastrarCertificadoPlugNotas,
@@ -20,6 +21,13 @@ const parseBooleanLike = (value, fallback = false) => {
   if (['1', 'true', 'yes', 'sim'].includes(text)) return true;
   if (['0', 'false', 'no', 'nao', 'não'].includes(text)) return false;
   return fallback;
+};
+
+const getEmpresaPayloadFromRequest = (req) => {
+  const body = req.body;
+  if (body?.payload && typeof body.payload === 'object') return body.payload;
+  if (body && typeof body === 'object') return body;
+  return {};
 };
 
 const ensureWebhookToken = (req) => {
@@ -124,10 +132,9 @@ export const cadastrarPlugNotasCertificado = async (req, res, next) => {
 
 export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
   try {
-    const payload = req.body?.payload && typeof req.body.payload === 'object'
-      ? req.body.payload
-      : req.body;
+    const payload = getEmpresaPayloadFromRequest(req);
     const data = await cadastrarEmpresaPlugNotas(payload);
+    await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
     return sendSuccess(res, data, 'Empresa configurada no serviço de emissão fiscal');
   } catch (error) {
     return next(error);
@@ -146,10 +153,9 @@ export const consultarPlugNotasEmpresa = async (req, res, next) => {
 
 export const atualizarPlugNotasEmpresa = async (req, res, next) => {
   try {
-    const payload = req.body?.payload && typeof req.body.payload === 'object'
-      ? req.body.payload
-      : req.body;
+    const payload = getEmpresaPayloadFromRequest(req);
     const data = await atualizarEmpresaPlugNotas(payload);
+    await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
     return sendSuccess(res, data, 'Empresa atualizada no serviço de emissão fiscal');
   } catch (error) {
     return next(error);

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   normalizeEmitenteRowFragment,
   emitenteRowToApiShape,
-  emitenteDbRowHasNfseData
+  emitenteDbRowHasNfseData,
+  parseDocumentosAtivosMirrorValue
 } from '../src/services/mei-certificate-store.js';
 
 test('normalizeEmitenteRowFragment — CEP e UF', () => {
@@ -135,4 +136,13 @@ test('emitenteDbRowHasNfseData — só optante_simples_nacional não basta', () 
     }),
     false
   );
+});
+
+test('parseDocumentosAtivosMirrorValue normaliza json válido e rejeita inválido', () => {
+  assert.deepStrictEqual(
+    parseDocumentosAtivosMirrorValue({ nfse: true, nfe: false }),
+    { nfse: true, nfe: false, nfce: false }
+  );
+  assert.strictEqual(parseDocumentosAtivosMirrorValue('{"nfse":true}'), null);
+  assert.strictEqual(parseDocumentosAtivosMirrorValue(null), null);
 });

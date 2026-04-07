@@ -54,6 +54,12 @@ import {
   type NfEmissionCompanyForm,
   type NfEmissionRegimeTributario
 } from '../utils/nfEmissionCompany';
+import {
+  DEFAULT_DOCUMENTOS_ATIVOS,
+  getDocumentosAtivosValidationMessage,
+  mapPlugnotasEmpresaToDocumentSelection,
+  type DocumentosAtivosState
+} from '../utils/plugnotasEmpresaDocumentosAtivos';
 import { isFetchConnectivityFailure } from '../utils/isFetchConnectivityFailure';
 import { getPlugnotasCodeFromUnknownError as getFiscalErrorCode } from '../utils/apiClientError';
 import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
@@ -107,6 +113,7 @@ import {
 } from '../utils/meiNfeLikeFormState';
 import { buildNfeLikePayloadFromMeiForm } from '../utils/meiNfeLikePayloadBuilder';
 import { validateMeiNfeLikeForm } from '../utils/meiNfeLikeClientValidation';
+import { GuiaMeiDesativarNfseDialog } from '../components/mei/GuiaMeiDesativarNfseDialog';
 import { MeiFiscalChangeEmissionTypeDialog } from '../components/mei/MeiFiscalChangeEmissionTypeDialog';
 import {
   MeiFiscalEmissionTypeSegmented,
@@ -114,9 +121,18 @@ import {
   type MeiFiscalEmissionDocumentType
 } from '../components/mei/MeiFiscalEmissionTypeSegmented';
 import { MeiFiscalCapabilityCallout } from '../components/mei/MeiFiscalCapabilityCallout';
+import { MeiCadastroNfeNfceInfoBanner } from '../components/mei/MeiCadastroNfeNfceInfoBanner';
+import { MeiCadastroRequisitosNfeNfcePlaceholder } from '../components/mei/MeiCadastroRequisitosNfeNfcePlaceholder';
 import { MeiNfeLikeEmitForm } from '../components/mei/MeiNfeLikeEmitForm';
 import { useMeiPlugnotasFiscalCapability } from '../hooks/useMeiPlugnotasFiscalCapability';
 import { isNfeLikeEmissionBlockedByCapabilities } from '../utils/plugnotasEmpresaCapabilities';
+import {
+  getGuiaMeiCadastroFiscalDocHref,
+  getHintBlocoDadosMinimosEmitente,
+  getTituloBlocoDadosMinimosEmitente,
+  shouldShowCadastroNfeNfceInfoBanner,
+  shouldShowRequisitosNfeNfceSecao
+} from '../utils/guiaMeiCadastroDocumentosAtivos';
 
 function formatMeiFiscalErr(error: unknown, fallback: string): string {
   return formatFiscalError(
@@ -656,11 +672,20 @@ export default function GuidesMei() {
   ));
   /** Evita sobrescrever edição local ao reexecutar `loadCertificateStatus`. */
   const nfseEmitenteHydratedRef = useRef(false);
+  /** Uma vez hidratado a partir do espelho Supabase ou após consulta GET remota (remoto > espelho > default). */
+  const documentosAtivosRemoteOrMirrorHydratedRef = useRef(false);
   /** Deteta troca para o separador NFS-e e dispara refetch do catálogo (CAT-MEI-05 / FR-CAT-07). */
   const prevMeiWorkspaceRef = useRef<GuidesMeiWorkspace | null>(null);
   const [nfEmissionCompanySyncLoading, setNfEmissionCompanySyncLoading] = useState<'consult' | 'patch' | null>(null);
   const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<string | null>(null);
   const [nfEmissionCompanySyncSuccess, setNfEmissionCompanySyncSuccess] = useState<string | null>(null);
+  const [documentosAtivos, setDocumentosAtivos] = useState<DocumentosAtivosState>(() => ({
+    ...DEFAULT_DOCUMENTOS_ATIVOS
+  }));
+  const [documentosAtivosSubmitError, setDocumentosAtivosSubmitError] = useState<string | null>(null);
+  const [documentosAtivosConsultWarning, setDocumentosAtivosConsultWarning] = useState<string | null>(null);
+  const [nfseDesativarDialogOpen, setNfseDesativarDialogOpen] = useState(false);
+  const documentosAtivosNfseCheckboxRef = useRef<HTMLInputElement>(null);
   const [brasilApiLoading, setBrasilApiLoading] = useState(false);
   const [brasilApiError, setBrasilApiError] = useState<string | null>(null);
   const [nfsePrestadorBrasilApiLoading, setNfsePrestadorBrasilApiLoading] = useState(false);
@@ -797,13 +822,25 @@ export default function GuidesMei() {
         setNfEmissionCompanyForm(emitenteSnapshotToForm(snap));
         setNfseForm((current) => mergeEmitenteSnapshotIntoNfseForm(current, snap));
       }
+      if (
+        canViewNfse
+        && status.documentosAtivos
+        && !documentosAtivosRemoteOrMirrorHydratedRef.current
+      ) {
+        documentosAtivosRemoteOrMirrorHydratedRef.current = true;
+        setDocumentosAtivos({
+          nfse: Boolean(status.documentosAtivos.nfse),
+          nfe: Boolean(status.documentosAtivos.nfe),
+          nfce: Boolean(status.documentosAtivos.nfce)
+        });
+      }
     } catch {
       setHasUserCertificate(false);
       setHasServerCertificate(false);
       setCertValidFrom(null);
       setCertValidTo(null);
     }
-  }, [applyDocumento]);
+  }, [applyDocumento, canViewNfse]);
 
   const loadMeiPeriods = useCallback(async () => {
     if (!canLoadPeriods) {
@@ -941,6 +978,23 @@ export default function GuidesMei() {
       ...updates
     }));
   };
+
+  const handleDocumentosAtivosChange = (key: keyof DocumentosAtivosState, checked: boolean) => {
+    if (key === 'nfse' && !checked && documentosAtivos.nfse) {
+      setNfseDesativarDialogOpen(true);
+      return;
+    }
+    setDocumentosAtivos((prev) => ({ ...prev, [key]: checked }));
+  };
+
+  const confirmDesativarNfse = () => {
+    setDocumentosAtivos((prev) => ({ ...prev, nfse: false }));
+    setNfseDesativarDialogOpen(false);
+  };
+
+  useEffect(() => {
+    setDocumentosAtivosSubmitError(null);
+  }, [documentosAtivos]);
 
   const handleSelectCatalogCliente = (id: string) => {
     setSelectedCatalogClienteId(id);
@@ -1169,10 +1223,19 @@ export default function GuidesMei() {
         setCertificateError(companyValidationMessage);
         return;
       }
+      const docMsg = getDocumentosAtivosValidationMessage(documentosAtivos);
+      if (docMsg) {
+        setCertificateConnectivityAlert(false);
+        setCertificateErrorFiscalCode(null);
+        setDocumentosAtivosSubmitError(docMsg);
+        documentosAtivosNfseCheckboxRef.current?.focus();
+        return;
+      }
     }
 
     setCertificateError(null);
     setCertificateErrorFiscalCode(null);
+    setDocumentosAtivosSubmitError(null);
     setCertificateConnectivityAlert(false);
     setCertificateSuccess(null);
     setIsUploadingCert(true);
@@ -1227,7 +1290,8 @@ export default function GuidesMei() {
       const companyPayload = buildNfEmissionEmpresaPayload({
         cnpj,
         certificadoId: certificateId,
-        form: nfEmissionCompanyForm
+        form: nfEmissionCompanyForm,
+        documentosAtivos
       });
       const companyResponse = await cadastrarEmpresaEmissaoNf(companyPayload);
       const returnedCnpj = normalizeDoc(String(companyResponse.cnpj || cnpj));
@@ -1304,6 +1368,7 @@ export default function GuidesMei() {
   const handleConsultarCadastroEmissor = async () => {
     setNfEmissionCompanySyncError(null);
     setNfEmissionCompanySyncSuccess(null);
+    setDocumentosAtivosConsultWarning(null);
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
       setNfEmissionCompanySyncError(
@@ -1324,6 +1389,16 @@ export default function GuidesMei() {
           .filter(Boolean)
           .join(' ')
       );
+      if (canViewNfse) {
+        const mapped = mapPlugnotasEmpresaToDocumentSelection(data);
+        if (mapped.kind === 'full') {
+          documentosAtivosRemoteOrMirrorHydratedRef.current = true;
+          setDocumentosAtivos(mapped.selection);
+          setDocumentosAtivosConsultWarning(null);
+        } else {
+          setDocumentosAtivosConsultWarning(mapped.message);
+        }
+      }
     } catch (error) {
       setNfEmissionCompanySyncError(
         formatMeiFiscalErr(error, 'Falha ao consultar cadastro no serviço de emissão fiscal.')
@@ -1336,9 +1411,16 @@ export default function GuidesMei() {
   const handleAtualizarCadastroSemNovoCertificado = async () => {
     setNfEmissionCompanySyncError(null);
     setNfEmissionCompanySyncSuccess(null);
+    setDocumentosAtivosSubmitError(null);
     const companyValidationMessage = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
     if (companyValidationMessage) {
       setNfEmissionCompanySyncError(companyValidationMessage);
+      return;
+    }
+    const docMsg = getDocumentosAtivosValidationMessage(documentosAtivos);
+    if (docMsg) {
+      setDocumentosAtivosSubmitError(docMsg);
+      documentosAtivosNfseCheckboxRef.current?.focus();
       return;
     }
     const cnpj = resolveCnpjParaEmissor();
@@ -1353,7 +1435,8 @@ export default function GuidesMei() {
     try {
       const companyPayload = buildNfEmissionEmpresaPayload({
         cnpj,
-        form: nfEmissionCompanyForm
+        form: nfEmissionCompanyForm,
+        documentosAtivos
       });
       const companyResponse = await atualizarEmpresaEmissaoNf(companyPayload);
       let updatedStatus;
@@ -1376,6 +1459,7 @@ export default function GuidesMei() {
       setNfEmissionCompanySyncSuccess(
         companyResponse.message || 'Empresa atualizada no serviço de emissão fiscal com sucesso.'
       );
+      setDocumentosAtivosSubmitError(null);
     } catch (error) {
       setNfEmissionCompanySyncError(
         formatMeiFiscalErr(error, 'Falha ao atualizar empresa no serviço de emissão fiscal.')
@@ -1414,8 +1498,11 @@ export default function GuidesMei() {
     try {
       await removeMeiCertificate();
       nfseEmitenteHydratedRef.current = false;
+      documentosAtivosRemoteOrMirrorHydratedRef.current = false;
       setNfseEmitentePendingApply(null);
       setNfEmissionCompanyForm(getDefaultNfEmissionCompanyForm());
+      setDocumentosAtivos({ ...DEFAULT_DOCUMENTOS_ATIVOS });
+      setDocumentosAtivosConsultWarning(null);
       setNfseForm((current) => ({
         ...current,
         prestadorRazaoSocial: '',
@@ -2182,8 +2269,35 @@ export default function GuidesMei() {
     return nfeLikeFieldErrors[keys[0]!];
   }, [nfeLikeFieldErrors]);
 
+  const dadosMinimosEmitenteTitle = useMemo(
+    () => getTituloBlocoDadosMinimosEmitente(documentosAtivos),
+    [documentosAtivos]
+  );
+
+  const dadosMinimosEmitenteHint = useMemo(
+    () => getHintBlocoDadosMinimosEmitente(documentosAtivos),
+    [documentosAtivos]
+  );
+
+  const showCadastroNfeNfceInfoBanner = useMemo(
+    () => shouldShowCadastroNfeNfceInfoBanner(documentosAtivos),
+    [documentosAtivos]
+  );
+
+  const cadastroFiscalDocHref = useMemo(() => getGuiaMeiCadastroFiscalDocHref(), []);
+
+  const showRequisitosNfeNfcePlaceholder = useMemo(
+    () => shouldShowRequisitosNfeNfceSecao(documentosAtivos),
+    [documentosAtivos]
+  );
+
   return (
     <>
+      <GuiaMeiDesativarNfseDialog
+        open={nfseDesativarDialogOpen}
+        onCancel={() => setNfseDesativarDialogOpen(false)}
+        onConfirm={confirmDesativarNfse}
+      />
       <MeiFiscalChangeEmissionTypeDialog
         open={emissionTypeChangeDialogOpen}
         onCancel={handleCancelEmissionTypeDialog}
@@ -2590,13 +2704,94 @@ export default function GuidesMei() {
               </div>
 
               {canViewNfse ? (
-                <div className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30">
+                <div className="space-y-3">
+                  <fieldset
+                    className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30"
+                    aria-describedby={
+                      documentosAtivosSubmitError ? 'mei-doc-ativos-erro' : undefined
+                    }
+                  >
+                    <legend className="mb-2 w-full text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Documentos ativos
+                    </legend>
+                    <p className="admin-field-hint mb-3">
+                      Escolha quais tipos de documento ficam ativos no emissor (alinhado ao painel Plugnotas).
+                    </p>
+                    <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:gap-x-6">
+                      <label className="flex max-w-md cursor-pointer items-start gap-2">
+                        <input
+                          ref={documentosAtivosNfseCheckboxRef}
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={documentosAtivos.nfse}
+                          onChange={(e) => handleDocumentosAtivosChange('nfse', e.target.checked)}
+                        />
+                        <span>
+                          <span className="text-sm font-medium text-slate-800 dark:text-slate-100">NFS-e</span>
+                          <span className="text-slate-600 dark:text-slate-300"> (nota de serviço)</span>
+                          <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                            Serviços prestados; padrão para MEI na área de emissão da app.
+                          </span>
+                        </span>
+                      </label>
+                      <label className="flex max-w-md cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={documentosAtivos.nfe}
+                          onChange={(e) => handleDocumentosAtivosChange('nfe', e.target.checked)}
+                        />
+                        <span>
+                          <span className="text-sm font-medium text-slate-800 dark:text-slate-100">NF-e</span>
+                          <span className="text-slate-600 dark:text-slate-300"> (modelo 55, produto)</span>
+                          <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                            Produtos e operações que exigem NF-e (modelo 55).
+                          </span>
+                        </span>
+                      </label>
+                      <label className="flex max-w-md cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={documentosAtivos.nfce}
+                          onChange={(e) => handleDocumentosAtivosChange('nfce', e.target.checked)}
+                        />
+                        <span>
+                          <span className="text-sm font-medium text-slate-800 dark:text-slate-100">NFC-e</span>
+                          <span className="text-slate-600 dark:text-slate-300"> (venda ao consumidor)</span>
+                          <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                            Venda presencial ou ao consumidor final com NFC-e.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                    {documentosAtivosSubmitError ? (
+                      <p
+                        id="mei-doc-ativos-erro"
+                        role="alert"
+                        className="mt-3 text-sm text-red-600 dark:text-red-400"
+                      >
+                        {documentosAtivosSubmitError}
+                      </p>
+                    ) : null}
+                  </fieldset>
+
+                  {showCadastroNfeNfceInfoBanner ? (
+                    <MeiCadastroNfeNfceInfoBanner docHref={cadastroFiscalDocHref} />
+                  ) : null}
+
+                  {documentosAtivosConsultWarning ? (
+                    <div className="admin-alert-warning text-sm leading-relaxed">{documentosAtivosConsultWarning}</div>
+                  ) : null}
+
+                  <div className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Dados mínimos para emissão de NFS-e
+                    {dadosMinimosEmitenteTitle}
                   </p>
                   <p className="admin-field-hint mb-2">
-                    Campos com * são obrigatórios para a configuração inicial. A inscrição estadual não é solicitada (política MEI).
+                    {dadosMinimosEmitenteHint}
                   </p>
+                  {showRequisitosNfeNfcePlaceholder ? <MeiCadastroRequisitosNfeNfcePlaceholder /> : null}
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
                       className="planner-input-compact"
@@ -2733,6 +2928,7 @@ export default function GuidesMei() {
                       </button>
                     </div>
                   </div>
+                </div>
                 </div>
               ) : null}
 

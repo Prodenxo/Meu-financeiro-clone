@@ -32,6 +32,10 @@ const MIGRATIONS = [
     version: '20260326150000',
     file: '20260326150000_add_tipo_logradouro_user_mei_certificates.sql',
   },
+  {
+    version: '20260407130000',
+    file: '20260407130000_add_documentos_ativos_user_mei_certificates.sql',
+  },
 ];
 
 /** Colunas esperadas após ambas as migrações (ver brief NFS-e). */
@@ -51,6 +55,7 @@ const REQUIRED_COLUMNS = [
   'uf',
   'optante_simples_nacional',
   'tipo_logradouro',
+  'documentos_ativos',
 ];
 
 const args = process.argv.slice(2);

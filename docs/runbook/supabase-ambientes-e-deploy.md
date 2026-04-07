@@ -2,6 +2,8 @@
 
 **Objetivo (CORR-02):** evitar desalinhamento entre código implantado e schema PostgREST/Postgres (ex.: colunas em falta em `user_mei_certificates`).
 
+**RLS (`user_mei_certificates`):** a migração `20260407150000_user_mei_certificates_rls.sql` ativa RLS com políticas *own row* (`user_id = auth.uid()`). O backend Node usa **service role** e continua a ler/gravar sem depender dessas políticas; clientes **anon** não têm políticas ⇒ sem acesso direto à tabela via PostgREST com chave anon.
+
 **Referências canónicas**
 
 | Documento | Caminho |
@@ -60,4 +62,4 @@ Após DDL e deploy, validar o fluxo Guia MEI / emitente NFS-e (PATCH + UI): `doc
 
 ---
 
-**Última atualização:** 2026-03-26 — CORR-02; 2026-03-26 — templates outros forges + workflow lembrete (pós-QA); 2026-03-26 — CORR-03 (ligação roteiro validação); 2026-03-26 — CORR-03 workflow smoke CI (pós-QA Quinn).
+**Última atualização:** 2026-04-07 — nota RLS `user_mei_certificates` (FR-CAD-DOC P1); 2026-03-26 — CORR-02; 2026-03-26 — templates outros forges + workflow lembrete (pós-QA); 2026-03-26 — CORR-03 (ligação roteiro validação); 2026-03-26 — CORR-03 workflow smoke CI (pós-QA Quinn).

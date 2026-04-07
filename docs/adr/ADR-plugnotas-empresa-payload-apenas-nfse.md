@@ -26,6 +26,16 @@
 
 Comportamento **apenas NFS-e** no cadastro de empresa está **ativo por padrão** no código; não há variável de ambiente dedicada até decisão de PO sobre feature flag (D-05). Eventual flag futura deve encapsular a normalização em `empresa.service.js` e o payload em `buildNfEmissionEmpresaPayload`.
 
+## Complemento (2026-04-07) — modo multi-documento (`documentosAtivos`)
+
+Quando o cliente envia **`documentosAtivos: { nfse, nfe, nfce }`** (booleanos), o backend monta os blocos `nfse` / `nfe` / `nfce` de forma **canónica** em `applyEmpresaPlugnotasDocumentSelectionForPost` / `ForPatch` (`backend/src/services/plugnotas/plugnotas-empresa-documentos-ativos.js`), **remove** `documentosAtivos` antes do `fetch` ao Plugnotas e valida **pelo menos um** tipo activo (mensagem 400 alinhada ao PRD §6.3).
+
+- **Inactivos:** continuam **sem** `config` (`{ ativo: false, tipoContrato: 0 }`).
+- **Activos:** `tipoContrato: 0` e `config` mínimo acordado (NF-e / NFC-e — valores documentados no módulo; revisão com doc oficial / sandbox).
+- **PATCH:** se **`documentosAtivos` ausente**, mantém-se o comportamento deste ADR (omitir `nfe`/`nfce` quando não enviados; não reactivar NFC-e legada por engano). Se **`documentosAtivos` presente**, aplica-se a mesma montagem que no POST para expressar intenção explícita.
+
+Story: [`story-fr-cad-doc-p0-backend-documentos-ativos-plugnotas.md`](../stories/story-fr-cad-doc-p0-backend-documentos-ativos-plugnotas.md).
+
 ## Consequências
 
 - Positivo: menos falhas de cadastro por validação de NFC-e inativa.

@@ -22,6 +22,13 @@ import {
   PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
   PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY
 } from './plugnotas-mei-empresa-policy.js';
+import {
+  applyEmpresaPlugnotasDocumentSelectionForPatch,
+  applyEmpresaPlugnotasDocumentSelectionForPost,
+  resolveDocumentosAtivosForPatch,
+  resolveDocumentosAtivosForPost,
+  stripDocumentosAtivos
+} from './plugnotas-empresa-documentos-ativos.js';
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
 /** Blocos mínimos inativos — sem `config`, para não disparar validação SEFAZ / `versaoQrCode` no Plugnotas (produto apenas NFS-e). Ver `docs/adr/ADR-plugnotas-empresa-payload-apenas-nfse.md`. */
@@ -44,22 +51,6 @@ const normalizeInscricaoEstadualApenasNfse = (payload) => {
 };
 
 /**
- * POST: default NFS-e Nacional ON em `nfse` (D-N01); garante bloco mínimo se ausente.
- * @param {Record<string, unknown>} payload
- */
-const applyNfseNacionalDefaultForPost = (payload) => {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
-  const base =
-    payload.nfse && typeof payload.nfse === 'object' && !Array.isArray(payload.nfse)
-      ? { ...payload.nfse }
-      : { ativo: true, tipoContrato: 0, config: { producao: true } };
-  payload.nfse = {
-    ...base,
-    [PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON
-  };
-};
-
-/**
  * PATCH: só toca `nfse` se o cliente enviou o bloco (D-N03 / FR-NA03). Preenche nacional ON se a chave não veio.
  * @param {Record<string, unknown>} payload
  */
@@ -72,18 +63,6 @@ const applyNfseNacionalDefaultForPatch = (payload) => {
     next[PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY] = PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON;
   }
   payload.nfse = next;
-};
-
-/**
- * POST cadastro: sempre envia `nfe`/`nfce` inativos sem `config`; normaliza IE.
- * @param {Record<string, unknown>} payload
- */
-const applyEmpresaPlugnotasApenasNfseForPost = (payload) => {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
-  payload.nfe = { ...PLUGNOTAS_EMPRESA_APENAS_NFSE_NFE };
-  payload.nfce = { ...PLUGNOTAS_EMPRESA_APENAS_NFSE_NFCE };
-  normalizeInscricaoEstadualApenasNfse(payload);
-  applyNfseNacionalDefaultForPost(payload);
 };
 
 /**
@@ -580,7 +559,16 @@ export const atualizarEmpresaPlugNotas = async (input) => {
     delete payload.certificado;
   }
 
-  applyEmpresaPlugnotasApenasNfseForPatch(payload);
+  const docPatch = resolveDocumentosAtivosForPatch(payload);
+  stripDocumentosAtivos(payload);
+  if (docPatch.present && docPatch.selection) {
+    applyEmpresaPlugnotasDocumentSelectionForPatch(payload, docPatch.selection);
+    if (hasOwn(payload, 'inscricaoEstadual')) {
+      normalizeInscricaoEstadualApenasNfse(payload);
+    }
+  } else {
+    applyEmpresaPlugnotasApenasNfseForPatch(payload);
+  }
 
   const updateResult = await tryUpdateEmpresa(cnpj, payload);
   if (updateResult.response) {
@@ -629,7 +617,9 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
 
-  applyEmpresaPlugnotasApenasNfseForPost(payload);
+  const docPost = resolveDocumentosAtivosForPost(payload);
+  stripDocumentosAtivos(payload);
+  applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection);
 
   try {
     const response = await requestJson('POST', '/empresa', payload);
