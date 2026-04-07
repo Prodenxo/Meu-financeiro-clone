@@ -14,7 +14,15 @@ export interface UseDreMatrixResult {
   refetch: () => Promise<void>;
 }
 
-export function useDreMatrix(userId: string | null, year: number): UseDreMatrixResult {
+/**
+ * @param dataRevision Incrementar após mutações de orçamento (ex.: remover planejamento, gravar mês)
+ * para refetch da matriz DRE sem mudar ano — evita células obsoletas ao alternar separadores.
+ */
+export function useDreMatrix(
+  userId: string | null,
+  year: number,
+  dataRevision = 0
+): UseDreMatrixResult {
   const [categories, setCategories] = useState<Category[]>([]);
   const [cells, setCells] = useState<DreMatrixCell[]>([]);
   const [loading, setLoading] = useState(false);
@@ -45,7 +53,7 @@ export function useDreMatrix(userId: string | null, year: number): UseDreMatrixR
 
   useEffect(() => {
     void refetch();
-  }, [refetch]);
+  }, [refetch, dataRevision]);
 
   return { categories, cells, loading, error, refetch };
 }

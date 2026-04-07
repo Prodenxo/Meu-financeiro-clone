@@ -36,6 +36,8 @@ export interface DreBudgetPanelProps {
   onYearChange: (y: number) => void;
   yearOptions: number[];
   onGoToMonthTab: () => void;
+  /** Incrementado pelo pai após alterar orçamentos no modo mensal — força refetch da DRE. */
+  matrixDataRevision?: number;
 }
 
 export default function DreBudgetPanel({
@@ -43,7 +45,8 @@ export default function DreBudgetPanel({
   year,
   onYearChange,
   yearOptions,
-  onGoToMonthTab
+  onGoToMonthTab,
+  matrixDataRevision = 0
 }: DreBudgetPanelProps) {
   const [dreSelection, setDreSelection] = useState<DreUiSelection>(() => ({
     mode: 'months',
@@ -112,7 +115,11 @@ export default function DreBudgetPanel({
     setDreSelection({ mode: 'months', months: [month] });
   }, []);
 
-  const { categories, cells, loading, error, refetch } = useDreMatrix(userId, year);
+  const { categories, cells, loading, error, refetch } = useDreMatrix(
+    userId,
+    year,
+    matrixDataRevision
+  );
 
   const { tableVariant, models, compareMonths, tableTitle, descriptionId } = useMemo(() => {
     if (dreSelection.mode === 'annual') {
