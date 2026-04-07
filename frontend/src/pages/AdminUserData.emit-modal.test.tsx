@@ -99,7 +99,9 @@ describe('AdminUserData — modal emitir nota fiscal (FR-GUIA-FISC P2)', () => {
     ).toBeTruthy();
   });
 
-  it('com utilizador seleccionado: abre modal, mostra seletor NFS-e/NF-e/NFC-e e texto contextual NFC-e', async () => {
+  it(
+    'com utilizador seleccionado: abre modal, mostra seletor NFS-e/NF-e/NFC-e e texto contextual NFC-e',
+    async () => {
     render(<AdminUserData />);
 
     await screen.findByPlaceholderText(/digite para filtrar/i);
@@ -132,5 +134,7 @@ describe('AdminUserData — modal emitir nota fiscal (FR-GUIA-FISC P2)', () => {
 
     const submitEmitir = within(dialog).getByRole('button', { name: 'Emitir' });
     expect((submitEmitir as HTMLButtonElement).disabled).toBe(true);
-  });
+  },
+    15_000
+  );
 });

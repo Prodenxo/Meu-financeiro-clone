@@ -66,4 +66,14 @@ describe('nfEmissionCompany', () => {
     const nfse = payload.nfse as Record<string, unknown>;
     expect(nfse[PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
   });
+
+  it('buildNfEmissionEmpresaPayload inclui documentosAtivos quando fornecido (cadastro Guia MEI)', () => {
+    const payload = buildNfEmissionEmpresaPayload({
+      cnpj: '12345678000190',
+      certificadoId: 'cert-abc',
+      form: fullValidForm(),
+      documentosAtivos: { nfse: true, nfe: true, nfce: false }
+    });
+    expect(payload.documentosAtivos).toEqual({ nfse: true, nfe: true, nfce: false });
+  });
 });

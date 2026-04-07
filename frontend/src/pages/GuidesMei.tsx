@@ -54,6 +54,16 @@ import {
   type NfEmissionCompanyForm,
   type NfEmissionRegimeTributario
 } from '../utils/nfEmissionCompany';
+import {
+  DEFAULT_DOCUMENTOS_ATIVOS,
+  documentosAtivosDivergem,
+  extractDocumentosAtivosFromEmpresaResponse,
+  getDocumentosAtivosValidationMessage,
+  mapPlugnotasEmpresaToDocumentSelection,
+  mergeDocumentosAtivosPrecedence,
+  type DocumentosAtivosState
+} from '../utils/plugnotasEmpresaDocumentosAtivos';
+import { fetchEmpresaJsonWithMeiCache, invalidateMeiEmpresaGetCache } from '../utils/guiaMeiEmpresaGetCache';
 import { isFetchConnectivityFailure } from '../utils/isFetchConnectivityFailure';
 import { getPlugnotasCodeFromUnknownError as getFiscalErrorCode } from '../utils/apiClientError';
 import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
@@ -107,6 +117,7 @@ import {
 } from '../utils/meiNfeLikeFormState';
 import { buildNfeLikePayloadFromMeiForm } from '../utils/meiNfeLikePayloadBuilder';
 import { validateMeiNfeLikeForm } from '../utils/meiNfeLikeClientValidation';
+import { GuiaMeiDesativarNfseDialog } from '../components/mei/GuiaMeiDesativarNfseDialog';
 import { MeiFiscalChangeEmissionTypeDialog } from '../components/mei/MeiFiscalChangeEmissionTypeDialog';
 import {
   MeiFiscalEmissionTypeSegmented,
@@ -114,9 +125,27 @@ import {
   type MeiFiscalEmissionDocumentType
 } from '../components/mei/MeiFiscalEmissionTypeSegmented';
 import { MeiFiscalCapabilityCallout } from '../components/mei/MeiFiscalCapabilityCallout';
+import { MeiCadastroNfeNfceInfoBanner } from '../components/mei/MeiCadastroNfeNfceInfoBanner';
+import { MeiCadastroRequisitosNfeNfcePlaceholder } from '../components/mei/MeiCadastroRequisitosNfeNfcePlaceholder';
 import { MeiNfeLikeEmitForm } from '../components/mei/MeiNfeLikeEmitForm';
 import { useMeiPlugnotasFiscalCapability } from '../hooks/useMeiPlugnotasFiscalCapability';
 import { isNfeLikeEmissionBlockedByCapabilities } from '../utils/plugnotasEmpresaCapabilities';
+import {
+  ARIA_LABEL_REGIAO_DIVERGENCIA_DOCUMENTOS_ATIVOS,
+  CTA_ATUALIZAR_VISTA_DOCUMENTOS_ATIVOS,
+  CTA_SINCRONIZAR_EMISSOR_DOCUMENTOS_ATIVOS,
+  getGuiaMeiCadastroFiscalDocHref,
+  getHintBlocoDadosMinimosEmitente,
+  getTituloBlocoDadosMinimosEmitente,
+  MSG_BANNER_DIVERGENCIA_DOCUMENTOS_ATIVOS,
+  MSG_DOCUMENTOS_ATIVOS_GET_EMPRESA_HIDRATACAO_FALHOU,
+  MSG_SUCESSO_PATCH_DOCUMENTOS_ATIVOS_EMISSOR,
+  shouldShowCadastroNfeNfceInfoBanner,
+  shouldShowRequisitosNfeNfceSecao,
+  SUBTITULO_OPCIONAL_ALTERAR_DEPOIS_DOCUMENTOS_ATIVOS,
+  SUBTITULO_SECAO_DOCUMENTOS_ATIVOS_DESCOBERTA,
+  TITULO_SECAO_DOCUMENTOS_ATIVOS_EMISSOR
+} from '../utils/guiaMeiCadastroDocumentosAtivos';
 
 function formatMeiFiscalErr(error: unknown, fallback: string): string {
   return formatFiscalError(
@@ -513,7 +542,7 @@ function MeiNfseAjudaFiscalCollapsible(props: {
 }
 
 export default function GuidesMei() {
-  const { role, mei } = useAuthStore();
+  const { role, mei, userId } = useAuthStore();
   const canViewNfse = role === 'superadmin'
     || role === 'admin'
     || (role === 'usuario' && mei !== false);
@@ -656,11 +685,33 @@ export default function GuidesMei() {
   ));
   /** Evita sobrescrever edição local ao reexecutar `loadCertificateStatus`. */
   const nfseEmitenteHydratedRef = useRef(false);
+  /** Uma vez hidratado a partir do espelho Supabase ou após consulta GET remota (remoto > espelho > default). */
+  const documentosAtivosRemoteOrMirrorHydratedRef = useRef(false);
   /** Deteta troca para o separador NFS-e e dispara refetch do catálogo (CAT-MEI-05 / FR-CAT-07). */
   const prevMeiWorkspaceRef = useRef<GuidesMeiWorkspace | null>(null);
   const [nfEmissionCompanySyncLoading, setNfEmissionCompanySyncLoading] = useState<'consult' | 'patch' | null>(null);
   const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<string | null>(null);
   const [nfEmissionCompanySyncSuccess, setNfEmissionCompanySyncSuccess] = useState<string | null>(null);
+  const [documentosAtivos, setDocumentosAtivos] = useState<DocumentosAtivosState>(() => ({
+    ...DEFAULT_DOCUMENTOS_ATIVOS
+  }));
+  const [documentosAtivosSubmitError, setDocumentosAtivosSubmitError] = useState<string | null>(null);
+  const [documentosAtivosConsultWarning, setDocumentosAtivosConsultWarning] = useState<string | null>(null);
+  /** S0 — até resolver GET espelho/remoto (FR-UPD-DOC); inicia locked para evitar flash de defaults. */
+  const [documentosAtivosHydrating, setDocumentosAtivosHydrating] = useState(true);
+  /** Falha GET empresa na hidratação inicial (aria-live). */
+  const [documentosAtivosHydrationError, setDocumentosAtivosHydrationError] = useState<string | null>(null);
+  /** FR-UPD-DOC-08 — últimos espelho/remoto parseados para deteção de deriva (tri-boolean estrito). */
+  const [documentosAtivosMirrorSnapshot, setDocumentosAtivosMirrorSnapshot] = useState<DocumentosAtivosState | null>(
+    null
+  );
+  const [documentosAtivosRemoteSnapshot, setDocumentosAtivosRemoteSnapshot] = useState<DocumentosAtivosState | null>(
+    null
+  );
+  /** FR-UPD-DOC-07 — utilizador alterou checkboxes desde o último PATCH emitente bem-sucedido. */
+  const documentosAtivosUserEditedRef = useRef(false);
+  const [nfseDesativarDialogOpen, setNfseDesativarDialogOpen] = useState(false);
+  const documentosAtivosNfseCheckboxRef = useRef<HTMLInputElement>(null);
   const [brasilApiLoading, setBrasilApiLoading] = useState(false);
   const [brasilApiError, setBrasilApiError] = useState<string | null>(null);
   const [nfsePrestadorBrasilApiLoading, setNfsePrestadorBrasilApiLoading] = useState(false);
@@ -693,6 +744,16 @@ export default function GuidesMei() {
   const nfseValidationMessage = useMemo(
     () => getNfseValidationMessage(nfseForm, nfsePrestadorAddressFallback),
     [nfseForm, nfsePrestadorAddressFallback]
+  );
+
+  const documentosAtivosDivergence = useMemo(
+    () => documentosAtivosDivergem(documentosAtivosMirrorSnapshot, documentosAtivosRemoteSnapshot),
+    [documentosAtivosMirrorSnapshot, documentosAtivosRemoteSnapshot]
+  );
+
+  const showDocumentosAtivosDivergenceBanner = useMemo(
+    () => Boolean(canViewNfse && !documentosAtivosHydrating && documentosAtivosDivergence),
+    [canViewNfse, documentosAtivosHydrating, documentosAtivosDivergence]
   );
 
   /** FR-NFSE-UX-P1: colapsáveis do formulário de emissão (todos expandidos por defeito). */
@@ -785,7 +846,31 @@ export default function GuidesMei() {
 
   const loadCertificateStatus = useCallback(async () => {
     try {
-      const status = await fetchMeiCertificateStatus();
+      const cnpjEarly = normalizeDoc(contribuinteDoc);
+      let status: Awaited<ReturnType<typeof fetchMeiCertificateStatus>>;
+      let empresaData: unknown | undefined;
+      let empresaFetchFailed = false;
+
+      if (canViewNfse && cnpjEarly.length === 14) {
+        const results = await Promise.allSettled([
+          fetchMeiCertificateStatus(),
+          fetchEmpresaJsonWithMeiCache({
+            userId,
+            cnpjDigits: cnpjEarly,
+            fetcher: () => consultarEmpresaEmissaoNf(cnpjEarly)
+          })
+        ]);
+        if (results[0].status === 'rejected') throw results[0].reason;
+        status = results[0].value;
+        if (results[1].status === 'fulfilled') {
+          empresaData = results[1].value;
+        } else {
+          empresaFetchFailed = true;
+        }
+      } else {
+        status = await fetchMeiCertificateStatus();
+      }
+
       setHasUserCertificate(Boolean(status.hasUserCertificate));
       setHasServerCertificate(Boolean(status.hasEnvCertificate));
       setCertValidFrom(status.certValidFrom ?? null);
@@ -797,13 +882,82 @@ export default function GuidesMei() {
         setNfEmissionCompanyForm(emitenteSnapshotToForm(snap));
         setNfseForm((current) => mergeEmitenteSnapshotIntoNfseForm(current, snap));
       }
+
+      const cnpjResolved = normalizeDoc(status.documento || '') || cnpjEarly;
+
+      if (canViewNfse) {
+        const firstHydration = !documentosAtivosRemoteOrMirrorHydratedRef.current;
+        if (firstHydration) {
+          setDocumentosAtivosHydrating(true);
+          setDocumentosAtivosHydrationError(null);
+        }
+        try {
+          let remoteSel: DocumentosAtivosState | null = null;
+          let getFailed = false;
+          let usedJson: unknown | undefined;
+
+          if (cnpjResolved.length === 14) {
+            const sameKeyAsParallel = cnpjEarly.length === 14 && cnpjResolved === cnpjEarly;
+            if (sameKeyAsParallel && !empresaFetchFailed) {
+              usedJson = empresaData;
+            } else if (sameKeyAsParallel && empresaFetchFailed) {
+              usedJson = undefined;
+              getFailed = true;
+            } else {
+              try {
+                usedJson = await fetchEmpresaJsonWithMeiCache({
+                  userId,
+                  cnpjDigits: cnpjResolved,
+                  fetcher: () => consultarEmpresaEmissaoNf(cnpjResolved)
+                });
+              } catch {
+                getFailed = true;
+                usedJson = undefined;
+              }
+            }
+
+            if (!getFailed && usedJson !== undefined) {
+              remoteSel = extractDocumentosAtivosFromEmpresaResponse(usedJson);
+            } else if (getFailed && firstHydration) {
+              setDocumentosAtivosHydrationError(MSG_DOCUMENTOS_ATIVOS_GET_EMPRESA_HIDRATACAO_FALHOU);
+            }
+          }
+
+          const mirror: DocumentosAtivosState | null = status.documentosAtivos
+            ? {
+                nfse: Boolean(status.documentosAtivos.nfse),
+                nfe: Boolean(status.documentosAtivos.nfe),
+                nfce: Boolean(status.documentosAtivos.nfce)
+              }
+            : null;
+
+          setDocumentosAtivosMirrorSnapshot(mirror);
+          setDocumentosAtivosRemoteSnapshot(remoteSel);
+
+          if (firstHydration) {
+            setDocumentosAtivos(
+              mergeDocumentosAtivosPrecedence({
+                remote: remoteSel,
+                mirror,
+                fallback: DEFAULT_DOCUMENTOS_ATIVOS
+              })
+            );
+            documentosAtivosRemoteOrMirrorHydratedRef.current = true;
+          }
+        } finally {
+          if (firstHydration) {
+            setDocumentosAtivosHydrating(false);
+          }
+        }
+      }
     } catch {
       setHasUserCertificate(false);
       setHasServerCertificate(false);
       setCertValidFrom(null);
       setCertValidTo(null);
+      setDocumentosAtivosHydrating(false);
     }
-  }, [applyDocumento]);
+  }, [applyDocumento, canViewNfse, contribuinteDoc, userId]);
 
   const loadMeiPeriods = useCallback(async () => {
     if (!canLoadPeriods) {
@@ -942,6 +1096,25 @@ export default function GuidesMei() {
     }));
   };
 
+  const handleDocumentosAtivosChange = (key: keyof DocumentosAtivosState, checked: boolean) => {
+    if (key === 'nfse' && !checked && documentosAtivos.nfse) {
+      setNfseDesativarDialogOpen(true);
+      return;
+    }
+    documentosAtivosUserEditedRef.current = true;
+    setDocumentosAtivos((prev) => ({ ...prev, [key]: checked }));
+  };
+
+  const confirmDesativarNfse = () => {
+    documentosAtivosUserEditedRef.current = true;
+    setDocumentosAtivos((prev) => ({ ...prev, nfse: false }));
+    setNfseDesativarDialogOpen(false);
+  };
+
+  useEffect(() => {
+    setDocumentosAtivosSubmitError(null);
+  }, [documentosAtivos]);
+
   const handleSelectCatalogCliente = (id: string) => {
     setSelectedCatalogClienteId(id);
     if (!id) return;
@@ -983,6 +1156,12 @@ export default function GuidesMei() {
       return next;
     });
   };
+
+  useEffect(() => {
+    if (!canViewNfse) {
+      setDocumentosAtivosHydrating(false);
+    }
+  }, [canViewNfse]);
 
   useEffect(() => {
     void loadCertificateStatus();
@@ -1169,10 +1348,19 @@ export default function GuidesMei() {
         setCertificateError(companyValidationMessage);
         return;
       }
+      const docMsg = getDocumentosAtivosValidationMessage(documentosAtivos);
+      if (docMsg) {
+        setCertificateConnectivityAlert(false);
+        setCertificateErrorFiscalCode(null);
+        setDocumentosAtivosSubmitError(docMsg);
+        documentosAtivosNfseCheckboxRef.current?.focus();
+        return;
+      }
     }
 
     setCertificateError(null);
     setCertificateErrorFiscalCode(null);
+    setDocumentosAtivosSubmitError(null);
     setCertificateConnectivityAlert(false);
     setCertificateSuccess(null);
     setIsUploadingCert(true);
@@ -1227,11 +1415,13 @@ export default function GuidesMei() {
       const companyPayload = buildNfEmissionEmpresaPayload({
         cnpj,
         certificadoId: certificateId,
-        form: nfEmissionCompanyForm
+        form: nfEmissionCompanyForm,
+        documentosAtivos
       });
       const companyResponse = await cadastrarEmpresaEmissaoNf(companyPayload);
       const returnedCnpj = normalizeDoc(String(companyResponse.cnpj || cnpj));
       const formattedCnpj = formatDocument(returnedCnpj || cnpj);
+      invalidateMeiEmpresaGetCache(userId, returnedCnpj || cnpj);
 
       setContribuinteDoc(formattedCnpj);
       updateNfseForm({
@@ -1260,7 +1450,8 @@ export default function GuidesMei() {
         [
           'Certificado enviado no MEI e configurado no sistema de emissão fiscal.',
           certificateResponse.message || null,
-          companyResponse.message || 'Empresa configurada no sistema de emissão fiscal com sucesso.'
+          companyResponse.message || 'Empresa configurada no sistema de emissão fiscal com sucesso.',
+          MSG_SUCESSO_PATCH_DOCUMENTOS_ATIVOS_EMISSOR
         ].filter(Boolean).join(' ')
       );
     } catch (error) {
@@ -1293,17 +1484,19 @@ export default function GuidesMei() {
     }
   };
 
-  const resolveCnpjParaEmissor = () => {
+  const resolveCnpjParaEmissor = useCallback(() => {
     const fromContrib = normalizeDoc(contribuinteDoc);
     if (fromContrib.length === 14) return fromContrib;
     const fromPrestador = normalizeDoc(nfseForm.prestadorCpfCnpj || '');
     if (fromPrestador.length === 14) return fromPrestador;
     return '';
-  };
+  }, [contribuinteDoc, nfseForm.prestadorCpfCnpj]);
 
   const handleConsultarCadastroEmissor = async () => {
     setNfEmissionCompanySyncError(null);
     setNfEmissionCompanySyncSuccess(null);
+    setDocumentosAtivosConsultWarning(null);
+    setDocumentosAtivosHydrationError(null);
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
       setNfEmissionCompanySyncError(
@@ -1313,7 +1506,11 @@ export default function GuidesMei() {
     }
     setNfEmissionCompanySyncLoading('consult');
     try {
-      const data = (await consultarEmpresaEmissaoNf(cnpj)) as Record<string, unknown>;
+      const data = (await fetchEmpresaJsonWithMeiCache({
+        userId,
+        cnpjDigits: cnpj,
+        fetcher: () => consultarEmpresaEmissaoNf(cnpj)
+      })) as Record<string, unknown>;
       const nested = data?.data && typeof data.data === 'object' && !Array.isArray(data.data)
         ? (data.data as Record<string, unknown>)
         : {};
@@ -1324,6 +1521,22 @@ export default function GuidesMei() {
           .filter(Boolean)
           .join(' ')
       );
+      if (canViewNfse) {
+        const mapped = mapPlugnotasEmpresaToDocumentSelection(data);
+        if (mapped.kind === 'full') {
+          documentosAtivosRemoteOrMirrorHydratedRef.current = true;
+          setDocumentosAtivosRemoteSnapshot(mapped.selection);
+          setDocumentosAtivos(mapped.selection);
+          setDocumentosAtivosConsultWarning(null);
+          try {
+            await loadCertificateStatus();
+          } catch {
+            // espelho/snapshots na próxima carga
+          }
+        } else {
+          setDocumentosAtivosConsultWarning(mapped.message);
+        }
+      }
     } catch (error) {
       setNfEmissionCompanySyncError(
         formatMeiFiscalErr(error, 'Falha ao consultar cadastro no serviço de emissão fiscal.')
@@ -1336,9 +1549,16 @@ export default function GuidesMei() {
   const handleAtualizarCadastroSemNovoCertificado = async () => {
     setNfEmissionCompanySyncError(null);
     setNfEmissionCompanySyncSuccess(null);
+    setDocumentosAtivosSubmitError(null);
     const companyValidationMessage = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
     if (companyValidationMessage) {
       setNfEmissionCompanySyncError(companyValidationMessage);
+      return;
+    }
+    const docMsg = getDocumentosAtivosValidationMessage(documentosAtivos);
+    if (docMsg) {
+      setDocumentosAtivosSubmitError(docMsg);
+      documentosAtivosNfseCheckboxRef.current?.focus();
       return;
     }
     const cnpj = resolveCnpjParaEmissor();
@@ -1353,7 +1573,8 @@ export default function GuidesMei() {
     try {
       const companyPayload = buildNfEmissionEmpresaPayload({
         cnpj,
-        form: nfEmissionCompanyForm
+        form: nfEmissionCompanyForm,
+        documentosAtivos
       });
       const companyResponse = await atualizarEmpresaEmissaoNf(companyPayload);
       let updatedStatus;
@@ -1373,9 +1594,21 @@ export default function GuidesMei() {
         nfseEmitenteHydratedRef.current = true;
         setNfseEmitentePendingApply(updatedStatus.nfseEmitente);
       }
-      setNfEmissionCompanySyncSuccess(
-        companyResponse.message || 'Empresa atualizada no serviço de emissão fiscal com sucesso.'
-      );
+      if (documentosAtivosUserEditedRef.current) {
+        setNfEmissionCompanySyncSuccess(MSG_SUCESSO_PATCH_DOCUMENTOS_ATIVOS_EMISSOR);
+      } else {
+        setNfEmissionCompanySyncSuccess(
+          companyResponse.message || 'Empresa atualizada no serviço de emissão fiscal com sucesso.'
+        );
+      }
+      documentosAtivosUserEditedRef.current = false;
+      setDocumentosAtivosSubmitError(null);
+      invalidateMeiEmpresaGetCache(userId, cnpj);
+      try {
+        await loadCertificateStatus();
+      } catch {
+        // mantém sucesso principal; snapshots podem actualizar na próxima carga
+      }
     } catch (error) {
       setNfEmissionCompanySyncError(
         formatMeiFiscalErr(error, 'Falha ao atualizar empresa no serviço de emissão fiscal.')
@@ -1384,6 +1617,40 @@ export default function GuidesMei() {
       setNfEmissionCompanySyncLoading(null);
     }
   };
+
+  const handleDocumentosAtivosAtualizarVista = useCallback(() => {
+    const remote = documentosAtivosRemoteSnapshot;
+    if (!remote) return;
+    setDocumentosAtivos({ ...remote });
+    documentosAtivosUserEditedRef.current = false;
+  }, [documentosAtivosRemoteSnapshot]);
+
+  const handleDocumentosAtivosSincronizarPlugnotas = useCallback(async () => {
+    const cnpj = resolveCnpjParaEmissor();
+    if (cnpj.length !== 14) {
+      setNfEmissionCompanySyncError(
+        'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
+      );
+      return;
+    }
+    setNfEmissionCompanySyncError(null);
+    setNfEmissionCompanySyncLoading('consult');
+    try {
+      invalidateMeiEmpresaGetCache(userId, cnpj);
+      await fetchEmpresaJsonWithMeiCache({
+        userId,
+        cnpjDigits: cnpj,
+        fetcher: () => consultarEmpresaEmissaoNf(cnpj)
+      });
+      await loadCertificateStatus();
+    } catch (error) {
+      setNfEmissionCompanySyncError(
+        formatMeiFiscalErr(error, 'Falha ao sincronizar com o emissor fiscal.')
+      );
+    } finally {
+      setNfEmissionCompanySyncLoading(null);
+    }
+  }, [userId, loadCertificateStatus, resolveCnpjParaEmissor]);
 
   const handleSalvarDadosEmitente = async () => {
     setNfEmissionCompanySyncError(null);
@@ -1414,8 +1681,15 @@ export default function GuidesMei() {
     try {
       await removeMeiCertificate();
       nfseEmitenteHydratedRef.current = false;
+      documentosAtivosRemoteOrMirrorHydratedRef.current = false;
+      documentosAtivosUserEditedRef.current = false;
+      setDocumentosAtivosMirrorSnapshot(null);
+      setDocumentosAtivosRemoteSnapshot(null);
       setNfseEmitentePendingApply(null);
       setNfEmissionCompanyForm(getDefaultNfEmissionCompanyForm());
+      setDocumentosAtivos({ ...DEFAULT_DOCUMENTOS_ATIVOS });
+      setDocumentosAtivosConsultWarning(null);
+      setDocumentosAtivosHydrationError(null);
       setNfseForm((current) => ({
         ...current,
         prestadorRazaoSocial: '',
@@ -2182,8 +2456,35 @@ export default function GuidesMei() {
     return nfeLikeFieldErrors[keys[0]!];
   }, [nfeLikeFieldErrors]);
 
+  const dadosMinimosEmitenteTitle = useMemo(
+    () => getTituloBlocoDadosMinimosEmitente(documentosAtivos),
+    [documentosAtivos]
+  );
+
+  const dadosMinimosEmitenteHint = useMemo(
+    () => getHintBlocoDadosMinimosEmitente(documentosAtivos),
+    [documentosAtivos]
+  );
+
+  const showCadastroNfeNfceInfoBanner = useMemo(
+    () => shouldShowCadastroNfeNfceInfoBanner(documentosAtivos),
+    [documentosAtivos]
+  );
+
+  const cadastroFiscalDocHref = useMemo(() => getGuiaMeiCadastroFiscalDocHref(), []);
+
+  const showRequisitosNfeNfcePlaceholder = useMemo(
+    () => shouldShowRequisitosNfeNfceSecao(documentosAtivos),
+    [documentosAtivos]
+  );
+
   return (
     <>
+      <GuiaMeiDesativarNfseDialog
+        open={nfseDesativarDialogOpen}
+        onCancel={() => setNfseDesativarDialogOpen(false)}
+        onConfirm={confirmDesativarNfse}
+      />
       <MeiFiscalChangeEmissionTypeDialog
         open={emissionTypeChangeDialogOpen}
         onCancel={handleCancelEmissionTypeDialog}
@@ -2590,13 +2891,148 @@ export default function GuidesMei() {
               </div>
 
               {canViewNfse ? (
-                <div className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30">
+                <div className="space-y-3">
+                  <fieldset
+                    className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30"
+                    aria-busy={documentosAtivosHydrating}
+                    aria-describedby={
+                      [
+                        documentosAtivosSubmitError ? 'mei-doc-ativos-erro' : '',
+                        documentosAtivosHydrationError ? 'mei-doc-ativos-hidratacao' : ''
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
+                  >
+                    <legend className="mb-2 w-full text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      {TITULO_SECAO_DOCUMENTOS_ATIVOS_EMISSOR}
+                    </legend>
+                    <p className="admin-field-hint mb-2">
+                      {SUBTITULO_OPCIONAL_ALTERAR_DEPOIS_DOCUMENTOS_ATIVOS}
+                    </p>
+                    <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{SUBTITULO_SECAO_DOCUMENTOS_ATIVOS_DESCOBERTA}</p>
+                    {showDocumentosAtivosDivergenceBanner ? (
+                      <div
+                        role="region"
+                        aria-label={ARIA_LABEL_REGIAO_DIVERGENCIA_DOCUMENTOS_ATIVOS}
+                        className="mb-3 flex flex-col gap-3 rounded-lg border border-amber-200/90 bg-amber-50/90 p-3 dark:border-amber-900/50 dark:bg-amber-950/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                      >
+                        <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100/95">
+                          {MSG_BANNER_DIVERGENCIA_DOCUMENTOS_ATIVOS}
+                        </p>
+                        <div className="flex flex-shrink-0 flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="planner-button-secondary-compact"
+                            onClick={handleDocumentosAtivosAtualizarVista}
+                            disabled={documentosAtivosHydrating}
+                          >
+                            {CTA_ATUALIZAR_VISTA_DOCUMENTOS_ATIVOS}
+                          </button>
+                          <button
+                            type="button"
+                            className="planner-button-secondary-compact"
+                            onClick={() => {
+                              void handleDocumentosAtivosSincronizarPlugnotas();
+                            }}
+                            disabled={
+                              documentosAtivosHydrating || nfEmissionCompanySyncLoading === 'consult'
+                            }
+                          >
+                            {nfEmissionCompanySyncLoading === 'consult'
+                              ? 'Sincronizando...'
+                              : CTA_SINCRONIZAR_EMISSOR_DOCUMENTOS_ATIVOS}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    {documentosAtivosHydrationError ? (
+                      <p
+                        id="mei-doc-ativos-hidratacao"
+                        className="mb-3 text-sm text-amber-700 dark:text-amber-300/90"
+                        aria-live="polite"
+                      >
+                        {documentosAtivosHydrationError}
+                      </p>
+                    ) : null}
+                    <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:gap-x-6">
+                      <label className="flex max-w-md cursor-pointer items-start gap-2">
+                        <input
+                          ref={documentosAtivosNfseCheckboxRef}
+                          type="checkbox"
+                          className="mt-0.5"
+                          disabled={documentosAtivosHydrating}
+                          checked={documentosAtivos.nfse}
+                          onChange={(e) => handleDocumentosAtivosChange('nfse', e.target.checked)}
+                        />
+                        <span>
+                          <span className="text-sm font-medium text-slate-800 dark:text-slate-100">NFS-e</span>
+                          <span className="text-slate-600 dark:text-slate-300"> (nota de serviço)</span>
+                          <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                            Serviços prestados; padrão para MEI na área de emissão da app.
+                          </span>
+                        </span>
+                      </label>
+                      <label className="flex max-w-md cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          disabled={documentosAtivosHydrating}
+                          checked={documentosAtivos.nfe}
+                          onChange={(e) => handleDocumentosAtivosChange('nfe', e.target.checked)}
+                        />
+                        <span>
+                          <span className="text-sm font-medium text-slate-800 dark:text-slate-100">NF-e</span>
+                          <span className="text-slate-600 dark:text-slate-300"> (modelo 55, produto)</span>
+                          <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                            Produtos e operações que exigem NF-e (modelo 55).
+                          </span>
+                        </span>
+                      </label>
+                      <label className="flex max-w-md cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          disabled={documentosAtivosHydrating}
+                          checked={documentosAtivos.nfce}
+                          onChange={(e) => handleDocumentosAtivosChange('nfce', e.target.checked)}
+                        />
+                        <span>
+                          <span className="text-sm font-medium text-slate-800 dark:text-slate-100">NFC-e</span>
+                          <span className="text-slate-600 dark:text-slate-300"> (venda ao consumidor)</span>
+                          <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                            Venda presencial ou ao consumidor final com NFC-e.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                    {documentosAtivosSubmitError ? (
+                      <p
+                        id="mei-doc-ativos-erro"
+                        role="alert"
+                        className="mt-3 text-sm text-red-600 dark:text-red-400"
+                      >
+                        {documentosAtivosSubmitError}
+                      </p>
+                    ) : null}
+                  </fieldset>
+
+                  {showCadastroNfeNfceInfoBanner ? (
+                    <MeiCadastroNfeNfceInfoBanner docHref={cadastroFiscalDocHref} />
+                  ) : null}
+
+                  {documentosAtivosConsultWarning ? (
+                    <div className="admin-alert-warning text-sm leading-relaxed">{documentosAtivosConsultWarning}</div>
+                  ) : null}
+
+                  <div className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Dados mínimos para emissão de NFS-e
+                    {dadosMinimosEmitenteTitle}
                   </p>
                   <p className="admin-field-hint mb-2">
-                    Campos com * são obrigatórios para a configuração inicial. A inscrição estadual não é solicitada (política MEI).
+                    {dadosMinimosEmitenteHint}
                   </p>
+                  {showRequisitosNfeNfcePlaceholder ? <MeiCadastroRequisitosNfeNfcePlaceholder /> : null}
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
                       className="planner-input-compact"
@@ -2733,6 +3169,7 @@ export default function GuidesMei() {
                       </button>
                     </div>
                   </div>
+                </div>
                 </div>
               ) : null}
 

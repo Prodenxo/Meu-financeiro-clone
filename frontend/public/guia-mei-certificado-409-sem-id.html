@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Guia MEI — Certificado Plugnotas (ID automático)</title>
+  <title>Guia MEI — Certificado no emissor (ID automático)</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #1e293b; }
     h1 { font-size: 1.25rem; }
@@ -14,22 +14,22 @@
   </style>
 </head>
 <body>
-  <h1 id="certificado-plugnotas-409-sem-id">Certificado já no Plugnotas — ID não obtido automaticamente</h1>
+  <h1 id="certificado-emissor-409-sem-id">Certificado já no emissor — ID não obtido automaticamente</h1>
   <p>
-    O aplicativo confirmou que o certificado existe na conta do emissor, mas não conseguiu obter o identificador (ID)
-    pelas consultas automáticas. Confira CNPJ, conta em
-    <a href="https://app2.plugnotas.com.br" target="_blank" rel="noopener noreferrer">app2.plugnotas.com.br</a>
+    O aplicativo confirmou que o certificado existe na conta do emissor fiscal, mas não conseguiu obter o identificador (ID)
+    pelas consultas automáticas. Confira CNPJ, conta no
+    <a href="https://app2.plugnotas.com.br" target="_blank" rel="noopener noreferrer">painel web do emissor</a>
     e se URL base + API key do servidor são do mesmo ambiente.
   </p>
   <p><strong>Checklist</strong></p>
   <ol>
-    <li>CNPJ do formulário com 14 dígitos, igual ao certificado e ao cadastro no Plugnotas.</li>
-    <li>Mesma conta Plugnotas que a chave de API do backend.</li>
+    <li>CNPJ do formulário com 14 dígitos, igual ao certificado e ao cadastro no emissor.</li>
+    <li>Mesma conta do emissor fiscal que a chave de API do backend.</li>
     <li><code>PLUGNOTAS_API_BASE_URL</code> e <code>PLUGNOTAS_API_KEY</code> coerentes (sandbox/produção).</li>
-    <li>Empresa existente na conta do provedor, se exigido para vincular certificado.</li>
+    <li>Empresa existente na conta do emissor, se exigido para vincular certificado.</li>
   </ol>
   <p class="muted">
-    Documentação canônica no repositório: <code>docs/operacao-mei-nfse.md</code> (âncora <code>#certificado-plugnotas-409-sem-id</code>).
+    Documentação canônica no repositório: <code>docs/operacao-mei-nfse.md</code> (âncora <code>#certificado-emissor-409-sem-id</code>).
     Brief: <code>docs/brief/brief-plugnotas-certificado-409-sem-id.md</code>.
   </p>
 </body>

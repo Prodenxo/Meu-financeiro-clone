@@ -7,14 +7,14 @@ describe('formatPlugnotasIntegrationError', () => {
     const msg = 'Não há cadastro desta empresa no plugnotas';
     const out = formatPlugnotasIntegrationError(msg);
     expect(out).toContain(msg);
-    expect(out).toContain('Empresa no Plugnotas');
+    expect(out).toContain('Cadastro no emissor');
   });
 
   it('enriquece quando API diz não localizar empresa (copy humana, sem colar JSON)', () => {
     const msg = 'Não localizamos qualquer Empresa com os parâmetros informados';
     const out = formatPlugnotasIntegrationError(msg);
-    expect(out).toContain('Empresa não encontrada no Plugnotas');
-    expect(out).toContain('Plugnotas');
+    expect(out).toContain('Empresa não encontrada no emissor');
+    expect(out).toContain('emissor fiscal');
     expect(out).not.toContain('Referência do emissor');
     expect(out).toContain('certificado');
     expect(out).toContain('token');
@@ -24,8 +24,8 @@ describe('formatPlugnotasIntegrationError', () => {
   it('enriquece rota inexistente no serviço (sem anexar mensagem bruta)', () => {
     const msg = 'Esta rota não existe no serviço';
     const out = formatPlugnotasIntegrationError(msg);
-    expect(out).toContain('Configuração do Plugnotas');
-    expect(out).toContain('PLUGNOTAS_API_BASE_URL');
+    expect(out).toContain('Configuração do emissor fiscal');
+    expect(out).toContain('URL base da API');
     expect(out).not.toContain(msg);
   });
 

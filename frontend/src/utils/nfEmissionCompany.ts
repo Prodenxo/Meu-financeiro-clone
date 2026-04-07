@@ -1,3 +1,5 @@
+import type { DocumentosAtivosState } from './plugnotasEmpresaDocumentosAtivos';
+
 const normalizeDoc = (value: string) => value.replace(/\D/g, '');
 
 /**
@@ -74,12 +76,15 @@ export const getNfEmissionCompanyValidationMessage = (form: NfEmissionCompanyFor
 export const buildNfEmissionEmpresaPayload = ({
   cnpj,
   certificadoId,
-  form
+  form,
+  documentosAtivos
 }: {
   cnpj: string;
   /** Quando omitido, o payload não inclui `certificado` (uso em PATCH só dados cadastrais). */
   certificadoId?: string;
   form: NfEmissionCompanyForm;
+  /** Se presente, o backend monta `nfse`/`nfe`/`nfce` a partir desta selecção canónica. */
+  documentosAtivos?: DocumentosAtivosState;
 }) => {
   const endereco: Record<string, unknown> = {
     tipoLogradouro: form.tipoLogradouro.trim() || 'Rua',
@@ -123,6 +128,14 @@ export const buildNfEmissionEmpresaPayload = ({
   const trimmedCert = certificadoId?.trim();
   if (trimmedCert) {
     payload.certificado = trimmedCert;
+  }
+
+  if (documentosAtivos) {
+    payload.documentosAtivos = {
+      nfse: Boolean(documentosAtivos.nfse),
+      nfe: Boolean(documentosAtivos.nfe),
+      nfce: Boolean(documentosAtivos.nfce)
+    };
   }
 
   return payload;

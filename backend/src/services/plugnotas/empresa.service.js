@@ -22,6 +22,13 @@ import {
   PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
   PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY
 } from './plugnotas-mei-empresa-policy.js';
+import {
+  applyEmpresaPlugnotasDocumentSelectionForPatch,
+  applyEmpresaPlugnotasDocumentSelectionForPost,
+  resolveDocumentosAtivosForPatch,
+  resolveDocumentosAtivosForPost,
+  stripDocumentosAtivos
+} from './plugnotas-empresa-documentos-ativos.js';
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
 /** Blocos mínimos inativos — sem `config`, para não disparar validação SEFAZ / `versaoQrCode` no Plugnotas (produto apenas NFS-e). Ver `docs/adr/ADR-plugnotas-empresa-payload-apenas-nfse.md`. */
@@ -44,22 +51,6 @@ const normalizeInscricaoEstadualApenasNfse = (payload) => {
 };
 
 /**
- * POST: default NFS-e Nacional ON em `nfse` (D-N01); garante bloco mínimo se ausente.
- * @param {Record<string, unknown>} payload
- */
-const applyNfseNacionalDefaultForPost = (payload) => {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
-  const base =
-    payload.nfse && typeof payload.nfse === 'object' && !Array.isArray(payload.nfse)
-      ? { ...payload.nfse }
-      : { ativo: true, tipoContrato: 0, config: { producao: true } };
-  payload.nfse = {
-    ...base,
-    [PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON
-  };
-};
-
-/**
  * PATCH: só toca `nfse` se o cliente enviou o bloco (D-N03 / FR-NA03). Preenche nacional ON se a chave não veio.
  * @param {Record<string, unknown>} payload
  */
@@ -72,18 +63,6 @@ const applyNfseNacionalDefaultForPatch = (payload) => {
     next[PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY] = PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON;
   }
   payload.nfse = next;
-};
-
-/**
- * POST cadastro: sempre envia `nfe`/`nfce` inativos sem `config`; normaliza IE.
- * @param {Record<string, unknown>} payload
- */
-const applyEmpresaPlugnotasApenasNfseForPost = (payload) => {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
-  payload.nfe = { ...PLUGNOTAS_EMPRESA_APENAS_NFSE_NFE };
-  payload.nfce = { ...PLUGNOTAS_EMPRESA_APENAS_NFSE_NFCE };
-  normalizeInscricaoEstadualApenasNfse(payload);
-  applyNfseNacionalDefaultForPost(payload);
 };
 
 /**
@@ -324,12 +303,12 @@ const isEmpresaNaoLocalizadaPlugnotas404 = (error) => {
   );
 };
 
-const MSG_EMPRESA_NAO_CADASTRADA_PLUGNOTAS =
-  'Não há cadastro desta empresa no Plugnotas para o token e ambiente configurados. '
+const MSG_EMPRESA_NAO_CADASTRADA_EMISSOR =
+  'Não há cadastro desta empresa no emissor fiscal para o token e ambiente configurados. '
   + 'Cadastre primeiro na guia MEI: envie o certificado (.pfx) e os dados para gravar a empresa no emissor; '
   + 'só depois use "Atualizar cadastro (sem novo certificado)". '
-  + 'Confira em app2.plugnotas.com.br se o CNPJ está na mesma conta e se PLUGNOTAS_API_BASE_URL '
-  + 'e PLUGNOTAS_API_KEY são do mesmo ambiente (sandbox ou produção).';
+  + 'Confira no painel do emissor se o CNPJ está na mesma conta e se a URL base da API e a chave '
+  + 'configuradas no servidor são do mesmo ambiente (sandbox ou produção).';
 
 /**
  * Plugnotas API pública: atualização de empresa é PATCH em /empresa/:cnpj.
@@ -527,7 +506,7 @@ export const cadastrarCertificadoPlugNotas = async ({
     if (resolved) {
       return {
         id: resolved,
-        message: 'Certificado já existente no Plugnotas; ID recuperado para continuar o cadastro da empresa.',
+        message: 'Certificado já existente no emissor fiscal; ID recuperado para continuar o cadastro da empresa.',
         raw: {
           recoveredFrom409: true,
           conflictMessage: error instanceof Error ? error.message : String(error)
@@ -535,9 +514,9 @@ export const cadastrarCertificadoPlugNotas = async ({
       };
     }
     throw badRequest(
-      'O certificado já está cadastrado no Plugnotas, mas não foi possível obter o ID automaticamente. '
-      + 'Confirme o CNPJ no formulário, verifique no app2.plugnotas.com.br se o certificado aparece nesta conta '
-      + 'e se PLUGNOTAS_API_BASE_URL e PLUGNOTAS_API_KEY são do mesmo ambiente.',
+      'O certificado já está cadastrado no emissor fiscal, mas não foi possível obter o ID automaticamente. '
+      + 'Confirme o CNPJ no formulário, verifique no painel do emissor se o certificado aparece nesta conta '
+      + 'e se a URL base da API e a chave configuradas no servidor são do mesmo ambiente.',
       { plugnotasCode: 'certificado_409_sem_id' }
     );
   }
@@ -580,7 +559,16 @@ export const atualizarEmpresaPlugNotas = async (input) => {
     delete payload.certificado;
   }
 
-  applyEmpresaPlugnotasApenasNfseForPatch(payload);
+  const docPatch = resolveDocumentosAtivosForPatch(payload);
+  stripDocumentosAtivos(payload);
+  if (docPatch.present && docPatch.selection) {
+    applyEmpresaPlugnotasDocumentSelectionForPatch(payload, docPatch.selection);
+    if (hasOwn(payload, 'inscricaoEstadual')) {
+      normalizeInscricaoEstadualApenasNfse(payload);
+    }
+  } else {
+    applyEmpresaPlugnotasApenasNfseForPatch(payload);
+  }
 
   const updateResult = await tryUpdateEmpresa(cnpj, payload);
   if (updateResult.response) {
@@ -601,7 +589,7 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   if (err && typeof err === 'object' && err.status === 403) throw err;
   const failures = Array.isArray(updateResult.failures) ? updateResult.failures : [];
   if (isEmpresaNaoLocalizadaPlugnotas404(err)) {
-    throw badRequest(MSG_EMPRESA_NAO_CADASTRADA_PLUGNOTAS, {
+    throw badRequest(MSG_EMPRESA_NAO_CADASTRADA_EMISSOR, {
       plugnotasUpdateAttempts: failures,
       plugnotasCode: 'empresa_nao_cadastrada'
     });
@@ -629,7 +617,9 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
 
-  applyEmpresaPlugnotasApenasNfseForPost(payload);
+  const docPost = resolveDocumentosAtivosForPost(payload);
+  stripDocumentosAtivos(payload);
+  applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection);
 
   try {
     const response = await requestJson('POST', '/empresa', payload);

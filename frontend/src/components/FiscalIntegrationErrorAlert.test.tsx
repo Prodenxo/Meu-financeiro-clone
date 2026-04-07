@@ -49,7 +49,7 @@ describe('EmissaoFiscalErrorAlert', () => {
     });
     expect(container.textContent).toContain('nfse.nacional rejeitado');
     expect(container.textContent).toContain('município');
-    expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#plugnotas-nfse-nacional-spike-nat01"]')).toBeTruthy();
+    expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
   });
 
   it('mensagem longa oferece expansão e depois mostra texto completo', async () => {
@@ -81,7 +81,7 @@ describe('EmissaoFiscalErrorAlert', () => {
       root.render(
         <EmissaoFiscalErrorAlertModal
           documentTypeLabel="NFS-e"
-          message="Rejeição Plugnotas: nfse.nacional não aceito."
+          message="Rejeição no emissor: nfse.nacional não aceito."
         />
       );
     });
@@ -116,7 +116,7 @@ describe('PlugnotasIntegrationErrorAlert', () => {
     });
     expect(container.textContent).toContain('Falha na operação');
     expect(container.textContent).toContain('ambiente nacional');
-    expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#plugnotas-nfse-nacional-spike-nat01"]')).toBeTruthy();
+    expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
   });
 });
 
@@ -160,7 +160,7 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     });
     expect(container.textContent).toContain('Município não credenciado');
     expect(container.textContent).toContain('NFS-e Nacional');
-    expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#plugnotas-nfse-nacional-spike-nat01"]')).toBeTruthy();
+    expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
   });
 
   it('mensagem longa mantém expansão e hint NFC-e com nfce.config.sefaz', async () => {
@@ -193,17 +193,17 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     await act(async () => {
       root.render(
         <GuiaMeiEmpresaCadastroErrorPanel
-          message="O certificado já está cadastrado no Plugnotas, mas não foi possível obter o ID automaticamente."
-          fiscalErrorCode={PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID}
           message="O certificado já está cadastrado no emissor fiscal, mas não foi possível obter o ID automaticamente."
-          fiscalErrorCode="certificado_409_sem_id"
+          fiscalErrorCode={PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID}
         />
       );
     });
     expect(container.textContent).toContain('CNPJ no formulário');
     expect(container.textContent).toContain('provedor fiscal');
     expect(container.textContent).toContain('Saiba mais');
-    expect(container.querySelector('a[href="/guia-mei-certificado-409-sem-id.html"]')).toBeTruthy();
+    expect(
+      container.querySelector('a[href^="/guia-mei-certificado-409-sem-id.html#certificado-emissor-409-sem-id"]')
+    ).toBeTruthy();
   });
 });
 

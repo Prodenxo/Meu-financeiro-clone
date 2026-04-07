@@ -47,6 +47,13 @@ export type NfseEmitenteSnapshot = Pick<
   certDocument?: string;
 };
 
+/** Espelho local em `user_mei_certificates.documentos_ativos` (P1). */
+export type DocumentosAtivosMirror = {
+  nfse: boolean;
+  nfe: boolean;
+  nfce: boolean;
+};
+
 export interface MeiCertificateStatus {
   hasUserCertificate: boolean;
   hasEnvCertificate: boolean;
@@ -54,6 +61,8 @@ export interface MeiCertificateStatus {
   certValidFrom?: string | null;
   certValidTo?: string | null;
   nfseEmitente?: NfseEmitenteSnapshot | null;
+  /** Precedência na UI: GET empresa > este espelho > default PRD. */
+  documentosAtivos?: DocumentosAtivosMirror | null;
 }
 
 export interface MeiValidationResult {
