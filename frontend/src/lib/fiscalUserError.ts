@@ -19,10 +19,14 @@ function meiOperacaoNfseDocBase(): string {
   return raw ? raw.replace(/#.*$/, '') : '';
 }
 
+/** Âncora alinhada a `frontend/public/guia-mei-certificado-409-sem-id.html`. */
+export const CERTIFICADO_EMISSOR_409_SEM_ID_DOC_ANCHOR = 'certificado-emissor-409-sem-id';
+
 function hrefCertificado409SemId(): string {
   const base = meiOperacaoNfseDocBase();
-  if (base) return `${base}#certificado-plugnotas-409-sem-id`;
-  return '/guia-mei-certificado-409-sem-id.html';
+  const hash = `#${CERTIFICADO_EMISSOR_409_SEM_ID_DOC_ANCHOR}`;
+  if (base) return `${base}${hash}`;
+  return `/guia-mei-certificado-409-sem-id.html${hash}`;
 }
 
 /** Texto que parece JSON de API — não mostrar como mensagem principal ao utilizador. */
@@ -68,7 +72,7 @@ export function isLikelyUserFacingFiscalValidationMessage(text: string): boolean
 
 /**
  * Mapeia `plugnotasCode` e/ou texto bruto da API para copy humana + próximo passo.
- * Ordem: código estável → padrões HTTP/rede → heurísticas Plugnotas → mensagem explícita conhecida → fallback global.
+ * Ordem: código estável → padrões HTTP/rede → heurísticas do emissor/fornecedor → mensagem explícita conhecida → fallback global.
  */
 export function mapMeiFiscalErrorToCopy(input: {
   rawMessage: string;
@@ -80,11 +84,11 @@ export function mapMeiFiscalErrorToCopy(input: {
 
   if (code === PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID) {
     return {
-      title: 'Certificado e conta Plugnotas',
+      title: 'Certificado e conta no emissor',
       description:
-        'O provedor reconheceu o certificado, mas não devolveu o identificador da empresa nesta conta. '
-        + 'Confirme se o CNPJ, o ambiente (testes/produção) e a API key são da mesma conta Plugnotas onde a empresa está cadastrada. '
-        + 'Depois volte a enviar o certificado ou peça apoio ao suporte Plugnotas.',
+        'O emissor fiscal reconheceu o certificado, mas não devolveu o identificador da empresa nesta conta. '
+        + 'Confirme se o CNPJ, o ambiente (testes/produção) e a API key são da mesma conta do emissor onde a empresa está cadastrada. '
+        + 'Depois volte a enviar o certificado ou peça apoio ao suporte do emissor.',
       actionLabel: 'Documentação',
       href: hrefCertificado409SemId(),
     };
@@ -163,9 +167,16 @@ export function mapMeiFiscalErrorToCopy(input: {
     };
   }
 
-  if (lower.includes('não há cadastro desta empresa no plugnotas') || lower.includes('nao ha cadastro desta empresa no plugnotas')) {
+  if (
+    lower.includes('não há cadastro desta empresa no plugnotas')
+    || lower.includes('nao ha cadastro desta empresa no plugnotas')
+    || lower.includes('não há cadastro desta empresa no emissor fiscal')
+    || lower.includes('nao ha cadastro desta empresa no emissor fiscal')
+    || lower.includes('não há cadastro desta empresa no emissor')
+    || lower.includes('nao ha cadastro desta empresa no emissor')
+  ) {
     return {
-      title: 'Empresa no Plugnotas',
+      title: 'Cadastro no emissor',
       description: normalizeMsg(raw),
     };
   }
@@ -175,9 +186,9 @@ export function mapMeiFiscalErrorToCopy(input: {
     && (lower.includes('empresa') || lower.includes('parâmetros') || lower.includes('parametros'))
   ) {
     return {
-      title: 'Empresa não encontrada no Plugnotas',
+      title: 'Empresa não encontrada no emissor',
       description:
-        'O Plugnotas não encontrou cadastro desta empresa para o seu token. Cadastre primeiro o certificado (.pfx) e os dados na guia MEI; '
+        'O emissor fiscal não encontrou cadastro desta empresa para o seu token. Cadastre primeiro o certificado (.pfx) e os dados na guia MEI; '
         + 'confirme também se ambiente (sandbox/produção) e token são da conta onde o CNPJ está registado.',
     };
   }
@@ -188,13 +199,13 @@ export function mapMeiFiscalErrorToCopy(input: {
     && (lower.includes('serviço') || lower.includes('servico'))
   ) {
     return {
-      title: 'Configuração do Plugnotas',
+      title: 'Configuração do emissor fiscal',
       description:
-        'O provedor recusou a chamada (URL base ou ambiente incorreto). Quem gere o servidor deve confirmar PLUGNOTAS_API_BASE_URL e a chave no mesmo ambiente.',
+        'O emissor fiscal recusou a chamada (URL base ou ambiente incorreto). Quem gere o servidor deve confirmar a URL base da API do emissor e a chave no mesmo ambiente.',
     };
   }
 
-  /** Mensagens agregadas legíveis (Plugnotas/SEFAZ) — POSQA / FR-POSQA-06: paridade com texto útil do provedor. */
+  /** Mensagens agregadas legíveis (provedor/SEFAZ) — POSQA / FR-POSQA-06: paridade com texto útil do fornecedor. */
   if (isLikelyUserFacingFiscalValidationMessage(raw)) {
     return {
       title: 'Validação ou rejeição no provedor',

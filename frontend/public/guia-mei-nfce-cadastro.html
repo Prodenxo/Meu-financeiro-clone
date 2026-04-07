@@ -16,17 +16,17 @@
   <h1 id="cadastro-empresa-nfce-qrcode-sefaz">Cadastro da empresa e NFC-e (QR e SEFAZ)</h1>
   <p style="background:#fff7ed;border:1px solid #fed7aa;border-radius:0.5rem;padding:0.75rem 1rem;margin-bottom:1.25rem;font-size:0.9rem;">
     <strong>Escopo da Guia MEI:</strong> neste aplicativo você emite e opera apenas <strong>NFS-e</strong> (notas de serviço).
-    Esta página ajuda quando o <strong>Plugnotas</strong> devolve erro no <strong>cadastro da empresa</strong> citando campos de NFC-e no JSON — não significa que a tela emita NFC-e.
+    Esta página ajuda quando o <strong>emissor fiscal</strong> devolve erro no <strong>cadastro da empresa</strong> citando campos de NFC-e no JSON — não significa que a tela emita NFC-e.
     Documentação completa: <code>docs/operacao-mei-nfse.md</code> (âncora <code>#guia-mei-escopo-apenas-nfse</code>).
   </p>
   <p>
     Se o aplicativo mostrar erro citando <code>versaoQrCode</code>, <code>nfce.config.sefaz</code> ou validação de JSON
-    vinda do <strong>provedor de emissão</strong>, a mensagem veio do serviço Plugnotas — não é um “erro genérico” só do app.
+    vinda do <strong>provedor de emissão</strong>, a mensagem veio do <strong>emissor fiscal</strong> — não é um “erro genérico” só do app.
   </p>
   <p>
     Este produto alinha o cadastro ao <strong>QR Code versão 1</strong> para NFC-e, quando aplicável. Se a API pedir
     dados de SEFAZ ou QR v2, consulte a documentação oficial:
-    <a href="https://docs.plugnotas.com.br/" rel="noopener noreferrer" target="_blank">docs.plugnotas.com.br</a>.
+    <a href="https://docs.plugnotas.com.br/" rel="noopener noreferrer" target="_blank">documentação técnica do emissor</a>.
   </p>
   <p class="muted">
     Documentação completa do projeto (operadores): arquivo <code>docs/operacao-mei-nfse.md</code> no repositório.

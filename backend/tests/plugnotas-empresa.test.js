@@ -830,7 +830,7 @@ test('empresa service atualizar mapeia 404 "não localizamos" para mensagem orie
         assert.equal(err.errors?.plugnotasCode, 'empresa_nao_cadastrada');
         assert.ok(Array.isArray(err.errors?.plugnotasUpdateAttempts));
         assert.equal(calls.length, 1);
-        assert.match(String(err.message), /Não há cadastro desta empresa no Plugnotas/);
+        assert.match(String(err.message), /Não há cadastro desta empresa no emissor fiscal/);
         assert.match(String(err.message), /certificado/);
         return true;
       }

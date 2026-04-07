@@ -17,9 +17,9 @@ describe('mapMeiFiscalErrorToCopy', () => {
       plugnotasCode: PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID,
     });
     expect(copy.title).toContain('Certificado');
-    expect(copy.description).toMatch(/Plugnotas|conta/i);
+    expect(copy.description).toMatch(/emissor|conta/i);
     expect(copy.actionLabel).toBe('Documentação');
-    expect(copy.href).toBeTruthy();
+    expect(copy.href).toContain('certificado-emissor-409-sem-id');
   });
 
   it('usa fallback para payload que parece JSON de API', () => {

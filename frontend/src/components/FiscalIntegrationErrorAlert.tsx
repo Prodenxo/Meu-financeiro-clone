@@ -12,6 +12,7 @@ import {
   getGuiaMeiConnectivityHelpHref,
   GUIMEI_CONNECTIVITY_CERTIFICATE_MESSAGE
 } from '../utils/guiaMeiConnectivityUserMessage';
+import { CERTIFICADO_EMISSOR_409_SEM_ID_DOC_ANCHOR } from '../lib/fiscalUserError';
 import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
 
 const meiOperacaoNfseDocUrl =
@@ -19,15 +20,13 @@ const meiOperacaoNfseDocUrl =
     ? import.meta.env.VITE_MEI_OPERACAO_NFSE_DOC_URL.trim()
     : '';
 
-/** Âncora em `docs/operacao-mei-nfse.md` (US-MEI-FISC-03). */
-const CERTIFICADO_409_SEM_ID_DOC_ANCHOR = 'certificado-plugnotas-409-sem-id';
-
 function getCertificado409SemIdHelpHref(): string {
+  const hash = `#${CERTIFICADO_EMISSOR_409_SEM_ID_DOC_ANCHOR}`;
   if (meiOperacaoNfseDocUrl) {
     const base = meiOperacaoNfseDocUrl.replace(/#.*$/, '');
-    return `${base}#${CERTIFICADO_409_SEM_ID_DOC_ANCHOR}`;
+    return `${base}${hash}`;
   }
-  return '/guia-mei-certificado-409-sem-id.html';
+  return `/guia-mei-certificado-409-sem-id.html${hash}`;
 }
 
 /** Alinhado a `docs/operacao-mei-nfse.md` (#cadastro-empresa-nfce-qrcode-sefaz). */

@@ -9,10 +9,17 @@ export function MeiCadastroRequisitosNfeNfcePlaceholder() {
       </summary>
       <div className="mt-2 border-t border-slate-200/80 pt-2 text-xs leading-relaxed text-slate-600 dark:border-slate-600/80 dark:text-slate-300">
         <p>
-          Para NF-e e NFC-e, o painel Plugnotas pode exigir dados que ainda não estão neste formulário (por exemplo CSC,
-          token SEFAZ ou cadastro de produtos). Complete ou valide no{' '}
-          <strong className="font-medium text-slate-800 dark:text-slate-100">app2.plugnotas.com.br</strong> conforme a sua
-          operação.
+          Para NF-e e NFC-e, o painel do emissor fiscal pode exigir dados que ainda não estão neste formulário (por exemplo
+          CSC, token SEFAZ ou cadastro de produtos). Complete ou valide no{' '}
+          <a
+            href="https://app2.plugnotas.com.br"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-slate-800 underline decoration-slate-400 hover:decoration-slate-600 dark:text-slate-100 dark:decoration-slate-500"
+          >
+            painel web do emissor
+          </a>{' '}
+          conforme a sua operação.
         </p>
         <p className="mt-2 text-slate-500 dark:text-slate-400">
           Quando o backend passar a expor campos obrigatórios para estes tipos, eles aparecerão aqui sem alterar o fluxo

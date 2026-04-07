@@ -452,13 +452,33 @@ export const parseDocumentosAtivosMirrorValue = (raw) => {
 };
 
 /**
+ * FR-UPD-DOC-09 — aviso estruturado sem PII desnecessária (sem payload Plugnotas / sem tri-boolean no log).
+ * @param {{ userId: string, reason: string, detail?: string }} ctx
+ */
+export const logDocumentosAtivosMirrorPersistWarn = (ctx) => {
+  const { userId, reason, detail } = ctx;
+  console.warn('[mei-certificate-store] documentos_ativos mirror', {
+    reason,
+    userId,
+    ...(detail ? { detail } : {})
+  });
+};
+
+/**
  * Persiste espelho local após POST/PATCH empresa Plugnotas (FR-CAD-DOC P1).
  * Só faz UPDATE se já existir linha em `user_mei_certificates` (evita INSERT sem .pfx).
- * Ignora falhas silenciosamente (deploy parcial / coluna ausente).
+ * Falhas de Supabase/rede ou ausência de linha UMC: no-op na resposta HTTP + `warn` estruturado (FR-UPD-DOC-09).
+ *
  * @param {string} userId
  * @param {{ nfse: boolean, nfe: boolean, nfce: boolean }} selection
+ * @param {object} [deps] — injeção para testes
+ * @param {() => object} [deps.getSupabase] — cliente Supabase (service role)
+ * @param {(ctx: { userId: string, reason: string, detail?: string }) => void} [deps.logWarn]
  */
-export const saveDocumentosAtivosMirror = async (userId, selection) => {
+export const saveDocumentosAtivosMirror = async (userId, selection, deps = {}) => {
+  const logWarn = deps.logWarn ?? logDocumentosAtivosMirrorPersistWarn;
+  const resolveSupabase = deps.getSupabase ?? getSupabase;
+
   if (!userId || !selection || typeof selection !== 'object') return;
   const json = {
     nfse: Boolean(selection.nfse),
@@ -467,13 +487,28 @@ export const saveDocumentosAtivosMirror = async (userId, selection) => {
   };
   if (!json.nfse && !json.nfe && !json.nfce) return;
   try {
-    const supabase = getSupabase();
+    const supabase = resolveSupabase();
     const { data: existing, error: selErr } = await supabase
       .from(TABLE)
       .select('id')
       .eq('user_id', userId)
       .maybeSingle();
-    if (selErr || !existing?.id) return;
+    if (selErr) {
+      logWarn({
+        userId,
+        reason: 'mirror_select_user_mei_certificates_failed',
+        detail: selErr.message || String(selErr.code || 'unknown')
+      });
+      return;
+    }
+    if (!existing?.id) {
+      logWarn({
+        userId,
+        reason: 'mirror_no_user_mei_certificate_row',
+        detail: 'no_update_without_certificate_row'
+      });
+      return;
+    }
     const { error } = await supabase
       .from(TABLE)
       .update({
@@ -481,9 +516,19 @@ export const saveDocumentosAtivosMirror = async (userId, selection) => {
         updated_at: new Date().toISOString()
       })
       .eq('user_id', userId);
-    if (error) return;
-  } catch {
-    // coluna inexistente ou rede
+    if (error) {
+      logWarn({
+        userId,
+        reason: 'mirror_update_documentos_ativos_failed',
+        detail: error.message || String(error.code || 'unknown')
+      });
+    }
+  } catch (err) {
+    logWarn({
+      userId,
+      reason: 'mirror_persist_unexpected_error',
+      detail: err instanceof Error ? err.message : String(err)
+    });
   }
 };
 

@@ -7,7 +7,7 @@
  */
 
 /** Âncora principal em `docs/operacao-mei-nfse.md` (troubleshoot município/credenciamento). */
-export const NFSE_NACIONAL_OPERACAO_DOC_ANCHOR = 'plugnotas-nfse-nacional-spike-nat01';
+export const NFSE_NACIONAL_OPERACAO_DOC_ANCHOR = 'emissor-nfse-nacional-spike-nat01';
 
 /**
  * Padrões que disparam a dica (substring após normalização: minúsculas, sem acentos).

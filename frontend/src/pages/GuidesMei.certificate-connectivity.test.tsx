@@ -162,7 +162,7 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     expect(container.textContent).toContain(GUIMEI_CONNECTIVITY_CERTIFICATE_MESSAGE);
     expect(container.textContent).toContain('Saiba mais');
     expect(container.textContent).not.toContain(
-      'Quando a mensagem citar validação de JSON, campos fiscais, integração fiscal ou o nome Plugnotas'
+      'quem recusou o cadastro costuma ser o provedor de emissão fiscal'
     );
 
     await act(async () => {
@@ -274,7 +274,7 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     container.remove();
   });
 
-  it('exibe alerta de conectividade quando cadastro da empresa fiscal falha por rede após certificado Plugnotas (US-MEI-FISC-01)', async () => {
+  it('exibe alerta de conectividade quando cadastro da empresa fiscal falha por rede após certificado no emissor (US-MEI-FISC-01)', async () => {
     authState.role = 'admin';
     authState.mei = false;
     uploadMeiCertificateMock.mockResolvedValueOnce({
@@ -430,7 +430,7 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     authState.role = 'admin';
     authState.mei = false;
     const apiMsg =
-      'O certificado já está cadastrado no Plugnotas, mas não foi possível obter o ID automaticamente.';
+      'O certificado já está cadastrado no emissor fiscal, mas não foi possível obter o ID automaticamente.';
     uploadMeiCertificateMock.mockResolvedValueOnce({
       hasUserCertificate: true,
       hasEnvCertificate: false,
@@ -478,7 +478,9 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     expect(container.textContent).toContain('CNPJ no formulário');
     expect(container.textContent).toContain('provedor fiscal');
     expect(container.textContent).toContain('Saiba mais');
-    expect(container.querySelector('a[href="/guia-mei-certificado-409-sem-id.html"]')).toBeTruthy();
+    expect(
+      container.querySelector('a[href^="/guia-mei-certificado-409-sem-id.html#certificado-emissor-409-sem-id"]')
+    ).toBeTruthy();
 
     await act(async () => {
       root.unmount();

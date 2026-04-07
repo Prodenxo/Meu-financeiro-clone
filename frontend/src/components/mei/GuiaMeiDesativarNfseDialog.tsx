@@ -51,7 +51,7 @@ export function GuiaMeiDesativarNfseDialog({
         </h2>
         <p id="mei-desativar-nfse-desc" className="mt-2 text-sm text-slate-600 dark:text-slate-300">
           A Guia MEI usa NFS-e para serviços. Sem NFS-e ativo no emissor, a emissão de serviços nesta app pode ficar
-          bloqueada ou inconsistente com o Plugnotas.
+          bloqueada ou inconsistente com o emissor fiscal.
         </p>
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button

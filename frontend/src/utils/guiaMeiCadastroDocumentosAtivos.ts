@@ -1,8 +1,39 @@
 /**
  * FR-CAD-DOC-08 / 09 / 10 — copy do bloco «dados mínimos», flag de emissão NF-e/NFC-e na UI, link para doc.
+ * FR-UPD-DOC-01 — secção «Documentos ativos» visível após cadastro (subtítulo de descoberta).
  * @see docs/specs/ux-spec-cadastro-empresa-documentos-ativos-plugnotas-2026-04-07.md §5–§7
  */
 import type { DocumentosAtivosState } from './plugnotasEmpresaDocumentosAtivos';
+
+/** UX §5.1 — título da secção (continuidade com cadastro). */
+export const TITULO_SECAO_DOCUMENTOS_ATIVOS_EMISSOR = 'Documentos ativos no emissor fiscal';
+
+/** UX §5.1 — subtítulo opcional (alteração posterior + envio ao emissor). */
+export const SUBTITULO_OPCIONAL_ALTERAR_DEPOIS_DOCUMENTOS_ATIVOS =
+  'Você pode alterar esta configuração depois do primeiro cadastro. As mudanças são enviadas ao emissor fiscal ao salvar.';
+
+/** UX spec — bloco permanece descoberto pós-cadastro (Guia MEI). */
+export const SUBTITULO_SECAO_DOCUMENTOS_ATIVOS_DESCOBERTA =
+  'Esta secção fica sempre disponível para rever ou alterar os tipos de documento ativos no emissor.';
+
+/** UX §6 / FR-UPD-DOC-08 — banner de deriva (sem jargão técnico). */
+export const MSG_BANNER_DIVERGENCIA_DOCUMENTOS_ATIVOS =
+  'A configuração guardada aqui differe do que encontramos no emissor. Mostramos o estado do emissor.';
+
+export const CTA_ATUALIZAR_VISTA_DOCUMENTOS_ATIVOS = 'Atualizar vista';
+export const CTA_SINCRONIZAR_EMISSOR_DOCUMENTOS_ATIVOS = 'Sincronizar com o emissor';
+
+/** UX §7 — `role="region"` */
+export const ARIA_LABEL_REGIAO_DIVERGENCIA_DOCUMENTOS_ATIVOS =
+  'Aviso de diferença de configuração';
+
+/** UX §5.3 / FR-UPD-DOC-07 — pós-PATCH quando `documentosAtivos` foi alterado pelo utilizador. */
+export const MSG_SUCESSO_PATCH_DOCUMENTOS_ATIVOS_EMISSOR =
+  'Configuração atualizada no emissor fiscal.';
+
+/** FR-UPD-DOC-06 / UX §4.3 — falha GET empresa na hidratação (ecrã continua utilizável). */
+export const MSG_DOCUMENTOS_ATIVOS_GET_EMPRESA_HIDRATACAO_FALHOU =
+  'Não foi possível obter a configuração atual no emissor fiscal. A seleção abaixo usa os dados guardados nesta aplicação ou os valores por defeito.';
 
 /** UX §5.1 — só um tipo activo e é NFS-e. */
 export const TITULO_DADOS_MINIMOS_SO_NFSE = 'Dados mínimos para emissão de NFS-e';

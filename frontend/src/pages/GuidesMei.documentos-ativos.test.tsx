@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
  * FR-CAD-DOC (follow-up QA): fieldset «Documentos ativos», modal NFS-e, validação unificada no PATCH.
+ * FR-UPD-DOC QA: remount + cache GET empresa (chave anon se `userId` ausente).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -10,34 +11,60 @@ import { waitFor } from '@testing-library/react';
 import GuidesMei from './GuidesMei';
 import { MEI_WORKSPACE_STORAGE_KEY } from './guidesMeiWorkspaceStorage';
 import { MSG_DOCUMENTOS_ATIVOS_MIN_ONE } from '../utils/plugnotasEmpresaDocumentosAtivos';
+import {
+  CTA_ATUALIZAR_VISTA_DOCUMENTOS_ATIVOS,
+  CTA_SINCRONIZAR_EMISSOR_DOCUMENTOS_ATIVOS,
+  MSG_BANNER_DIVERGENCIA_DOCUMENTOS_ATIVOS
+} from '../utils/guiaMeiCadastroDocumentosAtivos';
 
 const globalWithActFlag = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
 globalWithActFlag.IS_REACT_ACT_ENVIRONMENT = true;
 
-const { useAuthStoreMock, authState } = vi.hoisted(() => {
-  const state = {
-    role: 'admin' as 'superadmin' | 'admin' | 'usuario' | 'outsider',
-    mei: false
-  };
-  const hook = Object.assign(() => state, { getState: () => state });
-  return { useAuthStoreMock: hook, authState: state };
+const defaultCertStatus = () => ({
+  hasUserCertificate: false,
+  hasEnvCertificate: false,
+  documento: null as string | null,
+  documentosAtivos: null as { nfse: boolean; nfe: boolean; nfce: boolean } | null
 });
 
-const { atualizarEmpresaEmissaoNfMock, fetchNfsePrestadorPrefillMock } = vi.hoisted(() => ({
-  atualizarEmpresaEmissaoNfMock: vi.fn(async () => ({
+const {
+  useAuthStoreMock,
+  authState,
+  fetchMeiCertificateStatusMock,
+  consultarEmpresaEmissaoNfMock,
+  atualizarEmpresaEmissaoNfMock,
+  fetchNfsePrestadorPrefillMock
+} = vi.hoisted(() => {
+  const state = {
+    role: 'admin' as 'superadmin' | 'admin' | 'usuario' | 'outsider',
+    mei: false,
+    userId: 'test-user-id' as string | null
+  };
+  const hook = Object.assign(() => state, { getState: () => state });
+  const fetchMeiCertificateStatusMock = vi.fn(async () => defaultCertStatus());
+  const consultarEmpresaEmissaoNfMock = vi.fn(async () => ({ message: 'ok', data: {} }));
+  const atualizarEmpresaEmissaoNfMock = vi.fn(async () => ({
     cnpj: '12345678000190',
     message: 'ok',
     raw: {}
-  })),
-  fetchNfsePrestadorPrefillMock: vi.fn(async () => ({
+  }));
+  const fetchNfsePrestadorPrefillMock = vi.fn(async () => ({
     prestadorCpfCnpj: null,
     prestadorRazaoSocial: null,
     prestadorEmail: null,
     prestadorInscricaoMunicipal: null,
     prestadorEndereco: null,
     sourceRowId: null
-  }))
-}));
+  }));
+  return {
+    useAuthStoreMock: hook,
+    authState: state,
+    fetchMeiCertificateStatusMock,
+    consultarEmpresaEmissaoNfMock,
+    atualizarEmpresaEmissaoNfMock,
+    fetchNfsePrestadorPrefillMock
+  };
+});
 
 vi.mock('../store/authStore', () => ({
   useAuthStore: useAuthStoreMock
@@ -46,11 +73,7 @@ vi.mock('../store/authStore', () => ({
 vi.mock('../services/guidesMeiService', () => ({
   downloadMeiGuide: vi.fn(async () => ({ blob: new Blob(), filename: 'guia-mei.pdf' })),
   downloadParcelamentoPdf: vi.fn(async () => ({ blob: new Blob(), filename: 'p.pdf' })),
-  fetchMeiCertificateStatus: vi.fn(async () => ({
-    hasUserCertificate: false,
-    hasEnvCertificate: false,
-    documento: null
-  })),
+  fetchMeiCertificateStatus: (...args: unknown[]) => fetchMeiCertificateStatusMock(...args),
   fetchMeiPeriods: vi.fn(async () => []),
   fetchMeiPeriodsByCnpj: vi.fn(async () => []),
   fetchParcelamentos: vi.fn(async () => ({ parcelamentos: [] })),
@@ -75,7 +98,7 @@ vi.mock('../services/meiNotasService', () => ({
   baixarNfseXml: vi.fn(async () => ({ blob: new Blob(), filename: 'nota.xml' })),
   cadastrarCertificadoEmissaoNf: vi.fn(async () => ({ id: 'cert-1', message: 'ok' })),
   cadastrarEmpresaEmissaoNf: vi.fn(async () => ({ cnpj: '12345678000190', message: 'ok' })),
-  consultarEmpresaEmissaoNf: vi.fn(async () => ({ message: 'ok', data: {} })),
+  consultarEmpresaEmissaoNf: (...args: unknown[]) => consultarEmpresaEmissaoNfMock(...args),
   cancelarNfse: vi.fn(async () => ({})),
   emitirNfse: vi.fn(async () => ({ id: 'nfse-1', protocol: 'P-1' })),
   listarCatalogoNfseClientes: vi.fn(async () => []),
@@ -131,8 +154,14 @@ describe('GuidesMei — Documentos ativos (QA FR-CAD-DOC)', () => {
   beforeEach(() => {
     authState.role = 'admin';
     authState.mei = false;
+    authState.userId = 'test-user-id';
+    sessionStorage.clear();
     localStorage.removeItem(MEI_WORKSPACE_STORAGE_KEY);
     atualizarEmpresaEmissaoNfMock.mockClear();
+    consultarEmpresaEmissaoNfMock.mockClear();
+    fetchMeiCertificateStatusMock.mockReset();
+    fetchMeiCertificateStatusMock.mockImplementation(async () => defaultCertStatus());
+    consultarEmpresaEmissaoNfMock.mockImplementation(async () => ({ message: 'ok', data: {} }));
     fetchNfsePrestadorPrefillMock.mockImplementation(async () => ({
       prestadorCpfCnpj: null,
       prestadorRazaoSocial: null,
@@ -236,5 +265,140 @@ describe('GuidesMei — Documentos ativos (QA FR-CAD-DOC)', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it('FR-UPD-DOC QA: remount não duplica chamadas HTTP a consultarEmpresa (cache sessionStorage)', async () => {
+    fetchMeiCertificateStatusMock.mockImplementation(async () => ({
+      hasUserCertificate: true,
+      hasEnvCertificate: false,
+      documento: '12345678000190',
+      documentosAtivos: { nfse: true, nfe: false, nfce: false }
+    }));
+    consultarEmpresaEmissaoNfMock.mockImplementation(async () => ({
+      message: 'ok',
+      data: {
+        nfse: { ativo: true, tipoContrato: 0 },
+        nfe: { ativo: false, tipoContrato: 0 },
+        nfce: { ativo: false, tipoContrato: 0 }
+      }
+    }));
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await openCertificadoDas(container, root);
+
+    await waitFor(() => {
+      expect(consultarEmpresaEmissaoNfMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    });
+    const callsAfterFirstMount = consultarEmpresaEmissaoNfMock.mock.calls.length;
+
+    await act(async () => {
+      root.unmount();
+    });
+
+    const root2 = createRoot(container);
+    await act(async () => {
+      root2.render(<GuidesMei />);
+    });
+    const goDas = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Certificado e DAS')
+    );
+    await act(async () => {
+      goDas?.click();
+    });
+
+    await waitFor(() => {
+      expect(consultarEmpresaEmissaoNfMock.mock.calls.length).toBe(callsAfterFirstMount);
+    });
+
+    await act(async () => {
+      root2.unmount();
+    });
+    container.remove();
+  });
+
+  it('FR-UPD-DOC-08 QA: espelho ≠ remoto mostra banner de deriva, região e CTAs', async () => {
+    fetchMeiCertificateStatusMock.mockImplementation(async () => ({
+      hasUserCertificate: true,
+      hasEnvCertificate: false,
+      documento: '12345678000190',
+      documentosAtivos: { nfse: false, nfe: true, nfce: false }
+    }));
+    consultarEmpresaEmissaoNfMock.mockImplementation(async () => ({
+      message: 'ok',
+      data: {
+        nfse: { ativo: true, tipoContrato: 0 },
+        nfe: { ativo: false, tipoContrato: 0 },
+        nfce: { ativo: false, tipoContrato: 0 }
+      }
+    }));
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await openCertificadoDas(container, root);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(MSG_BANNER_DIVERGENCIA_DOCUMENTOS_ATIVOS);
+    });
+
+    const regiao = Array.from(container.querySelectorAll('[role="region"]')).find((el) =>
+      el.getAttribute('aria-label')?.includes('diferença')
+    );
+    expect(regiao).toBeTruthy();
+
+    expect(
+      Array.from(container.querySelectorAll('button')).some((b) =>
+        b.textContent?.includes(CTA_ATUALIZAR_VISTA_DOCUMENTOS_ATIVOS)
+      )
+    ).toBe(true);
+    expect(
+      Array.from(container.querySelectorAll('button')).some((b) =>
+        b.textContent?.includes(CTA_SINCRONIZAR_EMISSOR_DOCUMENTOS_ATIVOS)
+      )
+    ).toBe(true);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('FR-UPD-DOC QA: com userId ausente ainda hidrata GET empresa (chave cache anon)', async () => {
+    authState.userId = null;
+    sessionStorage.clear();
+    fetchMeiCertificateStatusMock.mockImplementation(async () => ({
+      hasUserCertificate: true,
+      hasEnvCertificate: false,
+      documento: '12345678000190',
+      documentosAtivos: { nfse: true, nfe: false, nfce: false }
+    }));
+    consultarEmpresaEmissaoNfMock.mockImplementation(async () => ({
+      message: 'ok',
+      data: {
+        nfse: { ativo: true, tipoContrato: 0 },
+        nfe: { ativo: false, tipoContrato: 0 },
+        nfce: { ativo: false, tipoContrato: 0 }
+      }
+    }));
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await openCertificadoDas(container, root);
+
+    await waitFor(() => {
+      expect(consultarEmpresaEmissaoNfMock).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    authState.userId = 'test-user-id';
   });
 });

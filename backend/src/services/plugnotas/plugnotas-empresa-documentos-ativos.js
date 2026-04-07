@@ -1,6 +1,8 @@
 /**
  * Seleção canónica de documentos ativos (NFSe / NF-e / NFC-e) para POST/PATCH empresa Plugnotas.
+ * Resposta GET /empresa: ver `extractDocumentosAtivosFromEmpresaResponse` e docs/operacao-mei-nfse.md.
  * @see docs/stories/story-fr-cad-doc-p0-backend-documentos-ativos-plugnotas.md
+ * @see docs/stories/story-fr-upd-doc-p0-backend-reconcile-get-espelho.md
  * @see docs/adr/ADR-plugnotas-empresa-payload-apenas-nfse.md
  */
 import { badRequest } from '../../utils/errors.js';
@@ -38,6 +40,61 @@ const toBool = (value, fallback = false) => {
   if (['1', 'true', 'yes', 'sim'].includes(t)) return true;
   if (['0', 'false', 'no', 'nao', 'não'].includes(t)) return false;
   return fallback;
+};
+
+/**
+ * Extrai a partir de um objecto onde `nfse` / `nfe` / `nfce` estão neste nível (shape “plano”).
+ * @param {Record<string, unknown>} o
+ * @returns {{ nfse: boolean, nfe: boolean, nfce: boolean } | null}
+ */
+const extractFromFlatEmpresaShape = (o) => {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  const blockAtivo = (key) => {
+    const block = o[key];
+    if (!block || typeof block !== 'object' || Array.isArray(block)) return false;
+    return toBool(/** @type {Record<string, unknown>} */ (block).ativo, false);
+  };
+  const nfse = blockAtivo('nfse');
+  const nfe = blockAtivo('nfe');
+  const nfce = blockAtivo('nfce');
+  if (!nfse && !nfe && !nfce) return null;
+  return { nfse, nfe, nfce };
+};
+
+const pushCandidate = (list, obj) => {
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) list.push(obj);
+};
+
+/**
+ * Deriva `documentosAtivos` a partir do JSON de **GET /empresa** (Plugnotas).
+ * Procura blocos `nfse` / `nfe` / `nfce` no **nível raiz** ou dentro de envelopes comuns (`data`, `empresa`, `data.empresa`).
+ * Não lança: formas inesperadas degradam para `null`.
+ *
+ * @param {unknown} empresaJson — corpo típico de GET empresa (pode incluir outros campos).
+ * @returns {{ nfse: boolean, nfe: boolean, nfce: boolean } | null} `null` se input inválido ou **nenhum** tipo ativo.
+ */
+export const extractDocumentosAtivosFromEmpresaResponse = (empresaJson) => {
+  try {
+    if (!empresaJson || typeof empresaJson !== 'object' || Array.isArray(empresaJson)) {
+      return null;
+    }
+    const root = /** @type {Record<string, unknown>} */ (empresaJson);
+    const candidates = [];
+    pushCandidate(candidates, root);
+    pushCandidate(candidates, root.data);
+    pushCandidate(candidates, root.empresa);
+    const data = root.data;
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      pushCandidate(candidates, /** @type {Record<string, unknown>} */ (data).empresa);
+    }
+    for (const c of candidates) {
+      const sel = extractFromFlatEmpresaShape(c);
+      if (sel) return sel;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 };
 
 /**

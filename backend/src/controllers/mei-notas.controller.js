@@ -1,11 +1,13 @@
 import { env } from '../config/env.js';
 import * as meiNotasService from '../services/mei-notas.service.js';
-import { persistDocumentosAtivosMirrorAfterEmpresa } from '../services/mei-notas-documentos-mirror.js';
+import {
+  consultarEmpresaAndReconcileMirror,
+  persistDocumentosAtivosMirrorAfterEmpresa
+} from '../services/mei-notas-documentos-mirror.js';
 import {
   atualizarEmpresaPlugNotas,
   cadastrarCertificadoPlugNotas,
-  cadastrarEmpresaPlugNotas,
-  consultarEmpresaPlugNotas
+  cadastrarEmpresaPlugNotas
 } from '../services/plugnotas/empresa.service.js';
 import { unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
@@ -144,7 +146,7 @@ export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
 export const consultarPlugNotasEmpresa = async (req, res, next) => {
   try {
     const cpfCnpj = String(req.query?.cpfCnpj || req.query?.cnpj || '').trim();
-    const data = await consultarEmpresaPlugNotas(cpfCnpj);
+    const data = await consultarEmpresaAndReconcileMirror(req.user?.id, cpfCnpj);
     return sendSuccess(res, data, 'Empresa consultada no serviço de emissão fiscal');
   } catch (error) {
     return next(error);
