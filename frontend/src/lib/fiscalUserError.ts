@@ -40,6 +40,32 @@ function normalizeMsg(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/** Pistas de validação fiscal / provedor — mensagens curtas com estes termos ainda são acionáveis (seg. QA POSQA-3). */
+const FISCAL_PROVIDER_CONTENT_HINT =
+  /\b(ncm|cfop|cst|icms|pis|cofins|sefaz|rejei[cç][aã]o|plugnotas|modelo\s*65|nf-?e|nfc-?e|itens?\s*\[|schema\s+xml)/i;
+
+/**
+ * Texto que parece mensagem útil do provedor (campos, rejeição SEFAZ), não JSON opaco nem stack interno.
+ * Usado após `looksLikeOpaqueApiPayload` — não revalidar JSON aqui.
+ */
+export function isLikelyUserFacingFiscalValidationMessage(text: string): boolean {
+  const t = text.trim();
+  if (t.length > 8000) return false;
+  const lower = t.toLowerCase();
+  if (
+    /unexpected token|syntaxerror|referenceerror|internal server error|econnrefused|etimedout|fetch failed|networkerror/i.test(
+      lower
+    )
+  ) {
+    return false;
+  }
+  if (/\bat\s+\w+\s*\([^)]*\.(ts|js|jsx|tsx):\d+\)/i.test(t)) return false;
+  if (/^\s*err_[a-z0-9_]+\b/i.test(t) && t.length < 120) return false;
+  const minLen = FISCAL_PROVIDER_CONTENT_HINT.test(t) ? 8 : 12;
+  if (t.length < minLen) return false;
+  return true;
+}
+
 /**
  * Mapeia `plugnotasCode` e/ou texto bruto da API para copy humana + próximo passo.
  * Ordem: código estável → padrões HTTP/rede → heurísticas Plugnotas → mensagem explícita conhecida → fallback global.
@@ -165,6 +191,14 @@ export function mapMeiFiscalErrorToCopy(input: {
       title: 'Configuração do Plugnotas',
       description:
         'O provedor recusou a chamada (URL base ou ambiente incorreto). Quem gere o servidor deve confirmar PLUGNOTAS_API_BASE_URL e a chave no mesmo ambiente.',
+    };
+  }
+
+  /** Mensagens agregadas legíveis (Plugnotas/SEFAZ) — POSQA / FR-POSQA-06: paridade com texto útil do provedor. */
+  if (isLikelyUserFacingFiscalValidationMessage(raw)) {
+    return {
+      title: 'Validação ou rejeição no provedor',
+      description: normalizeMsg(raw),
     };
   }
 

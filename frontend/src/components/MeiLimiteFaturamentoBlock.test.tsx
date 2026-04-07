@@ -96,5 +96,23 @@ describe('MeiLimiteFaturamentoBlock', () => {
     fireEvent.click(btn);
     expect(btn.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText(/Notas ainda em processamento ou canceladas/i)).toBeTruthy();
+    expect(screen.getByText(/NF-e e NFC-e seguem regras de ICMS\/SEFAZ/i)).toBeTruthy();
+    expect(screen.getByText(/será anunciado na app/i)).toBeTruthy();
+  });
+
+  it('Base (MVP): exclusão explícita de NF-e e NFC-e do total (FR-POSQA-05)', () => {
+    render(
+      <MeiLimiteFaturamentoBlock
+        anoCivil={2026}
+        progresso={progressoBase({
+          totalUtilizadoReais: 10_000,
+          notasConsideradas: 1,
+          percentualUtilizado: (10_000 / 81_000) * 100,
+          percentualUtilizadoParaBarra: (10_000 / 81_000) * 100
+        })}
+        vigenciaLabel={null}
+      />
+    );
+    expect(screen.getByText(/Notas NF-e e NFC-e não entram neste total/i)).toBeTruthy();
   });
 });

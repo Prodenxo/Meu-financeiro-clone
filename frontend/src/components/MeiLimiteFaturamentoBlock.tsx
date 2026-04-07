@@ -218,7 +218,8 @@ export function MeiLimiteFaturamentoBlock({
           <div className="space-y-2 border-t border-slate-200/70 pt-3 dark:border-slate-700/70">
             <p id={`${baseDetailId}-line`} className="text-sm text-slate-700 dark:text-slate-200">
               <span className="font-medium">Base (MVP):</span>{' '}
-              soma das NFS-e com emissão concluída nesta conta no ano civil {anoCivil}.
+              soma das <strong className="font-semibold">NFS-e</strong> com emissão concluída nesta conta no ano civil{' '}
+              {anoCivil}. <strong className="font-semibold">Notas NF-e e NFC-e não entram neste total.</strong>
             </p>
             <div>
               <button
@@ -233,12 +234,18 @@ export function MeiLimiteFaturamentoBlock({
               {baseOpen ? (
                 <div
                   id={`${baseDetailId}-panel`}
-                  className="mt-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-600 dark:border-slate-700/80 dark:bg-slate-900/50 dark:text-slate-300"
+                  className="mt-2 space-y-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-600 dark:border-slate-700/80 dark:bg-slate-900/50 dark:text-slate-300"
                   role="region"
                   aria-labelledby={`${baseDetailId}-line`}
                 >
-                  Total das NFS-e autorizadas por esta conta no ano civil, comparado ao limite de referência configurado.
-                  Notas ainda em processamento ou canceladas não entram no somatório.
+                  <p>
+                    Total das NFS-e autorizadas por esta conta no ano civil, comparado ao limite de referência configurado.
+                    Notas ainda em processamento ou canceladas não entram no somatório.
+                  </p>
+                  <p className="text-sm text-slate-700 dark:text-slate-200">
+                    NF-e e NFC-e seguem regras de ICMS/SEFAZ e <strong className="font-semibold">não são somadas</strong>{' '}
+                    neste indicador. Se no futuro o produto passar a incluí-las, será anunciado na app.
+                  </p>
                 </div>
               ) : null}
             </div>

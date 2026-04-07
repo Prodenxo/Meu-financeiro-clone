@@ -29,7 +29,8 @@
     "db:apply:empresa-invites": "node scripts/apply-empresa-invites-via-pg.mjs",
     "db:verify:nfse-emitente-schema": "node scripts/nfse-emitente-user-mei-certificates-schema.mjs --check",
     "db:apply:nfse-emitente-schema": "node scripts/nfse-emitente-user-mei-certificates-schema.mjs --apply",
-    "qa:corr03-smoke-backend": "cd backend && node --test tests/mei-guide-routes-emitente.test.js"
+    "qa:corr03-smoke-backend": "cd backend && node --test tests/mei-guide-routes-emitente.test.js",
+    "smoke:plugnotas:nfe-nfce": "node scripts/smoke-nfe-nfce-plugnotas.mjs"
   },
   "workspaces": [
     "frontend",

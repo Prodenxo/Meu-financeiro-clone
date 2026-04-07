@@ -206,10 +206,10 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     });
 
     expect(container.textContent).not.toContain('Servidor ou conexão indisponível');
-    expect(container.textContent).toMatch(/Operação fiscal/i);
+    expect(container.textContent).toMatch(/Operação fiscal|Validação ou rejeição no provedor/i);
     expect(container.textContent).toContain('provedor de emissão fiscal');
     const fiscalText = container.textContent ?? '';
-    // UI pode mapear o Error para cópia genérica ou expor a mensagem técnica — aceitar ambos (mitigação QA P0)
+    // UI pode mapear o Error para cópia genérica, título POSQA (validação legível) ou expor a mensagem técnica
     expect(
       fiscalText.includes('Não foi possível concluir o pedido') ||
         fiscalText.includes('Falha na validação: certificado rejeitado pelo serviço.')

@@ -24,6 +24,8 @@ Não grave secrets, tokens nem dados pessoais.
 
 ## Decisões de arquitetura
 
+- **2026-04-07 — FR-POSQA-07 (POSQA-5):** smoke opcional Plugnotas — `scripts/smoke-nfe-nfce-plugnotas.mjs` + `npm run smoke:plugnotas:nfe-nfce`; CI GitHub só com secrets `PLUGNOTAS_API_BASE_URL` / `PLUGNOTAS_API_KEY` (workflow não bloqueia PR se ausentes).
+- **2026-04-07 — Empresa Plugnotas NF-e/NFC-e (FR-POSQA-03 / PRD §8.1):** decisão **D1** — documentação + bloqueio honesto na UI (`MeiFiscalCapabilityCallout`, `parsePlugnotasEmpresaCapabilities`); **D2/D3** em backlog. ADR `docs/technical/adr-empresa-plugnotas-nfe-nfce-d1-2026-04-07.md`.
 - **2026-04-02 — Limite de faturamento MEI (LIM-MEI-01):** agregado MVP no cliente a partir de `NfseRecord[]` (`listarNfse`); ADR `docs/technical/mei-limite-faturamento-agregado-2026-04-02.md`; helpers `frontend/src/utils/meiLimiteFaturamento.ts` + `meiLimiteFaturamentoConfig.ts`.
 - Dados mínimos NFS-e do emitente: colunas em `user_mei_certificates` (migrações `20260326140000_*` e `20260326150000_add_tipo_logradouro_user_mei_certificates.sql` para tipo de via); gravação via `POST /mei-guide/certificate` (multipart) e `PATCH /mei-guide/certificate/emitente-nfse`; leitura em `GET /mei-guide/certificate/status` no campo `nfseEmitente`.
 
@@ -59,7 +61,10 @@ npm run db:verify:nfse-emitente-schema   # CORR-01: confirma colunas NFS-e + tip
 npm run db:apply:nfse-emitente-schema    # aplica migrações 20260326140000 + 20260326150000 via Postgres direto
 npm run db:migrate:prod:check            # Supabase CLI link + migration list (requer SUPABASE_PROD_* + login)
 npm run qa:corr03-smoke-backend          # CORR-03: teste unitário rota PATCH emitente-nfse (middlewares)
+npm run smoke:plugnotas:nfe-nfce        # POSQA-5 / FR-POSQA-07: smoke opcional HTTP Plugnotas (requer PLUGNOTAS_* no .env)
 ```
+
+Documentação: smoke E2E manual NF-e/NFC-e (Plugnotas sandbox) — `docs/runbook/runbook-smoke-nfe-nfce-plugnotas-sandbox.md` (PRD POSQA **FR-POSQA-01**); índice também em `docs/operacao-mei-nfse.md`.
 
 GitHub Actions: `.github/workflows/corr03-smoke-backend.yml` executa o mesmo smoke em PRs que alterem ficheiros `mei-guide*`, `mei-certificate-store*`, migrações `*user_mei*` ou o teste emitente (ver `paths` no workflow).
 
@@ -77,6 +82,13 @@ GitHub Actions: `.github/workflows/corr03-smoke-backend.yml` executa o mesmo smo
 
 ## Última atualização
 
+- **2026-04-07** — STORY-POSQA-5 pós-QA: runbook `docs/runbook/runbook-smoke-nfe-nfce-plugnotas-sandbox.md` v1.4 — critérios HTTP do smoke + troubleshooting (risco residual contrato Plugnotas).
+- **2026-04-07** — STORY-POSQA-5 / **FR-POSQA-07:** smoke opcional Plugnotas — `scripts/smoke-nfe-nfce-plugnotas.mjs`, `npm run smoke:plugnotas:nfe-nfce`, workflow `.github/workflows/posqa-5-plugnotas-smoke-optional.yml` (só com secrets `PLUGNOTAS_API_*`); runbook `docs/runbook/runbook-smoke-nfe-nfce-plugnotas-sandbox.md` §Automação opcional.
+- **2026-04-07** — STORY-POSQA-4: decisão **§8.1** **D1** (cadastro empresa Plugnotas); ADR `docs/technical/adr-empresa-plugnotas-nfe-nfce-d1-2026-04-07.md`; PRD POSQA v1.1 change log §15; runbook secção política empresa (`docs/runbook/runbook-smoke-nfe-nfce-plugnotas-sandbox.md`).
+- **2026-04-07** — STORY-POSQA-1: runbook `docs/runbook/runbook-smoke-nfe-nfce-plugnotas-sandbox.md` + link em `docs/operacao-mei-nfse.md` (FR-POSQA-01/02).
+- **2026-04-07** — Stories POSQA (pós-testes NF-e/NFC-e): `docs/stories/story-posqa-1-runbook-smoke-e2e-nfe-nfce.md` … `story-posqa-5-ci-e2e-opcional-nfe-nfce.md` (PRD `PRD-melhorias-nfe-nfce-pos-testes-automatizados-2026-04-07.md`).
+- **2026-04-07** — Arquitetura POSQA: `docs/technical/architecture-mei-posqa-nfe-nfce-2026-04-07.md` (cadeia erro Plugnotas→UI, limite NFSE-only sem schema novo, smoke runbook, D1/D2/D3 empresa).
+- **2026-04-07** — PRD `docs/prd/PRD-melhorias-nfe-nfce-pos-testes-automatizados-2026-04-07.md` (pós-QA automatizado: smoke E2E, empresa Plugnotas, reconciliação story, limite MEI copy, erros UI — FR-POSQA-*).
 - **2026-04-02** — LIM-MEI-01: limite MEI — agregado cliente + ADR + config por ano (`meiLimiteFaturamento*`).
 - **2026-03-26** — CORR-03 pós-QA: workflow `corr03-smoke-backend.yml` (smoke `qa:corr03-smoke-backend` em PRs relevantes); PATCH/UI/evidência §4 permanecem manuais.
 - **2026-03-26** — CORR-03: roteiro QA `docs/runbook/corr-03-validacao-guia-mei-nfse.md` (API + UI + evidência ticket).
