@@ -19,6 +19,13 @@ router.post(
   upload.single('arquivo'),
   controller.cadastrarPlugNotasCertificado
 );
+router.post(
+  '/setup/emissao-fiscal/emitente',
+  requireAuth,
+  requireMeiEnabled,
+  upload.single('arquivo'),
+  controller.cadastrarPlugNotasEmitenteComposite
+);
 router.post('/setup/emissao-fiscal/empresa', requireAuth, requireMeiEnabled, controller.cadastrarPlugNotasEmpresa);
 router.get('/setup/emissao-fiscal/empresa', requireAuth, requireMeiEnabled, controller.consultarPlugNotasEmpresa);
 router.patch('/setup/emissao-fiscal/empresa', requireAuth, requireMeiEnabled, controller.atualizarPlugNotasEmpresa);
@@ -28,6 +35,13 @@ router.post(
   requireMeiEnabled,
   upload.single('arquivo'),
   controller.cadastrarPlugNotasCertificado
+);
+router.post(
+  '/setup/plugnotas/emitente',
+  requireAuth,
+  requireMeiEnabled,
+  upload.single('arquivo'),
+  controller.cadastrarPlugNotasEmitenteComposite
 );
 router.post('/setup/plugnotas/empresa', requireAuth, requireMeiEnabled, controller.cadastrarPlugNotasEmpresa);
 router.get('/setup/plugnotas/empresa', requireAuth, requireMeiEnabled, controller.consultarPlugNotasEmpresa);

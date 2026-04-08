@@ -29,9 +29,8 @@ import {
   baixarNfsePdf,
   baixarNfseXml,
   atualizarEmpresaEmissaoNf,
-  cadastrarCertificadoEmissaoNf,
-  cadastrarEmpresaEmissaoNf,
   consultarEmpresaEmissaoNf,
+  type CadastrarEmissaoNfEmpresaResponse,
   cancelarNfse,
   emitirNfe,
   emitirNfce,
@@ -65,6 +64,11 @@ import {
 } from '../utils/plugnotasEmpresaDocumentosAtivos';
 import { fetchEmpresaJsonWithMeiCache, invalidateMeiEmpresaGetCache } from '../utils/guiaMeiEmpresaGetCache';
 import { isFetchConnectivityFailure } from '../utils/isFetchConnectivityFailure';
+import {
+  isPlugnotasEmitenteSetupError,
+  retryPlugnotasEmpresaRegistro,
+  submitPlugnotasEmitenteSetup
+} from '../utils/plugnotasEmitenteSetup';
 import { getPlugnotasCodeFromUnknownError as getFiscalErrorCode } from '../utils/apiClientError';
 import { mapMeiFiscalErrorToCopy } from '../lib/fiscalUserError';
 import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
@@ -568,6 +572,16 @@ export default function GuidesMei() {
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [certificatePassword, setCertificatePassword] = useState('');
   const [isUploadingCert, setIsUploadingCert] = useState(false);
+  const [plugnotasSubmitPhase, setPlugnotasSubmitPhase] = useState<
+    'idle' | 'certificado' | 'empresa'
+  >('idle');
+  const [plugnotasPendingRetry, setPlugnotasPendingRetry] = useState<{
+    certificadoId: string;
+    cnpj: string;
+  } | null>(null);
+  const [plugnotasEmpresaRetryDetail, setPlugnotasEmpresaRetryDetail] = useState<string | null>(null);
+  const [empresaRegistroRetryBusy, setEmpresaRegistroRetryBusy] = useState(false);
+  const plugnotasEmpresaRetryRef = useRef<HTMLDivElement>(null);
   const [isRemovingCert, setIsRemovingCert] = useState(false);
   const [hasUserCertificate, setHasUserCertificate] = useState(false);
   const [hasServerCertificate, setHasServerCertificate] = useState(false);
@@ -691,7 +705,10 @@ export default function GuidesMei() {
   const [nfsePeriodFilter, setNfsePeriodFilter] = useState('all');
   const [nfseShowArchived, setNfseShowArchived] = useState(false);
   const [nfseDocumentTypeFilter, setNfseDocumentTypeFilter] = useState<MeiFiscalListDocumentFilter>('all');
-  const [certificateSuccess, setCertificateSuccess] = useState<string | null>(null);
+  const [certificateSuccess, setCertificateSuccess] = useState<{
+    primary: string;
+    secondary?: string;
+  } | null>(null);
   const [nfEmissionCompanyForm, setNfEmissionCompanyForm] = useState<NfEmissionCompanyForm>(() => (
     getDefaultNfEmissionCompanyForm()
   ));
@@ -849,6 +866,78 @@ export default function GuidesMei() {
   const normalizedContribuinte = useMemo(() => normalizeDoc(contribuinteDoc), [contribuinteDoc]);
   const contribuinteTipo = useMemo(() => getDocType(normalizedContribuinte), [normalizedContribuinte]);
   const canLoadPeriods = normalizedContribuinte.length === 14;
+
+  const nfEmissionFormAndDocsOkForPlugnotas = useMemo(() => {
+    if (!canViewNfse) return true;
+    return (
+      !getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm)
+      && !getDocumentosAtivosValidationMessage(documentosAtivos)
+    );
+  }, [canViewNfse, nfEmissionCompanyForm, documentosAtivos]);
+
+  const plugnotasCnpjOkForSubmit = useMemo(
+    () => !canViewNfse || normalizedContribuinte.length === 14,
+    [canViewNfse, normalizedContribuinte]
+  );
+
+  const plugnotasPrimaryActionEnabled = useMemo(() => {
+    if (isUploadingCert || empresaRegistroRetryBusy) return false;
+    if (plugnotasPendingRetry) {
+      return nfEmissionFormAndDocsOkForPlugnotas && plugnotasCnpjOkForSubmit;
+    }
+    if (!certificateFile || !certificatePassword.trim()) return false;
+    if (canViewNfse) {
+      return nfEmissionFormAndDocsOkForPlugnotas && plugnotasCnpjOkForSubmit;
+    }
+    return true;
+  }, [
+    isUploadingCert,
+    empresaRegistroRetryBusy,
+    plugnotasPendingRetry,
+    certificateFile,
+    certificatePassword,
+    canViewNfse,
+    nfEmissionFormAndDocsOkForPlugnotas,
+    plugnotasCnpjOkForSubmit
+  ]);
+
+  const plugnotasPrimaryDisabledHint = useMemo(() => {
+    if (plugnotasPrimaryActionEnabled || isUploadingCert || empresaRegistroRetryBusy) return null;
+    if (plugnotasPendingRetry) {
+      const c = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
+      if (c) return c;
+      const d = getDocumentosAtivosValidationMessage(documentosAtivos);
+      if (d) return d;
+      if (!plugnotasCnpjOkForSubmit) {
+        return 'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI.';
+      }
+      return null;
+    }
+    if (!certificateFile || !certificatePassword.trim()) {
+      return 'Preencha todos os campos obrigatórios e selecione o certificado para continuar.';
+    }
+    if (canViewNfse) {
+      const c = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
+      if (c) return c;
+      const d = getDocumentosAtivosValidationMessage(documentosAtivos);
+      if (d) return d;
+      if (!plugnotasCnpjOkForSubmit) {
+        return 'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI.';
+      }
+    }
+    return null;
+  }, [
+    plugnotasPrimaryActionEnabled,
+    isUploadingCert,
+    empresaRegistroRetryBusy,
+    plugnotasPendingRetry,
+    certificateFile,
+    certificatePassword,
+    canViewNfse,
+    nfEmissionCompanyForm,
+    documentosAtivos,
+    plugnotasCnpjOkForSubmit
+  ]);
 
   const applyDocumento = useCallback((documento?: string | null, force = false) => {
     if (!documento) return;
@@ -1067,6 +1156,105 @@ export default function GuidesMei() {
   const updateNfseForm = (updates: Partial<EmitirNfseInput>) => {
     setNfseForm((current) => ({ ...current, ...updates }));
   };
+
+  const finalizePlugnotasEmpresaCadastroSuccess = useCallback((
+    companyResponse: CadastrarEmissaoNfEmpresaResponse,
+    cnpj: string,
+    opts: { certificateRecoveredFrom409: boolean; isRetryOnly: boolean }
+  ) => {
+    const returnedCnpj = normalizeDoc(String(companyResponse.cnpj || cnpj));
+    const formattedCnpj = formatDocument(returnedCnpj || cnpj);
+    invalidateMeiEmpresaGetCache(userId, returnedCnpj || cnpj);
+    setContribuinteDoc(formattedCnpj);
+    updateNfseForm({
+      prestadorCpfCnpj: formattedCnpj,
+      ...(nfEmissionCompanyForm.razaoSocial.trim()
+        ? { prestadorRazaoSocial: nfEmissionCompanyForm.razaoSocial.trim() }
+        : {}),
+      ...(nfEmissionCompanyForm.email.trim()
+        ? { prestadorEmail: nfEmissionCompanyForm.email.trim() }
+        : {}),
+      prestadorEndereco: resolvePrestadorEndereco(undefined, {
+        logradouro: nfEmissionCompanyForm.logradouro,
+        numero: nfEmissionCompanyForm.numero,
+        codigoCidade: nfEmissionCompanyForm.codigoCidade,
+        cep: nfEmissionCompanyForm.cep,
+        complemento: nfEmissionCompanyForm.complemento,
+        bairro: nfEmissionCompanyForm.bairro,
+        estado: nfEmissionCompanyForm.estado,
+        descricaoCidade: nfEmissionCompanyForm.descricaoCidade
+      })
+    });
+    setCertificateFile(null);
+    setCertificatePassword('');
+    setPlugnotasPendingRetry(null);
+    setPlugnotasEmpresaRetryDetail(null);
+    const primary = opts.isRetryOnly
+      ? 'Dados do emitente foram registrados no serviço de emissão fiscal com sucesso.'
+      : opts.certificateRecoveredFrom409
+        ? 'Seu certificado já estava no emissor; os dados do emitente foram registrados.'
+        : 'Certificado e dados do emitente foram enviados ao serviço de emissão.';
+    setCertificateSuccess({
+      primary,
+      secondary: canViewNfse ? MSG_SUCESSO_PATCH_DOCUMENTOS_ATIVOS_EMISSOR : undefined
+    });
+  }, [userId, nfEmissionCompanyForm, updateNfseForm, canViewNfse]);
+
+  const handleRetryPlugnotasEmpresaRegistro = useCallback(async () => {
+    if (!plugnotasPendingRetry) return;
+    const companyValidationMessage = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
+    if (companyValidationMessage) {
+      setCertificateError(companyValidationMessage);
+      return;
+    }
+    const docMsg = getDocumentosAtivosValidationMessage(documentosAtivos);
+    if (docMsg) {
+      setDocumentosAtivosSubmitError(docMsg);
+      documentosAtivosNfseCheckboxRef.current?.focus();
+      return;
+    }
+    setCertificateError(null);
+    setCertificateErrorFiscalCode(null);
+    setPlugnotasEmpresaRetryDetail(null);
+    setEmpresaRegistroRetryBusy(true);
+    setPlugnotasSubmitPhase('empresa');
+    try {
+      const companyPayload = buildNfEmissionEmpresaPayload({
+        cnpj: plugnotasPendingRetry.cnpj,
+        certificadoId: plugnotasPendingRetry.certificadoId,
+        form: nfEmissionCompanyForm,
+        documentosAtivos
+      });
+      const companyResponse = await retryPlugnotasEmpresaRegistro(companyPayload);
+      finalizePlugnotasEmpresaCadastroSuccess(companyResponse, plugnotasPendingRetry.cnpj, {
+        certificateRecoveredFrom409: false,
+        isRetryOnly: true
+      });
+    } catch (error) {
+      if (isFetchConnectivityFailure(error)) {
+        setCertificateConnectivityAlert(true);
+        setPlugnotasPendingRetry(null);
+      } else {
+        const rawMessage = error instanceof Error ? error.message : 'Erro ao registrar empresa.';
+        const fiscalCode = getFiscalErrorCode(error);
+        setPlugnotasEmpresaRetryDetail(formatFiscalError(rawMessage, fiscalCode));
+      }
+    } finally {
+      setEmpresaRegistroRetryBusy(false);
+      setPlugnotasSubmitPhase('idle');
+      try {
+        await loadCertificateStatus();
+      } catch {
+        /* mantém fluxo principal */
+      }
+    }
+  }, [
+    plugnotasPendingRetry,
+    nfEmissionCompanyForm,
+    documentosAtivos,
+    finalizePlugnotasEmpresaCadastroSuccess,
+    loadCertificateStatus
+  ]);
 
   const updateNfseServico = (updates: Partial<EmitirNfseInput['servico']>) => {
     setNfseForm((current) => ({
@@ -1326,6 +1514,11 @@ export default function GuidesMei() {
     setValidationSuccess(null);
   }, [normalizedContribuinte, selectedMonth, selectedYear, hasUserCertificate]);
 
+  useEffect(() => {
+    if (!plugnotasPendingRetry) return;
+    queueMicrotask(() => plugnotasEmpresaRetryRef.current?.focus());
+  }, [plugnotasPendingRetry]);
+
   const handleDownload = async (periodoApuracao: string, competencia?: string | null) => {
     const contribuinte = normalizedContribuinte && contribuinteTipo !== null
       ? { numero: normalizedContribuinte, tipo: contribuinteTipo }
@@ -1375,8 +1568,12 @@ export default function GuidesMei() {
     setDocumentosAtivosSubmitError(null);
     setCertificateConnectivityAlert(false);
     setCertificateSuccess(null);
+    setPlugnotasPendingRetry(null);
+    setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasSubmitPhase('idle');
     setIsUploadingCert(true);
     let uploadedToMei = false;
+    let cnpjForFiscal = '';
     try {
       const status = await uploadMeiCertificate(
         certificateFile,
@@ -1395,7 +1592,7 @@ export default function GuidesMei() {
       if (!canViewNfse) {
         setCertificateFile(null);
         setCertificatePassword('');
-        setCertificateSuccess('Certificado enviado com sucesso.');
+        setCertificateSuccess({ primary: 'Certificado enviado com sucesso.' });
         return;
       }
 
@@ -1408,70 +1605,80 @@ export default function GuidesMei() {
       if (cnpj.length !== 14) {
         throw new Error('Não foi possível identificar um CNPJ válido para configurar a empresa no sistema de emissão fiscal.');
       }
+      cnpjForFiscal = cnpj;
 
-      const certificateResponse = await cadastrarCertificadoEmissaoNf({
-        arquivo: certificateFile,
-        senha: trimmedPassword,
-        cpfCnpj: cnpj,
-        ...(
-          nfEmissionCompanyForm.email.trim()
-            ? { email: nfEmissionCompanyForm.email.trim() }
-            : {}
-        )
-      });
-      const certificateId = String(certificateResponse.id || '').trim();
-      if (!certificateId) {
-        throw new Error('O sistema de emissão fiscal não retornou o ID do certificado.');
-      }
-
-      const companyPayload = buildNfEmissionEmpresaPayload({
-        cnpj,
-        certificadoId: certificateId,
-        form: nfEmissionCompanyForm,
-        documentosAtivos
-      });
-      const companyResponse = await cadastrarEmpresaEmissaoNf(companyPayload);
-      const returnedCnpj = normalizeDoc(String(companyResponse.cnpj || cnpj));
-      const formattedCnpj = formatDocument(returnedCnpj || cnpj);
-      invalidateMeiEmpresaGetCache(userId, returnedCnpj || cnpj);
-
-      setContribuinteDoc(formattedCnpj);
-      updateNfseForm({
-        prestadorCpfCnpj: formattedCnpj,
-        ...(nfEmissionCompanyForm.razaoSocial.trim()
-          ? { prestadorRazaoSocial: nfEmissionCompanyForm.razaoSocial.trim() }
-          : {}),
-        ...(nfEmissionCompanyForm.email.trim()
-          ? { prestadorEmail: nfEmissionCompanyForm.email.trim() }
-          : {}),
-        prestadorEndereco: resolvePrestadorEndereco(undefined, {
-          logradouro: nfEmissionCompanyForm.logradouro,
-          numero: nfEmissionCompanyForm.numero,
-          codigoCidade: nfEmissionCompanyForm.codigoCidade,
-          cep: nfEmissionCompanyForm.cep,
-          complemento: nfEmissionCompanyForm.complemento,
-          bairro: nfEmissionCompanyForm.bairro,
-          estado: nfEmissionCompanyForm.estado,
-          descricaoCidade: nfEmissionCompanyForm.descricaoCidade
-        })
-      });
-
-      setCertificateFile(null);
-      setCertificatePassword('');
-      setCertificateSuccess(
-        [
-          'Certificado enviado no MEI e configurado no sistema de emissão fiscal.',
-          certificateResponse.message || null,
-          companyResponse.message || 'Empresa configurada no sistema de emissão fiscal com sucesso.',
-          MSG_SUCESSO_PATCH_DOCUMENTOS_ATIVOS_EMISSOR
-        ].filter(Boolean).join(' ')
+      const setupResult = await submitPlugnotasEmitenteSetup(
+        {
+          certificateInput: {
+            arquivo: certificateFile,
+            senha: trimmedPassword,
+            cpfCnpj: cnpj,
+            ...(
+              nfEmissionCompanyForm.email.trim()
+                ? { email: nfEmissionCompanyForm.email.trim() }
+                : {}
+            )
+          },
+          buildCompanyPayload: (certificadoId) => buildNfEmissionEmpresaPayload({
+            cnpj,
+            certificadoId,
+            form: nfEmissionCompanyForm,
+            documentosAtivos
+          })
+        },
+        { onPhaseChange: setPlugnotasSubmitPhase }
       );
+
+      finalizePlugnotasEmpresaCadastroSuccess(setupResult.companyResponse, cnpj, {
+        certificateRecoveredFrom409: setupResult.certificateRecoveredFrom409,
+        isRetryOnly: false
+      });
     } catch (error) {
-      // Rede até o backend: upload MEI, POST certificado fiscal ou cadastro empresa no mesmo try (US-CONN-MEI-03 / US-MEI-FISC-01).
-      if (isFetchConnectivityFailure(error)) {
+      if (isPlugnotasEmitenteSetupError(error) && error.phase === 'empresa') {
+        const cause = error.cause;
+        if (isFetchConnectivityFailure(cause)) {
+          setCertificateConnectivityAlert(true);
+          setCertificateError(null);
+          setCertificateErrorFiscalCode(null);
+          setPlugnotasPendingRetry(null);
+          setPlugnotasEmpresaRetryDetail(null);
+        } else {
+          setCertificateConnectivityAlert(false);
+          setCertificateError(null);
+          setCertificateErrorFiscalCode(null);
+          const rawMessage = cause instanceof Error ? cause.message : 'Erro ao registrar empresa.';
+          const fiscalCode = getFiscalErrorCode(cause);
+          setPlugnotasEmpresaRetryDetail(formatFiscalError(rawMessage, fiscalCode));
+          const retryCnpj = normalizeDoc(String(error.cnpj || cnpjForFiscal || ''));
+          const retryCert = String(error.certificadoId || '').trim();
+          if (retryCert && retryCnpj.length === 14) {
+            setPlugnotasPendingRetry({ certificadoId: retryCert, cnpj: retryCnpj });
+          } else {
+            setPlugnotasPendingRetry(null);
+          }
+        }
+      } else if (isFetchConnectivityFailure(error)) {
         setCertificateConnectivityAlert(true);
         setCertificateError(null);
         setCertificateErrorFiscalCode(null);
+      } else if (isPlugnotasEmitenteSetupError(error) && error.phase === 'certificado') {
+        const src = error.cause ?? error;
+        if (isFetchConnectivityFailure(src)) {
+          setCertificateConnectivityAlert(true);
+          setCertificateError(null);
+          setCertificateErrorFiscalCode(null);
+        } else {
+          setCertificateConnectivityAlert(false);
+          const rawMessage = src instanceof Error ? src.message : 'Erro ao enviar certificado.';
+          const fiscalCode = getFiscalErrorCode(src);
+          const fallbackMessage = formatFiscalError(rawMessage, fiscalCode);
+          setCertificateErrorFiscalCode(fiscalCode);
+          setCertificateError(
+            uploadedToMei
+              ? `Certificado enviado no MEI, mas falhou a configuração automática da integração fiscal: ${fallbackMessage}`
+              : fallbackMessage
+          );
+        }
       } else {
         setCertificateConnectivityAlert(false);
         const rawMessage = error instanceof Error ? error.message : 'Erro ao enviar certificado.';
@@ -1485,6 +1692,7 @@ export default function GuidesMei() {
         );
       }
     } finally {
+      setPlugnotasSubmitPhase('idle');
       if (uploadedToMei) {
         try {
           await loadCertificateStatus();
@@ -1689,6 +1897,9 @@ export default function GuidesMei() {
     setCertificateErrorFiscalCode(null);
     setCertificateConnectivityAlert(false);
     setCertificateSuccess(null);
+    setPlugnotasPendingRetry(null);
+    setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasSubmitPhase('idle');
     setIsRemovingCert(true);
     try {
       await removeMeiCertificate();
@@ -2806,11 +3017,62 @@ export default function GuidesMei() {
             />
           ) : null}
 
-          {certificateSuccess && (
-            <div className="admin-alert-success">
-              {certificateSuccess}
+          {plugnotasPendingRetry && !certificateConnectivityAlert ? (
+            <div
+              ref={plugnotasEmpresaRetryRef}
+              role="alert"
+              tabIndex={-1}
+              className="space-y-2 rounded-lg border border-amber-200/90 bg-amber-50/90 p-3 text-sm leading-relaxed dark:border-amber-900/50 dark:bg-amber-950/30"
+            >
+              <p className="font-semibold text-amber-950 dark:text-amber-100">
+                Não foi possível concluir o registro da empresa
+              </p>
+              <p className="text-amber-950/95 dark:text-amber-100/90">
+                O certificado pode já ter sido enviado ao emissor fiscal. Os dados do emitente não foram concluídos.
+                Você pode tentar registrar a empresa novamente sem enviar o arquivo outra vez.
+              </p>
+              {plugnotasEmpresaRetryDetail ? (
+                <p className="text-amber-900 dark:text-amber-200/95">{plugnotasEmpresaRetryDetail}</p>
+              ) : null}
+              <p className="text-xs text-slate-700 dark:text-slate-300">
+                Se o problema continuar, verifique se o CNPJ e o ambiente (sandbox ou produção) coincidem com o painel do emissor ou fale com o suporte.
+              </p>
+              <button
+                type="button"
+                className="planner-button-secondary-compact"
+                onClick={() => {
+                  document.getElementById('mei-emitente-dados-minimos')?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                  });
+                  window.setTimeout(() => {
+                    document.getElementById('mei-emitente-razao-social')?.focus();
+                  }, 300);
+                }}
+              >
+                Editar dados
+              </button>
+              <p className="text-xs">
+                <a
+                  href={cadastroFiscalDocHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-amber-900 underline decoration-amber-800/60 underline-offset-2 hover:text-amber-950 dark:text-amber-200/95 dark:decoration-amber-300/50 dark:hover:text-amber-100"
+                >
+                  Ver guia de operação fiscal
+                </a>
+              </p>
             </div>
-          )}
+          ) : null}
+
+          {certificateSuccess ? (
+            <div className="admin-alert-success space-y-1">
+              <p>{certificateSuccess.primary}</p>
+              {certificateSuccess.secondary ? (
+                <p className="text-sm opacity-90">{certificateSuccess.secondary}</p>
+              ) : null}
+            </div>
+          ) : null}
 
           {nfEmissionCompanySyncError ? (
             <GuiaMeiEmpresaCadastroErrorPanel message={nfEmissionCompanySyncError} />
@@ -2888,6 +3150,8 @@ export default function GuidesMei() {
                     setCertificateConnectivityAlert(false);
                     setCertificateError(null);
                     setCertificateErrorFiscalCode(null);
+                    setPlugnotasPendingRetry(null);
+                    setPlugnotasEmpresaRetryDetail(null);
                     setCertificateFile(event.target.files?.[0] || null);
                   }}
                 />
@@ -2899,6 +3163,8 @@ export default function GuidesMei() {
                     setCertificateConnectivityAlert(false);
                     setCertificateError(null);
                     setCertificateErrorFiscalCode(null);
+                    setPlugnotasPendingRetry(null);
+                    setPlugnotasEmpresaRetryDetail(null);
                     setCertificatePassword(event.target.value);
                   }}
                   placeholder="Senha do certificado"
@@ -3040,7 +3306,10 @@ export default function GuidesMei() {
                     <div className="admin-alert-warning text-sm leading-relaxed">{documentosAtivosConsultWarning}</div>
                   ) : null}
 
-                  <div className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30">
+                  <div
+                    id="mei-emitente-dados-minimos"
+                    className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30"
+                  >
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     {dadosMinimosEmitenteTitle}
                   </p>
@@ -3050,6 +3319,7 @@ export default function GuidesMei() {
                   {showRequisitosNfeNfcePlaceholder ? <MeiCadastroRequisitosNfeNfcePlaceholder /> : null}
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
+                      id="mei-emitente-razao-social"
                       className="planner-input-compact"
                       type="text"
                       value={nfEmissionCompanyForm.razaoSocial}
@@ -3188,14 +3458,61 @@ export default function GuidesMei() {
                 </div>
               ) : null}
 
-              <div className="admin-actions">
-                <button
-                  className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={handleCertificateUpload}
-                  disabled={isUploadingCert || !certificateFile || !certificatePassword}
+              {canViewNfse && ((isUploadingCert && plugnotasSubmitPhase !== 'idle') || empresaRegistroRetryBusy) ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mb-2 flex min-h-[28px] items-center gap-2 text-sm text-slate-600 dark:text-slate-300"
                 >
-                  {isUploadingCert ? (canViewNfse ? 'Enviando e configurando...' : 'Enviando...') : 'Enviar certificado'}
+                  <span
+                    className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-400 border-t-transparent dark:border-slate-500"
+                    aria-hidden
+                  />
+                  {plugnotasSubmitPhase === 'certificado' && isUploadingCert && !empresaRegistroRetryBusy
+                    ? 'Enviando certificado digital…'
+                    : 'Registrando empresa no emissor fiscal…'}
+                </div>
+              ) : null}
+
+              <div className="admin-actions flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <button
+                  type="button"
+                  className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-busy={isUploadingCert || empresaRegistroRetryBusy}
+                  disabled={!plugnotasPrimaryActionEnabled}
+                  title={
+                    canViewNfse && !plugnotasPendingRetry
+                      ? 'Envia o certificado e registra o emitente no serviço de emissão.'
+                      : undefined
+                  }
+                  onClick={() => {
+                    if (plugnotasPendingRetry) {
+                      void handleRetryPlugnotasEmpresaRegistro();
+                    } else {
+                      void handleCertificateUpload();
+                    }
+                  }}
+                >
+                  {empresaRegistroRetryBusy
+                    || (isUploadingCert && canViewNfse && plugnotasSubmitPhase === 'empresa')
+                    ? 'Registrando empresa no emissor fiscal…'
+                    : isUploadingCert && canViewNfse && plugnotasSubmitPhase === 'certificado'
+                      ? 'Enviando certificado digital…'
+                      : isUploadingCert && !canViewNfse
+                        ? 'Enviando...'
+                        : isUploadingCert
+                          ? 'Enviando e configurando...'
+                          : plugnotasPendingRetry
+                            ? 'Tentar registrar empresa novamente'
+                            : canViewNfse
+                              ? 'Concluir configuração fiscal'
+                              : 'Enviar certificado'}
                 </button>
+                {plugnotasPrimaryDisabledHint ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 sm:max-w-md sm:flex-1">
+                    {plugnotasPrimaryDisabledHint}
+                  </p>
+                ) : null}
                 {hasUserCertificate && (
                   <button
                     className="planner-button-secondary-compact w-full sm:w-auto"

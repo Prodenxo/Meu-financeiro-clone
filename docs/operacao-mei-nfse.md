@@ -144,6 +144,7 @@ O backend normaliza o JSON enviado ao Plugnotas em `POST /empresa` e `PATCH /emp
 ### Emissao e Gestao NFSe
 - `POST /api/mei-notas/emitir`
 - `POST /api/mei-notas/setup/emissao-fiscal/certificado` — upload do certificado A1 (multipart) para o provedor de emissão
+- `POST /api/mei-notas/setup/emissao-fiscal/emitente` — **(P1, opcional)** mesmo fluxo que certificado + empresa em **uma** requisição: `multipart/form-data` com campo ficheiro `arquivo`, `senha`, opcionais `email` / `cpfCnpj` / `cnpj`, e campo texto **`payload`** com JSON da empresa (mesma forma que `POST …/empresa`, **sem** `certificado` — o servidor injeta o `id` após o passo do certificado). Limite de ficheiro **5 MiB** (igual ao upload isolado). Em erro HTTP, `errors.orchestrationPhase` vale **`certificado`** ou **`empresa`** conforme a fase que falhou (**NFR-ORQ-CERT-02**). Com `documentosAtivos` no JSON, o espelho Supabase segue o mesmo critério que `POST …/empresa`. Rotas `POST …/certificado` e `POST …/empresa` **mantêm-se** (**CR-ORQ-CERT-01**).
 - `POST /api/mei-notas/setup/emissao-fiscal/empresa` — cadastro inicial da empresa (payload deve incluir `certificado`, id retornado no passo anterior)
 - `GET /api/mei-notas/setup/emissao-fiscal/empresa?cpfCnpj=` — consulta cadastro da empresa no provedor pelo CNPJ (somente dígitos na query)
 - `PATCH /api/mei-notas/setup/emissao-fiscal/empresa` — atualiza dados cadastrais **sem** reenviar certificado (útil quando empresa e A1 já existem no provedor; corpo alinhado ao cadastro, sem campo `certificado`)
@@ -448,6 +449,7 @@ URL base de produção típica (conforme `PLUGNOTAS_API_BASE_URL`): ver document
 - Endpoints de NFSe implementados:
   - `POST /api/mei-notas/emitir`
   - `POST /api/mei-notas/setup/emissao-fiscal/certificado` (alias: `.../setup/plugnotas/certificado`)
+  - `POST /api/mei-notas/setup/emissao-fiscal/emitente` (alias: `.../setup/plugnotas/emitente`) — composto certificado+empresa (P1)
   - `POST /api/mei-notas/setup/emissao-fiscal/empresa` (alias: `.../plugnotas/empresa`)
   - `GET /api/mei-notas/setup/emissao-fiscal/empresa?cpfCnpj=` (alias: `.../plugnotas/empresa`)
   - `PATCH /api/mei-notas/setup/emissao-fiscal/empresa` (alias: `.../plugnotas/empresa`)

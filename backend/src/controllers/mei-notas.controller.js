@@ -4,11 +4,25 @@ import {
   consultarEmpresaAndReconcileMirror,
   persistDocumentosAtivosMirrorAfterEmpresa
 } from '../services/mei-notas-documentos-mirror.js';
+
+/** @type {typeof persistDocumentosAtivosMirrorAfterEmpresa} */
+let persistDocumentosAtivosMirrorAfterEmitenteComposite = persistDocumentosAtivosMirrorAfterEmpresa;
+
+/** Injecção só para testes (`null` / `undefined` restaura o default). */
+export const __setPersistDocumentosAtivosMirrorAfterEmitenteForTests = (fn) => {
+  persistDocumentosAtivosMirrorAfterEmitenteComposite = fn == null
+    ? persistDocumentosAtivosMirrorAfterEmpresa
+    : fn;
+};
 import {
   atualizarEmpresaPlugNotas,
   cadastrarCertificadoPlugNotas,
   cadastrarEmpresaPlugNotas
 } from '../services/plugnotas/empresa.service.js';
+import {
+  parseEmpresaJsonPayloadField,
+  runPlugnotasEmitenteCompositeSetup
+} from '../services/plugnotas/plugnotas-emitente-setup.service.js';
 import { unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendSuccess } from '../utils/response.js';
@@ -138,6 +152,34 @@ export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
     const data = await cadastrarEmpresaPlugNotas(payload);
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
     return sendSuccess(res, data, 'Empresa configurada no serviço de emissão fiscal');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+/** P1: multipart certificado + campo `payload` JSON (empresa); orquestra certificado → empresa numa única requisição. */
+export const cadastrarPlugNotasEmitenteComposite = async (req, res, next) => {
+  try {
+    const file = req.file;
+    const senha = String(req.body?.senha || '').trim();
+    const email = String(req.body?.email || '').trim();
+    const cpfCnpj = String(req.body?.cpfCnpj || req.body?.cnpj || '').trim();
+    const empresaPayload = parseEmpresaJsonPayloadField(req.body?.payload);
+
+    const data = await runPlugnotasEmitenteCompositeSetup({
+      fileBuffer: file?.buffer,
+      fileName: file?.originalname,
+      mimeType: file?.mimetype,
+      password: senha,
+      ...(email ? { email } : {}),
+      ...(cpfCnpj ? { cpfCnpj } : {}),
+      empresaPayload
+    });
+
+    const mirrorPayload = { ...empresaPayload, certificado: data.certificado.id };
+    await persistDocumentosAtivosMirrorAfterEmitenteComposite(req.user?.id, mirrorPayload);
+
+    return sendSuccess(res, data, 'Certificado e empresa configurados no serviço de emissão fiscal');
   } catch (error) {
     return next(error);
   }
