@@ -3,6 +3,7 @@ import { buildApiErrorMessage } from './buildApiErrorMessage';
 import {
   ApiClientError,
   apiClientErrorFromPayload,
+  getApiErrorCodeFromUnknownError,
   getHttpStatusFromUnknownError,
   getPlugnotasCodeFromUnknownError,
 } from './apiClientError';
@@ -48,5 +49,15 @@ describe('ApiClientError', () => {
 
   it('getHttpStatusFromUnknownError retorna null sem metadado', () => {
     expect(getHttpStatusFromUnknownError(new Error('x'))).toBeNull();
+  });
+
+  it('apiClientErrorFromPayload anexa apiErrorCode quando presente em errors.code', () => {
+    const err = apiClientErrorFromPayload(
+      { success: false, message: 'Indisponível', errors: { code: 'MEI_GUIDE_SERPRO_UNAVAILABLE' } },
+      buildApiErrorMessage,
+      { httpStatus: 503 }
+    );
+    expect(err.apiErrorCode).toBe('MEI_GUIDE_SERPRO_UNAVAILABLE');
+    expect(getApiErrorCodeFromUnknownError(err)).toBe('MEI_GUIDE_SERPRO_UNAVAILABLE');
   });
 });

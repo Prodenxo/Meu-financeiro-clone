@@ -7,11 +7,13 @@ import {
 import {
   getNfseNacionalOperacaoHelpHref,
   getPlugnotasEmpresaCadastroErrorUxVariant,
+  isMeiGuideSerproConsCUserFacingText,
   isPlugnotasEmpresaIbgeCidadeMessage,
   isPlugnotasEmpresaMunicipalRequirementMessage,
   MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT,
   shouldOfferNfseNacionalOperacaoDocHint
 } from '../utils/nfseNacionalPlugnotasErrorHints';
+import { MEI_GUIDE_SERPRO_UNAVAILABLE } from '../utils/mapMeiGuideValidateErrorToUserMessage';
 import {
   getGuiaMeiConnectivityHelpHref,
   GUIMEI_CONNECTIVITY_CERTIFICATE_MESSAGE
@@ -398,6 +400,8 @@ type GuiaMeiEmpresaCadastroErrorPanelProps = {
   message: string;
   /** Definido quando a API retorna `errors.plugnotasCode` (ex.: US-MEI-FISC-02 / gateway upstream). */
   fiscalErrorCode?: string | null;
+  /** `errors.code` BFF quando disponível (ex.: FR-CONS Serpro — suprime hints NFS-e Nacional). */
+  fiscalApiErrorCode?: string | null;
   /** Status HTTP da resposta JSON de erro, quando disponível (ex.: `ApiClientError.httpStatus`). */
   fiscalHttpStatus?: number | null;
 };
@@ -408,10 +412,11 @@ type GuiaMeiEmpresaCadastroErrorPanelProps = {
 export function GuiaMeiEmpresaCadastroErrorPanel({
   message,
   fiscalErrorCode = null,
+  fiscalApiErrorCode = null,
   fiscalHttpStatus = null
 }: GuiaMeiEmpresaCadastroErrorPanelProps) {
   const showNfceHint = shouldOfferNfceCadastroDocHint(message);
-  const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message);
+  const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message, fiscalApiErrorCode);
   const linkClass = linkClassForTone('danger');
   const isLocalOnly = isLikelyLocalOnlyGuiaMeiEmpresaCertError(message);
   const showCert409 = fiscalErrorCode === PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID;
@@ -436,12 +441,14 @@ export function GuiaMeiEmpresaCadastroErrorPanel({
     plugnotasCode: fiscalErrorCode,
     embedRawAsTechnicalDetail: false
   });
+  const suppressIbgeCidadeHintForSerproCons =
+    fiscalApiErrorCode === MEI_GUIDE_SERPRO_UNAVAILABLE || isMeiGuideSerproConsCUserFacingText(message);
 
   return (
     <div className="admin-alert-danger space-y-2" role="alert">
       <UserFacingErrorBlock {...facing} />
       {isGatewayUpstream ? null : <LongFiscalErrorMessage message={message} tone="danger" />}
-      <PlugnotasIbgeCidadeOperacaoHint message={message} />
+      {suppressIbgeCidadeHintForSerproCons ? null : <PlugnotasIbgeCidadeOperacaoHint message={message} />}
       {showCert409 ? <GuiaMeiCertificado409SemIdChecklist /> : null}
       {showNfceHint ? (
         <p className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90">

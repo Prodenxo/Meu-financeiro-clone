@@ -1,10 +1,15 @@
 import { env } from '../../config/env.js';
-import { badRequest } from '../../utils/errors.js';
+import {
+  MEI_GUIDE_INTEGRATION_SERPRO,
+  MEI_GUIDE_SERPRO_UNAVAILABLE
+} from '../../constants/mei-guide-error-codes.js';
+import { badRequest, serviceUnavailable } from '../../utils/errors.js';
 import {
   obterTokenProcurador,
   armazenarTokenNoCache,
   autenticarViaCertificado,
-  getSerproTokens
+  getSerproTokens,
+  serproApiFetch
 } from './authProcurador.service.js';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
@@ -137,7 +142,7 @@ export const emitirServico = async ({
       autorLimpo,
       contribuinteLimpo
     });
-    const response = await fetch(`${baseUrl}/Emitir`, {
+    const response = await serproApiFetch(`${baseUrl}/Emitir`, {
       method: 'POST',
       headers,
       body: JSON.stringify(requestBody)
@@ -156,6 +161,24 @@ export const emitirServico = async ({
   }
 
   if (!result.response.ok) {
+    const upstreamStatus = result.response.status;
+    if (upstreamStatus >= 500) {
+      if (env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.info('[emitir] Serpro upstream erro', {
+          integration: MEI_GUIDE_INTEGRATION_SERPRO,
+          upstreamStatus
+        });
+      }
+      throw serviceUnavailable(
+        'O serviço da Receita Federal está temporariamente indisponível. Tente novamente em alguns minutos.',
+        {
+          code: MEI_GUIDE_SERPRO_UNAVAILABLE,
+          integration: MEI_GUIDE_INTEGRATION_SERPRO,
+          upstreamStatus
+        }
+      );
+    }
     throw badRequest(result.message || 'Falha ao emitir serviço');
   }
 
@@ -217,7 +240,7 @@ export const emitirRelatorio = async (
         autorLimpo,
         contribuinteLimpo
       });
-      const response = await fetch(`${baseUrl}/Emitir`, {
+      const response = await serproApiFetch(`${baseUrl}/Emitir`, {
         method: 'POST',
         headers,
         body: JSON.stringify(requestBody)
@@ -235,6 +258,24 @@ export const emitirRelatorio = async (
     }
 
     if (!result.response.ok) {
+      const upstreamStatus = result.response.status;
+      if (upstreamStatus >= 500) {
+        if (env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.info('[emitir relatorio] Serpro upstream erro', {
+            integration: MEI_GUIDE_INTEGRATION_SERPRO,
+            upstreamStatus
+          });
+        }
+        throw serviceUnavailable(
+          'O serviço da Receita Federal está temporariamente indisponível. Tente novamente em alguns minutos.',
+          {
+            code: MEI_GUIDE_SERPRO_UNAVAILABLE,
+            integration: MEI_GUIDE_INTEGRATION_SERPRO,
+            upstreamStatus
+          }
+        );
+      }
       throw badRequest(result.message || 'Falha ao emitir relatório');
     }
 

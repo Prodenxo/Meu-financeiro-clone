@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -76,9 +77,14 @@ import {
   submitPlugnotasEmitenteSetup
 } from '../utils/plugnotasEmitenteSetup';
 import {
+  getApiErrorCodeFromUnknownError,
   getHttpStatusFromUnknownError as getFiscalHttpStatus,
   getPlugnotasCodeFromUnknownError as getFiscalErrorCode
 } from '../utils/apiClientError';
+import {
+  mapMeiGuideValidateErrorToUserMessage,
+  type MeiGuideValidateMappedError
+} from '../utils/mapMeiGuideValidateErrorToUserMessage';
 import { mapMeiFiscalErrorToCopy } from '../lib/fiscalUserError';
 import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
@@ -580,6 +586,7 @@ function MeiNfseAjudaFiscalCollapsible(props: {
 }
 
 export default function GuidesMei() {
+  const meiGuideValidateConsCTitleId = useId();
   const { role, mei, userId } = useAuthStore();
   const canViewNfse = role === 'superadmin'
     || role === 'admin'
@@ -620,7 +627,7 @@ export default function GuidesMei() {
   const [certValidFrom, setCertValidFrom] = useState<string | null>(null);
   const [certValidTo, setCertValidTo] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<MeiGuideValidateMappedError | null>(null);
   const [validationSuccess, setValidationSuccess] = useState<string | null>(null);
   const [isDownloadingGuide, setIsDownloadingGuide] = useState(false);
 
@@ -752,7 +759,15 @@ export default function GuidesMei() {
   const prevMeiWorkspaceRef = useRef<GuidesMeiWorkspace | null>(null);
   const [nfEmissionCompanySyncLoading, setNfEmissionCompanySyncLoading] = useState<'consult' | 'patch' | null>(null);
   const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<string | null>(null);
+  /** `errors.code` BFF quando o erro vem de `ApiClientError` (paridade com painel certificado / FR-CONS-P1). */
+  const [nfEmissionCompanySyncFiscalApiErrorCode, setNfEmissionCompanySyncFiscalApiErrorCode] = useState<
+    string | null
+  >(null);
   const [nfEmissionCompanySyncSuccess, setNfEmissionCompanySyncSuccess] = useState<string | null>(null);
+  const clearNfEmissionCompanySyncErrorState = useCallback(() => {
+    setNfEmissionCompanySyncError(null);
+    setNfEmissionCompanySyncFiscalApiErrorCode(null);
+  }, []);
   const [documentosAtivos, setDocumentosAtivos] = useState<DocumentosAtivosState>(() => ({
     ...DEFAULT_DOCUMENTOS_ATIVOS
   }));
@@ -1775,12 +1790,13 @@ export default function GuidesMei() {
   }, [contribuinteDoc, nfseForm.prestadorCpfCnpj]);
 
   const handleConsultarCadastroEmissor = async () => {
-    setNfEmissionCompanySyncError(null);
+    clearNfEmissionCompanySyncErrorState();
     setNfEmissionCompanySyncSuccess(null);
     setDocumentosAtivosConsultWarning(null);
     setDocumentosAtivosHydrationError(null);
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
+      setNfEmissionCompanySyncFiscalApiErrorCode(null);
       setNfEmissionCompanySyncError(
         'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
       );
@@ -1822,8 +1838,14 @@ export default function GuidesMei() {
       }
     } catch (error) {
       const formatted = formatMeiFiscalErr(error, 'Falha ao consultar cadastro no serviço de emissão fiscal.');
+      const sessionPostFailedFlag =
+        cnpj.length === 14 && isGuiaMeiEmpresaFase2FailFlagActive(userId, cnpj);
+      setNfEmissionCompanySyncFiscalApiErrorCode(getApiErrorCodeFromUnknownError(error));
       setNfEmissionCompanySyncError(
-        withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(formatted, plugnotasPendingRetry)
+        withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(formatted, {
+          pendingRetryPanel: Boolean(plugnotasPendingRetry),
+          sessionPostFailedFlag
+        })
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -1831,11 +1853,12 @@ export default function GuidesMei() {
   };
 
   const handleAtualizarCadastroSemNovoCertificado = async () => {
-    setNfEmissionCompanySyncError(null);
+    clearNfEmissionCompanySyncErrorState();
     setNfEmissionCompanySyncSuccess(null);
     setDocumentosAtivosSubmitError(null);
     const companyValidationMessage = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
     if (companyValidationMessage) {
+      setNfEmissionCompanySyncFiscalApiErrorCode(null);
       setNfEmissionCompanySyncError(companyValidationMessage);
       return;
     }
@@ -1847,6 +1870,7 @@ export default function GuidesMei() {
     }
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
+      setNfEmissionCompanySyncFiscalApiErrorCode(null);
       setNfEmissionCompanySyncError(
         'CNPJ de 14 dígitos é obrigatório (campo CNPJ do MEI ou prestador na NFSe).'
       );
@@ -1869,6 +1893,7 @@ export default function GuidesMei() {
         );
       } catch (persistErr) {
         const msg = persistErr instanceof Error ? persistErr.message : String(persistErr);
+        setNfEmissionCompanySyncFiscalApiErrorCode(null);
         setNfEmissionCompanySyncError(
           `Empresa atualizada no emissor fiscal, mas os dados não foram gravados nesta aplicação: ${msg}`
         );
@@ -1895,6 +1920,7 @@ export default function GuidesMei() {
         // mantém sucesso principal; snapshots podem actualizar na próxima carga
       }
     } catch (error) {
+      setNfEmissionCompanySyncFiscalApiErrorCode(getApiErrorCodeFromUnknownError(error));
       setNfEmissionCompanySyncError(
         formatMeiFiscalErr(error, 'Falha ao atualizar empresa no serviço de emissão fiscal.')
       );
@@ -1913,12 +1939,13 @@ export default function GuidesMei() {
   const handleDocumentosAtivosSincronizarPlugnotas = useCallback(async () => {
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
+      setNfEmissionCompanySyncFiscalApiErrorCode(null);
       setNfEmissionCompanySyncError(
         'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
       );
       return;
     }
-    setNfEmissionCompanySyncError(null);
+    clearNfEmissionCompanySyncErrorState();
     setNfEmissionCompanySyncLoading('consult');
     try {
       invalidateMeiEmpresaGetCache(userId, cnpj);
@@ -1930,16 +1957,22 @@ export default function GuidesMei() {
       await loadCertificateStatus();
     } catch (error) {
       const formatted = formatMeiFiscalErr(error, 'Falha ao sincronizar com o emissor fiscal.');
+      const sessionPostFailedFlag =
+        cnpj.length === 14 && isGuiaMeiEmpresaFase2FailFlagActive(userId, cnpj);
+      setNfEmissionCompanySyncFiscalApiErrorCode(getApiErrorCodeFromUnknownError(error));
       setNfEmissionCompanySyncError(
-        withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(formatted, plugnotasPendingRetry)
+        withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(formatted, {
+          pendingRetryPanel: Boolean(plugnotasPendingRetry),
+          sessionPostFailedFlag
+        })
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
     }
-  }, [userId, loadCertificateStatus, resolveCnpjParaEmissor, plugnotasPendingRetry]);
+  }, [userId, loadCertificateStatus, resolveCnpjParaEmissor, plugnotasPendingRetry, clearNfEmissionCompanySyncErrorState]);
 
   const handleSalvarDadosEmitente = async () => {
-    setNfEmissionCompanySyncError(null);
+    clearNfEmissionCompanySyncErrorState();
     setNfEmissionCompanySyncSuccess(null);
     setNfEmissionCompanySyncLoading('patch');
     try {
@@ -1952,6 +1985,7 @@ export default function GuidesMei() {
       }
       setNfEmissionCompanySyncSuccess('Dados do emitente salvos com sucesso.');
     } catch (error) {
+      setNfEmissionCompanySyncFiscalApiErrorCode(getApiErrorCodeFromUnknownError(error));
       setNfEmissionCompanySyncError(formatMeiFiscalErr(error, 'Falha ao salvar dados do emitente.'));
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -2019,7 +2053,7 @@ export default function GuidesMei() {
       return;
     }
     if (normalizedContribuinte.length !== 14) {
-      setValidationError('CNPJ do MEI deve ter 14 dígitos.');
+      setValidationError({ variant: 'plain', message: 'CNPJ do MEI deve ter 14 dígitos.' });
       return;
     }
 
@@ -2032,7 +2066,7 @@ export default function GuidesMei() {
         : 'CNPJ validado com sucesso.';
       setValidationSuccess(result?.message || fallbackMessage);
     } catch (error) {
-      setValidationError(error instanceof Error ? error.message : 'Erro ao validar CNPJ.');
+      setValidationError(mapMeiGuideValidateErrorToUserMessage(error));
     } finally {
       setIsValidating(false);
     }
@@ -2652,8 +2686,11 @@ export default function GuidesMei() {
     }
     if (nfEmissionCompanySyncError) {
       nodes.push(
-        <div key="nfse-fb-sync" className="admin-alert-danger text-xs">
-          {nfEmissionCompanySyncError}
+        <div key="nfse-fb-sync" className="space-y-2 text-xs">
+          <GuiaMeiEmpresaCadastroErrorPanel
+            message={nfEmissionCompanySyncError}
+            fiscalApiErrorCode={nfEmissionCompanySyncFiscalApiErrorCode}
+          />
           <PlugnotasEmpresaCadastroSolContextPanel
             state={plugnotasCadastroSolUxState}
             compact
@@ -2728,6 +2765,7 @@ export default function GuidesMei() {
     hasUserCertificate,
     nfEmissionCompanyForm.razaoSocial,
     nfEmissionCompanySyncError,
+    nfEmissionCompanySyncFiscalApiErrorCode,
     nfseEmitentePendingApply,
     plugnotasCadastroSolUxState,
     setActiveWorkspace
@@ -3256,7 +3294,10 @@ export default function GuidesMei() {
 
           {nfEmissionCompanySyncError ? (
             <>
-              <GuiaMeiEmpresaCadastroErrorPanel message={nfEmissionCompanySyncError} />
+              <GuiaMeiEmpresaCadastroErrorPanel
+                message={nfEmissionCompanySyncError}
+                fiscalApiErrorCode={nfEmissionCompanySyncFiscalApiErrorCode}
+              />
               <PlugnotasEmpresaCadastroSolContextPanel state={plugnotasCadastroSolUxState} showPlaybook />
             </>
           ) : null}
@@ -3294,11 +3335,29 @@ export default function GuidesMei() {
             </div>
           )}
 
-          {validationError && (
-            <div className="admin-alert-danger">
-              {validationError}
+          {validationError?.variant === 'cons-c' ? (
+            <div
+              role="region"
+              aria-labelledby={meiGuideValidateConsCTitleId}
+              className="admin-alert-warning space-y-2"
+              data-cons-trigger="serpro-validate"
+            >
+              <p id={meiGuideValidateConsCTitleId} className="text-sm font-semibold">
+                {validationError.title}
+              </p>
+              <p className="text-sm leading-relaxed">{validationError.body}</p>
+              {validationError.rawDetail ? (
+                <details className="text-xs text-slate-600 dark:text-slate-400">
+                  <summary className="cursor-pointer select-none">Detalhe técnico</summary>
+                  <p className="mt-1 whitespace-pre-wrap">{validationError.rawDetail}</p>
+                </details>
+              ) : null}
             </div>
-          )}
+          ) : validationError?.variant === 'plain' ? (
+            <div className="admin-alert-danger" role="alert">
+              {validationError.message}
+            </div>
+          ) : null}
 
           <div className="admin-toolbar grid gap-3 lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
             <div>
@@ -3899,9 +3958,12 @@ export default function GuidesMei() {
               </button>
             </div>
           )}
-          {nfEmissionCompanySyncError && (
-            <div className="admin-alert-danger text-xs">{nfEmissionCompanySyncError}</div>
-          )}
+          {nfEmissionCompanySyncError ? (
+            <GuiaMeiEmpresaCadastroErrorPanel
+              message={nfEmissionCompanySyncError}
+              fiscalApiErrorCode={nfEmissionCompanySyncFiscalApiErrorCode}
+            />
+          ) : null}
           {nfEmissionCompanySyncSuccess && (
             <div className="admin-alert-success text-xs">{nfEmissionCompanySyncSuccess}</div>
           )}

@@ -1,3 +1,9 @@
+import {
+  MEI_GUIDE_SERPRO_UNAVAILABLE,
+  MEI_GUIDE_VALIDATE_CONS_C_BODY,
+  MEI_GUIDE_VALIDATE_CONS_C_TITLE
+} from './mapMeiGuideValidateErrorToUserMessage';
+
 /**
  * US-MEI-NAT-04 (FR-N05) + FR-NAT-ERR-01: heurística para oferecer copy/link quando o Plugnotas recusa
  * cadastro ou emissão ligados à NFS-e Nacional (município/credenciamento/indisponibilidade), incluindo
@@ -7,6 +13,8 @@
  * `NFSE_NACIONAL_OPERACAO_DOC_ANCHOR` (par `#plugnotas-nfse-nacional-spike-nat01` na mesma secção),
  * tabela de disparos em `#plugnotas-nfse-nacional-erros-mensagens`, contexto nacional vs municipal em
  * `#nfse-nacional-vs-municipal-cadastro`.
+ * **FR-CONS-P1:** erros de validação guia / Serpro (CONS-C) não disparam dica NFS-e Nacional — ver `isMeiGuideSerproConsCUserFacingText` e `MEI_GUIDE_SERPRO_UNAVAILABLE`.
+ *
  * **FR-PREF-HINT-01 / PREF-L1:** `isPlugnotasNfseConfigPrefeituraRequirementMessage`, `getPlugnotasEmpresaCadastroErrorUxVariant`
  * — ver `docs/operacao-mei-nfse.md` (#nfse-config-prefeitura-cadastro-pref).
  *
@@ -191,20 +199,43 @@ export function isPlugnotasEmpresaConsultNotFoundMessage(message: string): boole
   return false;
 }
 
+/** Contexto CONS-B: painel retry visível e/ou marcador de sessão SOL-P1 (POST fase 2 falhou). */
+export type PlugnotasEmpresaConsultConsBContext = {
+  pendingRetryPanel: boolean;
+  sessionPostFailedFlag: boolean;
+};
+
 /**
- * UX §5.4: após falha recente no POST empresa (`plugnotasPendingRetry`), uma consulta GET que pareça
- * “cadastro inexistente” deve ganhar contexto — não deixar só “CNPJ não encontrado”.
+ * UX §5.4 + FR-CONS-P1: após falha no POST empresa, consulta GET “não encontrada” deve ganhar contexto —
+ * não só quando o painel âmbar está visível, mas também quando a flag de sessão SOL-P1 está activa.
  *
  * Função pura para testes de regressão (evita depender de RTL em `GuidesMei.tsx`).
  */
 export function withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(
   formattedMessage: string,
-  plugnotasPendingRetry: boolean
+  context: PlugnotasEmpresaConsultConsBContext | boolean
 ): string {
-  if (plugnotasPendingRetry && isPlugnotasEmpresaConsultNotFoundMessage(formattedMessage)) {
+  const pendingRetryPanel = typeof context === 'boolean' ? context : context.pendingRetryPanel;
+  const sessionPostFailedFlag =
+    typeof context === 'boolean' ? false : context.sessionPostFailedFlag;
+  if (
+    (pendingRetryPanel || sessionPostFailedFlag) &&
+    isPlugnotasEmpresaConsultNotFoundMessage(formattedMessage)
+  ) {
     return `${PLUGNOTAS_EMPRESA_CONSULT_PENDENTE_CADASTRO_PREFIX}\n\n${formattedMessage}`;
   }
   return formattedMessage;
+}
+
+/** Texto visível alinhado à copy CONS-C / Serpro (validação guia) — não misturar com hints Plugnotas. */
+export function isMeiGuideSerproConsCUserFacingText(message: string): boolean {
+  const m = normalizeForMatch(message);
+  if (!m.trim()) return false;
+  if (m.includes(normalizeForMatch(MEI_GUIDE_VALIDATE_CONS_C_TITLE))) return true;
+  if (m.includes('nao foi possivel validar o cnpj com a receita federal')) return true;
+  if (m.includes(normalizeForMatch(MEI_GUIDE_SERPRO_UNAVAILABLE))) return true;
+  if (m.includes('validacao do guia') && m.includes('receita federal')) return true;
+  return false;
 }
 
 export function getNfseNacionalOperacaoHelpHref(): string {
@@ -244,8 +275,16 @@ function shouldOfferNfseNacionalOperacaoDocHintNacionalPatterns(message: string)
   return false;
 }
 
-/** Inclui padrões «NFS-e Nacional» e exigência municipal (IM/prefeitura) sem «nacional» no texto. */
-export function shouldOfferNfseNacionalOperacaoDocHint(message: string): boolean {
+/**
+ * Inclui padrões «NFS-e Nacional» e exigência municipal (IM/prefeitura) sem «nacional» no texto.
+ * @param fiscalApiErrorCode — quando `MEI_GUIDE_SERPRO_UNAVAILABLE`, não oferecer dica (FR-CONS-P1).
+ */
+export function shouldOfferNfseNacionalOperacaoDocHint(
+  message: string,
+  fiscalApiErrorCode?: string | null
+): boolean {
+  if (fiscalApiErrorCode === MEI_GUIDE_SERPRO_UNAVAILABLE) return false;
+  if (isMeiGuideSerproConsCUserFacingText(message)) return false;
   return (
     shouldOfferNfseNacionalOperacaoDocHintNacionalPatterns(message) ||
     isPlugnotasEmpresaMunicipalRequirementMessage(message)

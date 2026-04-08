@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
+import { MEI_GUIDE_SERPRO_UNAVAILABLE } from './mapMeiGuideValidateErrorToUserMessage';
 import {
   NFSE_NACIONAL_OPERACAO_DOC_ANCHOR,
   NFSE_NACIONAL_PLUGNOTAS_HINT_PATTERNS_DOC,
@@ -41,6 +42,17 @@ describe('nfseNacionalPlugnotasErrorHints', () => {
     ['Erro em nfce.config.prefeitura no cadastro da empresa.', false]
   ])('shouldOfferNfseNacionalOperacaoDocHint(%s) → %s', (msg, expected) => {
     expect(shouldOfferNfseNacionalOperacaoDocHint(msg)).toBe(expected);
+  });
+
+  it('shouldOfferNfseNacionalOperacaoDocHint: suprime para copy CONS-C / validação guia Serpro (FR-CONS-P1)', () => {
+    expect(
+      shouldOfferNfseNacionalOperacaoDocHint(
+        'Validação do guia (Receita Federal)\nNão foi possível validar o CNPJ com a Receita Federal neste momento.'
+      )
+    ).toBe(false);
+    expect(shouldOfferNfseNacionalOperacaoDocHint('HTTP 400 genérico', MEI_GUIDE_SERPRO_UNAVAILABLE)).toBe(
+      false
+    );
   });
 
   it.each([
@@ -114,8 +126,23 @@ describe('nfseNacionalPlugnotasErrorHints', () => {
       expect(out).toContain(notFound);
     });
 
-    it('não prefixa sem retry pendente', () => {
+    it('não prefixa sem retry pendente nem flag de sessão', () => {
       expect(withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(notFound, false)).toBe(notFound);
+      expect(
+        withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(notFound, {
+          pendingRetryPanel: false,
+          sessionPostFailedFlag: false
+        })
+      ).toBe(notFound);
+    });
+
+    it('prefixa só com sessionPostFailedFlag (FR-CONS-P1 / SOL-L2)', () => {
+      const out = withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(notFound, {
+        pendingRetryPanel: false,
+        sessionPostFailedFlag: true
+      });
+      expect(out.startsWith(PLUGNOTAS_EMPRESA_CONSULT_PENDENTE_CADASTRO_PREFIX)).toBe(true);
+      expect(out).toContain(notFound);
     });
 
     it('não prefixa se a mensagem não for de consulta “não encontrado”', () => {

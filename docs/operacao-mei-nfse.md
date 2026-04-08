@@ -57,13 +57,14 @@
 - **Interface:** quando a mensagem casa com a variante **PREF-L1**, a Guia MEI mostra copy que explica a diferença (painel âmbar de retry e painel vermelho de erro) — funções `isPlugnotasNfseConfigPrefeituraRequirementMessage` e `getPlugnotasEmpresaCadastroErrorUxVariant` em `frontend/src/utils/nfseNacionalPlugnotasErrorHints.ts`.
 - **PREF-L2 (spec UX §3.2):** exigências municipais **só** com inscrição municipal (sem gatilho L1) usam a mesma copy genérica municipal (**NAT §5.2**); no código isto corresponde à variante interna `'municipal-generic'` (não a `'prefeitura-config'`).
 - **Consulta GET empresa após falha no registo:** se o utilizador ainda tem o painel de **retry** (cadastro da empresa não concluído) e a consulta devolve “não encontrado” / **404**, a app pode prefixar a mensagem com orientação para resolver o erro de registo antes de interpretar como CNPJ errado.
+- **FR-CONS (P1) — triade UX / CONS-B:** o mesmo prefixo (UX §5.4) aplica-se quando o painel de retry **já não** está visível mas o marcador de sessão SOL-P1 (`guiaMeiEmpresaFase2FailFlag`) indica falha recente no POST fase 2 — `withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable` com `sessionPostFailedFlag`. Erros de validação guia / Serpro (CONS-C) **não** disparam dica NFS-e Nacional / municipal na heurística — `shouldOfferNfseNacionalOperacaoDocHint` em `nfseNacionalPlugnotasErrorHints.ts`; story [`story-fr-cons-p1-guidesmei-fr-cons-ux-paridade-sol.md`](stories/story-fr-cons-p1-guidesmei-fr-cons-ux-paridade-sol.md).
 - **Payload com `prefeitura` preenchida** no `nfse.config` fica para story/evidência **NFR-PREF-EV-01** (trilhos B/C/D no mesmo PRD).
 
 <a id="cadastro-post-404-get-empresa"></a>
 
 #### Encadeamento **POST** cadastro empresa → **GET** **404** (**FR-SOL-DIAG-01**, **FR-SOL-ANT-01**)
 
-- Se o **`POST`** `…/emissao-fiscal/empresa` falhar (ex.: **400** com `nfse.config.prefeitura`), o Plugnotas **não** cria a empresa na conta; um **`GET`** `…/emissao-fiscal/empresa?cpfCnpj=` pode devolver **404** (*não localizamos empresa*). Isto é **esperado**: o **404** não indica por si um “bug só da consulta” — trata primeiro o erro do **envio** (POST) ou conclui o cadastro com sucesso antes de esperar dados na consulta.
+- Se o **`POST`** `…/emissao-fiscal/empresa` falhar (ex.: **400** com `nfse.config.prefeitura`), o Plugnotas **não** cria a empresa na conta; um **`GET`** `…/emissao-fiscal/empresa?cpfCnpj=` pode devolver **404** (*não localizamos empresa*). Isto é **esperado**: o **404** não indica por si um “bug só da consulta” — trata primeiro o erro do **envio** (POST) ou conclui o cadastro com sucesso antes de esperar dados na consulta. Consolidação para suporte: [Triagem: erros na consola do browser](#triagem-erros-consola-guia-mei) (**FR-CONS-MAP-01**).
 - **Antipadrões:** (1) assumir que **inscrição municipal** na raiz do JSON substitui **`nfse.config.prefeitura`** quando o erro citar esse campo — ver [secção PREF](#nfse-config-prefeitura-cadastro-pref); (2) **repetir só o GET** esperando 200 sem corrigir o POST; (3) assumir que **`nfse.nacional: true`** no payload dispensa **`prefeitura`** em **todas** as contas (**NFR-N04**).
 - **Produto / UX:** PRD [`PRD-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](prd/PRD-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md); spec [`ux-spec-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](specs/ux-spec-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md); arquitetura [`architecture-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](technical/architecture-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md). A Guia MEI mostra blocos contextuais (`PlugnotasEmpresaCadastroSolContextPanel`) e heurística `resolvePlugnotasEmpresaCadastroSolUxState` em `frontend/src/utils/plugnotasEmpresaCadastroSolUx.ts`.
 - **Marcador de sessão (SOL-L2 / P1):** após falha confirmada do POST fase 2 (cadastro empresa), o cliente grava em `sessionStorage` a chave `mei:empresaFase2Fail:v1:${userId}:${cnpj14}` com **apenas** `{ t: number }` (TTL ~30 min; sem texto de erro). Limpeza após POST 2xx de empresa ou GET com dados de cadastro parseáveis; expirado → UX volta ao estado neutro **SOL-L3**. Código: `frontend/src/utils/guiaMeiEmpresaFase2FailFlag.ts`.
@@ -117,6 +118,59 @@ O frontend não reparseia JSON do emissor: usa a **string de erro** já consolid
 **Implementação:** `frontend/src/utils/nfseNacionalPlugnotasErrorHints.ts` (lista `NFSE_NACIONAL_PLUGNOTAS_HINT_PATTERNS_DOC` + testes: manter alinhamento com esta tabela). **Onde aparece:** `GuiaMeiEmpresaCadastroErrorPanel`, `EmissaoFiscalErrorAlert`, `EmissaoFiscalErrorAlertModal` (link com tom `rose` no modal), `PlugnotasIntegrationErrorAlert`, painel âmbar de retry em `GuidesMei.tsx`, e corpo partilhado `PlugnotasMunicipalRequirementOperacaoCopy.tsx`.
 
 Épico: [`epic-nfse-nacional-plugnotas-prd.md`](stories/epic-nfse-nacional-plugnotas-prd.md) (**US-MEI-NAT-04**).
+
+<a id="triagem-erros-consola-guia-mei"></a>
+
+## Triagem: erros na consola do browser (Guia MEI) (**FR-CONS-MAP-01**)
+
+**Princípio:** na [spec UX CONS](specs/ux-spec-correcao-cadastro-plugnotas-erros-console-mei-2026-04-08.md) (secção 2 — mapa de specs), **consola ≠ UI**: o painel da Guia MEI pode humanizar ou encadear mensagens; na aba **Rede** aparecem pedidos distintos ao BFF. Esta secção consolida a **tríade** mais comum de incidentes — **sem PII de exemplo** — para suporte e engenharia correlacionarem sintoma e sistema certo (Plugnotas vs Serpro).
+
+### Mapa rápido — endpoint × sintoma × causa provável × próximo passo
+
+| Gatilho | Pedido BFF (típico) | Sintoma na rede / consola | Causa provável | Próximo passo |
+| --- | --- | --- | --- | --- |
+| **CONS-B** (cadastro / consulta empresa) | `GET /api/mei-notas/setup/emissao-fiscal/empresa?cpfCnpj=` | **404** (`success: false` no JSON da app) | Depois de um **`POST` empresa falhado**, o Plugnotas **não criou** a empresa na conta; o **404 é esperado** até existir registo aceite. **Não** é, por si só, “bug só da consulta”. | Tratar primeiro o **erro do `POST`** (ex.: **400** `prefeitura`) ou concluir o cadastro com sucesso antes de esperar **200** no GET. Ver [Encadeamento POST → GET 404](#cadastro-post-404-get-empresa). |
+| **CONS-A / PREF** | `POST` ou `PATCH …/emissao-fiscal/empresa` | **400** com texto citando **`nfse.config.prefeitura`** ou `fields.nfse.config.prefeitura` | Validador do **Plugnotas** exige configuração de prefeitura dentro de **`nfse.config`**; é **distinto** de preencher só **`inscricaoMunicipal`** na raiz do JSON. | PRD [**FR-PREF**](prd/PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md), spec UX PREF e [secção PREF neste runbook](#nfse-config-prefeitura-cadastro-pref). |
+| **CONS-C** (validate guia / Serpro) | `POST /api/mei-guide/validate` | **HTTP 503** com `errors.code: MEI_GUIDE_SERPRO_UNAVAILABLE` e `integration: serpro` *(contrato pós [P0 Serpro](stories/story-fr-cons-p0-serpro-emitir-503-mei-guide-validate.md))*; em cenários legados pode ainda aparecer **400** com mensagem genérica até alinhar cliente | Falha **5xx** ou indisponibilidade no **Serpro** (`/Emitir`); **não** desbloqueia cadastro no Plugnotas nem substitui correção de **`prefeitura`**. | Copy **CONS-C** na UI (spec UX CONS §6); orientar “tentar mais tarde” / canal Receita, **sem** misturar com NFS-e Nacional ou painel de empresa. |
+
+### Ordem de verificação sugerida (suporte)
+
+1. Identificar **qual** pedido falhou por último no fluxo que o utilizador descreveu (empresa **vs** validate).  
+2. Se houver **400** em **`…/empresa`**, resolver **PREF / payload / ambiente Plugnotas** antes de interpretar um **404** subsequente no GET.  
+3. Se o sintoma for **`…/mei-guide/validate`** com **503** + código Serpro, **não** redireccionar o utilizador para checklist de cadastro Plugnotas como causa única.
+
+### Diagrama — cadeia causal (resumo)
+
+Fluxo equivalente ao [brief da consola](brief/brief-correcao-cadastro-plugnotas-erros-console-2026-04-08.md) e ao diagrama de sequência na [arquitetura CONS](technical/architecture-correcao-cadastro-plugnotas-erros-console-mei-2026-04-08.md) (§1.2); versão operacional:
+
+```mermaid
+flowchart TD
+  A[POST empresa Plugnotas via BFF] -->|400 prefeitura| B[Empresa não criada no Plugnotas]
+  B --> C[GET empresa por CNPJ]
+  C -->|404| D[Sintoma esperado até cadastro OK]
+  E[POST mei-guide/validate] --> F[Serpro Emitir]
+  F -->|5xx upstream| G[503 BFF + errors.code MEI_GUIDE_SERPRO_UNAVAILABLE]
+```
+
+### Artefactos relacionados (ponteiro; copy detalhada nas specs)
+
+| Artefacto | Link |
+| --- | --- |
+| PRD CONS (requisitos) | [`PRD-correcao-cadastro-plugnotas-erros-console-mei-2026-04-08.md`](prd/PRD-correcao-cadastro-plugnotas-erros-console-mei-2026-04-08.md) |
+| Brief — cadeia na consola | [`brief-correcao-cadastro-plugnotas-erros-console-2026-04-08.md`](brief/brief-correcao-cadastro-plugnotas-erros-console-2026-04-08.md) |
+| Spec UX CONS (CONS-A/B/C) | [`ux-spec-correcao-cadastro-plugnotas-erros-console-mei-2026-04-08.md`](specs/ux-spec-correcao-cadastro-plugnotas-erros-console-mei-2026-04-08.md) |
+| Arquitetura CONS | [`architecture-correcao-cadastro-plugnotas-erros-console-mei-2026-04-08.md`](technical/architecture-correcao-cadastro-plugnotas-erros-console-mei-2026-04-08.md) |
+| Spec SOL (400 + 404 GET) | [`ux-spec-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](specs/ux-spec-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md) |
+
+### Rastreio em stories (**FR-CONS-EVID-01**)
+
+As stories de implementação **FR-CONS P0/P1** devem referenciar esta âncora no **Dev Agent Record** / checklist: **`docs/operacao-mei-nfse.md#triagem-erros-consola-guia-mei`**. Exemplos: [P0 Serpro 503](stories/story-fr-cons-p0-serpro-emitir-503-mei-guide-validate.md), [P1 paridade SOL/CONS na Guia MEI](stories/story-fr-cons-p1-guidesmei-fr-cons-ux-paridade-sol.md), [P1 runbook tríade](stories/story-fr-cons-p1-operacao-mei-nfse-triade-erros-consola.md).
+
+### Revisão operação (informal)
+
+Registar **OK** na story [STORY-FR-CONS-P1-OPERACAO-TRIADE](stories/story-fr-cons-p1-operacao-mei-nfse-triade-erros-consola.md) ou comentário no MR após leitura desta secção *(critério de aceite da story)*.
+
+---
 
 ## Objetivo
 Registrar pre-condicoes, variaveis de ambiente e orientacoes basicas para operacao do fluxo MEI/NFSe.

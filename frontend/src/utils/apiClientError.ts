@@ -1,9 +1,18 @@
 import type { ApiErrorPayload } from './buildApiErrorMessage';
 import { getPlugnotasCodeFromApiErrors } from './plugnotasApiErrorCode';
 
+/** Extrai `errors.code` do JSON de erro da API (`success: false`). */
+export function getApiErrorCodeFromApiErrors(errors: unknown): string | null {
+  if (!errors || typeof errors !== 'object' || Array.isArray(errors)) return null;
+  const raw = (errors as Record<string, unknown>).code;
+  return typeof raw === 'string' && raw.length > 0 ? raw : null;
+}
+
 /** Erro HTTP JSON da API (`success: false`) com metadados opcionais para a UI (US-MEI-FISC-03). */
 export class ApiClientError extends Error {
   readonly plugnotasCode: string | null;
+  /** Código estável em `payload.errors.code` (ex.: MEI_GUIDE_SERPRO_UNAVAILABLE). */
+  readonly apiErrorCode: string | null;
   readonly payload: ApiErrorPayload | null;
   /** Status HTTP da resposta quando o erro veio de JSON `success: false` (mapeamento fiscal / gateway). */
   readonly httpStatus: number | null;
@@ -12,6 +21,7 @@ export class ApiClientError extends Error {
     message: string,
     options?: {
       plugnotasCode?: string | null;
+      apiErrorCode?: string | null;
       payload?: ApiErrorPayload | null;
       httpStatus?: number | null;
     }
@@ -19,6 +29,7 @@ export class ApiClientError extends Error {
     super(message);
     this.name = 'ApiClientError';
     this.plugnotasCode = options?.plugnotasCode ?? null;
+    this.apiErrorCode = options?.apiErrorCode ?? null;
     this.payload = options?.payload ?? null;
     this.httpStatus =
       options?.httpStatus != null && Number.isFinite(options.httpStatus)
@@ -45,6 +56,15 @@ export function getHttpStatusFromUnknownError(err: unknown): number | null {
   return null;
 }
 
+export function getApiErrorCodeFromUnknownError(err: unknown): string | null {
+  if (err instanceof ApiClientError) return err.apiErrorCode;
+  if (err && typeof err === 'object' && 'apiErrorCode' in err) {
+    const v = (err as { apiErrorCode?: unknown }).apiErrorCode;
+    return typeof v === 'string' && v.length > 0 ? v : null;
+  }
+  return null;
+}
+
 /** Monta `ApiClientError` a partir do payload JSON de erro já parseado. */
 export function apiClientErrorFromPayload(
   payload: { message?: string; errors?: unknown; details?: string } | null | undefined,
@@ -53,6 +73,7 @@ export function apiClientErrorFromPayload(
 ): ApiClientError {
   return new ApiClientError(buildMessage(payload), {
     plugnotasCode: getPlugnotasCodeFromApiErrors(payload?.errors),
+    apiErrorCode: getApiErrorCodeFromApiErrors(payload?.errors),
     payload: (payload as ApiErrorPayload | null | undefined) ?? null,
     httpStatus: init?.httpStatus ?? null,
   });

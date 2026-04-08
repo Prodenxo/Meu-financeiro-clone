@@ -13,6 +13,7 @@ import {
 import { FISCAL_ERROR_LONG_THRESHOLD } from '../lib/fiscalUserError';
 import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
 import { MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT } from '../utils/nfseNacionalPlugnotasErrorHints';
+import { MEI_GUIDE_SERPRO_UNAVAILABLE } from '../utils/mapMeiGuideValidateErrorToUserMessage';
 
 const globalWithActFlag = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
 globalWithActFlag.IS_REACT_ACT_ENVIRONMENT = true;
@@ -229,6 +230,19 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
       );
     });
     expect(container.textContent).toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
+  });
+
+  it('FR-CONS-P1: suprime hint IBGE cidade quando fiscalApiErrorCode é Serpro indisponível', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <GuiaMeiEmpresaCadastroErrorPanel
+          message="HTTP 400: fields.endereco.codigoCidade não localizado na tabela IBGE."
+          fiscalApiErrorCode={MEI_GUIDE_SERPRO_UNAVAILABLE}
+        />
+      );
+    });
+    expect(container.textContent).not.toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
   });
 
   it('mensagem longa mantém expansão e hint NFC-e com nfce.config.sefaz', async () => {

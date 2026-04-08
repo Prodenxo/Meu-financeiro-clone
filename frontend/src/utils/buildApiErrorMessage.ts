@@ -4,6 +4,8 @@ export type ApiErrorPayload = {
   /** Anexado com newline se não estiver já contido em `message`. */
   details?: string;
   errors?: {
+    /** Código estável BFF (ex.: indisponibilidade Serpro no validate do guia MEI). */
+    code?: string;
     /** Código estável de negócio (ex.: US-MEI-FISC-02). */
     plugnotasCode?: string;
     plugnotasRequest?: { method?: string; path?: string };
