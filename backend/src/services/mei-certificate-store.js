@@ -101,6 +101,12 @@ export const normalizeEmitenteRowFragment = (raw, opts = {}) => {
     if (t || !omitEmpty) out.fiscal_email = t || null;
   }
 
+  const im = get('inscricaoMunicipal', 'inscricao_municipal');
+  if (im !== undefined && im !== null) {
+    const t = String(im).trim();
+    if (t || !omitEmpty) out.inscricao_municipal = t || null;
+  }
+
   const rt = get('regimeTributario', 'regime_tributario');
   if (rt !== undefined && rt !== null) {
     const t = String(rt).trim();
@@ -185,6 +191,7 @@ export const normalizeEmitenteRowFragment = (raw, opts = {}) => {
  * @property {string} razaoSocial — `razao_social`
  * @property {string} nomeFantasia — `nome_fantasia`
  * @property {string} email — `fiscal_email`
+ * @property {string} [inscricaoMunicipal] — `inscricao_municipal`, opcional
  * @property {string} regimeTributario
  * @property {boolean} simplesNacional — `optante_simples_nacional`
  * @property {string} cep — só dígitos (até 8)
@@ -231,6 +238,8 @@ export const emitenteRowToApiShape = (row) => {
     razaoSocial: row.razao_social != null ? String(row.razao_social) : '',
     nomeFantasia: row.nome_fantasia != null ? String(row.nome_fantasia) : '',
     email: row.fiscal_email != null ? String(row.fiscal_email) : '',
+    inscricaoMunicipal:
+      row.inscricao_municipal != null ? String(row.inscricao_municipal).trim() : '',
     regimeTributario: row.regime_tributario ? String(row.regime_tributario) : '1',
     simplesNacional: row.optante_simples_nacional !== false,
     cep: cepDigits,
@@ -306,6 +315,7 @@ export const getEmitenteNfseSnapshot = async (userId) => {
       nome_fantasia,
       fiscal_email,
       regime_tributario,
+      inscricao_municipal,
       cep,
       tipo_logradouro,
       logradouro,

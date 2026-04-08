@@ -31,6 +31,7 @@ export type NfseEmitenteSnapshot = Pick<
   | 'razaoSocial'
   | 'nomeFantasia'
   | 'email'
+  | 'inscricaoMunicipal'
   | 'regimeTributario'
   | 'simplesNacional'
   | 'cep'
@@ -149,6 +150,7 @@ export function appendNfseEmitenteToFormData(
   formData.append('razaoSocial', emitente.razaoSocial);
   formData.append('nomeFantasia', emitente.nomeFantasia);
   formData.append('email', emitente.email);
+  formData.append('inscricaoMunicipal', emitente.inscricaoMunicipal ?? '');
   formData.append('regimeTributario', String(emitente.regimeTributario || '1'));
   formData.append('cep', emitente.cep);
   formData.append('tipoLogradouro', emitente.tipoLogradouro);

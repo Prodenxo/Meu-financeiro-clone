@@ -57,7 +57,8 @@ const fullSnapshot = (): NfseEmitenteSnapshot => ({
   bairro: 'Jardim Paulista',
   codigoCidade: '3550308',
   descricaoCidade: 'São Paulo',
-  estado: 'SP'
+  estado: 'SP',
+  inscricaoMunicipal: ''
 });
 
 vi.mock('../store/authStore', () => ({

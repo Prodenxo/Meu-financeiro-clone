@@ -23,6 +23,7 @@ const baseSnap = (): NfseEmitenteSnapshot => ({
   codigoCidade: '3550308',
   descricaoCidade: 'São Paulo',
   estado: 'SP',
+  inscricaoMunicipal: '',
   certDocument: '11222333000181'
 });
 
@@ -61,6 +62,13 @@ describe('mergeEmitenteSnapshotIntoNfseForm', () => {
     expect(next.prestadorEndereco?.cep).toBe('01310100');
     expect(next.prestadorEndereco?.codigoCidade).toBe('3550308');
     expect(next.prestadorEndereco?.estado).toBe('SP');
+    expect(next.prestadorInscricaoMunicipal).toBe('');
+  });
+
+  it('preenche inscrição municipal a partir do snapshot quando o formulário está vazio', () => {
+    const snap = { ...baseSnap(), inscricaoMunicipal: 'IM-12345' };
+    const next = mergeEmitenteSnapshotIntoNfseForm(emptyForm(), snap);
+    expect(next.prestadorInscricaoMunicipal).toBe('IM-12345');
   });
 
   it('não sobrescreve campos já preenchidos manualmente', () => {
@@ -106,9 +114,11 @@ describe('replacePrestadorFromEmitenteSnapshot', () => {
       ...emptyNfsePrestadorEndereco(),
       logradouro: 'Rua Velha'
     };
-    const next = replacePrestadorFromEmitenteSnapshot(current, baseSnap());
+    const snap = { ...baseSnap(), inscricaoMunicipal: 'IM-SNAP' };
+    const next = replacePrestadorFromEmitenteSnapshot(current, snap);
     expect(next.prestadorRazaoSocial).toBe('ACME LTDA');
     expect(next.prestadorEndereco?.logradouro).toBe('Av Paulista');
     expect(onlyDigits(next.prestadorCpfCnpj)).toBe('11222333000181');
+    expect(next.prestadorInscricaoMunicipal).toBe('IM-SNAP');
   });
 });
