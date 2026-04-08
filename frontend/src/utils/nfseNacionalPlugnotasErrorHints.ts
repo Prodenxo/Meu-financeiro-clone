@@ -7,10 +7,31 @@
  * `NFSE_NACIONAL_OPERACAO_DOC_ANCHOR` (par `#plugnotas-nfse-nacional-spike-nat01` na mesma secção),
  * tabela de disparos em `#plugnotas-nfse-nacional-erros-mensagens`, contexto nacional vs municipal em
  * `#nfse-nacional-vs-municipal-cadastro`.
+ * **FR-PREF-HINT-01 / PREF-L1:** `isPlugnotasNfseConfigPrefeituraRequirementMessage`, `getPlugnotasEmpresaCadastroErrorUxVariant`
+ * — ver `docs/operacao-mei-nfse.md` (#nfse-config-prefeitura-cadastro-pref).
  */
 
 /** Âncora principal em `docs/operacao-mei-nfse.md` (troubleshoot município/credenciamento). */
 export const NFSE_NACIONAL_OPERACAO_DOC_ANCHOR = 'emissor-nfse-nacional-spike-nat01';
+
+/** Prefixo quando consulta GET empresa falha com “não encontrado” após falha recente no POST empresa (FR-PREF-UX-01 §5.4). */
+export const PLUGNOTAS_EMPRESA_CONSULT_PENDENTE_CADASTRO_PREFIX =
+  'O cadastro ainda não foi concluído no emissor. Se você acabou de enviar os dados e viu um erro, resolva o erro acima e tente registrar de novo.';
+
+/**
+ * Variante de copy para erros de cadastro empresa Plugnotas.
+ *
+ * Mapeamento com a spec UX §3.2 (`ux-spec-plugnotas-nfse-config-prefeitura-payload-2026-04-08.md`):
+ * - **PREF-L1** → `'prefeitura-config'` (copy §5.1 — `nfse.config.prefeitura` / config prefeitura no NFS-e).
+ * - **PREF-L2** → `'municipal-generic'` (só IM / municipal sem gatilho L1; copy NAT §5.2).
+ * - **Demais** (sem heurística municipal) → `'generic'` (equivalente a não mostrar bloco municipal especializado).
+ *
+ * Prioridade na função {@link getPlugnotasEmpresaCadastroErrorUxVariant}: L1 > L2 > generic.
+ */
+export type PlugnotasEmpresaCadastroErrorUxVariant =
+  | 'generic'
+  | 'municipal-generic'
+  | 'prefeitura-config';
 
 /**
  * Padrões que disparam a dica (substring após normalização: minúsculas, sem acentos).
@@ -69,6 +90,83 @@ export function isPlugnotasEmpresaMunicipalRequirementMessage(message: string): 
     m.includes('config.prefeitura');
 
   return empresaFiscalContext;
+}
+
+/**
+ * PREF-L1: erro cita explicitamente **prefeitura na configuração NFS-e** (`nfse.config.prefeitura`), não só IM na raiz.
+ * Subconjunto testado de `isPlugnotasEmpresaMunicipalRequirementMessage` quando ambos aplicam.
+ */
+export function isPlugnotasNfseConfigPrefeituraRequirementMessage(message: string): boolean {
+  const m = normalizeForMatch(message);
+  if (!m.trim()) return false;
+
+  if (m.includes('nfce') && !m.includes('nfse')) return false;
+
+  if (
+    m.includes('nfse.config.prefeitura')
+    || m.includes('fields.nfse.config.prefeitura')
+    || m.includes('config.prefeitura')
+  ) {
+    return true;
+  }
+
+  if (!m.includes('prefeitura')) return false;
+
+  const hasMandatory =
+    m.includes('obrigator') ||
+    m.includes('preenchimento') ||
+    m.includes('required') ||
+    m.includes('nao informad') ||
+    m.includes('não informad');
+
+  const configOrNfseContext =
+    m.includes('nfse') ||
+    m.includes('config') ||
+    m.includes('validacao') ||
+    m.includes('validação') ||
+    m.includes('json') ||
+    m.includes('empresa') ||
+    m.includes('cadastro') ||
+    m.includes('plugnotas');
+
+  return hasMandatory && configOrNfseContext;
+}
+
+/** @see PlugnotasEmpresaCadastroErrorUxVariant — prioridade spec UX PREF-L1 > PREF-L2 > generic. */
+export function getPlugnotasEmpresaCadastroErrorUxVariant(
+  message: string
+): PlugnotasEmpresaCadastroErrorUxVariant {
+  if (isPlugnotasNfseConfigPrefeituraRequirementMessage(message)) return 'prefeitura-config';
+  if (isPlugnotasEmpresaMunicipalRequirementMessage(message)) return 'municipal-generic';
+  return 'generic';
+}
+
+/** Consulta GET empresa: resposta sugere ausência de cadastro (404 / não localizado / mensagens BFF típicas). */
+export function isPlugnotasEmpresaConsultNotFoundMessage(message: string): boolean {
+  const m = normalizeForMatch(message);
+  if (!m.trim()) return false;
+  if (/\b404\b/.test(m)) return true;
+  if (m.includes('not found')) return true;
+  if (m.includes('nao encontrad') || m.includes('não encontrad')) return true;
+  if (m.includes('nao localizamos') && m.includes('empresa')) return true;
+  if (m.includes('nao ha cadastro desta empresa') || m.includes('não há cadastro desta empresa')) return true;
+  return false;
+}
+
+/**
+ * UX §5.4: após falha recente no POST empresa (`plugnotasPendingRetry`), uma consulta GET que pareça
+ * “cadastro inexistente” deve ganhar contexto — não deixar só “CNPJ não encontrado”.
+ *
+ * Função pura para testes de regressão (evita depender de RTL em `GuidesMei.tsx`).
+ */
+export function withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(
+  formattedMessage: string,
+  plugnotasPendingRetry: boolean
+): string {
+  if (plugnotasPendingRetry && isPlugnotasEmpresaConsultNotFoundMessage(formattedMessage)) {
+    return `${PLUGNOTAS_EMPRESA_CONSULT_PENDENTE_CADASTRO_PREFIX}\n\n${formattedMessage}`;
+  }
+  return formattedMessage;
 }
 
 export function getNfseNacionalOperacaoHelpHref(): string {

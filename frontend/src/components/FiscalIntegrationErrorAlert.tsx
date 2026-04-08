@@ -6,6 +6,7 @@ import {
 } from '../utils/nfceEmpresaCadastroErrorHints';
 import {
   getNfseNacionalOperacaoHelpHref,
+  getPlugnotasEmpresaCadastroErrorUxVariant,
   isPlugnotasEmpresaMunicipalRequirementMessage,
   shouldOfferNfseNacionalOperacaoDocHint
 } from '../utils/nfseNacionalPlugnotasErrorHints';
@@ -20,7 +21,11 @@ import {
 } from '../lib/fiscalUserError';
 import { meiFiscalUserCopyToUserFacing } from '../lib/meiFiscalUserCopyToUserFacing';
 import UserFacingErrorBlock from './UserFacingErrorBlock';
-import { PlugnotasMunicipalRequirementOperacaoBody } from './PlugnotasMunicipalRequirementOperacaoCopy';
+import {
+  PlugnotasMunicipalRequirementOperacaoBody,
+  PlugnotasPrefeituraConfigNfseOperacaoBody,
+  PlugnotasPrefeituraConfigNfseOperacaoTitle
+} from './PlugnotasMunicipalRequirementOperacaoCopy';
 import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
 
 const meiOperacaoNfseDocUrl =
@@ -171,6 +176,27 @@ function NfseNacionalOperacaoDocHint({ message, linkTone = 'danger' }: NfseNacio
     : 'Ver guia rápido (NFS-e Nacional)';
 
   if (isPlugnotasEmpresaMunicipalRequirementMessage(message)) {
+    const uxVariant = getPlugnotasEmpresaCadastroErrorUxVariant(message);
+    if (uxVariant === 'prefeitura-config') {
+      return (
+        <div
+          className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90"
+          role="region"
+          aria-label="Configuração de prefeitura no NFS-e"
+        >
+          <p className="mb-1 font-semibold text-rose-900 dark:text-rose-100">
+            <PlugnotasPrefeituraConfigNfseOperacaoTitle />
+          </p>
+          <p>
+            <PlugnotasPrefeituraConfigNfseOperacaoBody />{' '}
+            <a href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+              {linkLabel}
+            </a>
+            <span className="text-rose-800/85 dark:text-rose-300/85"> (abre em nova aba).</span>
+          </p>
+        </div>
+      );
+    }
     return (
       <p className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90">
         <PlugnotasMunicipalRequirementOperacaoBody />{' '}

@@ -178,6 +178,20 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
   });
 
+  it('FR-PREF-UX-01: fields.nfse.config.prefeitura mostra copy específica (não só cadastro municipal genérico)', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <GuiaMeiEmpresaCadastroErrorPanel message="Falha na validação do JSON de Empresa: fields.nfse.config.prefeitura: Preenchimento obrigatório" />
+      );
+    });
+    expect(container.textContent).toContain('configuração da prefeitura no NFS-e');
+    expect(container.textContent).toContain('inscrição municipal opcional');
+    expect(container.textContent).toContain('painel Plugnotas');
+    expect(container.querySelector('[role="region"][aria-label="Configuração de prefeitura no NFS-e"]')).toBeTruthy();
+    expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
+  });
+
   it('mensagem longa mantém expansão e hint NFC-e com nfce.config.sefaz', async () => {
     const filler = 'z'.repeat(FISCAL_ERROR_LONG_THRESHOLD + 30);
     const msg = `${filler}\nnfce.config.sefaz obrigatório`;

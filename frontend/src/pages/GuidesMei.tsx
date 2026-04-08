@@ -75,11 +75,17 @@ import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/p
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import {
   getNfseNacionalOperacaoHelpHref,
-  isPlugnotasEmpresaMunicipalRequirementMessage
+  getPlugnotasEmpresaCadastroErrorUxVariant,
+  isPlugnotasEmpresaMunicipalRequirementMessage,
+  withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable
 } from '../utils/nfseNacionalPlugnotasErrorHints';
 import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
-import { PlugnotasMunicipalRequirementOperacaoBody } from '../components/PlugnotasMunicipalRequirementOperacaoCopy';
+import {
+  PlugnotasMunicipalRequirementOperacaoBody,
+  PlugnotasPrefeituraConfigNfseOperacaoBody,
+  PlugnotasPrefeituraConfigNfseOperacaoTitle
+} from '../components/PlugnotasMunicipalRequirementOperacaoCopy';
 import { MeiLimiteFaturamentoBlock } from '../components/MeiLimiteFaturamentoBlock';
 import { MeiNfseCatalogManageActions } from '../components/MeiNfseCatalogManageActions';
 import { MeiNfseListRowActions } from '../components/MeiNfseListRowActions';
@@ -1768,8 +1774,9 @@ export default function GuidesMei() {
         }
       }
     } catch (error) {
+      const formatted = formatMeiFiscalErr(error, 'Falha ao consultar cadastro no serviço de emissão fiscal.');
       setNfEmissionCompanySyncError(
-        formatMeiFiscalErr(error, 'Falha ao consultar cadastro no serviço de emissão fiscal.')
+        withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(formatted, plugnotasPendingRetry)
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -1874,13 +1881,14 @@ export default function GuidesMei() {
       });
       await loadCertificateStatus();
     } catch (error) {
+      const formatted = formatMeiFiscalErr(error, 'Falha ao sincronizar com o emissor fiscal.');
       setNfEmissionCompanySyncError(
-        formatMeiFiscalErr(error, 'Falha ao sincronizar com o emissor fiscal.')
+        withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(formatted, plugnotasPendingRetry)
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
     }
-  }, [userId, loadCertificateStatus, resolveCnpjParaEmissor]);
+  }, [userId, loadCertificateStatus, resolveCnpjParaEmissor, plugnotasPendingRetry]);
 
   const handleSalvarDadosEmitente = async () => {
     setNfEmissionCompanySyncError(null);
@@ -2715,6 +2723,13 @@ export default function GuidesMei() {
       ),
     [plugnotasEmpresaRetryDetail]
   );
+  const plugnotasRetryEmpresaUxVariant = useMemo(
+    () =>
+      plugnotasEmpresaRetryDetail
+        ? getPlugnotasEmpresaCadastroErrorUxVariant(plugnotasEmpresaRetryDetail)
+        : 'generic',
+    [plugnotasEmpresaRetryDetail]
+  );
 
   const showRequisitosNfeNfcePlaceholder = useMemo(
     () => shouldShowRequisitosNfeNfceSecao(documentosAtivos),
@@ -3056,9 +3071,24 @@ export default function GuidesMei() {
                 <p className="text-amber-900 dark:text-amber-200/95">{plugnotasEmpresaRetryDetail}</p>
               ) : null}
               {plugnotasRetryMunicipalOperacaoHint ? (
-                <p className="text-xs text-amber-950/95 dark:text-amber-100/90">
-                  <PlugnotasMunicipalRequirementOperacaoBody />
-                </p>
+                plugnotasRetryEmpresaUxVariant === 'prefeitura-config' ? (
+                  <div
+                    role="region"
+                    aria-label="Configuração de prefeitura no NFS-e"
+                    className="text-xs text-amber-950/95 dark:text-amber-100/90"
+                  >
+                    <p className="mb-1 font-semibold text-amber-950 dark:text-amber-50">
+                      <PlugnotasPrefeituraConfigNfseOperacaoTitle />
+                    </p>
+                    <p className="leading-snug">
+                      <PlugnotasPrefeituraConfigNfseOperacaoBody />
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-950/95 dark:text-amber-100/90">
+                    <PlugnotasMunicipalRequirementOperacaoBody />
+                  </p>
+                )
               ) : null}
               <p className="text-xs text-slate-700 dark:text-slate-300">
                 Se o problema continuar, verifique se o CNPJ e o ambiente (sandbox ou produção) coincidem com o painel do emissor ou fale com o suporte.
@@ -3389,7 +3419,15 @@ export default function GuidesMei() {
                       })}
                       placeholder="Inscrição municipal (opcional)"
                       autoComplete="off"
+                      aria-describedby="mei-emitente-inscricao-municipal-hint"
                     />
+                    <p
+                      id="mei-emitente-inscricao-municipal-hint"
+                      className="md:col-span-2 text-xs text-slate-600 dark:text-slate-400"
+                    >
+                      Opcional. É o número da inscrição na prefeitura; não substitui configurações extras que o emissor
+                      possa pedir no cadastro NFS-e.
+                    </p>
                   </div>
                   <div className="mt-2 grid gap-2 md:grid-cols-4">
                     <input

@@ -48,6 +48,17 @@
 - **Referências de produto e engenharia:** PRD [`PRD-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md`](prd/PRD-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md); especificação de UX [`ux-spec-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md`](specs/ux-spec-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md); nota de arquitetura [`architecture-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md`](technical/architecture-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md).
 - **Sintomas na interface:** copy de ajuda e painel de retry âmbar quando a heurística municipal dispara — ver [Mensagens Plugnotas → dica na Guia MEI](#plugnotas-nfse-nacional-erros-mensagens) e `frontend/src/utils/nfseNacionalPlugnotasErrorHints.ts`.
 
+<a id="nfse-config-prefeitura-cadastro-pref"></a>
+
+#### `nfse.config.prefeitura` obrigatório vs inscrição municipal na raiz (**FR-PREF-DOC-01**)
+
+- O Plugnotas pode devolver **400** citando `fields.nfse.config.prefeitura` ou `nfse.config.prefeitura` (preenchimento obrigatório). Isto é **distinto** do campo **`inscricaoMunicipal`** ao nível raiz do JSON de empresa: preencher a IM opcional na Guia MEI **não** substitui a configuração de prefeitura dentro de **`nfse.config`** quando o validador exige esse ramo.
+- **Produto / UX:** PRD [`PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md`](prd/PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md); spec [`ux-spec-plugnotas-nfse-config-prefeitura-payload-2026-04-08.md`](specs/ux-spec-plugnotas-nfse-config-prefeitura-payload-2026-04-08.md); arquitetura [`architecture-plugnotas-nfse-config-prefeitura-payload-2026-04-08.md`](technical/architecture-plugnotas-nfse-config-prefeitura-payload-2026-04-08.md).
+- **Interface:** quando a mensagem casa com a variante **PREF-L1**, a Guia MEI mostra copy que explica a diferença (painel âmbar de retry e painel vermelho de erro) — funções `isPlugnotasNfseConfigPrefeituraRequirementMessage` e `getPlugnotasEmpresaCadastroErrorUxVariant` em `frontend/src/utils/nfseNacionalPlugnotasErrorHints.ts`.
+- **PREF-L2 (spec UX §3.2):** exigências municipais **só** com inscrição municipal (sem gatilho L1) usam a mesma copy genérica municipal (**NAT §5.2**); no código isto corresponde à variante interna `'municipal-generic'` (não a `'prefeitura-config'`).
+- **Consulta GET empresa após falha no registo:** se o utilizador ainda tem o painel de **retry** (cadastro da empresa não concluído) e a consulta devolve “não encontrado” / **404**, a app pode prefixar a mensagem com orientação para resolver o erro de registo antes de interpretar como CNPJ errado.
+- **Payload com `prefeitura` preenchida** no `nfse.config` fica para story/evidência **NFR-PREF-EV-01** (trilhos B/C/D no mesmo PRD).
+
 #### Sandbox vs produção (**NFR-N04**)
 
 - **`PLUGNOTAS_API_BASE_URL`** e **`PLUGNOTAS_API_KEY`** devem ser da **mesma conta** e do **mesmo ambiente** (sandbox **ou** produção). Cadastrar em sandbox e inspecionar em produção (ou o inverso) gera inconsistência e falso diagnóstico sobre `nfse.nacional`.
