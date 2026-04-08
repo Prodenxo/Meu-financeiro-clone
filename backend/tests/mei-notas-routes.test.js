@@ -20,10 +20,12 @@ test('rotas autenticadas de mei-notas exigem requireMeiEnabled', () => {
   const protectedRoutes = [
     { method: 'post', path: '/emitir' },
     { method: 'post', path: '/setup/emissao-fiscal/certificado' },
+    { method: 'post', path: '/setup/emissao-fiscal/emitente' },
     { method: 'post', path: '/setup/emissao-fiscal/empresa' },
     { method: 'get', path: '/setup/emissao-fiscal/empresa' },
     { method: 'patch', path: '/setup/emissao-fiscal/empresa' },
     { method: 'post', path: '/setup/plugnotas/certificado' },
+    { method: 'post', path: '/setup/plugnotas/emitente' },
     { method: 'post', path: '/setup/plugnotas/empresa' },
     { method: 'get', path: '/setup/plugnotas/empresa' },
     { method: 'patch', path: '/setup/plugnotas/empresa' },

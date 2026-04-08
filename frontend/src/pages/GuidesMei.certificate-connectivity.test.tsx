@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 import GuidesMei from './GuidesMei';
 import { ApiClientError } from '../utils/apiClientError';
 import { GUIMEI_CONNECTIVITY_CERTIFICATE_MESSAGE } from '../utils/guiaMeiConnectivityUserMessage';
+import { invalidateMeiEmpresaGetCache } from '../utils/guiaMeiEmpresaGetCache';
 
 const globalWithActFlag = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
 globalWithActFlag.IS_REACT_ACT_ENVIRONMENT = true;
@@ -22,6 +23,9 @@ const {
   uploadMeiCertificateMock,
   cadastrarCertificadoEmissaoNfMock,
   cadastrarEmpresaEmissaoNfMock,
+  consultarEmpresaEmissaoNfMock,
+  atualizarEmpresaEmissaoNfMock,
+  patchMeiCertificateEmitenteNfseMock,
   removeMeiCertificateMock,
   fetchMeiCertificateStatusMock
 } = vi.hoisted(() => {
@@ -36,6 +40,14 @@ const {
     uploadMeiCertificateMock: vi.fn(),
     cadastrarCertificadoEmissaoNfMock: vi.fn(async () => ({ id: 'cert-1', message: 'ok' })),
     cadastrarEmpresaEmissaoNfMock: vi.fn(async () => ({ cnpj: '12345678000190', message: 'ok' })),
+    consultarEmpresaEmissaoNfMock: vi.fn(async () => ({ message: 'ok', data: {} })),
+    atualizarEmpresaEmissaoNfMock: vi.fn(async () => ({ cnpj: '12345678000190', message: 'ok', raw: {} })),
+    patchMeiCertificateEmitenteNfseMock: vi.fn(async () => ({
+      hasUserCertificate: false,
+      hasEnvCertificate: false,
+      documento: null,
+      nfseEmitente: null
+    })),
     removeMeiCertificateMock: vi.fn(async () => undefined),
     fetchMeiCertificateStatusMock: vi.fn(async () => defaultCertStatus())
   };
@@ -47,9 +59,12 @@ vi.mock('../store/authStore', () => ({
 
 vi.mock('../services/guidesMeiService', () => ({
   downloadMeiGuide: vi.fn(async () => ({ blob: new Blob(), filename: 'guia-mei.pdf' })),
+  downloadParcelamentoPdf: vi.fn(async () => ({ blob: new Blob(), filename: 'p.pdf' })),
   fetchMeiCertificateStatus: fetchMeiCertificateStatusMock,
   fetchMeiPeriods: vi.fn(async () => []),
   fetchMeiPeriodsByCnpj: vi.fn(async () => []),
+  fetchParcelamentos: vi.fn(async () => ({ parcelamentos: [] })),
+  patchMeiCertificateEmitenteNfse: patchMeiCertificateEmitenteNfseMock,
   removeMeiCertificate: removeMeiCertificateMock,
   uploadMeiCertificate: uploadMeiCertificateMock,
   validateMeiGuide: vi.fn(async () => ({
@@ -61,12 +76,12 @@ vi.mock('../services/guidesMeiService', () => ({
 vi.mock('../services/meiNotasService', () => ({
   arquivarNfse: vi.fn(async () => ({})),
   atualizarNfse: vi.fn(async () => ({})),
-  atualizarEmpresaEmissaoNf: vi.fn(async () => ({ cnpj: '12345678000190', message: 'ok', raw: {} })),
+  atualizarEmpresaEmissaoNf: atualizarEmpresaEmissaoNfMock,
   baixarNfsePdf: vi.fn(async () => ({ blob: new Blob(), filename: 'nota.pdf' })),
   baixarNfseXml: vi.fn(async () => ({ blob: new Blob(), filename: 'nota.xml' })),
   cadastrarCertificadoEmissaoNf: cadastrarCertificadoEmissaoNfMock,
   cadastrarEmpresaEmissaoNf: cadastrarEmpresaEmissaoNfMock,
-  consultarEmpresaEmissaoNf: vi.fn(async () => ({ message: 'ok', data: {} })),
+  consultarEmpresaEmissaoNf: consultarEmpresaEmissaoNfMock,
   cancelarNfse: vi.fn(async () => ({})),
   emitirNfse: vi.fn(async () => ({ id: 'nfse-1', protocol: 'P-1' })),
   listarCatalogoNfseClientes: vi.fn(async () => []),
@@ -111,13 +126,40 @@ function fillNfEmissionCompanyMinimum(container: HTMLElement) {
   setByPlaceholder('UF *', 'SP');
 }
 
+/** CTA primário do certificado: fluxo DAS-only ou “Concluir configuração fiscal” (canViewNfse). */
+function findGuidesMeiCertPrimaryCta(container: HTMLElement) {
+  return Array.from(container.querySelectorAll('button')).find((b) => {
+    const t = b.textContent ?? '';
+    return t.includes('Enviar certificado') || t.includes('Concluir configuração fiscal');
+  });
+}
+
+function fillCnpjMei(container: HTMLElement, digits = '12345678000190') {
+  const el = container.querySelector('input[placeholder="00.000.000/0001-00"]') as HTMLInputElement | null;
+  if (!el) throw new Error('campo CNPJ do MEI não encontrado');
+  setTextInputValue(el, digits);
+}
+
 describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-01)', () => {
   beforeEach(() => {
     authState.role = 'usuario';
     authState.mei = false;
     uploadMeiCertificateMock.mockReset();
+    cadastrarCertificadoEmissaoNfMock.mockReset();
+    cadastrarEmpresaEmissaoNfMock.mockReset();
+    consultarEmpresaEmissaoNfMock.mockReset();
+    atualizarEmpresaEmissaoNfMock.mockReset();
+    patchMeiCertificateEmitenteNfseMock.mockReset();
     cadastrarCertificadoEmissaoNfMock.mockImplementation(async () => ({ id: 'cert-1', message: 'ok' }));
     cadastrarEmpresaEmissaoNfMock.mockImplementation(async () => ({ cnpj: '12345678000190', message: 'ok' }));
+    consultarEmpresaEmissaoNfMock.mockImplementation(async () => ({ message: 'ok', data: {} }));
+    atualizarEmpresaEmissaoNfMock.mockImplementation(async () => ({ cnpj: '12345678000190', message: 'ok', raw: {} }));
+    patchMeiCertificateEmitenteNfseMock.mockImplementation(async () => ({
+      hasUserCertificate: false,
+      hasEnvCertificate: false,
+      documento: null,
+      nfseEmitente: null
+    }));
     removeMeiCertificateMock.mockImplementation(async () => undefined);
     fetchMeiCertificateStatusMock.mockImplementation(async () => defaultCertStatus());
   });
@@ -143,9 +185,7 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
 
     const fileInput = container.querySelector('input[type=file]') as HTMLInputElement;
     const passInput = container.querySelector('input[type=password]') as HTMLInputElement;
-    const submitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Enviar certificado')
-    );
+    const submitBtn = findGuidesMeiCertPrimaryCta(container);
 
     expect(fileInput && passInput && submitBtn).toBeTruthy();
 
@@ -192,9 +232,7 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
 
     const fileInput = container.querySelector('input[type=file]') as HTMLInputElement;
     const passInput = container.querySelector('input[type=password]') as HTMLInputElement;
-    const submitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Enviar certificado')
-    );
+    const submitBtn = findGuidesMeiCertPrimaryCta(container);
 
     await act(async () => {
       setFileInputFiles(fileInput, new File(['x'], 'test.p12'));
@@ -249,11 +287,10 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
 
     const fileInput = container.querySelector('input[type=file]') as HTMLInputElement;
     const passInput = container.querySelector('input[type=password]') as HTMLInputElement;
-    const submitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Enviar certificado')
-    );
+    const submitBtn = findGuidesMeiCertPrimaryCta(container);
 
     await act(async () => {
+      fillCnpjMei(container);
       setFileInputFiles(fileInput, new File(['x'], 'test.p12'));
       setTextInputValue(passInput, 'secret');
       fillNfEmissionCompanyMinimum(container);
@@ -303,11 +340,10 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
 
     const fileInput = container.querySelector('input[type=file]') as HTMLInputElement;
     const passInput = container.querySelector('input[type=password]') as HTMLInputElement;
-    const submitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Enviar certificado')
-    );
+    const submitBtn = findGuidesMeiCertPrimaryCta(container);
 
     await act(async () => {
+      fillCnpjMei(container);
       setFileInputFiles(fileInput, new File(['x'], 'test.p12'));
       setTextInputValue(passInput, 'secret');
       fillNfEmissionCompanyMinimum(container);
@@ -358,11 +394,10 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
 
     const fileInput = container.querySelector('input[type=file]') as HTMLInputElement;
     const passInput = container.querySelector('input[type=password]') as HTMLInputElement;
-    const submitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Enviar certificado')
-    );
+    const submitBtn = findGuidesMeiCertPrimaryCta(container);
 
     await act(async () => {
+      fillCnpjMei(container);
       setFileInputFiles(fileInput, new File(['x'], 'test.p12'));
       setTextInputValue(passInput, 'secret');
       fillNfEmissionCompanyMinimum(container);
@@ -377,6 +412,151 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     expect(cadastrarEmpresaEmissaoNfMock).toHaveBeenCalled();
     expect(container.textContent).toContain('Servidor ou conexão indisponível');
     expect(container.textContent).toContain(GUIMEI_CONNECTIVITY_CERTIFICATE_MESSAGE);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('FR-ORQ-CERT: falha só na empresa (sem rede) exibe retry; segundo envio chama só cadastrarEmpresa de novo', async () => {
+    authState.role = 'admin';
+    authState.mei = false;
+    uploadMeiCertificateMock.mockResolvedValueOnce({
+      hasUserCertificate: true,
+      hasEnvCertificate: false,
+      documento: '12345678000190',
+      certValidFrom: null,
+      certValidTo: null
+    });
+    cadastrarCertificadoEmissaoNfMock.mockResolvedValueOnce({ id: 'cert-plug-1', message: 'ok' });
+    cadastrarEmpresaEmissaoNfMock
+      .mockRejectedValueOnce(new Error('regra negócio plugnotas'))
+      .mockResolvedValueOnce({ cnpj: '12345678000190', message: 'ok', raw: {} });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find((b) => b.textContent?.includes('Certificado e DAS'))
+        ?.click();
+    });
+
+    const fileInput = container.querySelector('input[type=file]') as HTMLInputElement;
+    const passInput = container.querySelector('input[type=password]') as HTMLInputElement;
+    const submitBtn = findGuidesMeiCertPrimaryCta(container);
+
+    await act(async () => {
+      fillCnpjMei(container);
+      setFileInputFiles(fileInput, new File(['x'], 'test.p12'));
+      setTextInputValue(passInput, 'secret');
+      fillNfEmissionCompanyMinimum(container);
+    });
+
+    await act(async () => {
+      submitBtn?.click();
+    });
+
+    expect(container.textContent).toContain('Não foi possível concluir o registro da empresa');
+    expect(cadastrarCertificadoEmissaoNfMock).toHaveBeenCalledTimes(1);
+    expect(cadastrarEmpresaEmissaoNfMock).toHaveBeenCalledTimes(1);
+
+    const guiaOperacaoLink = container.querySelector('a[href*="guia-mei"]');
+    expect(guiaOperacaoLink?.textContent).toMatch(/guia de operação fiscal/i);
+
+    const retryBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tentar registrar empresa novamente')
+    );
+    expect(retryBtn).toBeTruthy();
+
+    await act(async () => {
+      retryBtn?.click();
+    });
+
+    expect(cadastrarCertificadoEmissaoNfMock).toHaveBeenCalledTimes(1);
+    expect(cadastrarEmpresaEmissaoNfMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Dados do emitente foram registrados');
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('FR-ORQ-CERT-07: Consultar e Atualizar (sem novo certificado) funcionam sem o CTA Concluir configuração fiscal', async () => {
+    authState.role = 'admin';
+    authState.mei = false;
+    consultarEmpresaEmissaoNfMock.mockClear();
+    atualizarEmpresaEmissaoNfMock.mockClear();
+    patchMeiCertificateEmitenteNfseMock.mockClear();
+    cadastrarCertificadoEmissaoNfMock.mockClear();
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find((b) => b.textContent?.includes('Certificado e DAS'))
+        ?.click();
+    });
+
+    await act(async () => {
+      fillCnpjMei(container);
+      fillNfEmissionCompanyMinimum(container);
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    invalidateMeiEmpresaGetCache(null, '12345678000190');
+    consultarEmpresaEmissaoNfMock.mockClear();
+
+    const consultBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Consultar cadastro no emissor')
+    );
+    expect(consultBtn).toBeTruthy();
+
+    await act(async () => {
+      consultBtn!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(consultarEmpresaEmissaoNfMock).toHaveBeenCalled();
+    expect(cadastrarCertificadoEmissaoNfMock).not.toHaveBeenCalled();
+
+    atualizarEmpresaEmissaoNfMock.mockClear();
+    patchMeiCertificateEmitenteNfseMock.mockClear();
+
+    const atualizarBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Atualizar cadastro (sem novo certificado)')
+    );
+    expect(atualizarBtn).toBeTruthy();
+
+    await act(async () => {
+      atualizarBtn!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(atualizarEmpresaEmissaoNfMock).toHaveBeenCalled();
+    expect(patchMeiCertificateEmitenteNfseMock).toHaveBeenCalled();
+    expect(cadastrarCertificadoEmissaoNfMock).not.toHaveBeenCalled();
 
     await act(async () => {
       root.unmount();
@@ -458,11 +638,10 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
 
     const fileInput = container.querySelector('input[type=file]') as HTMLInputElement;
     const passInput = container.querySelector('input[type=password]') as HTMLInputElement;
-    const submitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Enviar certificado')
-    );
+    const submitBtn = findGuidesMeiCertPrimaryCta(container);
 
     await act(async () => {
+      fillCnpjMei(container);
       setFileInputFiles(fileInput, new File(['x'], 'test.p12'));
       setTextInputValue(passInput, 'secret');
       fillNfEmissionCompanyMinimum(container);
