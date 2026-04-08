@@ -1,4 +1,5 @@
 import type { DocumentosAtivosState } from './plugnotasEmpresaDocumentosAtivos';
+import { normalizeIbgeMunicipioCodigo } from './ibgeMunicipioCodigo';
 
 const normalizeDoc = (value: string) => value.replace(/\D/g, '');
 
@@ -72,7 +73,7 @@ export const getNfEmissionCompanyValidationMessage = (form: NfEmissionCompanyFor
   if (normalizeDoc(form.cep).length !== 8) return 'Informe um CEP válido com 8 dígitos.';
   if (!hasRequiredText(form.codigoCidade)) return 'Informe o código IBGE da cidade.';
   if (!hasRequiredText(form.descricaoCidade)) return 'Informe a cidade da empresa.';
-  if (form.estado.trim().length !== 2) return 'Informe a UF com 2 letras (ex.: PR).';
+  if (String(form.estado ?? '').trim().length !== 2) return 'Informe a UF com 2 letras (ex.: PR).';
   return null;
 };
 
@@ -96,7 +97,7 @@ export const buildNfEmissionEmpresaPayload = ({
     bairro: form.bairro.trim(),
     codigoPais: '1058',
     descricaoPais: 'Brasil',
-    codigoCidade: form.codigoCidade.trim(),
+    codigoCidade: normalizeIbgeMunicipioCodigo(form.codigoCidade),
     descricaoCidade: form.descricaoCidade.trim(),
     estado: form.estado.trim().toUpperCase(),
     cep: normalizeDoc(form.cep).slice(0, 8)

@@ -7,7 +7,9 @@ import {
 import {
   getNfseNacionalOperacaoHelpHref,
   getPlugnotasEmpresaCadastroErrorUxVariant,
+  isPlugnotasEmpresaIbgeCidadeMessage,
   isPlugnotasEmpresaMunicipalRequirementMessage,
+  MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT,
   shouldOfferNfseNacionalOperacaoDocHint
 } from '../utils/nfseNacionalPlugnotasErrorHints';
 import {
@@ -153,6 +155,19 @@ export function LongFiscalErrorMessage({ message, tone }: LongMessageProps) {
 
 const providerHintClass = 'text-xs leading-snug text-rose-800/90 dark:text-rose-300/90';
 
+const ibgeCidadeAlertHintClass =
+  'text-sm leading-snug text-rose-800/80 dark:text-rose-300/85';
+
+/** FR-CID-UX-02: linha secundária quando a mensagem cita tabela IBGE / codigoCidade (spec UX §6.2). */
+function PlugnotasIbgeCidadeOperacaoHint({ message }: { message: string }) {
+  if (!isPlugnotasEmpresaIbgeCidadeMessage(message)) return null;
+  return (
+    <p className={ibgeCidadeAlertHintClass} role="note">
+      {MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT}
+    </p>
+  );
+}
+
 type EmissaoFiscalErrorAlertProps = {
   documentTypeLabel: string;
   message: string;
@@ -242,6 +257,7 @@ export function EmissaoFiscalErrorAlert({
         <span className="normal-case tracking-normal">{documentTypeLabel}</span>
       </p>
       <UserFacingErrorBlock {...facing} />
+      <PlugnotasIbgeCidadeOperacaoHint message={message} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} /> : null}
     </div>
   );
@@ -272,6 +288,7 @@ export function PlugnotasIntegrationErrorAlert({
         <p className="text-xs font-semibold text-rose-900 dark:text-rose-100">{title}</p>
       ) : null}
       <UserFacingErrorBlock {...facing} />
+      <PlugnotasIbgeCidadeOperacaoHint message={message} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} /> : null}
     </div>
   );
@@ -297,6 +314,7 @@ export function EmissaoFiscalErrorAlertModal({
         Falha ao emitir {documentTypeLabel}
       </p>
       <UserFacingErrorBlock {...facing} />
+      <PlugnotasIbgeCidadeOperacaoHint message={message} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} linkTone="rose" /> : null}
     </div>
   );
@@ -410,6 +428,7 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = nu
     <div className="admin-alert-danger space-y-2" role="alert">
       <UserFacingErrorBlock {...facing} />
       <LongFiscalErrorMessage message={message} tone="danger" />
+      <PlugnotasIbgeCidadeOperacaoHint message={message} />
       {showCert409 ? <GuiaMeiCertificado409SemIdChecklist /> : null}
       {showNfceHint ? (
         <p className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90">

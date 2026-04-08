@@ -12,6 +12,7 @@ import {
 } from './FiscalIntegrationErrorAlert';
 import { FISCAL_ERROR_LONG_THRESHOLD } from '../lib/fiscalUserError';
 import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
+import { MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT } from '../utils/nfseNacionalPlugnotasErrorHints';
 
 const globalWithActFlag = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
 globalWithActFlag.IS_REACT_ACT_ENVIRONMENT = true;
@@ -50,6 +51,33 @@ describe('EmissaoFiscalErrorAlert', () => {
     expect(container.textContent).toContain('nfse.nacional rejeitado');
     expect(container.textContent).toContain('município');
     expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
+  });
+
+  it('FR-CID-UX-02: mostra hint IBGE quando mensagem cita tabela de cidades / codigoCidade', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <EmissaoFiscalErrorAlert
+          documentTypeLabel="NFS-e"
+          message="Valor não encontrado na tabela de cidades do IBGE."
+        />
+      );
+    });
+    expect(container.textContent).toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
+    expect(container.querySelector('[role="note"]')?.textContent).toContain('tabela de cidades');
+  });
+
+  it('FR-CID-UX-02: mensagem só prefeitura não mostra hint IBGE', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <EmissaoFiscalErrorAlert
+          documentTypeLabel="NFS-e"
+          message="Falha na validação do JSON de Empresa: fields.nfse.config.prefeitura: Preenchimento obrigatório"
+        />
+      );
+    });
+    expect(container.textContent).not.toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
   });
 
   it('mensagem longa oferece expansão técnica e depois mostra texto completo', async () => {
@@ -190,6 +218,17 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     expect(container.textContent).toContain('painel Plugnotas');
     expect(container.querySelector('[role="region"][aria-label="Configuração de prefeitura no NFS-e"]')).toBeTruthy();
     expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
+    expect(container.textContent).not.toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
+  });
+
+  it('FR-CID-UX-02: painel cadastro mostra hint IBGE após mensagem longa (endereco.codigoCidade)', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <GuiaMeiEmpresaCadastroErrorPanel message="HTTP 400: fields.endereco.codigoCidade não localizado na tabela IBGE." />
+      );
+    });
+    expect(container.textContent).toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
   });
 
   it('mensagem longa mantém expansão e hint NFC-e com nfce.config.sefaz', async () => {

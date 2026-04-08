@@ -29,6 +29,7 @@ import {
   resolveDocumentosAtivosForPost,
   stripDocumentosAtivos
 } from './plugnotas-empresa-documentos-ativos.js';
+import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.js';
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
 /** Blocos mínimos inativos — sem `config`, para não disparar validação SEFAZ / `versaoQrCode` no Plugnotas (produto apenas NFS-e). Ver `docs/adr/ADR-plugnotas-empresa-payload-apenas-nfse.md`. */
@@ -37,6 +38,19 @@ const PLUGNOTAS_EMPRESA_APENAS_NFSE_NFCE = Object.freeze({ ativo: false, tipoCon
 
 const hasOwn = (obj, key) =>
   Object.prototype.hasOwnProperty.call(obj, key);
+
+/**
+ * Garante `endereco.codigoCidade` como string só com dígitos antes do Plugnotas (FR-CID-BE-01).
+ * Não cria `endereco` se ausente.
+ * @param {Record<string, unknown>} payload
+ */
+const normalizePayloadEnderecoCodigoCidade = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+  const endereco = payload.endereco;
+  if (!endereco || typeof endereco !== 'object' || Array.isArray(endereco)) return;
+  if (!hasOwn(endereco, 'codigoCidade')) return;
+  endereco.codigoCidade = normalizeIbgeMunicipioCodigo(endereco.codigoCidade);
+};
 
 /**
  * IE ausente ou em branco → `ISENTO` (MEI sem IE coletada na UI).
@@ -570,6 +584,8 @@ export const atualizarEmpresaPlugNotas = async (input) => {
     applyEmpresaPlugnotasApenasNfseForPatch(payload);
   }
 
+  normalizePayloadEnderecoCodigoCidade(payload);
+
   const updateResult = await tryUpdateEmpresa(cnpj, payload);
   if (updateResult.response) {
     const data = toObject(updateResult.response?.data);
@@ -620,6 +636,8 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
   const docPost = resolveDocumentosAtivosForPost(payload);
   stripDocumentosAtivos(payload);
   applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection);
+
+  normalizePayloadEnderecoCodigoCidade(payload);
 
   try {
     const response = await requestJson('POST', '/empresa', payload);

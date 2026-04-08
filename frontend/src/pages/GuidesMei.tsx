@@ -53,6 +53,7 @@ import {
   type NfEmissionCompanyForm,
   type NfEmissionRegimeTributario
 } from '../utils/nfEmissionCompany';
+import { normalizeIbgeMunicipioCodigo } from '../utils/ibgeMunicipioCodigo';
 import {
   DEFAULT_DOCUMENTOS_ATIVOS,
   documentosAtivosDivergem,
@@ -77,6 +78,7 @@ import {
   getNfseNacionalOperacaoHelpHref,
   getPlugnotasEmpresaCadastroErrorUxVariant,
   isPlugnotasEmpresaMunicipalRequirementMessage,
+  MEI_IBGE_CIDADE_PRESTACAO_PRESTADOR_FIELD_HINT,
   withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable
 } from '../utils/nfseNacionalPlugnotasErrorHints';
 import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
@@ -224,7 +226,8 @@ const emitenteSnapshotToForm = (snap: NfseEmitenteSnapshot): NfEmissionCompanyFo
     ...getDefaultNfEmissionCompanyForm(),
     ...companyFields,
     regimeTributario: regime,
-    inscricaoMunicipal: String(companyFields.inscricaoMunicipal ?? '').trim()
+    inscricaoMunicipal: String(companyFields.inscricaoMunicipal ?? '').trim(),
+    codigoCidade: normalizeIbgeMunicipioCodigo(companyFields.codigoCidade)
   };
 };
 
@@ -2004,7 +2007,7 @@ export default function GuidesMei() {
       bairro: data.bairro ?? '',
       cep: (data.cep ?? '').replace('-', ''),
       descricaoCidade: data.municipio ?? '',
-      codigoCidade: data.codigo_municipio ?? '',
+      codigoCidade: normalizeIbgeMunicipioCodigo(data.codigo_municipio ?? ''),
       estado: data.uf ?? '',
       simplesNacional: data.simples?.optante_simples_nacional ?? prev.simplesNacional,
     }));
@@ -2052,7 +2055,7 @@ export default function GuidesMei() {
           complemento: data.complemento ?? '',
           bairro: data.bairro ?? '',
           cep: (data.cep ?? '').replace('-', ''),
-          codigoCidade: data.codigo_municipio ?? '',
+          codigoCidade: normalizeIbgeMunicipioCodigo(data.codigo_municipio ?? ''),
           descricaoCidade: data.municipio ?? '',
           estado: data.uf ?? '',
         }
@@ -3476,6 +3479,7 @@ export default function GuidesMei() {
                     <input
                       className="planner-input-compact"
                       type="text"
+                      inputMode="numeric"
                       value={nfEmissionCompanyForm.codigoCidade}
                       onChange={(event) => updateNfEmissionCompanyForm({ codigoCidade: event.target.value })}
                       placeholder="Código IBGE cidade *"
@@ -4018,17 +4022,23 @@ export default function GuidesMei() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-prestador-codigo-ibge">
                 Código IBGE da cidade do prestador
                 <span className="admin-required-mark">*</span>
               </label>
               <input
+                id="nfse-prestador-codigo-ibge"
                 className="planner-input-compact w-full"
                 type="text"
+                inputMode="numeric"
                 value={nfseForm.prestadorEndereco?.codigoCidade || ''}
                 onChange={(event) => updateNfsePrestadorEndereco({ codigoCidade: event.target.value })}
                 placeholder="3304557"
+                aria-describedby="nfse-prestador-codigo-ibge-hint"
               />
+              <p id="nfse-prestador-codigo-ibge-hint" className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                {MEI_IBGE_CIDADE_PRESTACAO_PRESTADOR_FIELD_HINT}
+              </p>
             </div>
             <div>
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
@@ -4220,10 +4230,18 @@ export default function GuidesMei() {
                   id="nfse-cidade-prestacao-codigo"
                   className="planner-input-compact w-full"
                   type="text"
+                  inputMode="numeric"
                   value={nfseForm.cidadePrestacao?.codigo || ''}
                   onChange={(event) => updateNfseCidade({ codigo: event.target.value })}
                   placeholder="Código IBGE"
+                  aria-describedby="nfse-cidade-prestacao-codigo-hint"
                 />
+                <p
+                  id="nfse-cidade-prestacao-codigo-hint"
+                  className="mt-1 text-xs text-slate-600 dark:text-slate-400"
+                >
+                  {MEI_IBGE_CIDADE_PRESTACAO_PRESTADOR_FIELD_HINT}
+                </p>
               </div>
               <div>
                 <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-cidade-prestacao-desc">

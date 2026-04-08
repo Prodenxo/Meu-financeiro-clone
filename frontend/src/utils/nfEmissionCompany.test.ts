@@ -85,4 +85,16 @@ describe('nfEmissionCompany', () => {
     });
     expect(payload.documentosAtivos).toEqual({ nfse: true, nfe: true, nfce: false });
   });
+
+  it('buildNfEmissionEmpresaPayload envia endereco.codigoCidade como string só dígitos quando o form tem number (FR-CID-PAY-01)', () => {
+    const form = { ...fullValidForm(), codigoCidade: 3550308 as unknown as string };
+    const payload = buildNfEmissionEmpresaPayload({
+      cnpj: '12345678000190',
+      certificadoId: 'cert-abc',
+      form
+    });
+    const endereco = payload.endereco as Record<string, unknown>;
+    expect(endereco.codigoCidade).toBe('3550308');
+    expect(typeof endereco.codigoCidade).toBe('string');
+  });
 });

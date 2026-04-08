@@ -9,7 +9,17 @@
  * `#nfse-nacional-vs-municipal-cadastro`.
  * **FR-PREF-HINT-01 / PREF-L1:** `isPlugnotasNfseConfigPrefeituraRequirementMessage`, `getPlugnotasEmpresaCadastroErrorUxVariant`
  * — ver `docs/operacao-mei-nfse.md` (#nfse-config-prefeitura-cadastro-pref).
+ *
+ * **FR-CID-UX-02 / CID-L1:** `isPlugnotasEmpresaIbgeCidadeMessage` — spec UX
+ * `ux-spec-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md` secção 3.2 (não confundir com PREF-L1 sem sinais IBGE).
  */
+
+/** Spec UX §4.2 — prestador / cidade de prestação (linha curta). */
+export const MEI_IBGE_CIDADE_PRESTACAO_PRESTADOR_FIELD_HINT = 'Sete dígitos, conforme IBGE.';
+
+/** Spec UX §6.2 — linha secundária no alerta fiscal quando CID-L1 (FR-CID-UX-02). */
+export const MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT =
+  'Se o erro citar código IBGE ou tabela de cidades, confira se o município e o código de 7 dígitos batem com o endereço do CNPJ ou com a consulta oficial do IBGE.';
 
 /** Âncora principal em `docs/operacao-mei-nfse.md` (troubleshoot município/credenciamento). */
 export const NFSE_NACIONAL_OPERACAO_DOC_ANCHOR = 'emissor-nfse-nacional-spike-nat01';
@@ -130,6 +140,34 @@ export function isPlugnotasNfseConfigPrefeituraRequirementMessage(message: strin
     m.includes('plugnotas');
 
   return hasMandatory && configOrNfseContext;
+}
+
+/**
+ * CID-L1 (spec UX §3.2): mensagem indica falha no código IBGE do município / tabela de cidades do emissor.
+ * **Não** corresponde a mensagem só PREF-L1 (`nfse.config.prefeitura`) sem estes sinais — ver story FR-CID P1.
+ */
+export function isPlugnotasEmpresaIbgeCidadeMessage(message: string): boolean {
+  const m = normalizeForMatch(message);
+  if (!m.trim()) return false;
+
+  const hasEnderecoCodigoCidade =
+    m.includes('endereco.codigocidade') ||
+    m.includes('fields.endereco.codigocidade');
+
+  // Evitar `municip` (casa com «inscricaoMunicipal» / «municipal» sem ser município IBGE) — follow-up QA FR-CID P1.
+  const hasTabelaIbge =
+    m.includes('ibge') &&
+    m.includes('tabela') &&
+    (m.includes('cidades') ||
+      m.includes('cidade') ||
+      m.includes('municipio') ||
+      m.includes('municipios'));
+
+  const hasCodigoIbgeMunicipio =
+    m.includes('ibge') &&
+    (m.includes('codigocidade') || m.includes('codigo ibge') || m.includes('codigo do municipio'));
+
+  return hasEnderecoCodigoCidade || hasTabelaIbge || hasCodigoIbgeMunicipio;
 }
 
 /** @see PlugnotasEmpresaCadastroErrorUxVariant — prioridade spec UX PREF-L1 > PREF-L2 > generic. */

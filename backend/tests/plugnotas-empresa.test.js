@@ -69,6 +69,73 @@ test('empresa service cria empresa com POST /empresa', async () => {
   }
 });
 
+test('POST normaliza endereco.codigoCidade numérico para string só dígitos (FR-CID-BE-01)', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return createJsonResponse(200, {
+      message: 'OK',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await cadastrarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      certificado: 'cert-1',
+      razaoSocial: 'Empresa Teste',
+      endereco: {
+        codigoCidade: 3550308,
+        uf: 'SP',
+        logradouro: 'Rua A',
+        numero: '1',
+        bairro: 'Centro',
+        cep: '01000000'
+      }
+    });
+    assert.equal(calls.length, 1);
+    const sent = JSON.parse(calls[0].options.body);
+    assert.equal(sent.endereco.codigoCidade, '3550308');
+    assert.equal(typeof sent.endereco.codigoCidade, 'string');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('PATCH normaliza endereco.codigoCidade numérico para string só dígitos (FR-CID-BE-01)', async () => {
+  const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options, body: options.body });
+    return createJsonResponse(200, {
+      message: 'Empresa atualizada',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await atualizarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      razaoSocial: 'Empresa Teste',
+      endereco: {
+        codigoCidade: 3550308,
+        uf: 'SP'
+      }
+    });
+    assert.ok(calls.length >= 1);
+    const sent = JSON.parse(calls[0].body);
+    assert.equal(sent.endereco.codigoCidade, '3550308');
+    assert.equal(typeof sent.endereco.codigoCidade, 'string');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('POST com documentosAtivos só NFSe equivale ao default e não envia campo interno ao Plugnotas (CR-CAD-DOC-01)', async () => {
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;

@@ -7,6 +7,7 @@ import {
   getNfseNacionalOperacaoHelpHref,
   getPlugnotasEmpresaCadastroErrorUxVariant,
   isPlugnotasEmpresaConsultNotFoundMessage,
+  isPlugnotasEmpresaIbgeCidadeMessage,
   isPlugnotasEmpresaMunicipalRequirementMessage,
   isPlugnotasNfseConfigPrefeituraRequirementMessage,
   shouldOfferNfseNacionalOperacaoDocHint,
@@ -120,6 +121,40 @@ describe('nfseNacionalPlugnotasErrorHints', () => {
     it('não prefixa se a mensagem não for de consulta “não encontrado”', () => {
       const other = 'Falha de rede ao consultar empresa.';
       expect(withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(other, true)).toBe(other);
+    });
+  });
+
+  describe('isPlugnotasEmpresaIbgeCidadeMessage (FR-CID-UX-02 / CID-L1)', () => {
+    it.each([
+      ['Valor não encontrado na tabela de cidades do IBGE.', true],
+      [
+        'Falha na validação: fields.endereco.codigoCidade não consta na base de municípios.',
+        true
+      ],
+      ['HTTP 400: endereco.codigoCidade inválido para o cadastro da empresa.', true],
+      ['O código IBGE informado não existe na tabela utilizada pelo emissor.', true],
+      ['JSON: codigoCidade incompatível com tabela IBGE.', true],
+      [
+        'Falha na validação do JSON de Empresa: fields.nfse.config.prefeitura: Preenchimento obrigatório',
+        false
+      ],
+      ['JSON: nfse.config.prefeitura não informada para o emitente.', false],
+      ['Informe a razão social.', false],
+      ['Município não credenciado para NFS-e Nacional.', false],
+      [
+        'Validação: consulte a tabela de parâmetros IBGE e a inscricaoMunicipal do emitente.',
+        false
+      ],
+      ['Tabela de municípios cadastrados no IBGE incompatível com o código enviado.', true]
+    ])('isPlugnotasEmpresaIbgeCidadeMessage(%s) → %s', (msg, expected) => {
+      expect(isPlugnotasEmpresaIbgeCidadeMessage(msg)).toBe(expected);
+    });
+
+    it('mensagem composta: prefeitura + endereco.codigoCidade → verdadeiro (CID-L1)', () => {
+      const msg =
+        'Validação: fields.nfse.config.prefeitura ausente e fields.endereco.codigoCidade inválido na tabela IBGE.';
+      expect(isPlugnotasNfseConfigPrefeituraRequirementMessage(msg)).toBe(true);
+      expect(isPlugnotasEmpresaIbgeCidadeMessage(msg)).toBe(true);
     });
   });
 });
