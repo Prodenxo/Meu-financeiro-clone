@@ -19,6 +19,7 @@ import {
 import {
   CERTIFICADO_EMISSOR_409_SEM_ID_DOC_ANCHOR,
   FISCAL_ERROR_LONG_THRESHOLD,
+  isMeiFiscalGatewayUpstreamError,
   mapMeiFiscalErrorToCopy
 } from '../lib/fiscalUserError';
 import { meiFiscalUserCopyToUserFacing } from '../lib/meiFiscalUserCopyToUserFacing';
@@ -395,19 +396,30 @@ export function GuiaMeiCertificado409SemIdChecklist() {
 
 type GuiaMeiEmpresaCadastroErrorPanelProps = {
   message: string;
-  /** Definido quando a API retorna `errors.fiscalErrorCode` (ex.: US-MEI-FISC-02). */
+  /** Definido quando a API retorna `errors.plugnotasCode` (ex.: US-MEI-FISC-02 / gateway upstream). */
   fiscalErrorCode?: string | null;
+  /** Status HTTP da resposta JSON de erro, quando disponível (ex.: `ApiClientError.httpStatus`). */
+  fiscalHttpStatus?: number | null;
 };
 
 /**
  * Cadastro certificado/empresa na Guia MEI: mensagem completa (quebras + textos longos) + tom de provedor (US-NFCE-EMP-03).
  */
-export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = null }: GuiaMeiEmpresaCadastroErrorPanelProps) {
+export function GuiaMeiEmpresaCadastroErrorPanel({
+  message,
+  fiscalErrorCode = null,
+  fiscalHttpStatus = null
+}: GuiaMeiEmpresaCadastroErrorPanelProps) {
   const showNfceHint = shouldOfferNfceCadastroDocHint(message);
   const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message);
   const linkClass = linkClassForTone('danger');
   const isLocalOnly = isLikelyLocalOnlyGuiaMeiEmpresaCertError(message);
   const showCert409 = fiscalErrorCode === PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID;
+  const isGatewayUpstream = isMeiFiscalGatewayUpstreamError({
+    rawMessage: message,
+    plugnotasCode: fiscalErrorCode,
+    httpStatus: fiscalHttpStatus,
+  });
   const meiEmpresaDocHref = getMeiEmpresaPlugnotasCadastroHelpHref();
   const meiEmpresaDocLinkLabel = meiOperacaoNfseDocUrl
     ? 'abra a documentação de operação'
@@ -415,7 +427,8 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = nu
 
   const copy = mapMeiFiscalErrorToCopy({
     rawMessage: message,
-    plugnotasCode: fiscalErrorCode
+    plugnotasCode: fiscalErrorCode,
+    httpStatus: fiscalHttpStatus,
   });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
     variant: 'inline',
@@ -427,7 +440,7 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = nu
   return (
     <div className="admin-alert-danger space-y-2" role="alert">
       <UserFacingErrorBlock {...facing} />
-      <LongFiscalErrorMessage message={message} tone="danger" />
+      {isGatewayUpstream ? null : <LongFiscalErrorMessage message={message} tone="danger" />}
       <PlugnotasIbgeCidadeOperacaoHint message={message} />
       {showCert409 ? <GuiaMeiCertificado409SemIdChecklist /> : null}
       {showNfceHint ? (
@@ -460,6 +473,12 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = nu
         </p>
       ) : isLocalOnly ? (
         <p className={providerHintClass}>Corrija os dados no formulário conforme a mensagem acima e tente de novo.</p>
+      ) : isGatewayUpstream ? (
+        <p className={providerHintClass}>
+          Trata-se de indisponibilidade temporária do <strong className="font-semibold">emissor fiscal</strong>, não de
+          rejeição do certificado ou dos dados do formulário. Aguarde alguns minutos e tente de novo; se persistir,
+          confirme no servidor a URL base e a chave de API do emissor no mesmo ambiente (sandbox/produção).
+        </p>
       ) : (
         <p className={providerHintClass}>
           Quando a mensagem citar validação de JSON, campos fiscais ou integração fiscal, quem recusou o

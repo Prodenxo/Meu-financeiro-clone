@@ -5,6 +5,7 @@ import {
   isLikelyUserFacingFiscalValidationMessage,
   looksLikeOpaqueApiPayload,
   MEI_FISCAL_ERROR_FALLBACK_DESCRIPTION,
+  MEI_FISCAL_GATEWAY_SOURCE_FOOTNOTE,
 } from './fiscalUserError';
 
 export type MeiFiscalUserFacingOptions = {
@@ -65,6 +66,7 @@ export function meiFiscalUserCopyToUserFacing(
   const embed = options.embedRawAsTechnicalDetail !== false;
   const raw = (options.rawMessage || '').trim();
   const rawTrim = raw.trim();
+  const isGatewayUpstream = copy.gatewayUpstream === true;
   const useRawInsteadOfFallback =
     copy.description === MEI_FISCAL_ERROR_FALLBACK_DESCRIPTION &&
     rawTrim.length > 0 &&
@@ -79,7 +81,8 @@ export function meiFiscalUserCopyToUserFacing(
       : copy.description.trim() || MEI_FISCAL_ERROR_FALLBACK_DESCRIPTION
   ).trim();
 
-  const technicalDetail = embed ? pickFiscalTechnicalDetail(copy, raw, description) : null;
+  const technicalDetail =
+    isGatewayUpstream || !embed ? null : pickFiscalTechnicalDetail(copy, raw, description);
 
   const secondaryAction = copy.href
     ? {
@@ -103,5 +106,6 @@ export function meiFiscalUserCopyToUserFacing(
     showCopyForSupport: technicalDetail ? true : undefined,
     className: options.className,
     titleId: options.titleId,
+    sourceFootnote: isGatewayUpstream ? MEI_FISCAL_GATEWAY_SOURCE_FOOTNOTE : undefined,
   };
 }

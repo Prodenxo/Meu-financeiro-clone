@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { HttpError } from '../src/utils/errors.js';
+
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://example.supabase.co';
 process.env.SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'anon-key';
 process.env.PLUGNOTAS_API_BASE_URL = process.env.PLUGNOTAS_API_BASE_URL || 'https://api.sandbox.plugnotas.com.br';
@@ -13,6 +15,20 @@ const createJsonResponse = (status, payload) => ({
   statusText: status === 409 ? 'Conflict' : 'Error',
   headers: { get: () => 'application/json' },
   json: async () => payload
+});
+
+/** Resposta erro com corpo HTML (proxy/gateway) — `parseResponsePayload` usa `text()`. */
+const createHtmlErrorResponse = (status, htmlBody) => ({
+  ok: false,
+  status,
+  statusText: status === 502 ? 'Bad Gateway' : 'Error',
+  headers: {
+    get: (name) => (String(name).toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null)
+  },
+  json: async () => {
+    throw new SyntaxError('not json');
+  },
+  text: async () => htmlBody
 });
 
 test('empresa service valida payload obrigatório', async () => {
@@ -952,9 +968,70 @@ test('empresa service POST /empresa inclui detalhes de validação no 400', asyn
         razaoSocial: 'Empresa Teste'
       }),
       (err) => {
+        assert.ok(err instanceof HttpError);
         assert.equal(err.status, 400);
         assert.match(String(err.message), /endereco\.logradouro/);
         assert.match(String(err.message), /inválido/);
+        assert.ok(
+          !String(err.errors?.plugnotasCode || '').startsWith('plugnotas_gateway_'),
+          'CR-GW-02: 400 validação não deve usar código plugnotas_gateway_*'
+        );
+        return true;
+      }
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('empresa service POST /empresa: 502 HTML normaliza mensagem + plugnotas_gateway_502 (integração requestJson)', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const html = '<html><body>502 Bad Gateway</body></html>';
+  global.fetch = async () => createHtmlErrorResponse(502, html);
+
+  try {
+    await assert.rejects(
+      () => cadastrarEmpresaPlugNotas({
+        cpfCnpj: '17422651000172',
+        certificado: 'cert-1',
+        razaoSocial: 'Empresa Teste'
+      }),
+      (err) => {
+        assert.ok(err instanceof HttpError);
+        assert.equal(err.status, 502);
+        assert.match(String(err.message), /emissor fiscal não está a responder/i);
+        assert.equal(err.errors?.plugnotasCode, 'plugnotas_gateway_502');
+        assert.equal(err.errors?.plugnotasRequest?.method, 'POST');
+        assert.ok(String(err.errors?.plugnotasRequest?.path || '').includes('/empresa'));
+        return true;
+      }
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('cadastrarCertificadoPlugNotas: 502 HTML normaliza mensagem + plugnotas_gateway_502 (integração requestFormData)', async () => {
+  const { cadastrarCertificadoPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const html = '<html><title>502 Bad Gateway</title></html>';
+  global.fetch = async () => createHtmlErrorResponse(502, html);
+
+  try {
+    await assert.rejects(
+      () => cadastrarCertificadoPlugNotas({
+        fileBuffer: Buffer.from('fake-pfx'),
+        fileName: 'cert.pfx',
+        password: 'secret'
+      }),
+      (err) => {
+        assert.ok(err instanceof HttpError);
+        assert.equal(err.status, 502);
+        assert.match(String(err.message), /emissor fiscal não está a responder/i);
+        assert.equal(err.errors?.plugnotasCode, 'plugnotas_gateway_502');
+        assert.equal(err.errors?.plugnotasRequest?.method, 'POST');
+        assert.ok(String(err.errors?.plugnotasRequest?.path || '').includes('/certificado'));
         return true;
       }
     );

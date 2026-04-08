@@ -256,6 +256,27 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     expect(container.textContent).toContain('formulário');
   });
 
+  it('FR-MEI-CERT-GW-01: gateway upstream omite LongFiscalErrorMessage e mostra rodapé de indisponibilidade', async () => {
+    const root = createRoot(container);
+    const html = '<html><body>502 Bad Gateway</body></html>';
+    await act(async () => {
+      root.render(
+        <GuiaMeiEmpresaCadastroErrorPanel
+          message={html}
+          fiscalErrorCode="plugnotas_gateway_502"
+          fiscalHttpStatus={502}
+        />
+      );
+    });
+    expect(container.textContent).toContain('Emissor fiscal temporariamente indisponível');
+    expect(container.textContent).toContain('indisponibilidade temporária');
+    expect(container.textContent).not.toContain('<html');
+    expect(container.textContent).not.toMatch(/validação de JSON.*provedor de emissão fiscal/s);
+    expect(
+      Array.from(container.querySelectorAll('button')).some((b) => b.textContent?.includes('Ver detalhes completos'))
+    ).toBe(false);
+  });
+
   it('exibe checklist e Saiba mais quando fiscalErrorCode é certificado_409_sem_id (US-MEI-FISC-03)', async () => {
     const root = createRoot(container);
     await act(async () => {

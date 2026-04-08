@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { buildApiErrorMessage } from './buildApiErrorMessage';
-import { ApiClientError, apiClientErrorFromPayload, getPlugnotasCodeFromUnknownError } from './apiClientError';
+import {
+  ApiClientError,
+  apiClientErrorFromPayload,
+  getHttpStatusFromUnknownError,
+  getPlugnotasCodeFromUnknownError,
+} from './apiClientError';
 
 describe('ApiClientError', () => {
   it('apiClientErrorFromPayload anexa plugnotasCode quando presente em errors', () => {
@@ -29,5 +34,19 @@ describe('ApiClientError', () => {
 
   it('getPlugnotasCodeFromUnknownError retorna null para Error genérico', () => {
     expect(getPlugnotasCodeFromUnknownError(new Error('x'))).toBeNull();
+  });
+
+  it('apiClientErrorFromPayload anexa httpStatus quando passado', () => {
+    const err = apiClientErrorFromPayload(
+      { success: false, message: 'x', errors: { plugnotasCode: 'plugnotas_gateway_502' } },
+      buildApiErrorMessage,
+      { httpStatus: 502 }
+    );
+    expect(err.httpStatus).toBe(502);
+    expect(getHttpStatusFromUnknownError(err)).toBe(502);
+  });
+
+  it('getHttpStatusFromUnknownError retorna null sem metadado', () => {
+    expect(getHttpStatusFromUnknownError(new Error('x'))).toBeNull();
   });
 });

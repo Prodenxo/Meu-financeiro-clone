@@ -47,6 +47,11 @@ export type UserFacingErrorProps = {
   titleId?: string;
   className?: string;
   /**
+   * Substitui o rodapé de fonte por defeito (`USER_ERROR_SOURCE_LABEL`) quando definido
+   * (ex.: gateway upstream Plugnotas — UX spec certificado 2026-04-08).
+   */
+  sourceFootnote?: string | null;
+  /**
    * Se definido, dispara `reportUserErrorShown` no mount (FR-ERR-B08 / P2).
    * Usar o mesmo valor que `surfaceId` do mapper quando existir.
    */

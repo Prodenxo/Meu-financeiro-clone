@@ -1,5 +1,8 @@
-import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
-import { getPlugnotasCodeFromUnknownError } from '../utils/apiClientError';
+import {
+  isPlugnotasGatewayUpstreamCode,
+  PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID,
+} from '../utils/plugnotasApiErrorCode';
+import { getPlugnotasCodeFromUnknownError, getHttpStatusFromUnknownError } from '../utils/apiClientError';
 
 /** Alinhado à Story 6.3 / Guia MEI: acima disto, mensagem longa exige expansão ou área rolável. */
 export const FISCAL_ERROR_LONG_THRESHOLD = 300;
@@ -13,7 +16,46 @@ export type MeiFiscalUserCopy = {
   description: string;
   actionLabel?: string;
   href?: string;
+  /** Gateway upstream Plugnotas (502–504): UI suprime HTML bruto e ajusta rodapé. */
+  gatewayUpstream?: boolean;
 };
+
+/** Paridade com `PLUGNOTAS_GATEWAY_UPSTREAM_PUBLIC_MESSAGE_PT` no backend. */
+export const MEI_FISCAL_GATEWAY_UPSTREAM_DESCRIPTION =
+  'O emissor fiscal não está a responder neste momento (erro temporário no servidor). '
+  + 'Tente de novo dentro de alguns minutos. Se o problema continuar, confirme no servidor a URL e a chave '
+  + 'de API do emissor, ou contacte o suporte do emissor fiscal.';
+
+export const MEI_FISCAL_GATEWAY_SOURCE_FOOTNOTE =
+  'Esta mensagem refere-se ao serviço de emissão de notas (emissor fiscal). Neste caso indica indisponibilidade '
+  + 'temporária, não rejeição do seu certificado ou dos dados preenchidos.';
+
+function isGatewayHttpStatus(status: number | null | undefined): boolean {
+  const s = Number(status);
+  return s === 502 || s === 503 || s === 504;
+}
+
+/** Heurística para respostas HTML de proxy (legado antes da normalização BFF). */
+export function isLikelyPlugnotasGatewayRawMessage(raw: string): boolean {
+  const t = raw.trim();
+  if (!t) return false;
+  const lower = t.toLowerCase();
+  if (lower.includes('<html') && (lower.includes('502') || lower.includes('bad gateway'))) return true;
+  if (lower.includes('502 bad gateway')) return true;
+  if (lower.includes('503 service unavailable')) return true;
+  if (lower.includes('504 gateway timeout')) return true;
+  return false;
+}
+
+export function isMeiFiscalGatewayUpstreamError(input: {
+  rawMessage: string;
+  plugnotasCode?: string | null;
+  httpStatus?: number | null;
+}): boolean {
+  if (isPlugnotasGatewayUpstreamCode(input.plugnotasCode)) return true;
+  if (isGatewayHttpStatus(input.httpStatus)) return true;
+  return isLikelyPlugnotasGatewayRawMessage(input.rawMessage);
+}
 
 function meiOperacaoNfseDocBase(): string {
   const raw = typeof import.meta.env.VITE_MEI_OPERACAO_NFSE_DOC_URL === 'string'
@@ -80,10 +122,25 @@ export function isLikelyUserFacingFiscalValidationMessage(text: string): boolean
 export function mapMeiFiscalErrorToCopy(input: {
   rawMessage: string;
   plugnotasCode?: string | null;
+  httpStatus?: number | null;
 }): MeiFiscalUserCopy {
   const code = input.plugnotasCode?.trim() || null;
   const raw = (input.rawMessage || '').trim();
   const lower = raw.toLowerCase();
+
+  if (
+    isMeiFiscalGatewayUpstreamError({
+      rawMessage: raw,
+      plugnotasCode: code,
+      httpStatus: input.httpStatus,
+    })
+  ) {
+    return {
+      title: 'Emissor fiscal temporariamente indisponível',
+      description: MEI_FISCAL_GATEWAY_UPSTREAM_DESCRIPTION,
+      gatewayUpstream: true,
+    };
+  }
 
   if (code === PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID) {
     return {
@@ -240,6 +297,7 @@ export function meiFiscalToastMessage(err: unknown, fallback: string): string {
   const copy = mapMeiFiscalErrorToCopy({
     rawMessage: raw || fallback,
     plugnotasCode: getPlugnotasCodeFromUnknownError(err),
+    httpStatus: getHttpStatusFromUnknownError(err),
   });
   const line = `${copy.title}: ${copy.description}`.replace(/\s+/g, ' ').trim();
   return line.length > 220 ? `${line.slice(0, 217)}…` : line;
@@ -248,10 +306,15 @@ export function meiFiscalToastMessage(err: unknown, fallback: string): string {
 /**
  * Entrada usada por `formatPlugnotasIntegrationError` (Guia MEI e integrações).
  */
-export function formatMeiFiscalErrorForIntegrations(rawMessage: string, plugnotasCode?: string | null): string {
+export function formatMeiFiscalErrorForIntegrations(
+  rawMessage: string,
+  plugnotasCode?: string | null,
+  httpStatus?: number | null
+): string {
   const copy = mapMeiFiscalErrorToCopy({
     rawMessage,
     plugnotasCode: plugnotasCode ?? null,
+    httpStatus: httpStatus ?? null,
   });
   return formatMeiFiscalMappedForAlert(copy);
 }
@@ -261,5 +324,6 @@ export function mapMeiFiscalErrorFromUnknown(err: unknown, fallbackMessage: stri
   return mapMeiFiscalErrorToCopy({
     rawMessage: raw || fallbackMessage,
     plugnotasCode: getPlugnotasCodeFromUnknownError(err),
+    httpStatus: getHttpStatusFromUnknownError(err),
   });
 }

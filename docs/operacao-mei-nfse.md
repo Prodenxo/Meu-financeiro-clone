@@ -204,6 +204,15 @@ Quando a Guia MEI mostra que o certificado **já está cadastrado** no Plugnotas
 
 Brief detalhado: [`docs/brief/brief-plugnotas-certificado-409-sem-id.md`](brief/brief-plugnotas-certificado-409-sem-id.md).
 
+<a id="plugnotas-gateway-upstream-502-504"></a>
+
+### Gateway upstream Plugnotas (HTTP 502, 503, 504 e HTML de proxy)
+
+- Quando o **Plugnotas** (ou um proxy à frente) responde com **502 Bad Gateway**, **503 Service Unavailable** ou **504 Gateway Timeout**, o backend **normaliza** a mensagem ao cliente para texto em português canónico e pode anexar **`errors.plugnotasCode`** com prefixo **`plugnotas_gateway_`** (ex.: `plugnotas_gateway_502`). Isto **não** indica rejeição do certificado ou dos dados do formulário — é **indisponibilidade temporária** do emissor.
+- **Antes** dessa normalização, o corpo podia ser **HTML** de página de erro; a Guia MEI deixa de repetir esse HTML na área de detalhe longo quando o caso é classificado como gateway.
+- **Após falha no envio do certificado:** se uma consulta **`GET /empresa/:cnpj`** devolver **404**, pode ser efeito de cadastro incompleto após o erro acima — repetir o fluxo quando o emissor voltar a responder, ou confirmar no painel Plugnotas se empresa/certificado existem na conta correta.
+- Referências: [`docs/brief/brief-mei-plugnotas-certificado-502-bad-gateway-2026-04-08.md`](brief/brief-mei-plugnotas-certificado-502-bad-gateway-2026-04-08.md); PRD [`docs/prd/PRD-mei-plugnotas-certificado-gateway-upstream-502-2026-04-08.md`](prd/PRD-mei-plugnotas-certificado-gateway-upstream-502-2026-04-08.md).
+
 ### Catálogo de clientes e produtos (após emissão)
 
 Após uma emissão bem-sucedida via provedor externo, o backend grava o registro da nota em `mei_nfse` e em seguida tenta **upsert** no catálogo local (Supabase), para atalhos no formulário da Guia MEI (`GuidesMei.tsx`):

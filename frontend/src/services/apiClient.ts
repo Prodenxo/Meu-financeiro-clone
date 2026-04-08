@@ -176,7 +176,7 @@ class ApiClient {
         headers,
         body: payload
       });
-      throw apiClientErrorFromPayload(payload, buildApiErrorMessage);
+      throw apiClientErrorFromPayload(payload, buildApiErrorMessage, { httpStatus: response.status });
     }
 
     return payload?.data as T;
@@ -241,7 +241,7 @@ class ApiClient {
         headers,
         body: payload
       });
-      throw apiClientErrorFromPayload(payload, buildApiErrorMessage);
+      throw apiClientErrorFromPayload(payload, buildApiErrorMessage, { httpStatus: response.status });
     }
 
     return payload?.data as T;
@@ -302,7 +302,8 @@ class ApiClient {
           });
           throw apiClientErrorFromPayload(
             payload as { message?: string; errors?: unknown },
-            buildApiErrorMessage
+            buildApiErrorMessage,
+            { httpStatus: response.status }
           );
         }
         errorMessage = buildApiErrorMessage(payload) || response.statusText;

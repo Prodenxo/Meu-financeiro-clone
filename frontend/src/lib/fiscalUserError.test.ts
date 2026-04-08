@@ -5,12 +5,33 @@ import {
   mapMeiFiscalErrorToCopy,
   looksLikeOpaqueApiPayload,
   MEI_FISCAL_ERROR_FALLBACK_DESCRIPTION,
+  MEI_FISCAL_GATEWAY_UPSTREAM_DESCRIPTION,
   meiFiscalToastMessage,
   isLikelyUserFacingFiscalValidationMessage,
   formatMeiFiscalMappedForAlert,
 } from './fiscalUserError';
 
 describe('mapMeiFiscalErrorToCopy', () => {
+  it('gateway upstream: plugnotas_gateway_* prioriza copy canónica', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage: '<html>502 Bad Gateway</html>',
+      plugnotasCode: 'plugnotas_gateway_502',
+    });
+    expect(copy.title).toBe('Emissor fiscal temporariamente indisponível');
+    expect(copy.description).toBe(MEI_FISCAL_GATEWAY_UPSTREAM_DESCRIPTION);
+    expect(copy.gatewayUpstream).toBe(true);
+  });
+
+  it('gateway upstream: httpStatus 503 sem código', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage: 'Service Unavailable',
+      plugnotasCode: null,
+      httpStatus: 503,
+    });
+    expect(copy.gatewayUpstream).toBe(true);
+    expect(copy.description).toBe(MEI_FISCAL_GATEWAY_UPSTREAM_DESCRIPTION);
+  });
+
   it('mapeia certificado_409_sem_id com título e link de documentação', () => {
     const copy = mapMeiFiscalErrorToCopy({
       rawMessage: 'conflict',

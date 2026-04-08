@@ -30,6 +30,10 @@ import {
   stripDocumentosAtivos
 } from './plugnotas-empresa-documentos-ativos.js';
 import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.js';
+import {
+  resolvePlugnotasGatewayUpstreamForClient,
+  summarizePlugnotasErrorLogBody
+} from './plugnotas-gateway-upstream-error.js';
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
 /** Blocos mínimos inativos — sem `config`, para não disparar validação SEFAZ / `versaoQrCode` no Plugnotas (produto apenas NFS-e). Ver `docs/adr/ADR-plugnotas-empresa-payload-apenas-nfse.md`. */
@@ -177,7 +181,12 @@ const requestJson = async (method, path, body) => {
 
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
-      const message = messageFromPlugnotasPayload(payload, response.statusText);
+      const rawMessage = messageFromPlugnotasPayload(payload, response.statusText);
+      const gateway = resolvePlugnotasGatewayUpstreamForClient(response.status);
+      const message = gateway ? gateway.publicMessage : rawMessage;
+      const errors = gateway
+        ? { ...plugnotasRequestErrors(method, path), plugnotasCode: gateway.plugnotasCode }
+        : plugnotasRequestErrors(method, path);
       const fullUrl = `${baseUrl}${path}`;
       if (
         response.status === 400
@@ -191,33 +200,37 @@ const requestJson = async (method, path, body) => {
       if (process.env.NODE_ENV !== 'production' || isPlugnotasDebugExplicitlyEnabled()) {
         const pathLog = maskPlugnotasPathOrUrlForLog(path);
         const fullUrlLog = maskPlugnotasPathOrUrlForLog(fullUrl);
+        const ct = response.headers.get('content-type') || '';
+        const logBody = gateway
+          ? `[gateway_upstream HTTP ${response.status}]`
+          : summarizePlugnotasErrorLogBody(rawMessage, ct);
         // eslint-disable-next-line no-console
-        console.error('[plugnotas]', method, pathLog, response.status, message, fullUrlLog);
+        console.error('[plugnotas]', method, pathLog, response.status, logBody, fullUrlLog);
       }
       if (response.status === 401) {
         throw new HttpError(
           401,
           message || 'Token do serviço de emissão fiscal inválido',
-          plugnotasRequestErrors(method, path)
+          errors
         );
       }
       if (response.status === 403) {
         throw new HttpError(
           403,
           message || 'Acesso negado pelo serviço de emissão fiscal',
-          plugnotasRequestErrors(method, path)
+          errors
         );
       }
       if (response.status === 404) {
-        throw new HttpError(404, message || 'Empresa não encontrada', plugnotasRequestErrors(method, path));
+        throw new HttpError(404, message || 'Empresa não encontrada', errors);
       }
       if (response.status === 409) {
-        throw new HttpError(409, message || 'Empresa já cadastrada', plugnotasRequestErrors(method, path));
+        throw new HttpError(409, message || 'Empresa já cadastrada', errors);
       }
       throw new HttpError(
         response.status || 400,
         message || 'Erro no serviço de emissão fiscal',
-        plugnotasRequestErrors(method, path)
+        errors
       );
     }
 
@@ -249,32 +262,41 @@ const requestFormData = async (method, path, body) => {
 
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
-      const message = messageFromPlugnotasPayload(payload, response.statusText);
+      const rawMessage = messageFromPlugnotasPayload(payload, response.statusText);
+      const gateway = resolvePlugnotasGatewayUpstreamForClient(response.status);
+      const message = gateway ? gateway.publicMessage : rawMessage;
+      const errors = gateway
+        ? { ...plugnotasRequestErrors(method, path), plugnotasCode: gateway.plugnotasCode }
+        : plugnotasRequestErrors(method, path);
       const fullUrl = `${baseUrl}${path}`;
       if (process.env.NODE_ENV !== 'production' || isPlugnotasDebugExplicitlyEnabled()) {
         const pathLog = maskPlugnotasPathOrUrlForLog(path);
         const fullUrlLog = maskPlugnotasPathOrUrlForLog(fullUrl);
+        const ct = response.headers.get('content-type') || '';
+        const logBody = gateway
+          ? `[gateway_upstream HTTP ${response.status}]`
+          : summarizePlugnotasErrorLogBody(rawMessage, ct);
         // eslint-disable-next-line no-console
-        console.error('[plugnotas]', method, pathLog, response.status, message, fullUrlLog);
+        console.error('[plugnotas]', method, pathLog, response.status, logBody, fullUrlLog);
       }
       if (response.status === 401) {
         throw new HttpError(
           401,
           message || 'Token do serviço de emissão fiscal inválido',
-          plugnotasRequestErrors(method, path)
+          errors
         );
       }
       if (response.status === 403) {
         throw new HttpError(
           403,
           message || 'Acesso negado pelo serviço de emissão fiscal',
-          plugnotasRequestErrors(method, path)
+          errors
         );
       }
       throw new HttpError(
         response.status || 400,
         message || 'Erro no serviço de emissão fiscal',
-        plugnotasRequestErrors(method, path)
+        errors
       );
     }
 
