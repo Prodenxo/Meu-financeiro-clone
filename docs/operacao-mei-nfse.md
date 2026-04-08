@@ -59,6 +59,15 @@
 - **Consulta GET empresa após falha no registo:** se o utilizador ainda tem o painel de **retry** (cadastro da empresa não concluído) e a consulta devolve “não encontrado” / **404**, a app pode prefixar a mensagem com orientação para resolver o erro de registo antes de interpretar como CNPJ errado.
 - **Payload com `prefeitura` preenchida** no `nfse.config` fica para story/evidência **NFR-PREF-EV-01** (trilhos B/C/D no mesmo PRD).
 
+<a id="cadastro-post-404-get-empresa"></a>
+
+#### Encadeamento **POST** cadastro empresa → **GET** **404** (**FR-SOL-DIAG-01**, **FR-SOL-ANT-01**)
+
+- Se o **`POST`** `…/emissao-fiscal/empresa` falhar (ex.: **400** com `nfse.config.prefeitura`), o Plugnotas **não** cria a empresa na conta; um **`GET`** `…/emissao-fiscal/empresa?cpfCnpj=` pode devolver **404** (*não localizamos empresa*). Isto é **esperado**: o **404** não indica por si um “bug só da consulta” — trata primeiro o erro do **envio** (POST) ou conclui o cadastro com sucesso antes de esperar dados na consulta.
+- **Antipadrões:** (1) assumir que **inscrição municipal** na raiz do JSON substitui **`nfse.config.prefeitura`** quando o erro citar esse campo — ver [secção PREF](#nfse-config-prefeitura-cadastro-pref); (2) **repetir só o GET** esperando 200 sem corrigir o POST; (3) assumir que **`nfse.nacional: true`** no payload dispensa **`prefeitura`** em **todas** as contas (**NFR-N04**).
+- **Produto / UX:** PRD [`PRD-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](prd/PRD-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md); spec [`ux-spec-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](specs/ux-spec-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md); arquitetura [`architecture-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](technical/architecture-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md). A Guia MEI mostra blocos contextuais (`PlugnotasEmpresaCadastroSolContextPanel`) e heurística `resolvePlugnotasEmpresaCadastroSolUxState` em `frontend/src/utils/plugnotasEmpresaCadastroSolUx.ts`.
+- **Marcador de sessão (SOL-L2 / P1):** após falha confirmada do POST fase 2 (cadastro empresa), o cliente grava em `sessionStorage` a chave `mei:empresaFase2Fail:v1:${userId}:${cnpj14}` com **apenas** `{ t: number }` (TTL ~30 min; sem texto de erro). Limpeza após POST 2xx de empresa ou GET com dados de cadastro parseáveis; expirado → UX volta ao estado neutro **SOL-L3**. Código: `frontend/src/utils/guiaMeiEmpresaFase2FailFlag.ts`.
+
 <a id="endereco-codigo-cidade-ibge-plugnotas"></a>
 
 #### `endereco.codigoCidade` e tabela de municípios IBGE (**FR-CID-DOC-01**)
