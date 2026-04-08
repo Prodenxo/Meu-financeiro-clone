@@ -166,6 +166,18 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
   });
 
+  it('FR-NAT-ERR-01: mensagem só com inscricaoMunicipal mostra copy municipal e link operação', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <GuiaMeiEmpresaCadastroErrorPanel message="Validação Plugnotas: inscricaoMunicipal obrigatória no payload." />
+      );
+    });
+    expect(container.textContent).toContain('cadastro municipal');
+    expect(container.textContent).toContain('painel Plugnotas');
+    expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
+  });
+
   it('mensagem longa mantém expansão e hint NFC-e com nfce.config.sefaz', async () => {
     const filler = 'z'.repeat(FISCAL_ERROR_LONG_THRESHOLD + 30);
     const msg = `${filler}\nnfce.config.sefaz obrigatório`;

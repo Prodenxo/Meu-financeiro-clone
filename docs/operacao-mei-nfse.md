@@ -6,12 +6,14 @@
 
 ## Escopo da Guia MEI no produto (apenas NFS-e na interface)
 
-- **Limitação D-01 (épico):** o fluxo **Guia MEI** (`GuidesMei`) é voltado a **MEI prestador de serviços**; na **interface** o usuário **só emite e opera NFS-e** (não há escolha de NF-e nem NFC-e na tela).
-- **Inscrição estadual (IE):** o formulário da Guia MEI **não pede** IE da empresa. O backend envia ao Plugnotas o valor definido na política MEI quando a IE não vem do usuário — hoje **`ISENTO`** (ver `plugnotas-mei-empresa-policy` / ADR de payload apenas NFS-e). A **inscrição municipal** continua obrigatória no bloco de dados mínimos onde aplicável (exigência do cadastro no provedor).
-- **Backend e API:** endpoints de NF-e/NFC-e podem existir para outros contextos ou contratos do emissor; na Guia MEI a experiência exposta ao usuário é **só NFS-e**. Decisão de produto documentada no PRD: [`epic-guia-mei-apenas-nfse-prd.md`](stories/epic-guia-mei-apenas-nfse-prd.md).
+- **Limitação D-01 (épico):** o fluxo **Guia MEI** (`GuidesMei`) é voltado a **MEI prestador de serviços**; na **interface** o utilizador **só emite e opera NFS-e** (não há escolha de NF-e nem NFC-e na tela).
+- **Inscrição estadual (IE):** o formulário da Guia MEI **não pede** IE da empresa. O backend envia ao Plugnotas o valor definido na política MEI quando a IE não vem do utilizador — hoje **`ISENTO`** (ver `plugnotas-mei-empresa-policy` / ADR de payload apenas NFS-e).
+- **Inscrição municipal (IM) e prefeitura (modo NFS-e Nacional):** no fluxo em [`PRD-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md`](prd/PRD-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md), a **Guia MEI** **não** inclui campos obrigatórios para IM nem para escolha de prefeitura no **formulário local** de cadastro. O **Plugnotas** pode, ainda assim, devolver erros que exijam dados municipais (conta, ambiente ou política do provedor). Isto **não** significa que o utilizador “faltou preencher” um campo visível na app — ver [Modo NFS-e Nacional no formulário vs exigência municipal na API](#nfse-nacional-vs-municipal-cadastro).
+- **Backend e API:** endpoints de NF-e/NFC-e podem existir para outros contextos ou contratos do emissor; na Guia MEI a experiência exposta ao utilizador é **só NFS-e**. Decisão de produto documentada no PRD: [`epic-guia-mei-apenas-nfse-prd.md`](stories/epic-guia-mei-apenas-nfse-prd.md).
 - **Erros que citam NFC-e ou `nfce` no JSON:** podem aparecer no **cadastro/atualização da empresa** no Plugnotas (payload enviado pelo app após o certificado), mesmo com a UI de emissão só NFS-e — ver [Cadastro da empresa e NFC-e (QR e SEFAZ)](#cadastro-empresa-nfce-qrcode-sefaz).
 
 <a id="plugnotas-nfse-nacional-spike-nat01"></a>
+<a id="emissor-nfse-nacional-spike-nat01"></a>
 
 ### NFS-e Nacional no cadastro Plugnotas (NAT-01 / NAT-02 / US-MEI-NAT-03)
 
@@ -37,6 +39,15 @@
   - comportamento em que o painel **não** exibe nacional ativa (município ainda só no modelo antigo, CNPJ sem credenciamento adequado, etc.).
 - **Não** concluir automaticamente que o app “não enviou o campo” antes de comparar o **corpo da requisição** (logs redigidos de cadastro empresa, com opt-in `PLUGNOTAS_DEBUG` em produção) com a resposta do Plugnotas.
 
+<a id="nfse-nacional-vs-municipal-cadastro"></a>
+
+#### Modo NFS-e Nacional no formulário vs exigência municipal na API (**FR-NAT-DOC-01**)
+
+- **No produto (Guia MEI, painel DAS):** o cadastro orientado a **NFS-e Nacional** envia `nfse.nacional: true` conforme [`ADR-plugnotas-nfse-nacional-empresa-spike.md`](adr/ADR-plugnotas-nfse-nacional-empresa-spike.md) e **não** acrescenta IM nem prefeitura ao payload a partir de campos do formulário descritos no PRD abaixo.
+- **Resposta da API:** mensagens que citam `inscricaoMunicipal`, inscrição municipal, prefeitura ou `nfse.config` municipal indicam **tensão entre modo nacional escolhido no produto e validações que o emissor aplica** (limitação de conta, homologação vs produção, ou regra ainda municipal na ponta). **NFR-N04:** painel web e corpo de erro podem **divergir** até existir evidência fechada (ticket ou doc oficial do provedor); não prometa em nome do produto que a emissão está **legalmente** autorizada ou homologada em todos os municípios.
+- **Referências de produto e engenharia:** PRD [`PRD-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md`](prd/PRD-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md); especificação de UX [`ux-spec-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md`](specs/ux-spec-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md); nota de arquitetura [`architecture-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md`](technical/architecture-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md).
+- **Sintomas na interface:** copy de ajuda e painel de retry âmbar quando a heurística municipal dispara — ver [Mensagens Plugnotas → dica na Guia MEI](#plugnotas-nfse-nacional-erros-mensagens) e `frontend/src/utils/nfseNacionalPlugnotasErrorHints.ts`.
+
 #### Sandbox vs produção (**NFR-N04**)
 
 - **`PLUGNOTAS_API_BASE_URL`** e **`PLUGNOTAS_API_KEY`** devem ser da **mesma conta** e do **mesmo ambiente** (sandbox **ou** produção). Cadastrar em sandbox e inspecionar em produção (ou o inverso) gera inconsistência e falso diagnóstico sobre `nfse.nacional`.
@@ -49,7 +60,7 @@ Use em **homologação/sandbox** (recomendado) antes de repetir em produção:
 1. Configurar backend com `PLUGNOTAS_API_BASE_URL` / `PLUGNOTAS_API_KEY` de **sandbox**.
 2. Na Guia MEI, concluir fluxo **certificado A1** + **cadastro da empresa** com CNPJ e dados válidos para o ambiente.
 3. No painel Plugnotas (mesma conta), localizar a empresa pelo CNPJ e verificar o estado do controle **NFS-e Nacional** (ligado / disponível conforme UI do provedor).
-4. Se houver **400** no cadastro, copiar a mensagem exibida ao usuário e, se possível, o trecho relevante do log redigido do servidor (`PLUGNOTAS_DEBUG` se necessário) para suporte interno — **sem** colar `x-api-key` nem PII completa em tickets públicos.
+4. Se houver **400** no cadastro, copiar a mensagem exibida ao utilizador e, se possível, o trecho relevante do log redigido do servidor (`PLUGNOTAS_DEBUG` se necessário) para suporte interno — **sem** colar `x-api-key` nem PII completa em tickets públicos.
 
 5. **Após executar** o checklist em sandbox (ou homologação), **registar** data, `PLUGNOTAS_API_BASE_URL` usada (sem expor API key) e resultado (ex.: nacional refletida no painel / 400 com mensagem X) nas **QA Results** da story **US-MEI-NAT-03** no épico ou em ticket interno — fecha o ciclo **FR-N02** além do artefato estático.
 
@@ -59,7 +70,7 @@ PRD de produto: [`PRD-nfse-nacional-default-cadastro-plugnotas.md`](prd/PRD-nfse
 
 ### Mensagens Plugnotas → dica na Guia MEI (**US-MEI-NAT-04**, **FR-N05**)
 
-O frontend não reparseia JSON do emissor: usa a **string de erro** já consolidada pelo backend (`message` / `details`). Quando a heurística abaixo casa, a UI exibe texto de ajuda curto e um link para [NFS-e Nacional no cadastro Plugnotas](#plugnotas-nfse-nacional-spike-nat01) (ou `frontend/public/guia-mei-nfse-nacional.html` se `VITE_MEI_OPERACAO_NFSE_DOC_URL` não estiver definido).
+O frontend não reparseia JSON do emissor: usa a **string de erro** já consolidada pelo backend (`message` / `details`). Quando a heurística abaixo casa, a UI exibe texto de ajuda curto e um link para esta secção de cadastro nacional (âncoras `#plugnotas-nfse-nacional-spike-nat01` ou `#emissor-nfse-nacional-spike-nat01`, esta última igual à constante `NFSE_NACIONAL_OPERACAO_DOC_ANCHOR` no código), ou para `frontend/public/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01` quando `VITE_MEI_OPERACAO_NFSE_DOC_URL` **não** está definido.
 
 | Disparo (texto normalizado: minúsculas, sem acento) | Comportamento na UI |
 | --- | --- |
@@ -71,8 +82,10 @@ O frontend não reparseia JSON do emissor: usa a **string de erro** já consolid
 | `nacional` **e** (`municipio`, `prefeitura`, `credenci`, `aderiu`, `adesao`) | Dica + link |
 | `nacional` **e** (`indispon`, `nao dispon`, `nao suport`) | Dica + link |
 | `plugnotas` **e** `nacional` **e** (`nfse` ou `nfs`) | Dica + link |
+| **`inscricaomunicipal`**, inscrição municipal ou (`inscricao` **e** `municipal`) | Dica + link (+ parágrafo **FR-NAT-ERR-01** quando a UI mostra a explicação municipal) |
+| `prefeitura` **e** contexto de cadastro fiscal (`nfse`, `emitente`, `empresa`, `cadastro`, `plugnotas`, `nfse.config`, `config.prefeitura`) — **não** aplica se só `nfce` sem `nfse` | Idem |
 
-**Implementação:** `frontend/src/utils/nfseNacionalPlugnotasErrorHints.ts` (manter esta tabela e o ficheiro alinhados). **Onde aparece:** `GuiaMeiEmpresaCadastroErrorPanel`, `EmissaoFiscalErrorAlert`, `EmissaoFiscalErrorAlertModal` (link com tom `rose` no modal) e `PlugnotasIntegrationErrorAlert` em `FiscalIntegrationErrorAlert.tsx`.
+**Implementação:** `frontend/src/utils/nfseNacionalPlugnotasErrorHints.ts` (lista `NFSE_NACIONAL_PLUGNOTAS_HINT_PATTERNS_DOC` + testes: manter alinhamento com esta tabela). **Onde aparece:** `GuiaMeiEmpresaCadastroErrorPanel`, `EmissaoFiscalErrorAlert`, `EmissaoFiscalErrorAlertModal` (link com tom `rose` no modal), `PlugnotasIntegrationErrorAlert`, painel âmbar de retry em `GuidesMei.tsx`, e corpo partilhado `PlugnotasMunicipalRequirementOperacaoCopy.tsx`.
 
 Épico: [`epic-nfse-nacional-plugnotas-prd.md`](stories/epic-nfse-nacional-plugnotas-prd.md) (**US-MEI-NAT-04**).
 
@@ -288,7 +301,7 @@ Em **HTTP 400** nas rotas Plugnotas `POST /empresa` e `PATCH /empresa/:cnpj`, o 
 
 ### 2b.4) POST /empresa — inscrições e NFC-e (validação Plugnotas)
 
-- A API Plugnotas pode exigir **`inscricaoMunicipal`** e **`inscricaoEstadual`** no JSON de empresa. Na **Guia MEI**, o usuário preenche **inscrição municipal** nos dados mínimos; a **IE não é digitada** — o app envia a política MEI (**`ISENTO`** quando vazia no fluxo suportado). A municipal depende das regras do município e do cadastro.
+- A API Plugnotas pode exigir **`inscricaoMunicipal`** e **`inscricaoEstadual`** no JSON de empresa em **alguns** cenários. No **modo NFS-e Nacional** da Guia MEI (PRD [`PRD-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md`](prd/PRD-nfse-nacional-sem-im-prefeitura-mei-2026-04-08.md)), o **formulário** **não** recolhe IM nem prefeitura — ver [Modo NFS-e Nacional no formulário vs exigência municipal na API](#nfse-nacional-vs-municipal-cadastro). A **IE** não é digitada pelo utilizador — o app envia a política MEI (**`ISENTO`** quando vazia no fluxo suportado). Mensagens municipais na resposta vêm do **provedor**, não de campos obrigatórios em falta na UI desse modo.
 - O bloco **`nfce`** no payload de empresa é mantido **inativo** no modo apenas NFS-e (ver [Plugnotas: cadastro de empresa](#plugnotas-empresa-payload-apenas-nfse)). Se a **resposta de erro** ainda citar **`nfce`**, **`versaoQrCode`** ou **`sefaz`**, trate como validação do **cadastro** no provedor, não como emissão de NFC-e pela tela da Guia MEI.
 - Se a validação reclamar de **`nfce.config.sefaz`** quando **`versaoQrCode`** for 2, o app tende a enviar **`versaoQrCode: 1`** em `nfce.config` para alinhar ao schema sem exigir `sefaz` nesse cenário. Ajustes finos: documentação Plugnotas e credenciamento SEFAZ.
 
@@ -413,7 +426,7 @@ URL base de produção típica (conforme `PLUGNOTAS_API_BASE_URL`): ver document
    - Rota local do projeto: `POST /api/mei-notas/webhook`.
    - Backend deve retornar `2xx` apenas quando processar com sucesso.
 6. Validar emissao por tipo conforme o **canal** em uso:
-   - **Guia MEI (usuário final):** fluxo de emissão exposto é **NFSE** apenas.
+   - **Guia MEI (utilizador final):** fluxo de emissão exposto é **NFSE** apenas.
    - **API / testes / histórico:** podem existir registros ou chamadas com `NFE` / `NFCE` — validar conforme escopo do cliente.
 7. Validar ciclo completo:
    - emissao assíncrona;

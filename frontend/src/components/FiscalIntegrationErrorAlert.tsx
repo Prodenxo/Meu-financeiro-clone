@@ -6,6 +6,7 @@ import {
 } from '../utils/nfceEmpresaCadastroErrorHints';
 import {
   getNfseNacionalOperacaoHelpHref,
+  isPlugnotasEmpresaMunicipalRequirementMessage,
   shouldOfferNfseNacionalOperacaoDocHint
 } from '../utils/nfseNacionalPlugnotasErrorHints';
 import {
@@ -19,6 +20,7 @@ import {
 } from '../lib/fiscalUserError';
 import { meiFiscalUserCopyToUserFacing } from '../lib/meiFiscalUserCopyToUserFacing';
 import UserFacingErrorBlock from './UserFacingErrorBlock';
+import { PlugnotasMunicipalRequirementOperacaoBody } from './PlugnotasMunicipalRequirementOperacaoCopy';
 import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
 
 const meiOperacaoNfseDocUrl =
@@ -155,17 +157,30 @@ type EmissaoFiscalErrorAlertProps = {
 type NfseNacionalDocHintLinkTone = Extract<LongFiscalErrorTone, 'danger' | 'rose'>;
 
 type NfseNacionalOperacaoDocHintProps = {
+  message: string;
   /** `rose` alinha o link ao painel compacto do modal admin (pós-QA NAT-04). */
   linkTone?: NfseNacionalDocHintLinkTone;
 };
 
-/** US-MEI-NAT-04: dica quando o texto sugere rejeição ligada à NFS-e Nacional (FR-N05). */
-function NfseNacionalOperacaoDocHint({ linkTone = 'danger' }: NfseNacionalOperacaoDocHintProps) {
+/** US-MEI-NAT-04 + FR-NAT-ERR-01: dica quando o texto sugere rejeição NFS-e Nacional ou exigência municipal no emissor. */
+function NfseNacionalOperacaoDocHint({ message, linkTone = 'danger' }: NfseNacionalOperacaoDocHintProps) {
   const href = getNfseNacionalOperacaoHelpHref();
   const linkClass = linkClassForTone(linkTone);
   const linkLabel = meiOperacaoNfseDocUrl
     ? 'Ver documentação de operação (NFS-e Nacional)'
     : 'Ver guia rápido (NFS-e Nacional)';
+
+  if (isPlugnotasEmpresaMunicipalRequirementMessage(message)) {
+    return (
+      <p className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90">
+        <PlugnotasMunicipalRequirementOperacaoBody />{' '}
+        <a href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+          {linkLabel}
+        </a>
+        <span className="text-rose-800/85 dark:text-rose-300/85"> (abre em nova aba).</span>
+      </p>
+    );
+  }
 
   return (
     <p className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90">
@@ -201,7 +216,7 @@ export function EmissaoFiscalErrorAlert({
         <span className="normal-case tracking-normal">{documentTypeLabel}</span>
       </p>
       <UserFacingErrorBlock {...facing} />
-      {showNacionalHint ? <NfseNacionalOperacaoDocHint /> : null}
+      {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} /> : null}
     </div>
   );
 }
@@ -231,7 +246,7 @@ export function PlugnotasIntegrationErrorAlert({
         <p className="text-xs font-semibold text-rose-900 dark:text-rose-100">{title}</p>
       ) : null}
       <UserFacingErrorBlock {...facing} />
-      {showNacionalHint ? <NfseNacionalOperacaoDocHint /> : null}
+      {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} /> : null}
     </div>
   );
 }
@@ -256,7 +271,7 @@ export function EmissaoFiscalErrorAlertModal({
         Falha ao emitir {documentTypeLabel}
       </p>
       <UserFacingErrorBlock {...facing} />
-      {showNacionalHint ? <NfseNacionalOperacaoDocHint linkTone="rose" /> : null}
+      {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} linkTone="rose" /> : null}
     </div>
   );
 }
@@ -393,7 +408,7 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = nu
           )}
         </p>
       ) : null}
-      {showNacionalHint ? <NfseNacionalOperacaoDocHint /> : null}
+      {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} /> : null}
       {showCert409 ? (
         <p className={providerHintClass}>
           Depois de ajustar conta, ambiente ou CNPJ conforme o checklist, tente enviar o certificado de novo.
