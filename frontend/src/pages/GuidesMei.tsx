@@ -73,8 +73,13 @@ import { getPlugnotasCodeFromUnknownError as getFiscalErrorCode } from '../utils
 import { mapMeiFiscalErrorToCopy } from '../lib/fiscalUserError';
 import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
+import {
+  getNfseNacionalOperacaoHelpHref,
+  isPlugnotasEmpresaMunicipalRequirementMessage
+} from '../utils/nfseNacionalPlugnotasErrorHints';
 import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
+import { PlugnotasMunicipalRequirementOperacaoBody } from '../components/PlugnotasMunicipalRequirementOperacaoCopy';
 import { MeiLimiteFaturamentoBlock } from '../components/MeiLimiteFaturamentoBlock';
 import { MeiNfseCatalogManageActions } from '../components/MeiNfseCatalogManageActions';
 import { MeiNfseListRowActions } from '../components/MeiNfseListRowActions';
@@ -2694,6 +2699,15 @@ export default function GuidesMei() {
   );
 
   const cadastroFiscalDocHref = useMemo(() => getGuiaMeiCadastroFiscalDocHref(), []);
+  const nfseNacionalOperacaoHelpHref = useMemo(() => getNfseNacionalOperacaoHelpHref(), []);
+  const plugnotasRetryMunicipalOperacaoHint = useMemo(
+    () =>
+      Boolean(
+        plugnotasEmpresaRetryDetail &&
+          isPlugnotasEmpresaMunicipalRequirementMessage(plugnotasEmpresaRetryDetail)
+      ),
+    [plugnotasEmpresaRetryDetail]
+  );
 
   const showRequisitosNfeNfcePlaceholder = useMemo(
     () => shouldShowRequisitosNfeNfceSecao(documentosAtivos),
@@ -3009,6 +3023,31 @@ export default function GuidesMei() {
             </div>
           ) : null}
 
+          {canViewNfse ? (
+            <div
+              className="rounded-lg border border-slate-200/80 bg-slate-50/90 p-3 text-sm leading-relaxed dark:border-slate-700/80 dark:bg-slate-900/40"
+              data-testid="mei-nfse-nacional-mode-callout"
+              role="region"
+              aria-labelledby="mei-nfse-nacional-callout-heading"
+            >
+              <h3
+                id="mei-nfse-nacional-callout-heading"
+                className="text-sm font-semibold text-slate-900 dark:text-slate-100"
+              >
+                NFS-e em ambiente nacional
+              </h3>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                O cadastro desta área envia a configuração de <strong>NFS-e Nacional</strong> para o emissor fiscal, alinhada
+                à opção &quot;NFS-e Nacional&quot; do painel Plugnotas. <strong>Não</strong> é necessário preencher
+                inscrição municipal nem escolher prefeitura aqui.
+              </p>
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Se o emissor recusar o cadastro pedindo dados municipais, pode ser limitação da conta ou da API — siga a
+                mensagem de erro ou o guia de operação.
+              </p>
+            </div>
+          ) : null}
+
           {certificateConnectivityAlert ? <GuiaMeiCertificateConnectivityPanel /> : null}
           {certificateError ? (
             <GuiaMeiEmpresaCadastroErrorPanel
@@ -3034,6 +3073,11 @@ export default function GuidesMei() {
               {plugnotasEmpresaRetryDetail ? (
                 <p className="text-amber-900 dark:text-amber-200/95">{plugnotasEmpresaRetryDetail}</p>
               ) : null}
+              {plugnotasRetryMunicipalOperacaoHint ? (
+                <p className="text-xs text-amber-950/95 dark:text-amber-100/90">
+                  <PlugnotasMunicipalRequirementOperacaoBody />
+                </p>
+              ) : null}
               <p className="text-xs text-slate-700 dark:text-slate-300">
                 Se o problema continuar, verifique se o CNPJ e o ambiente (sandbox ou produção) coincidem com o painel do emissor ou fale com o suporte.
               </p>
@@ -3054,7 +3098,9 @@ export default function GuidesMei() {
               </button>
               <p className="text-xs">
                 <a
-                  href={cadastroFiscalDocHref}
+                  href={
+                    plugnotasRetryMunicipalOperacaoHint ? nfseNacionalOperacaoHelpHref : cadastroFiscalDocHref
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-amber-900 underline decoration-amber-800/60 underline-offset-2 hover:text-amber-950 dark:text-amber-200/95 dark:decoration-amber-300/50 dark:hover:text-amber-100"

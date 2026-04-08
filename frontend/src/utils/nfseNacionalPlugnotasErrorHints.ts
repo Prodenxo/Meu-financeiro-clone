@@ -1,9 +1,12 @@
 /**
- * US-MEI-NAT-04 (FR-N05): heurística para oferecer copy/link quando o Plugnotas recusa
- * cadastro ou emissão ligados à NFS-e Nacional (município/credenciamento/indisponibilidade).
+ * US-MEI-NAT-04 (FR-N05) + FR-NAT-ERR-01: heurística para oferecer copy/link quando o Plugnotas recusa
+ * cadastro ou emissão ligados à NFS-e Nacional (município/credenciamento/indisponibilidade), incluindo
+ * exigência de IM/prefeitura sem a palavra «nacional» no texto (painel retry âmbar + `GuiaMeiEmpresaCadastroErrorPanel`).
  *
- * Mapeamento documentado também em `docs/operacao-mei-nfse.md` (#plugnotas-nfse-nacional-erros-mensagens).
- * Ajustar os dois sítios em conjunto quando surgirem mensagens reais novas.
+ * Mapeamento documentado também em `docs/operacao-mei-nfse.md` — âncora operacional
+ * `NFSE_NACIONAL_OPERACAO_DOC_ANCHOR` (par `#plugnotas-nfse-nacional-spike-nat01` na mesma secção),
+ * tabela de disparos em `#plugnotas-nfse-nacional-erros-mensagens`, contexto nacional vs municipal em
+ * `#nfse-nacional-vs-municipal-cadastro`.
  */
 
 /** Âncora principal em `docs/operacao-mei-nfse.md` (troubleshoot município/credenciamento). */
@@ -11,7 +14,8 @@ export const NFSE_NACIONAL_OPERACAO_DOC_ANCHOR = 'emissor-nfse-nacional-spike-na
 
 /**
  * Padrões que disparam a dica (substring após normalização: minúsculas, sem acentos).
- * Ordem não importa para o match — ver implementação em `shouldOfferNfseNacionalOperacaoDocHint`.
+ * Ordem não importa para o match — ver `shouldOfferNfseNacionalOperacaoDocHint` e
+ * `isPlugnotasEmpresaMunicipalRequirementMessage`.
  */
 export const NFSE_NACIONAL_PLUGNOTAS_HINT_PATTERNS_DOC = [
   'nfse.nacional',
@@ -21,7 +25,9 @@ export const NFSE_NACIONAL_PLUGNOTAS_HINT_PATTERNS_DOC = [
   'nota nacional (com nfse ou servico no texto)',
   'nacional + (municipio | prefeitura | credenci | aderiu | adesao)',
   'nacional + (indispon | nao dispon | nao suport)',
-  'plugnotas + nacional + (nfse | nfs)'
+  'plugnotas + nacional + (nfse | nfs)',
+  'inscricaomunicipal | inscricao + municipal',
+  'prefeitura + contexto empresa/nfse (emitente | empresa | cadastro | plugnotas | nfse.config | config.prefeitura); nao nfce-only sem nfse'
 ] as const;
 
 const meiOperacaoNfseDocUrl =
@@ -36,6 +42,35 @@ function normalizeForMatch(s: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+/**
+ * Mensagem do emissor sugere obrigatoriedade de **cadastro municipal** (IM ou prefeitura) no contexto de empresa/NFS-e.
+ * Usar a mesma regra no painel âmbar de retry e em `GuiaMeiEmpresaCadastroErrorPanel` (arquitetura §4.2).
+ */
+export function isPlugnotasEmpresaMunicipalRequirementMessage(message: string): boolean {
+  const m = normalizeForMatch(message);
+  if (!m.trim()) return false;
+
+  if (m.includes('inscricaomunicipal')) return true;
+  if (m.includes('inscricao municipal')) return true;
+  if (m.includes('inscricao') && m.includes('municipal')) return true;
+
+  const hasPrefeitura = m.includes('prefeitura');
+  if (!hasPrefeitura) return false;
+
+  if (m.includes('nfce') && !m.includes('nfse')) return false;
+
+  const empresaFiscalContext =
+    m.includes('nfse') ||
+    m.includes('emitente') ||
+    m.includes('empresa') ||
+    m.includes('cadastro') ||
+    m.includes('plugnotas') ||
+    m.includes('nfse.config') ||
+    m.includes('config.prefeitura');
+
+  return empresaFiscalContext;
+}
+
 export function getNfseNacionalOperacaoHelpHref(): string {
   if (meiOperacaoNfseDocUrl) {
     const base = meiOperacaoNfseDocUrl.replace(/#.*$/, '');
@@ -44,7 +79,7 @@ export function getNfseNacionalOperacaoHelpHref(): string {
   return `/guia-mei-nfse-nacional.html#${NFSE_NACIONAL_OPERACAO_DOC_ANCHOR}`;
 }
 
-export function shouldOfferNfseNacionalOperacaoDocHint(message: string): boolean {
+function shouldOfferNfseNacionalOperacaoDocHintNacionalPatterns(message: string): boolean {
   const m = normalizeForMatch(message);
   if (!m.trim()) return false;
 
@@ -71,4 +106,12 @@ export function shouldOfferNfseNacionalOperacaoDocHint(message: string): boolean
   }
 
   return false;
+}
+
+/** Inclui padrões «NFS-e Nacional» e exigência municipal (IM/prefeitura) sem «nacional» no texto. */
+export function shouldOfferNfseNacionalOperacaoDocHint(message: string): boolean {
+  return (
+    shouldOfferNfseNacionalOperacaoDocHintNacionalPatterns(message) ||
+    isPlugnotasEmpresaMunicipalRequirementMessage(message)
+  );
 }
