@@ -29,15 +29,24 @@ describe('nfEmissionCompany', () => {
     ).toContain('razão social');
   });
 
-  it('buildNfEmissionEmpresaPayload não envia inscrição municipal pelo formulário; inclui IE e nfe/nfce inativos sem config (apenas NFS-e)', () => {
+  it('buildNfEmissionEmpresaPayload omite inscrição municipal quando vazia; inclui quando preenchida; IE e nfe/nfce inativos sem config (apenas NFS-e)', () => {
     const form = fullValidForm();
-    const payload = buildNfEmissionEmpresaPayload({
+    const payloadEmptyIm = buildNfEmissionEmpresaPayload({
       cnpj: '12345678000190',
       certificadoId: 'cert-abc',
       form
     });
 
-    expect('inscricaoMunicipal' in payload).toBe(false);
+    expect('inscricaoMunicipal' in payloadEmptyIm).toBe(false);
+
+    const payloadWithIm = buildNfEmissionEmpresaPayload({
+      cnpj: '12345678000190',
+      certificadoId: 'cert-abc',
+      form: { ...form, inscricaoMunicipal: '  12345  ' }
+    });
+    expect(payloadWithIm.inscricaoMunicipal).toBe('12345');
+
+    const payload = payloadEmptyIm;
     expect(payload.inscricaoEstadual).toBe(PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA);
     expect(payload.certificado).toBe('cert-abc');
     const nfce = payload.nfce as Record<string, unknown>;

@@ -20,9 +20,9 @@ describe('guiaMeiCadastroDocumentosAtivos', () => {
     expect(
       getTituloBlocoDadosMinimosEmitente({ nfse: true, nfe: false, nfce: false })
     ).toBe(TITULO_DADOS_MINIMOS_SO_NFSE);
-    expect(getHintBlocoDadosMinimosEmitente({ nfse: true, nfe: false, nfce: false })).toContain(
-      'inscrição estadual'
-    );
+    const hintOnlyNfse = getHintBlocoDadosMinimosEmitente({ nfse: true, nfe: false, nfce: false });
+    expect(hintOnlyNfse).toContain('inscrição estadual');
+    expect(hintOnlyNfse).toContain('Inscrição municipal é opcional');
   });
 
   it('FR-CAD-DOC-08: título neutro quando há dois ou mais tipos activos', () => {

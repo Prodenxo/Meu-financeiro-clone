@@ -36,6 +36,10 @@ export function mergeEmitenteSnapshotIntoNfseForm(
     prestadorCpfCnpj,
     prestadorRazaoSocial: fillText(current.prestadorRazaoSocial, snap.razaoSocial),
     prestadorEmail: fillText(current.prestadorEmail, snap.email),
+    prestadorInscricaoMunicipal: fillText(
+      current.prestadorInscricaoMunicipal,
+      snap.inscricaoMunicipal
+    ),
     prestadorEndereco: {
       logradouro: fillText(pe.logradouro, snap.logradouro),
       numero: fillText(pe.numero, snap.numero),
@@ -107,6 +111,7 @@ export function replacePrestadorFromEmitenteSnapshot(
       prestadorCpfCnpj: '',
       prestadorRazaoSocial: '',
       prestadorEmail: '',
+      prestadorInscricaoMunicipal: '',
       prestadorEndereco: emptyNfsePrestadorEndereco()
     },
     snap

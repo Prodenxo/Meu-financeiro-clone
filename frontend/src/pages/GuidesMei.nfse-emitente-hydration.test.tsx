@@ -41,7 +41,8 @@ const emitenteStatus = vi.hoisted(() =>
       bairro: 'Jardim Paulista',
       codigoCidade: '3550308',
       descricaoCidade: 'São Paulo',
-      estado: 'SP'
+      estado: 'SP',
+      inscricaoMunicipal: ''
     }
   }))
 );

@@ -27,6 +27,8 @@ export type NfEmissionCompanyForm = {
   razaoSocial: string;
   nomeFantasia: string;
   email: string;
+  /** Opcional — enviado ao Plugnotas apenas se preenchido (modo nacional não exige na UI). */
+  inscricaoMunicipal: string;
   regimeTributario: NfEmissionRegimeTributario;
   simplesNacional: boolean;
   cep: string;
@@ -44,6 +46,7 @@ export const getDefaultNfEmissionCompanyForm = (): NfEmissionCompanyForm => ({
   razaoSocial: '',
   nomeFantasia: '',
   email: '',
+  inscricaoMunicipal: '',
   regimeTributario: '1',
   simplesNacional: true,
   cep: '',
@@ -123,6 +126,10 @@ export const buildNfEmissionEmpresaPayload = ({
   };
   if (form.email.trim()) {
     payload.email = form.email.trim();
+  }
+  const im = form.inscricaoMunicipal?.trim();
+  if (im) {
+    payload.inscricaoMunicipal = im;
   }
 
   const trimmedCert = certificadoId?.trim();

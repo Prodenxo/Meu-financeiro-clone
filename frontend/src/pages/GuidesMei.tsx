@@ -217,7 +217,8 @@ const emitenteSnapshotToForm = (snap: NfseEmitenteSnapshot): NfEmissionCompanyFo
   return {
     ...getDefaultNfEmissionCompanyForm(),
     ...companyFields,
-    regimeTributario: regime
+    regimeTributario: regime,
+    inscricaoMunicipal: String(companyFields.inscricaoMunicipal ?? '').trim()
   };
 };
 
@@ -225,6 +226,7 @@ const nfEmissionFormToPersistBody = (form: NfEmissionCompanyForm) => ({
   razaoSocial: form.razaoSocial,
   nomeFantasia: form.nomeFantasia,
   email: form.email,
+  inscricaoMunicipal: form.inscricaoMunicipal,
   regimeTributario: form.regimeTributario,
   cep: form.cep,
   tipoLogradouro: form.tipoLogradouro,
@@ -1179,6 +1181,9 @@ export default function GuidesMei() {
       ...(nfEmissionCompanyForm.email.trim()
         ? { prestadorEmail: nfEmissionCompanyForm.email.trim() }
         : {}),
+      ...(nfEmissionCompanyForm.inscricaoMunicipal.trim()
+        ? { prestadorInscricaoMunicipal: nfEmissionCompanyForm.inscricaoMunicipal.trim() }
+        : {}),
       prestadorEndereco: resolvePrestadorEndereco(undefined, {
         logradouro: nfEmissionCompanyForm.logradouro,
         numero: nfEmissionCompanyForm.numero,
@@ -2112,8 +2117,10 @@ export default function GuidesMei() {
         if (nfseForm.prestadorEmail?.trim()) {
           payload.prestadorEmail = nfseForm.prestadorEmail.trim();
         }
-        if (nfseForm.prestadorInscricaoMunicipal?.trim()) {
-          payload.prestadorInscricaoMunicipal = nfseForm.prestadorInscricaoMunicipal.trim();
+        const prestadorIm =
+          nfseForm.prestadorInscricaoMunicipal?.trim() || nfEmissionCompanyForm.inscricaoMunicipal?.trim() || '';
+        if (prestadorIm) {
+          payload.prestadorInscricaoMunicipal = prestadorIm;
         }
         if (tomadorCpfCnpj) {
           payload.tomadorCpfCnpj = tomadorCpfCnpj;
@@ -3372,6 +3379,17 @@ export default function GuidesMei() {
                       <option value="2">Regime tributário: Simples excesso sublimite (2)</option>
                       <option value="3">Regime tributário: Regime normal (3)</option>
                     </select>
+                    <input
+                      id="mei-emitente-inscricao-municipal"
+                      className="planner-input-compact md:col-span-2"
+                      type="text"
+                      value={nfEmissionCompanyForm.inscricaoMunicipal}
+                      onChange={(event) => updateNfEmissionCompanyForm({
+                        inscricaoMunicipal: event.target.value
+                      })}
+                      placeholder="Inscrição municipal (opcional)"
+                      autoComplete="off"
+                    />
                   </div>
                   <div className="mt-2 grid gap-2 md:grid-cols-4">
                     <input
