@@ -3023,31 +3023,6 @@ export default function GuidesMei() {
             </div>
           ) : null}
 
-          {canViewNfse ? (
-            <div
-              className="rounded-lg border border-slate-200/80 bg-slate-50/90 p-3 text-sm leading-relaxed dark:border-slate-700/80 dark:bg-slate-900/40"
-              data-testid="mei-nfse-nacional-mode-callout"
-              role="region"
-              aria-labelledby="mei-nfse-nacional-callout-heading"
-            >
-              <h3
-                id="mei-nfse-nacional-callout-heading"
-                className="text-sm font-semibold text-slate-900 dark:text-slate-100"
-              >
-                NFS-e em ambiente nacional
-              </h3>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                O cadastro desta área envia a configuração de <strong>NFS-e Nacional</strong> para o emissor fiscal, alinhada
-                à opção &quot;NFS-e Nacional&quot; do painel Plugnotas. <strong>Não</strong> é necessário preencher
-                inscrição municipal nem escolher prefeitura aqui.
-              </p>
-              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                Se o emissor recusar o cadastro pedindo dados municipais, pode ser limitação da conta ou da API — siga a
-                mensagem de erro ou o guia de operação.
-              </p>
-            </div>
-          ) : null}
-
           {certificateConnectivityAlert ? <GuiaMeiCertificateConnectivityPanel /> : null}
           {certificateError ? (
             <GuiaMeiEmpresaCadastroErrorPanel
