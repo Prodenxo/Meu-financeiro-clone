@@ -36,6 +36,18 @@ Quando o cliente envia **`documentosAtivos: { nfse, nfe, nfce }`** (booleanos), 
 
 Story: [`story-fr-cad-doc-p0-backend-documentos-ativos-plugnotas.md`](../stories/story-fr-cad-doc-p0-backend-documentos-ativos-plugnotas.md).
 
+## Complemento (2026-04-08) — trilho B opt-in `nfse.config.prefeitura.codigoIbge`
+
+Quando `PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE=true`, o BFF preenche `nfse.config.prefeitura.codigoIbge` com `endereco.codigoCidade` normalizado (7 dígitos) **apenas** se `nfse` está activo e o ramo `prefeitura` ainda não define `codigoIbge` — preserva `login` / `senha` enviados pelo cliente.
+
+A documentação pública Plugnotas (exemplo TecnoSpeed) usa com frequência `prefeitura.login` / `prefeitura.senha` para NFS-e municipal; o ramo **IBGE** serve ambientes em que o validador aceita (ou exige em conjunto) identificação por código IBGE. Confirmar conta/ambiente com **NFR-PREF-EV-01**. **Desligado por defeito** (**NFR-P0-REG-01**).
+
+Implementação: `backend/src/services/plugnotas/nfsePrefeituraPayload.js` + `empresa.service.js` após `normalizePayloadEnderecoCodigoCidade` em `POST` e `PATCH` empresa.
+
+Story: [`story-fr-cons-p0-plugnotas-empresa-backend-trilho-b-nfse-prefeitura.md`](../stories/story-fr-cons-p0-plugnotas-empresa-backend-trilho-b-nfse-prefeitura.md).
+
+**FR-P0-SPIKE-01 / FR-P0-DOC-01:** fecho documental do spike e decisão trilho **B** — [`docs/evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md`](../evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md); story [`docs/stories/story-fr-cons-p0-plugnotas-empresa-spike-prefeitura-decisao-doc.md`](../stories/story-fr-cons-p0-plugnotas-empresa-spike-prefeitura-decisao-doc.md). Runbook: [`docs/operacao-mei-nfse.md`](../operacao-mei-nfse.md) âncora `#p0-prefeitura-spike-trilho-b`.
+
 ## Consequências
 
 - Positivo: menos falhas de cadastro por validação de NFC-e inativa.

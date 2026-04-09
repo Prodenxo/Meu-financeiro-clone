@@ -30,6 +30,7 @@ import {
   stripDocumentosAtivos
 } from './plugnotas-empresa-documentos-ativos.js';
 import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.js';
+import { applyNfseConfigPrefeituraDeriveIbge } from './nfsePrefeituraPayload.js';
 import {
   resolvePlugnotasGatewayUpstreamForClient,
   summarizePlugnotasErrorLogBody
@@ -54,6 +55,15 @@ const normalizePayloadEnderecoCodigoCidade = (payload) => {
   if (!endereco || typeof endereco !== 'object' || Array.isArray(endereco)) return;
   if (!hasOwn(endereco, 'codigoCidade')) return;
   endereco.codigoCidade = normalizeIbgeMunicipioCodigo(endereco.codigoCidade);
+};
+
+/**
+ * Trilho B P0 — opt-in via `PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE=true`.
+ * Usa `process.env` em tempo de chamada (não só o snapshot de `env.js`) para testes e workers.
+ */
+const applyNfsePrefeituraIbgeIfEnabled = (payload) => {
+  if (process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE !== 'true') return;
+  applyNfseConfigPrefeituraDeriveIbge(payload, { derivePrefeituraIbge: true });
 };
 
 /**
@@ -607,6 +617,7 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   }
 
   normalizePayloadEnderecoCodigoCidade(payload);
+  applyNfsePrefeituraIbgeIfEnabled(payload);
 
   const updateResult = await tryUpdateEmpresa(cnpj, payload);
   if (updateResult.response) {
@@ -660,6 +671,7 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
   applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection);
 
   normalizePayloadEnderecoCodigoCidade(payload);
+  applyNfsePrefeituraIbgeIfEnabled(payload);
 
   try {
     const response = await requestJson('POST', '/empresa', payload);

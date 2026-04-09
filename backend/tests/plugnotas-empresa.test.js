@@ -80,6 +80,11 @@ test('empresa service cria empresa com POST /empresa', async () => {
     assert.equal('config' in sent.nfce, false);
     assert.equal(sent.inscricaoEstadual, 'ISENTO');
     assert.equal(sent.nfse?.nacional, true);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(sent.nfse?.config || {}, 'prefeitura'),
+      false,
+      'sem PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE não enviar prefeitura derivada (NFR-P0-REG-01)'
+    );
   } finally {
     global.fetch = originalFetch;
   }
@@ -1068,5 +1073,84 @@ test('empresa service trata conflito sem update como sucesso operacional', async
     );
   } finally {
     global.fetch = originalFetch;
+  }
+});
+
+test('POST com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeitura.codigoIbge (trilho B)', async () => {
+  const prevDerive = process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
+  process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE = 'true';
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return createJsonResponse(200, {
+      message: 'OK',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await cadastrarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      certificado: 'cert-1',
+      razaoSocial: 'Empresa Teste',
+      endereco: {
+        codigoCidade: '4115200',
+        estado: 'PR',
+        logradouro: 'Rua A',
+        numero: '1',
+        bairro: 'Centro',
+        cep: '87000000'
+      }
+    });
+    assert.equal(calls.length, 1);
+    const sent = JSON.parse(calls[0].options.body);
+    assert.deepEqual(sent.nfse.config.prefeitura, { codigoIbge: '4115200' });
+  } finally {
+    global.fetch = originalFetch;
+    if (prevDerive === undefined) delete process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
+    else process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE = prevDerive;
+  }
+});
+
+test('PATCH com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeitura.codigoIbge (trilho B, coerência POST)', async () => {
+  const prevDerive = process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
+  process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE = 'true';
+  const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options, body: options.body });
+    return createJsonResponse(200, {
+      message: 'Empresa atualizada',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await atualizarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      razaoSocial: 'Empresa Teste',
+      nfse: { ativo: true, tipoContrato: 0, config: { producao: true } },
+      endereco: {
+        codigoCidade: '4115200',
+        estado: 'PR',
+        logradouro: 'Rua A',
+        numero: '1',
+        bairro: 'Centro',
+        cep: '87000000'
+      }
+    });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].options.method, 'PATCH');
+    const sent = JSON.parse(calls[0].body);
+    assert.deepEqual(sent.nfse.config.prefeitura, { codigoIbge: '4115200' });
+  } finally {
+    global.fetch = originalFetch;
+    if (prevDerive === undefined) delete process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
+    else process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE = prevDerive;
   }
 });

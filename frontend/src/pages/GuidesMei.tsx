@@ -97,6 +97,14 @@ import {
   withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable
 } from '../utils/nfseNacionalPlugnotasErrorHints';
 import { resolvePlugnotasEmpresaCadastroSolUxState } from '../utils/plugnotasEmpresaCadastroSolUx';
+import {
+  PLUGNOTAS_P0_L1_ARIA_LABEL,
+  PLUGNOTAS_P0_L1_BODY_PARAS,
+  PLUGNOTAS_P0_L1_TITLE,
+  PLUGNOTAS_P0_L2_STATUS_MESSAGE,
+  readMeiPlugnotasEmpresaCadastroBlockedExternally,
+  resolvePlugnotasEmpresaP0Overlay
+} from '../utils/plugnotasEmpresaP0Overlay';
 import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
 import {
@@ -620,6 +628,11 @@ export default function GuidesMei() {
   /** FR-SOL-P1 follow-up QA: força re-leitura do sessionStorage (TTL) sem depender só de outras interacções. */
   const [solFase2SessionFlagRevalidateTick, setSolFase2SessionFlagRevalidateTick] = useState(0);
   const [empresaRegistroRetryBusy, setEmpresaRegistroRetryBusy] = useState(false);
+  /** P0-L1: utilizador fechou o bloco «impossibilidade» (região abaixo de PREF/SOL no painel âmbar). */
+  const [plugnotasP0L1ImposibilidadeDismissed, setPlugnotasP0L1ImposibilidadeDismissed] = useState(false);
+  /** P0-L2: `role="status"` sucinto, uma transição para sucesso de fase (sem spam em poll). */
+  const [plugnotasP0L2PhaseSuccessVisible, setPlugnotasP0L2PhaseSuccessVisible] = useState(false);
+  const plugnotasP0OverlayPrevKindRef = useRef<string>('');
   const plugnotasEmpresaRetryRef = useRef<HTMLDivElement>(null);
   const [isRemovingCert, setIsRemovingCert] = useState(false);
   const [hasUserCertificate, setHasUserCertificate] = useState(false);
@@ -927,8 +940,14 @@ export default function GuidesMei() {
     [canViewNfse, normalizedContribuinte]
   );
 
+  const meiPlugnotasEmpresaBlockedExternally = useMemo(
+    () => readMeiPlugnotasEmpresaCadastroBlockedExternally(),
+    []
+  );
+
   const plugnotasPrimaryActionEnabled = useMemo(() => {
     if (isUploadingCert || empresaRegistroRetryBusy) return false;
+    if (meiPlugnotasEmpresaBlockedExternally && plugnotasPendingRetry) return false;
     if (plugnotasPendingRetry) {
       return nfEmissionFormAndDocsOkForPlugnotas && plugnotasCnpjOkForSubmit;
     }
@@ -940,6 +959,7 @@ export default function GuidesMei() {
   }, [
     isUploadingCert,
     empresaRegistroRetryBusy,
+    meiPlugnotasEmpresaBlockedExternally,
     plugnotasPendingRetry,
     certificateFile,
     certificatePassword,
@@ -951,6 +971,9 @@ export default function GuidesMei() {
   const plugnotasPrimaryDisabledHint = useMemo(() => {
     if (plugnotasPrimaryActionEnabled || isUploadingCert || empresaRegistroRetryBusy) return null;
     if (plugnotasPendingRetry) {
+      if (meiPlugnotasEmpresaBlockedExternally) {
+        return 'Neste cenário o cadastro automático pelo site não está disponível. Use o guia de operação fiscal ou o suporte do emissor antes de insistir no envio.';
+      }
       const c = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
       if (c) return c;
       const d = getDocumentosAtivosValidationMessage(documentosAtivos);
@@ -977,6 +1000,7 @@ export default function GuidesMei() {
     plugnotasPrimaryActionEnabled,
     isUploadingCert,
     empresaRegistroRetryBusy,
+    meiPlugnotasEmpresaBlockedExternally,
     plugnotasPendingRetry,
     certificateFile,
     certificatePassword,
@@ -1216,6 +1240,7 @@ export default function GuidesMei() {
     const formattedCnpj = formatDocument(returnedCnpj || cnpj);
     invalidateMeiEmpresaGetCache(userId, returnedCnpj || cnpj);
     clearGuiaMeiEmpresaFase2FailFlag(userId, returnedCnpj || cnpj);
+    clearNfEmissionCompanySyncErrorState();
     setContribuinteDoc(formattedCnpj);
     updateNfseForm({
       prestadorCpfCnpj: formattedCnpj,
@@ -1253,7 +1278,7 @@ export default function GuidesMei() {
       primary,
       secondary: canViewNfse ? MSG_SUCESSO_PATCH_DOCUMENTOS_ATIVOS_EMISSOR : undefined
     });
-  }, [userId, nfEmissionCompanyForm, updateNfseForm, canViewNfse]);
+  }, [userId, nfEmissionCompanyForm, updateNfseForm, canViewNfse, clearNfEmissionCompanySyncErrorState]);
 
   const handleRetryPlugnotasEmpresaRegistro = useCallback(async () => {
     if (!plugnotasPendingRetry) return;
@@ -2668,6 +2693,58 @@ export default function GuidesMei() {
     userId
   ]);
 
+  const plugnotasEmpresaLastGetCoherent = useMemo(() => {
+    const err = nfEmissionCompanySyncError?.trim();
+    if (!err) return true;
+    return !isPlugnotasEmpresaConsultNotFoundMessage(err);
+  }, [nfEmissionCompanySyncError]);
+
+  const plugnotasEmpresaP0Overlay = useMemo(
+    () =>
+      resolvePlugnotasEmpresaP0Overlay({
+        configuracaoCadastroBloqueadoExternamente: meiPlugnotasEmpresaBlockedExternally,
+        lastPostEmpresaPhase2Ok: plugnotasEmpresaFase2PostOk,
+        lastGetEmpresaHasData: plugnotasEmpresaLastGetCoherent,
+        postErrorPanelVisible: Boolean(plugnotasPendingRetry && !certificateConnectivityAlert)
+      }),
+    [
+      meiPlugnotasEmpresaBlockedExternally,
+      plugnotasEmpresaFase2PostOk,
+      plugnotasEmpresaLastGetCoherent,
+      plugnotasPendingRetry,
+      certificateConnectivityAlert
+    ]
+  );
+
+  useEffect(() => {
+    setPlugnotasP0L1ImposibilidadeDismissed(false);
+  }, [plugnotasEmpresaRetryDetail]);
+
+  useEffect(() => {
+    if (!plugnotasPendingRetry) {
+      setPlugnotasP0L1ImposibilidadeDismissed(false);
+    }
+  }, [plugnotasPendingRetry]);
+
+  useEffect(() => {
+    if (plugnotasEmpresaFase2PostOk !== true) {
+      plugnotasP0OverlayPrevKindRef.current = '';
+      setPlugnotasP0L2PhaseSuccessVisible(false);
+      return;
+    }
+    const k = plugnotasEmpresaP0Overlay.kind;
+    if (k === 'phaseSuccess' && plugnotasP0OverlayPrevKindRef.current !== 'phaseSuccess') {
+      setPlugnotasP0L2PhaseSuccessVisible(true);
+    }
+    plugnotasP0OverlayPrevKindRef.current = k;
+  }, [plugnotasEmpresaFase2PostOk, plugnotasEmpresaP0Overlay.kind]);
+
+  useEffect(() => {
+    if (!plugnotasP0L2PhaseSuccessVisible) return undefined;
+    const id = window.setTimeout(() => setPlugnotasP0L2PhaseSuccessVisible(false), 6000);
+    return () => window.clearTimeout(id);
+  }, [plugnotasP0L2PhaseSuccessVisible]);
+
   /** FR-NFSE-UX-P2 §7: pilha de feedback abaixo do botão Emitir — (1) bloqueio certificado/emitente. */
   const nfseEmitFeedbackTier1 = useMemo(() => {
     const nodes: ReactNode[] = [];
@@ -3250,6 +3327,43 @@ export default function GuidesMei() {
                   </p>
                 )
               ) : null}
+              {plugnotasEmpresaP0Overlay.kind === 'impossibility' &&
+              !plugnotasP0L1ImposibilidadeDismissed ? (
+                <div
+                  role="region"
+                  aria-label={PLUGNOTAS_P0_L1_ARIA_LABEL}
+                  className="space-y-2 rounded-md border border-amber-300/70 bg-amber-100/40 p-3 dark:border-amber-800/60 dark:bg-amber-950/40"
+                >
+                  <p className="text-sm font-semibold text-amber-950 dark:text-amber-50">
+                    {PLUGNOTAS_P0_L1_TITLE}
+                  </p>
+                  {PLUGNOTAS_P0_L1_BODY_PARAS.map((para) => (
+                    <p
+                      key={para.slice(0, 24)}
+                      className="text-xs leading-relaxed text-amber-950/95 dark:text-amber-100/90"
+                    >
+                      {para}
+                    </p>
+                  ))}
+                  <p className="text-xs">
+                    <a
+                      href={nfseNacionalOperacaoHelpHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-amber-900 underline decoration-amber-800/60 underline-offset-2 hover:text-amber-950 dark:text-amber-200/95 dark:decoration-amber-300/50 dark:hover:text-amber-100"
+                    >
+                      Ver guia de operação fiscal
+                    </a>
+                  </p>
+                  <button
+                    type="button"
+                    className="planner-button-secondary-compact"
+                    onClick={() => setPlugnotasP0L1ImposibilidadeDismissed(true)}
+                  >
+                    Entendi
+                  </button>
+                </div>
+              ) : null}
               <p className="text-xs text-slate-700 dark:text-slate-300">
                 Se o problema continuar, verifique se o CNPJ e o ambiente (sandbox ou produção) coincidem com o painel do emissor ou fale com o suporte.
               </p>
@@ -3290,6 +3404,15 @@ export default function GuidesMei() {
                 <p className="text-sm opacity-90">{certificateSuccess.secondary}</p>
               ) : null}
             </div>
+          ) : null}
+
+          {plugnotasP0L2PhaseSuccessVisible ? (
+            <p
+              className="rounded-md border border-emerald-200/90 bg-emerald-50/90 px-3 py-2 text-sm text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/35 dark:text-emerald-100/95"
+              role="status"
+            >
+              {PLUGNOTAS_P0_L2_STATUS_MESSAGE}
+            </p>
           ) : null}
 
           {nfEmissionCompanySyncError ? (

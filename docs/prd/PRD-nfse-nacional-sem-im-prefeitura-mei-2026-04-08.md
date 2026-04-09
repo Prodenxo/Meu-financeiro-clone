@@ -100,6 +100,12 @@ Quando o provedor devolver validações que exijam campos típicos de **NFS-e mu
 
 Este PRD **recomenda A** para o MVP descrito no brief; **B** exige escopo adicional e validação legal/UX.
 
+### 6.4 P0 cadastro `nfse.config.prefeitura` — trilhos **C/D** (UI) vs este PRD
+
+**Registo 2026-04-08:** no fecho do spike P0 ([`docs/evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md`](../evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md)), o trilho principal foi **B** (derivação server-side opt-in de `nfse.config.prefeitura.codigoIbge`; ver [`story-fr-cons-p0-plugnotas-empresa-backend-trilho-b-nfse-prefeitura.md`](../stories/story-fr-cons-p0-plugnotas-empresa-backend-trilho-b-nfse-prefeitura.md)). A story de UI **C/D** ([`story-fr-cons-p0-plugnotas-empresa-ui-trilho-c-d-prefeitura.md`](../stories/story-fr-cons-p0-plugnotas-empresa-ui-trilho-c-d-prefeitura.md)) fica **fora de escopo** enquanto o PO **não** reabrir trilho **C** ou **D**.
+
+**Coerência com §6.1 / FR-NAT-UX-01:** o formulário Guia MEI **continua** sem tornar **obrigatórios** IM nem campos de prefeitura na UI; o trilho **B** não contradiz esta decisão (enriquecimento no BFF a partir de `endereco.codigoCidade` já colectado). Se no futuro o PO activar **C** ou **D**, actualizar este parágrafo e o PRD PREF correspondente.
+
 ---
 
 ## 7. Requisitos funcionais
@@ -168,3 +174,4 @@ Este PRD **recomenda A** para o MVP descrito no brief; **B** exige escopo adicio
 | Data | Autor | Nota |
 | --- | --- | --- |
 | 2026-04-08 | PM (Morgan) | PRD inicial derivado do brief `brief-nfse-nacional-sem-im-prefeitura-2026-04-08.md`. |
+| 2026-04-08 | Engenharia | §6.4 — trilho P0 **B** vs story UI C/D cancelada; alinhamento FR-NAT-UX-01. |

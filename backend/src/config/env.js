@@ -93,6 +93,11 @@ export const env = {
    */
   PLUGNOTAS_CERT_409_RESOLVE_LOG_LEVEL: process.env.PLUGNOTAS_CERT_409_RESOLVE_LOG_LEVEL || 'warn',
   PLUGNOTAS_TIMEOUT_MS: process.env.PLUGNOTAS_TIMEOUT_MS || '15000',
+  /**
+   * Trilho B (P0): `true` — BFF preenche `nfse.config.prefeitura.codigoIbge` a partir de `endereco.codigoCidade`
+   * (7 dígitos) quando `nfse` está activo. **Desligado por defeito** (NFR-P0-REG-01). Ver ADR apenas-NFS-e e `nfsePrefeituraPayload.js`.
+   */
+  PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE: process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE || 'false',
   /** Nível de log para diagnóstico HTTP 400 em emissão (requestJson): `error` (padrão) ou `warn`. */
   PLUGNOTAS_EMIT_400_LOG_LEVEL: process.env.PLUGNOTAS_EMIT_400_LOG_LEVEL || 'error',
   PLUGNOTAS_WEBHOOK_TOKEN: requiredInProduction('PLUGNOTAS_WEBHOOK_TOKEN'),
