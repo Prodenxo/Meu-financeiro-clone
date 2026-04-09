@@ -710,12 +710,15 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
       return el.getAttribute('placeholder') || '';
     });
 
-    expect(sequence).toEqual([
+    const expectedSequence = [
       'Razão social *',
       'Nome fantasia (opcional)',
       'Email fiscal (opcional)',
       '__select__',
       'Inscrição municipal (opcional)',
+      ...(import.meta.env.VITE_PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED === 'true'
+        ? ['Utilizador do portal (opcional)', 'Senha do portal (opcional)']
+        : []),
       'CEP *',
       'Tipo logradouro',
       'Logradouro *',
@@ -726,7 +729,9 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
       'Cidade *',
       'UF *',
       '__checkbox__'
-    ]);
+    ];
+
+    expect(sequence).toEqual(expectedSequence);
 
     await act(async () => {
       root.unmount();

@@ -337,6 +337,54 @@ Se o backend estiver parado, o sintoma típico é falha de rede no envio do cert
 
 O backend normaliza o JSON enviado ao Plugnotas em `POST /empresa` e `PATCH /empresa/:cnpj`: **`nfe` e `nfce` inativos** (`ativo: false`, `tipoContrato: 0`) **sem** objeto `config`, e **`inscricaoEstadual`** vazia no cadastro vira o valor definido em `plugnotas-mei-empresa-policy.js` (hoje **`ISENTO`**). O **`POST`** também garante o bloco **`nfse`** com **`nacional: true`** por padrão (**US-MEI-NAT-02**); ver [NFS-e Nacional no cadastro Plugnotas](#plugnotas-nfse-nacional-spike-nat01). Em `PATCH` sem as chaves `nfe`/`nfce`, esses blocos **não** são enviados (evita reativar NFC-e legada). Detalhes apenas NFS-e: [`ADR-plugnotas-empresa-payload-apenas-nfse.md`](adr/ADR-plugnotas-empresa-payload-apenas-nfse.md).
 
+### Checklist de deriva de contrato addCompany (FR-ADDCO-05)
+
+Use esta checklist **antes de release** sempre que houver mudança documentada no contrato upstream equivalente a `addCompany`, alteração de validação do provedor para `POST /empresa` / `PATCH /empresa/:cnpj`, ou dúvida interna de paridade entre payload, backend e UX da Guia MEI.
+
+#### Gatilho de uso
+
+1. Houve mudança na documentação pública do provedor para `addCompany`, `POST /empresa` ou `PATCH /empresa/:cnpj`.
+2. Um erro novo de cadastro empresa passou a exigir campos, mensagens ou regras não cobertos pela baseline validada.
+3. Houve alteração interna em `buildNfEmissionEmpresaPayload`, `cadastrarEmpresaPlugNotas` ou copy/hints da Guia MEI que possa afetar a paridade com o provedor.
+
+#### Passos de revisão
+
+1. Confirmar ambiente e credenciais antes de concluir qualquer diagnóstico:
+   `PLUGNOTAS_API_BASE_URL` e `PLUGNOTAS_API_KEY` devem apontar para a mesma conta e o mesmo ambiente (sandbox ou produção).
+2. Revisar o payload frontend em `frontend/src/utils/nfEmissionCompany.ts`, com foco em `buildNfEmissionEmpresaPayload`.
+3. Revisar a normalização e a política backend em `backend/src/services/plugnotas/empresa.service.js`, com foco em `cadastrarEmpresaPlugNotas` e fallback `POST /empresa` -> `PATCH /empresa/:cnpj`.
+4. Revisar copy, hints e estados de UX na Guia MEI, com foco em `frontend/src/pages/GuidesMei.tsx`, `GuiaMeiEmpresaCadastroErrorPanel`, heurísticas de hint e retry parcial.
+5. Verificar se a mudança impacta distinção por fase:
+   `certificado` versus `empresa` devem continuar distinguíveis em logs, erros tipados e UX.
+6. Verificar se a mudança introduz risco de vazamento:
+   não expor segredos, credenciais, tokens ou detalhes sensíveis do provedor em mensagens ao utilizador ou em registos públicos.
+
+#### Pontos obrigatórios de inspeção
+
+- `buildNfEmissionEmpresaPayload`
+- `cadastrarEmpresaPlugNotas`
+- copy/hints da Guia MEI para cadastro empresa, incluindo `GuiaMeiEmpresaCadastroErrorPanel`
+- retry parcial após falha da fase `empresa`
+- verificação de ambiente (`PLUGNOTAS_API_BASE_URL`, chave e coerência sandbox/produção)
+
+#### Decisão final
+
+Registar exatamente uma destas saídas ao fim da revisão:
+
+- `sem gap`
+- `gap documentado sem bloqueio`
+- `gap bloqueante para release`
+
+#### Local de registo da execução
+
+Registar cada execução futura desta checklist em uma story, epic ou ticket interno associado à mudança, incluindo:
+
+1. data da revisão;
+2. ambiente usado (`PLUGNOTAS_API_BASE_URL`, sem expor chave);
+3. decisão final (`sem gap`, `gap documentado sem bloqueio` ou `gap bloqueante para release`);
+4. links para os artefatos afetados;
+5. resumo curto do impacto em payload, backend e UX.
+
 **Documentos ativos (P0):** o corpo pode incluir **`documentosAtivos: { nfse, nfe, nfce }`** (booleanos). O servidor monta os três blocos conforme a selecção, valida pelo menos um tipo activo e **não** reenvia `documentosAtivos` ao Plugnotas. Se **`documentosAtivos` estiver ausente** no `POST`, o default continua **só NFS-e activo** (equivalente ao comportamento anterior). No **`PATCH`**, se **`documentosAtivos` estiver ausente**, mantém-se a semântica acima (omitir `nfe`/`nfce` quando o cliente não os envia).
 
 ## Endpoints Relevantes
