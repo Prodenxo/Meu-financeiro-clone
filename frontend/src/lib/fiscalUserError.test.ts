@@ -9,6 +9,7 @@ import {
   meiFiscalToastMessage,
   isLikelyUserFacingFiscalValidationMessage,
   formatMeiFiscalMappedForAlert,
+  PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02,
 } from './fiscalUserError';
 
 describe('mapMeiFiscalErrorToCopy', () => {
@@ -41,6 +42,16 @@ describe('mapMeiFiscalErrorToCopy', () => {
     expect(copy.description).toMatch(/emissor|conta/i);
     expect(copy.actionLabel).toBe('Documentação');
     expect(copy.href).toContain('certificado-emissor-409-sem-id');
+  });
+
+  it('DP-PLOGIN-02: prefeitura_ibge_apenas_insuficiente_dp02 — copy limite do serviço (UX §7)', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage: 'ignored when code set',
+      plugnotasCode: PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02,
+    });
+    expect(copy.title).toContain('Limite');
+    expect(copy.description).toMatch(/município|emissor/i);
+    expect(copy.description).not.toMatch(/culpa|erro seu/i);
   });
 
   it('usa fallback para payload que parece JSON de API', () => {

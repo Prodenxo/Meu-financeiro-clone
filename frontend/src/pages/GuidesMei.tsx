@@ -54,6 +54,7 @@ import {
   type NfEmissionCompanyForm,
   type NfEmissionRegimeTributario
 } from '../utils/nfEmissionCompany';
+import { isPrefeituraPortalCredentialsUiEnabled } from '../utils/prefeituraPortalCredentialsUi';
 import { normalizeIbgeMunicipioCodigo } from '../utils/ibgeMunicipioCodigo';
 import {
   DEFAULT_DOCUMENTOS_ATIVOS,
@@ -110,7 +111,9 @@ import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
 import {
   PlugnotasMunicipalRequirementOperacaoBody,
   PlugnotasPrefeituraConfigNfseOperacaoBody,
-  PlugnotasPrefeituraConfigNfseOperacaoTitle
+  PlugnotasPrefeituraConfigNfseOperacaoTitle,
+  PlugnotasPrefeituraLoginRequiredNfseOperacaoBody,
+  PlugnotasPrefeituraLoginRequiredNfseOperacaoTitle
 } from '../components/PlugnotasMunicipalRequirementOperacaoCopy';
 import { MeiLimiteFaturamentoBlock } from '../components/MeiLimiteFaturamentoBlock';
 import { MeiNfseCatalogManageActions } from '../components/MeiNfseCatalogManageActions';
@@ -3308,7 +3311,20 @@ export default function GuidesMei() {
                 <p className="text-amber-900 dark:text-amber-200/95">{plugnotasEmpresaRetryDetail}</p>
               ) : null}
               {plugnotasRetryMunicipalOperacaoHint ? (
-                plugnotasRetryEmpresaUxVariant === 'prefeitura-config' ? (
+                plugnotasRetryEmpresaUxVariant === 'prefeitura-login-required' ? (
+                  <div
+                    role="region"
+                    aria-label="Acesso ao portal da prefeitura no NFS-e"
+                    className="text-xs text-amber-950/95 dark:text-amber-100/90"
+                  >
+                    <p className="mb-1 font-semibold text-amber-950 dark:text-amber-50">
+                      <PlugnotasPrefeituraLoginRequiredNfseOperacaoTitle />
+                    </p>
+                    <p className="leading-snug">
+                      <PlugnotasPrefeituraLoginRequiredNfseOperacaoBody />
+                    </p>
+                  </div>
+                ) : plugnotasRetryEmpresaUxVariant === 'prefeitura-config' ? (
                   <div
                     role="region"
                     aria-label="Configuração de prefeitura no NFS-e"
@@ -3739,6 +3755,50 @@ export default function GuidesMei() {
                       Opcional. É o número da inscrição na prefeitura; não substitui configurações extras que o emissor
                       possa pedir no cadastro NFS-e.
                     </p>
+                    {isPrefeituraPortalCredentialsUiEnabled() ? (
+                      <>
+                        <div className="md:col-span-2 mt-2 rounded-lg border border-amber-200/80 bg-amber-50/80 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+                          <p
+                            id="mei-prefeitura-portal-heading"
+                            className="mb-2 text-xs font-semibold text-amber-900 dark:text-amber-200"
+                          >
+                            Acesso ao portal municipal (NFS-e)
+                          </p>
+                          <p className="mb-2 text-xs text-slate-700 dark:text-slate-300">
+                            Dados sensíveis para o sistema da prefeitura, quando o emissor os exigir — não confundir com a
+                            inscrição municipal acima. Não partilhe estas credenciais em chats públicos.
+                          </p>
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <input
+                              id="mei-prefeitura-portal-usuario"
+                              className="planner-input-compact"
+                              type="text"
+                              name="prefeitura_portal_usuario"
+                              autoComplete="off"
+                              value={nfEmissionCompanyForm.prefeituraPortalUsuario}
+                              onChange={(event) => updateNfEmissionCompanyForm({
+                                prefeituraPortalUsuario: event.target.value
+                              })}
+                              placeholder="Utilizador do portal (opcional)"
+                              aria-labelledby="mei-prefeitura-portal-heading"
+                            />
+                            <input
+                              id="mei-prefeitura-portal-senha"
+                              className="planner-input-compact"
+                              type="password"
+                              name="prefeitura_portal_senha"
+                              autoComplete="new-password"
+                              value={nfEmissionCompanyForm.prefeituraPortalSenha}
+                              onChange={(event) => updateNfEmissionCompanyForm({
+                                prefeituraPortalSenha: event.target.value
+                              })}
+                              placeholder="Senha do portal (opcional)"
+                              aria-labelledby="mei-prefeitura-portal-heading"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                   <div className="mt-2 grid gap-2 md:grid-cols-4">
                     <input

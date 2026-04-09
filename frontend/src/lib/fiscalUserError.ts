@@ -2,6 +2,10 @@ import {
   isPlugnotasGatewayUpstreamCode,
   PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID,
 } from '../utils/plugnotasApiErrorCode';
+
+/** DP-PLOGIN-02 — BFF bloqueia cadastro só com IBGE em município da lista (`prefeituraIbgeOnlyBlock.js`). */
+export const PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02 =
+  'prefeitura_ibge_apenas_insuficiente_dp02';
 import { getPlugnotasCodeFromUnknownError, getHttpStatusFromUnknownError } from '../utils/apiClientError';
 
 /** Alinhado à Story 6.3 / Guia MEI: acima disto, mensagem longa exige expansão ou área rolável. */
@@ -139,6 +143,16 @@ export function mapMeiFiscalErrorToCopy(input: {
       title: 'Emissor fiscal temporariamente indisponível',
       description: MEI_FISCAL_GATEWAY_UPSTREAM_DESCRIPTION,
       gatewayUpstream: true,
+    };
+  }
+
+  if (code === PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02) {
+    return {
+      title: 'Limite do serviço — prefeitura no NFS-e',
+      description:
+        'Nem todos os municípios ficam disponíveis neste fluxo sem dados adicionais da prefeitura no emissor fiscal. '
+        + 'Para o seu município, o cadastro costuma exigir configuração além do código IBGE. '
+        + 'Isto não é um erro das suas credenciais MEI — contacte o suporte ou consulte a documentação do emissor.',
     };
   }
 

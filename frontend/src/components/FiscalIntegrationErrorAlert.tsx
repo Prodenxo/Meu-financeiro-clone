@@ -29,7 +29,9 @@ import UserFacingErrorBlock from './UserFacingErrorBlock';
 import {
   PlugnotasMunicipalRequirementOperacaoBody,
   PlugnotasPrefeituraConfigNfseOperacaoBody,
-  PlugnotasPrefeituraConfigNfseOperacaoTitle
+  PlugnotasPrefeituraConfigNfseOperacaoTitle,
+  PlugnotasPrefeituraLoginRequiredNfseOperacaoBody,
+  PlugnotasPrefeituraLoginRequiredNfseOperacaoTitle
 } from './PlugnotasMunicipalRequirementOperacaoCopy';
 import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
 
@@ -195,6 +197,26 @@ function NfseNacionalOperacaoDocHint({ message, linkTone = 'danger' }: NfseNacio
 
   if (isPlugnotasEmpresaMunicipalRequirementMessage(message)) {
     const uxVariant = getPlugnotasEmpresaCadastroErrorUxVariant(message);
+    if (uxVariant === 'prefeitura-login-required') {
+      return (
+        <div
+          className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90"
+          role="region"
+          aria-label="Acesso ao portal da prefeitura no NFS-e"
+        >
+          <p className="mb-1 font-semibold text-rose-900 dark:text-rose-100">
+            <PlugnotasPrefeituraLoginRequiredNfseOperacaoTitle />
+          </p>
+          <p>
+            <PlugnotasPrefeituraLoginRequiredNfseOperacaoBody />{' '}
+            <a href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+              {linkLabel}
+            </a>
+            <span className="text-rose-800/85 dark:text-rose-300/85"> (abre em nova aba).</span>
+          </p>
+        </div>
+      );
+    }
     if (uxVariant === 'prefeitura-config') {
       return (
         <div

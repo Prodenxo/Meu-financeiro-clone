@@ -98,6 +98,22 @@ export const env = {
    * (7 dígitos) quando `nfse` está activo. **Desligado por defeito** (NFR-P0-REG-01). Ver ADR apenas-NFS-e e `nfsePrefeituraPayload.js`.
    */
   PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE: process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE || 'false',
+  /**
+   * DP-PLOGIN-01: `true` — BFF aceita e valida `nfse.config.prefeitura.login` / `senha` no POST/PATCH empresa.
+   * **Desligado por defeito** até decisão PO / rollout. O frontend deve usar o mesmo critério via `VITE_*`.
+   */
+  PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED:
+    process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED || 'false',
+  /**
+   * DP-PLOGIN-02: `true` — BFF pode bloquear POST/PATCH empresa antes do Plugnotas quando `nfse.config.prefeitura`
+   * ficar só com `codigoIbge` e o IBGE estiver em `PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES`.
+   * **Desligado por defeito.** Lista vazia ⇒ sem bloqueios (evita falsos positivos globais).
+   */
+  PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED:
+    process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED || 'false',
+  /** Códigos IBGE (7 dígitos), separados por vírgula — usado só com a flag acima `true`. */
+  PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES:
+    process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES || '',
   /** Nível de log para diagnóstico HTTP 400 em emissão (requestJson): `error` (padrão) ou `warn`. */
   PLUGNOTAS_EMIT_400_LOG_LEVEL: process.env.PLUGNOTAS_EMIT_400_LOG_LEVEL || 'error',
   PLUGNOTAS_WEBHOOK_TOKEN: requiredInProduction('PLUGNOTAS_WEBHOOK_TOKEN'),

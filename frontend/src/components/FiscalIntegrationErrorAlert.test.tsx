@@ -95,6 +95,25 @@ describe('EmissaoFiscalErrorAlert', () => {
     ).toBeTruthy();
   });
 
+  it('FR-PLOGIN / PLOGIN-UX-L1: mensagem com prefeitura.login obrigatório — região dedicada (distinto PREF-L1)', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <EmissaoFiscalErrorAlert
+          documentTypeLabel="NFS-e"
+          message="HTTP 400: fields.nfse.config.prefeitura.login é obrigatório no cadastro NFSe."
+        />
+      );
+    });
+    expect(
+      container.querySelector('[role="region"][aria-label="Acesso ao portal da prefeitura no NFS-e"]')
+    ).toBeTruthy();
+    expect(container.textContent).toContain('acesso ao sistema da prefeitura');
+    expect(
+      container.querySelector('[role="region"][aria-label="Configuração de prefeitura no NFS-e"]')
+    ).toBeNull();
+  });
+
   it('FR-CID-UX-02: mensagem só prefeitura não mostra hint IBGE', async () => {
     const root = createRoot(container);
     await act(async () => {

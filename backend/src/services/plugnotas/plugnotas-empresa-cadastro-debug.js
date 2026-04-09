@@ -59,6 +59,8 @@ export const applyEmpresaCadastroPiiMaskForLog = (value) => {
     const kk = key.toLowerCase();
     if (kk === 'cep' && typeof val === 'string') {
       out[key] = maskCepDigits(val);
+    } else if ((kk === 'login' || kk === 'senha') && typeof val === 'string') {
+      out[key] = '***';
     } else if (typeof val === 'string' && EMPRESA_CADASTRO_PII_KEYS.has(kk)) {
       out[key] = maskPiiString(val);
     } else if (val && typeof val === 'object') {

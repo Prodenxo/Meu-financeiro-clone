@@ -60,6 +60,33 @@
 - **Consulta GET empresa após falha no registo:** se o utilizador ainda tem o painel de **retry** (cadastro da empresa não concluído) e a consulta devolve “não encontrado” / **404**, a app pode prefixar a mensagem com orientação para resolver o erro de registo antes de interpretar como CNPJ errado.
 - **FR-CONS (P1) — triade UX / CONS-B:** o mesmo prefixo (UX §5.4) aplica-se quando o painel de retry **já não** está visível mas o marcador de sessão SOL-P1 (`guiaMeiEmpresaFase2FailFlag`) indica falha recente no POST fase 2 — `withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable` com `sessionPostFailedFlag`. Erros de validação guia / Serpro (CONS-C) **não** disparam dica NFS-e Nacional / municipal na heurística — `shouldOfferNfseNacionalOperacaoDocHint` em `nfseNacionalPlugnotasErrorHints.ts`; story [`story-fr-cons-p1-guidesmei-fr-cons-ux-paridade-sol.md`](stories/story-fr-cons-p1-guidesmei-fr-cons-ux-paridade-sol.md).
 - **Payload com `prefeitura` preenchida** no `nfse.config` — ver fecho do spike P0 e evidência redigida: [`NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md`](evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md) (**FR-P0-SPIKE-01**, **FR-P0-DOC-01**). Trilhos **C/D** permanecem stories condicionais no mesmo eixo PRD PREF.
+- **400 com `prefeitura.login` / `senha` obrigatório** (mensagem do emissor, distinto de tabela IBGE e de “só falta `prefeitura` / trilho B”): [Triagem PLOGIN — 400 `prefeitura.login`](#plogin-400-prefeitura-login-obrigatorio-triagem).
+
+<a id="plogin-400-prefeitura-login-obrigatorio-triagem"></a>
+
+##### Triagem **P1** — HTTP **400** com **`prefeitura.login` / `senha` obrigatório** (FR-PLOGIN)
+
+**Sintoma:** resposta **400** do **Plugnotas** (upstream) cuja mensagem indica explicitamente **`nfse.config.prefeitura.login`**, **`prefeitura.login`**, **`prefeitura.senha`** ou texto equivalente — o validador exige **credenciais do portal municipal** no ramo `prefeitura`, não apenas um bloco `nfse.config.prefeitura` com **`codigoIbge`**.
+
+**Não confundir com:**
+
+1. **TIBGE / CID** — erro sobre **`endereco.codigoCidade`**, valor não encontrado na **tabela de cidades IBGE** do emissor, ou `codigoIBGECidade`: ver [endereco.codigoCidade e tabela IBGE](#endereco-codigo-cidade-ibge-plugnotas) e [400 cadastro empresa: qual erro? — CID vs TIBGE vs PREF](#cadastro-empresa-400-qual-erro).  
+2. **Só falta `nfse.config.prefeitura` / trilho B** — o backend pode derivar **`nfse.config.prefeitura.codigoIbge`** a partir de **`endereco.codigoCidade`** com **`PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE=true`**; isso **não** dispensa **login/senha** quando o Plugnotas as exige no schema — ver [Trilho B — env `PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE`](#prefb-trilho-b-env-derive-ibge) e [Spike P0 — trilho B](#p0-prefeitura-spike-trilho-b).  
+3. **400 do BFF (DP-PLOGIN-02)** — bloqueio interno `prefeitura_ibge_apenas_insuficiente_dp02` **antes** do emissor — ver [DP-PLOGIN-02](#dp02-prefeitura-ibge-apenas-bloqueio).
+
+**Referências canónicas:** PRD [`PRD-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md`](prd/PRD-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md); spec UX [`ux-spec-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md`](specs/ux-spec-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md); arquitetura [`architecture-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md`](technical/architecture-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md).
+
+**Contrato público (Plugnotas) — FR-PLOGIN-03:** [Documentação da API (Postman)](https://documenter.getpostman.com/view/3720339/2sB3WpSh1R?version=latest) — ramo `prefeitura`; **não** copiar credenciais para o Git nem para tickets públicos.
+
+**FR-PLOGIN-01 — evidência em ticket interno ou acta (sem secrets em canal aberto):**
+
+1. Guardar **mensagem de erro completa** (texto ou screenshot) e **ambiente** (homologação/produção).  
+2. Se possível, **payload ou excerto redigido** enviado ao Plugnotas (`login`/`senha` substituídos por `***` ou marcador) para provar se o ramo `nfse.config.prefeitura` incluía ou não credenciais.  
+3. Registar em **ticket interno ou acta**; **não** colar tokens, certificados nem credenciais reais em Slack/Git público (**NFR-PLOGIN-02**).
+
+**Quando persistir após dados coerentes e revisão de ambiente:** alinhar **FR-BRIEF-OP-06** e **FR-PREFB-ESC-01** — [Programa briefing (FR-BRIEF-OP)](#programa-briefing-fr-brief-op); [Trilho B — escalação FR-PREFB-ESC-01](#prefb-trilho-b-env-derive-ibge); PRD PREF [`PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md`](prd/PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md); PRD P0 [`PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md`](prd/PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md).
+
+**Ver também:** [DP-PLOGIN-01 — credenciais do portal municipal](#dp01-prefeitura-portal-credenciais) (opt-in produto); [Quadro CID / TIBGE / PREF](#cadastro-empresa-400-qual-erro).
 
 <a id="p0-prefeitura-spike-trilho-b"></a>
 
@@ -72,6 +99,24 @@
 - **FR-P0-OUT-01 / 02** (POST 2xx + GET coerente no ambiente acordado): fechar com evidência **interna** (ticket/QA) **sem** CNPJ nem chaves no Git.
 - **NFR-PREF-EV-01 (produção):** antes do primeiro deploy com **`PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE=true`** em ambiente real, validar conta/sandbox conforme nível **B** em [`NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md`](evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md) §8 e anexar registo redigido ao processo de release (fora do Git se contiver dados sensíveis).
 
+<a id="dp01-prefeitura-portal-credenciais"></a>
+
+##### DP-PLOGIN-01 — credenciais do portal municipal (`login` / `senha` em `nfse.config.prefeitura`)
+
+- **Opt-in:** backend `PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED` e frontend `VITE_PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED` (ambos por defeito desligados até decisão PO). Com ambos **ligados**, a Guia MEI pode recolher «utilizador do portal» e «senha do portal» e o BFF valida antes do Plugnotas; ver ADR [`ADR-plugnotas-empresa-payload-apenas-nfse.md`](adr/ADR-plugnotas-empresa-payload-apenas-nfse.md) complemento 2026-04-09.
+- **Activar / desactivar (QA ou piloto):** definir as duas variáveis (`true` / ausente ou `false`); **reiniciar** o backend e **recompilar** o frontend de dev (Vite lê `VITE_*` ao arranque). **Promoção a GA** — owner: @po conforme pré-condições da story DP-PLOGIN-01.
+- **Checklist manual ramo desactivado (defeito):** secção «Acesso ao portal municipal» **não** aparece no passo empresa da Guia MEI; envio de `nfse.config.prefeitura.login`/`senha` ao BFF → **400** `prefeitura_portal_credenciais_disabled` (mensagem clara, sem segredo no corpo da resposta).
+- **Checklist manual ramo activado (ambas as flags `true`):** bloco «Acesso ao portal municipal (NFS-e)» visível; par utilizador+senha validado no cliente e no BFF; heurísticas de erro municipal (`nfseNacionalPlugnotasErrorHints`) mantêm variante **prefeitura-config** para a mensagem BFF de recurso desactivado (cita `nfse.config.prefeitura`) — regressão em `nfseNacionalPlugnotasErrorHints.test.ts`.
+- **Suporte:** não solicitar credenciais reais em tickets públicos; triagem distinta do trilho B só IBGE — [Triagem PLOGIN — 400 `prefeitura.login`](#plogin-400-prefeitura-login-obrigatorio-triagem); PRD [`PRD-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md`](prd/PRD-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md).
+
+<a id="dp02-prefeitura-ibge-apenas-bloqueio"></a>
+
+##### DP-PLOGIN-02 — bloqueio BFF quando só `codigoIbge` em município da lista
+
+- **Opt-in:** `PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED` e `PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES` (IBGEs de 7 dígitos). **Defeito desligado;** lista vazia ⇒ sem bloqueio. Ver ADR [`ADR-plugnotas-empresa-payload-apenas-nfse.md`](adr/ADR-plugnotas-empresa-payload-apenas-nfse.md) complemento DP-PLOGIN-02.
+- **Sintoma controlado:** HTTP **400** do BFF com `errors.plugnotasCode` = `prefeitura_ibge_apenas_insuficiente_dp02` — distinto de **400** do emissor com `nfse.config.prefeitura` obrigatório (PREF-L1) e de erros de tabela IBGE em `endereco` (TIBGE-L1). **Triagem:** não tratar como “falta só corrigir IBGE” se o código indicar DP02.
+- **Activar / desactivar:** mesmo critério que DP01 (reinício Node; owner promoção **@po**).
+
 <a id="prefb-trilho-b-env-derive-ibge"></a>
 
 ##### Trilho B — env `PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE` (FR-PREFB: derivação IBGE → `nfse.config.prefeitura.codigoIbge`)
@@ -82,7 +127,9 @@
 - **Causalidade:** se o **POST** cadastro empresa falhar, um **GET** empresa pode devolver **404** até existir **POST** 2xx — [Encadeamento POST → GET 404](#cadastro-post-404-get-empresa).
 - **PRD / brief PREFB (400 prefeitura + derivação IBGE):** [`PRD-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](prd/PRD-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md); [`brief-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](brief/brief-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md).
 - **Spec UX e arquitetura (referência):** [`ux-spec-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](specs/ux-spec-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md); [`architecture-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](technical/architecture-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md).
-- **FR-PREFB-ESC-01 — se o erro persistir após trilho B + IBGE válido (7 dígitos) e revisão de ambiente:** PRD PREF [`PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md`](prd/PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md); PRD P0 ação cadastro [`PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md`](prd/PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md).
+- **FR-PREFB-ESC-01 — se o erro persistir após trilho B + IBGE válido (7 dígitos) e revisão de ambiente:** PRD PREF [`PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md`](prd/PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md); PRD P0 ação cadastro [`PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md`](prd/PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md). Se a mensagem for **`prefeitura.login`/senha obrigatório** (não só falta de `codigoIbge`), ver também [Triagem PLOGIN — 400 `prefeitura.login`](#plogin-400-prefeitura-login-obrigatorio-triagem).
+
+<a id="programa-briefing-fr-brief-op"></a>
 
 ##### Programa briefing (FR-BRIEF-OP)
 
@@ -105,7 +152,7 @@ Camada operacional / triagem (**FR-BRIEF-OP-01** a **FR-BRIEF-OP-06**) — ponte
 
 #### `endereco.codigoCidade` e tabela de municípios IBGE (**FR-CID-DOC-01**)
 
-- O Plugnotas pode devolver **400** com validação do tipo *valor não encontrado na tabela de cidades do IBGE* ou menção a **`fields.endereco.codigoCidade`**. Isto é **distinto** de erros sobre **`nfse.config.prefeitura`** ou só inscrição municipal — ver secção [acima](#nfse-config-prefeitura-cadastro-pref).
+- O Plugnotas pode devolver **400** com validação do tipo *valor não encontrado na tabela de cidades do IBGE* ou menção a **`fields.endereco.codigoCidade`**. Isto é **distinto** de erros sobre **`nfse.config.prefeitura`** ou só inscrição municipal — ver secção [acima](#nfse-config-prefeitura-cadastro-pref). Também é **distinto** de **400** que exige **`prefeitura.login`/senha** no ramo municipal — [Triagem PLOGIN — 400 `prefeitura.login`](#plogin-400-prefeitura-login-obrigatorio-triagem).
 - **Formato técnico:** o aplicativo normaliza o código para **string com apenas dígitos** (7 dígitos típicos de município IBGE) no cliente e no servidor antes de `POST`/`PATCH` `/empresa`, para evitar rejeição só por tipo JSON (ex.: número vs string) ou caracteres não numéricos colados na consulta CNPJ.
 - **Dados incorrectos na fonte:** se, após normalização, o **conteúdo** ainda não existir na tabela que o emissor usa, o **400** pode persistir — aí o utilizador deve conferir município e código no cadastro CNPJ ou na base oficial do IBGE; não é falha de “formato” corrigível só no app.
 - **Referências:** PRD [`PRD-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md`](prd/PRD-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md); arquitetura [`architecture-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md`](technical/architecture-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md).

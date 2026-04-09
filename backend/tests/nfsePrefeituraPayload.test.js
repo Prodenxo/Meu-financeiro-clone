@@ -80,6 +80,15 @@ test('prefeitura string no config — no-op (não sobrescrever)', () => {
   assert.equal(payload.nfse.config.prefeitura, 'x');
 });
 
+test('DP-PLOGIN-02 / FR-PREFB: derivação trilho B (só codigoIbge) inalterada — bloqueio BFF é política em empresa.service', () => {
+  const payload = {
+    endereco: { codigoCidade: '4106902' },
+    nfse: { ativo: true, tipoContrato: 0, config: { producao: true } }
+  };
+  assert.equal(applyNfseConfigPrefeituraDeriveIbge(payload, { derivePrefeituraIbge: true }), true);
+  assert.deepEqual(payload.nfse.config.prefeitura, { codigoIbge: '4106902' });
+});
+
 function hasPref(p) {
   return Boolean(p?.nfse?.config?.prefeitura);
 }

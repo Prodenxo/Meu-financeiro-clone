@@ -33,6 +33,8 @@ import {
 import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.js';
 import { isPlugnotasIbgeTableRejectMessage } from '../../utils/plugnotasIbgeTableRejectMessage.js';
 import { applyNfseConfigPrefeituraDeriveIbge } from './nfsePrefeituraPayload.js';
+import { applyPrefeituraPortalCredentialsPolicy } from './prefeituraPortalCredentials.js';
+import { applyPrefeituraIbgeOnlyBlockPolicy } from './prefeituraIbgeOnlyBlock.js';
 import {
   resolvePlugnotasGatewayUpstreamForClient,
   summarizePlugnotasErrorLogBody
@@ -622,7 +624,9 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   }
 
   normalizePayloadEnderecoCodigoCidade(payload);
+  applyPrefeituraPortalCredentialsPolicy(payload);
   applyNfsePrefeituraIbgeIfEnabled(payload);
+  applyPrefeituraIbgeOnlyBlockPolicy(payload);
 
   const updateResult = await tryUpdateEmpresa(cnpj, payload);
   if (updateResult.response) {
@@ -676,7 +680,9 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
   applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection);
 
   normalizePayloadEnderecoCodigoCidade(payload);
+  applyPrefeituraPortalCredentialsPolicy(payload);
   applyNfsePrefeituraIbgeIfEnabled(payload);
+  applyPrefeituraIbgeOnlyBlockPolicy(payload);
 
   try {
     const response = await requestJson('POST', '/empresa', payload);

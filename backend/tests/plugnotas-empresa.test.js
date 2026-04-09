@@ -1154,3 +1154,55 @@ test('PATCH com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeit
     else process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE = prevDerive;
   }
 });
+
+test('POST DP-PLOGIN-02: bloqueio BFF antes do Plugnotas quando trilho B + IBGE na lista', async () => {
+  const prevDerive = process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
+  const prevBlock = process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED;
+  const prevCodes = process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES;
+  process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE = 'true';
+  process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED = 'true';
+  process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES = '4115200';
+
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async () => {
+    calls.push(1);
+    return createJsonResponse(200, {
+      message: 'OK',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await assert.rejects(
+      () =>
+        cadastrarEmpresaPlugNotas({
+          cpfCnpj: '17422651000172',
+          certificado: 'cert-1',
+          razaoSocial: 'Empresa Teste',
+          endereco: {
+            codigoCidade: '4115200',
+            estado: 'PR',
+            logradouro: 'Rua A',
+            numero: '1',
+            bairro: 'Centro',
+            cep: '87000000'
+          }
+        }),
+      (err) =>
+        err instanceof HttpError
+        && err.status === 400
+        && err.errors?.plugnotasCode === 'prefeitura_ibge_apenas_insuficiente_dp02'
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    global.fetch = originalFetch;
+    if (prevDerive === undefined) delete process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
+    else process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE = prevDerive;
+    if (prevBlock === undefined) delete process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED;
+    else process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED = prevBlock;
+    if (prevCodes === undefined) delete process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES;
+    else process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES = prevCodes;
+  }
+});

@@ -17,6 +17,13 @@ import {
  * **FR-PREF-HINT-01 / PREF-L1:** `isPlugnotasNfseConfigPrefeituraRequirementMessage`, `getPlugnotasEmpresaCadastroErrorUxVariant`
  * — ver `docs/operacao-mei-nfse.md` (#nfse-config-prefeitura-cadastro-pref).
  *
+ * **FR-PLOGIN / PLOGIN-UX-L1:** `isPlugnotasPrefeituraLoginRequiredMessage`, variante **`prefeitura-login-required`**
+ * — `ux-spec-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md` secção 5 (distinto de TIBGE e de PREF só com `codigoIbge`/config genérica).
+ *
+ * **DP-PLOGIN-02:** o identificador estável `prefeitura_ibge_apenas_insuficiente_dp02` (bloqueio BFF antes do emissor) e a copy
+ * ao utilizador estão em `mapMeiFiscalErrorToCopy` (`frontend/src/lib/fiscalUserError.ts`). Este ficheiro re-exporta a constante
+ * (`PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02`) para rastreio; testes de desambiguação com TIBGE-L1 / PREF-L1 em `nfseNacionalPlugnotasErrorHints.test.ts`.
+ *
  * **FR-CID-UX-02 / CID-L1; FR-TIBGE-UX-01 / TIBGE-L1:** `isPlugnotasEmpresaIbgeCidadeMessage` — spec UX
  * `ux-spec-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md` §3.2;
  * `ux-spec-correcao-ibge-tabela-plugnotas-400-get-404-2026-04-09.md` §3.1 (campo `codigoIBGECidade` na mensagem do emissor).
@@ -41,16 +48,18 @@ export const PLUGNOTAS_EMPRESA_CONSULT_PENDENTE_CADASTRO_PREFIX =
  * Variante de copy para erros de cadastro empresa Plugnotas.
  *
  * Mapeamento com a spec UX §3.2 (`ux-spec-plugnotas-nfse-config-prefeitura-payload-2026-04-08.md`):
- * - **PREF-L1** → `'prefeitura-config'` (copy §5.1 — `nfse.config.prefeitura` / config prefeitura no NFS-e).
+ * - **PLOGIN-UX-L1** → `'prefeitura-login-required'` (login/senha do portal municipal obrigatórios no JSON — ver spec PLOGIN).
+ * - **PREF-L1** → `'prefeitura-config'` (copy §5.1 — `nfse.config.prefeitura` / config prefeitura no NFS-e sem subcaso login).
  * - **PREF-L2** → `'municipal-generic'` (só IM / municipal sem gatilho L1; copy NAT §5.2).
  * - **Demais** (sem heurística municipal) → `'generic'` (equivalente a não mostrar bloco municipal especializado).
  *
- * Prioridade na função {@link getPlugnotasEmpresaCadastroErrorUxVariant}: L1 > L2 > generic.
+ * Prioridade na função {@link getPlugnotasEmpresaCadastroErrorUxVariant}: PLOGIN-L1 > PREF-L1 > L2 > generic.
  */
 export type PlugnotasEmpresaCadastroErrorUxVariant =
   | 'generic'
   | 'municipal-generic'
-  | 'prefeitura-config';
+  | 'prefeitura-config'
+  | 'prefeitura-login-required';
 
 /**
  * Padrões que disparam a dica (substring após normalização: minúsculas, sem acentos).
@@ -152,6 +161,64 @@ export function isPlugnotasNfseConfigPrefeituraRequirementMessage(message: strin
 }
 
 /**
+ * PLOGIN-UX-L1 (spec UX §5.1): emissor exige **login** e/ou **senha** do portal municipal em `nfse.config.prefeitura`.
+ * **Não** cobre o aviso BFF de credenciais desactivadas (DP-PLOGIN-01 — manter `prefeitura-config`).
+ */
+export function isPlugnotasPrefeituraLoginRequiredMessage(message: string): boolean {
+  const m = normalizeForMatch(message);
+  if (!m.trim()) return false;
+
+  if (m.includes('nfce') && !m.includes('nfse')) return false;
+
+  if (
+    m.includes('prefeitura_portal_credenciais_disabled') ||
+    ((m.includes('nao esta activo') || m.includes('não está activo')) &&
+      (m.includes('credencial') || m.includes('login/senha')))
+  ) {
+    return false;
+  }
+
+  const hasPathLoginOrSenha =
+    m.includes('prefeitura.login') ||
+    m.includes('prefeitura.senha') ||
+    m.includes('config.prefeitura.login') ||
+    m.includes('config.prefeitura.senha') ||
+    m.includes('nfse.config.prefeitura.login') ||
+    m.includes('nfse.config.prefeitura.senha');
+
+  const mandatory =
+    m.includes('obrigator') ||
+    m.includes('required') ||
+    m.includes('preenchiment') ||
+    m.includes('nao informad') ||
+    m.includes('não informad');
+
+  const hasPrefeitura = m.includes('prefeitura');
+  const nfseOrConfigContext =
+    m.includes('nfse') ||
+    m.includes('config') ||
+    m.includes('fields.') ||
+    m.includes('empresa') ||
+    m.includes('cadastro') ||
+    m.includes('plugnotas') ||
+    m.includes('json');
+
+  const loginPlusMandatory =
+    hasPrefeitura &&
+    m.includes('login') &&
+    mandatory &&
+    nfseOrConfigContext;
+
+  const senhaPlusMandatory =
+    hasPrefeitura &&
+    m.includes('senha') &&
+    mandatory &&
+    nfseOrConfigContext;
+
+  return Boolean(hasPathLoginOrSenha || loginPlusMandatory || senhaPlusMandatory);
+}
+
+/**
  * CID-L1 / **TIBGE-L1** (spec UX §3.1–3.2): mensagem indica falha no código IBGE do município / tabela de cidades do emissor.
  * Inclui citações a **`fields.endereco.codigoIBGECidade`** no texto Plugnotas (após `normalizeForMatch`: `codigoibgecidade`).
  * **NFR-TIBGE-02:** o JSON enviado pela app mantém apenas **`endereco.codigoCidade`** — não duplicar `codigoIBGECidade` no payload.
@@ -185,10 +252,11 @@ export function isPlugnotasEmpresaIbgeCidadeMessage(message: string): boolean {
   return hasEnderecoCodigoCidade || hasTabelaIbge || hasCodigoIbgeMunicipio;
 }
 
-/** @see PlugnotasEmpresaCadastroErrorUxVariant — prioridade spec UX PREF-L1 > PREF-L2 > generic. */
+/** @see PlugnotasEmpresaCadastroErrorUxVariant — prioridade PLOGIN-UX-L1 > PREF-L1 > PREF-L2 > generic. */
 export function getPlugnotasEmpresaCadastroErrorUxVariant(
   message: string
 ): PlugnotasEmpresaCadastroErrorUxVariant {
+  if (isPlugnotasPrefeituraLoginRequiredMessage(message)) return 'prefeitura-login-required';
   if (isPlugnotasNfseConfigPrefeituraRequirementMessage(message)) return 'prefeitura-config';
   if (isPlugnotasEmpresaMunicipalRequirementMessage(message)) return 'municipal-generic';
   return 'generic';
@@ -297,3 +365,6 @@ export function shouldOfferNfseNacionalOperacaoDocHint(
     isPlugnotasEmpresaMunicipalRequirementMessage(message)
   );
 }
+
+/** DP-PLOGIN-02 — mesmo valor que `errors.plugnotasCode` no BFF; copy canónica em `mapMeiFiscalErrorToCopy` (`fiscalUserError.ts`). */
+export { PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02 } from '../lib/fiscalUserError';

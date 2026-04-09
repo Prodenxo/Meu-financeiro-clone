@@ -1,12 +1,15 @@
 import { describe, it, expect } from 'vitest';
 
 import { MEI_GUIDE_SERPRO_UNAVAILABLE } from './mapMeiGuideValidateErrorToUserMessage';
+import { PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02 as dp02CodeFromFiscal } from '../lib/fiscalUserError';
 import {
   NFSE_NACIONAL_OPERACAO_DOC_ANCHOR,
   NFSE_NACIONAL_PLUGNOTAS_HINT_PATTERNS_DOC,
+  PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02,
   PLUGNOTAS_EMPRESA_CONSULT_PENDENTE_CADASTRO_PREFIX,
   getNfseNacionalOperacaoHelpHref,
   getPlugnotasEmpresaCadastroErrorUxVariant,
+  isPlugnotasPrefeituraLoginRequiredMessage,
   isPlugnotasEmpresaConsultNotFoundMessage,
   isPlugnotasEmpresaIbgeCidadeMessage,
   isPlugnotasEmpresaMunicipalRequirementMessage,
@@ -16,6 +19,11 @@ import {
 } from './nfseNacionalPlugnotasErrorHints';
 
 describe('nfseNacionalPlugnotasErrorHints', () => {
+  it('DP-PLOGIN-02: re-export do plugnotasCode alinha fiscalUserError (rastreio QA)', () => {
+    expect(PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02).toBe(dp02CodeFromFiscal);
+    expect(PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02).toBe('prefeitura_ibge_apenas_insuficiente_dp02');
+  });
+
   it('documenta lista de padrões para operação (sincronizar com operacao-mei-nfse.md)', () => {
     expect(NFSE_NACIONAL_PLUGNOTAS_HINT_PATTERNS_DOC.length).toBeGreaterThanOrEqual(6);
   });
@@ -89,6 +97,14 @@ describe('nfseNacionalPlugnotasErrorHints', () => {
 
   it.each([
     [
+      'HTTP 400: fields.nfse.config.prefeitura.login é obrigatório no cadastro da empresa.',
+      'prefeitura-login-required'
+    ],
+    [
+      'Falha na validação: prefeitura.login — preenchimento obrigatório (JSON empresa / NFSe).',
+      'prefeitura-login-required'
+    ],
+    [
       'Falha na validação do JSON de Empresa: fields.nfse.config.prefeitura: Preenchimento obrigatório',
       'prefeitura-config'
     ],
@@ -100,6 +116,41 @@ describe('nfseNacionalPlugnotasErrorHints', () => {
     ]
   ])('getPlugnotasEmpresaCadastroErrorUxVariant(%s) → %s', (msg, expected) => {
     expect(getPlugnotasEmpresaCadastroErrorUxVariant(msg)).toBe(expected);
+  });
+
+  describe('FR-PLOGIN / PLOGIN-UX-L1 (prefeitura-login-required)', () => {
+    it.each([
+      ['Campo nfse.config.prefeitura.login obrigatório.', true],
+      ['fields.nfse.config.prefeitura.senha: preenchimento obrigatório', true],
+      ['Valor não encontrado na tabela de cidades do IBGE.', false],
+      ['Falha: fields.endereco.codigoIBGECidade inválido.', false]
+    ])('isPlugnotasPrefeituraLoginRequiredMessage(%s) → %s', (msg, expected) => {
+      expect(isPlugnotasPrefeituraLoginRequiredMessage(msg)).toBe(expected);
+    });
+
+    it('híbrido TIBGE + login: variante L1 (não confundir só com IBGE)', () => {
+      const hybrid =
+        'Validação: fields.endereco.codigoIBGECidade inválido na tabela IBGE e fields.nfse.config.prefeitura.login obrigatório.';
+      expect(isPlugnotasEmpresaIbgeCidadeMessage(hybrid)).toBe(true);
+      expect(isPlugnotasPrefeituraLoginRequiredMessage(hybrid)).toBe(true);
+      expect(getPlugnotasEmpresaCadastroErrorUxVariant(hybrid)).toBe('prefeitura-login-required');
+    });
+  });
+
+  it('DP-PLOGIN-02: mensagem BFF bloqueio IBGE-only não dispara CID-L1 / TIBGE-L1 (FR-PREFB-QA-01)', () => {
+    // Sem a frase «código IBGE» — essa subcadeia acciona TIBGE-L1 por desenho; o utilizador vê `mapMeiFiscalErrorToCopy` via plugnotasCode.
+    const bffDp02 =
+      'Para este município a configuração NFS-e da prefeitura no emissor costuma exigir dados adicionais além do identificador municipal.';
+    expect(isPlugnotasEmpresaIbgeCidadeMessage(bffDp02)).toBe(false);
+    expect(isPlugnotasNfseConfigPrefeituraRequirementMessage(bffDp02)).toBe(false);
+  });
+
+  it('DP-PLOGIN-01 regressão: código BFF prefeitura_portal_credenciais_disabled mantém PREF-L1 / prefeitura-config', () => {
+    const msg =
+      'Envio de credenciais do portal da prefeitura (login/senha em nfse.config.prefeitura) não está activo neste ambiente.';
+    expect(isPlugnotasNfseConfigPrefeituraRequirementMessage(msg)).toBe(true);
+    expect(shouldOfferNfseNacionalOperacaoDocHint(msg)).toBe(true);
+    expect(getPlugnotasEmpresaCadastroErrorUxVariant(msg)).toBe('prefeitura-config');
   });
 
   it('PREF-L2 (spec UX §3.2): só IM obrigatória → municipal-generic, não prefeitura-config', () => {
