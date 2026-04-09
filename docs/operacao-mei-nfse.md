@@ -72,6 +72,18 @@
 - **FR-P0-OUT-01 / 02** (POST 2xx + GET coerente no ambiente acordado): fechar com evidência **interna** (ticket/QA) **sem** CNPJ nem chaves no Git.
 - **NFR-PREF-EV-01 (produção):** antes do primeiro deploy com **`PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE=true`** em ambiente real, validar conta/sandbox conforme nível **B** em [`NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md`](evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md) §8 e anexar registo redigido ao processo de release (fora do Git se contiver dados sensíveis).
 
+<a id="prefb-trilho-b-env-derive-ibge"></a>
+
+##### Trilho B — env `PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE` (FR-PREFB: derivação IBGE → `nfse.config.prefeitura.codigoIbge`)
+
+- **Sintoma:** HTTP **400** do Plugnotas citando `fields.nfse.config.prefeitura`, `nfse.config.prefeitura` ou preenchimento obrigatório desse ramo — ver [secção PREF](#nfse-config-prefeitura-cadastro-pref).
+- **Mitigação trilho B:** com **`PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE=true`**, o BFF pode preencher **`nfse.config.prefeitura.codigoIbge`** a partir de **`endereco.codigoCidade`** (**7 dígitos** após normalização — alinhar com [endereco.codigoCidade e tabela IBGE](#endereco-codigo-cidade-ibge-plugnotas) e §3 do brief PREFB). O defeito da env é **desligado**; **reinicie** o processo Node do backend após alterar a variável (local: `backend/.env`; Vercel ou outro host: novo deploy ou restart conforme a plataforma após mudar env).
+- **Ambientes:** **dev/staging/homologação** — pode activar-se para testes; **produção** continua **opt-in** (**DP-PREFB-01** no PRD PREFB): validar conta e evidência (**NFR-PREF-EV-01**) antes do primeiro uso real com `true`.
+- **Causalidade:** se o **POST** cadastro empresa falhar, um **GET** empresa pode devolver **404** até existir **POST** 2xx — [Encadeamento POST → GET 404](#cadastro-post-404-get-empresa).
+- **PRD / brief PREFB (400 prefeitura + derivação IBGE):** [`PRD-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](prd/PRD-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md); [`brief-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](brief/brief-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md).
+- **Spec UX e arquitetura (referência):** [`ux-spec-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](specs/ux-spec-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md); [`architecture-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](technical/architecture-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md).
+- **FR-PREFB-ESC-01 — se o erro persistir após trilho B + IBGE válido (7 dígitos) e revisão de ambiente:** PRD PREF [`PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md`](prd/PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md); PRD P0 ação cadastro [`PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md`](prd/PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md).
+
 <a id="cadastro-post-404-get-empresa"></a>
 
 #### Encadeamento **POST** cadastro empresa → **GET** **404** (**FR-SOL-DIAG-01**, **FR-SOL-ANT-01**)
