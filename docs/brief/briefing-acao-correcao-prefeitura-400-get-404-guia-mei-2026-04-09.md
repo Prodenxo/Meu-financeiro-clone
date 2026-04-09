@@ -2,6 +2,7 @@
 
 **Data:** 2026-04-09  
 **Origem:** brainstorm operacional (stack `apiClient` → `cadastrarEmpresaEmissaoNf` / `consultarEmpresaEmissaoNf` → Guia MEI).  
+**PRD formal (programa briefing — FR-BRIEF-OP):** [`PRD-briefing-acao-correcao-prefeitura-400-get-404-guia-mei-2026-04-09.md`](../prd/PRD-briefing-acao-correcao-prefeitura-400-get-404-guia-mei-2026-04-09.md)  
 **Documento canónico (detalhe técnico):** [`brief-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](./brief-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md)
 
 ---

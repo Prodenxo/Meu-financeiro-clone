@@ -20,7 +20,9 @@ export type PlugnotasEmpresaCadastroSolContextPanelProps = {
   showPlaybook?: boolean;
 };
 
-const REGION_LABEL_L1 = 'Por que a consulta pode mostrar que a empresa não foi encontrada';
+/** FR-BRIEF-OP-05: nome acessível não deve sugerir que a consulta é a causa principal sem o contexto de cadastro pendente. */
+const REGION_LABEL_L1 =
+  'Cadastro ainda não concluído no emissor; a consulta pode indicar que a empresa não foi encontrada';
 const REGION_LABEL_L2 = 'Cadastro da empresa ainda pendente no emissor';
 const REGION_LABEL_L3 = 'Como concluir o registro da empresa no emissor';
 

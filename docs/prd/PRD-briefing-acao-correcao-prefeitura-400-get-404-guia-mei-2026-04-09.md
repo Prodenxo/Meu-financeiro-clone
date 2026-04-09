@@ -11,6 +11,8 @@
 |-----------|--------|
 | [`PRD-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](./PRD-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md) | **PRD canónico PREFB** — objetivos, escopo, **FR-PREFB-***, **NFR-PREFB-***, **DP-PREFB-***, epic/stories sugeridos. **Este PRD** deriva apenas o **briefing de ação** em IDs operacionais. |
 | [`docs/technical/architecture-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](../technical/architecture-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md) | Ordem BFF (`normalizePayloadEnderecoCodigoCidade` → `applyNfsePrefeituraIbgeIfEnabled`), fronteiras FE/BFF/Plugnotas, env `PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE === 'true'`. |
+| [`docs/technical/architecture-briefing-acao-prefeitura-400-get-404-guia-mei-2026-04-09.md`](../technical/architecture-briefing-acao-prefeitura-400-get-404-guia-mei-2026-04-09.md) | Triagem POST/GET, superfícies (browser, Node, deploy), observabilidade e mapeamento **FR-BRIEF-OP-*** → artefactos; complementa a arquitectura canónica trilho B. |
+| [`docs/specs/ux-spec-briefing-acao-prefeitura-400-get-404-guia-mei-2026-04-09.md`](../specs/ux-spec-briefing-acao-prefeitura-400-get-404-guia-mei-2026-04-09.md) | **BRIEF-OP-UX**, guardrails de causalidade na UI. |
 | [`brief-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](../brief/brief-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md) | Causa raiz e detalhe técnico; o briefing de ação remete a este brief como canónico. |
 
 ---

@@ -84,6 +84,14 @@
 - **Spec UX e arquitetura (referência):** [`ux-spec-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](specs/ux-spec-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md); [`architecture-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md`](technical/architecture-correcao-400-nfse-config-prefeitura-derive-ibge-2026-04-09.md).
 - **FR-PREFB-ESC-01 — se o erro persistir após trilho B + IBGE válido (7 dígitos) e revisão de ambiente:** PRD PREF [`PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md`](prd/PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md); PRD P0 ação cadastro [`PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md`](prd/PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md).
 
+##### Programa briefing (FR-BRIEF-OP)
+
+Camada operacional / triagem (**FR-BRIEF-OP-01** a **FR-BRIEF-OP-06**) — ponteiros canónicos (sem duplicar o [brief curto](brief/briefing-acao-correcao-prefeitura-400-get-404-guia-mei-2026-04-09.md)):
+
+- **PRD formal** — requisitos e critérios §9: [`PRD-briefing-acao-correcao-prefeitura-400-get-404-guia-mei-2026-04-09.md`](prd/PRD-briefing-acao-correcao-prefeitura-400-get-404-guia-mei-2026-04-09.md).
+- **Spec UX** — guardrails **BRIEF-OP-UX**, checklist doc equipas: [`ux-spec-briefing-acao-prefeitura-400-get-404-guia-mei-2026-04-09.md`](specs/ux-spec-briefing-acao-prefeitura-400-get-404-guia-mei-2026-04-09.md).
+- **Arquitetura** — triagem, superfícies e rastreio **FR-BRIEF-OP-***: [`architecture-briefing-acao-prefeitura-400-get-404-guia-mei-2026-04-09.md`](technical/architecture-briefing-acao-prefeitura-400-get-404-guia-mei-2026-04-09.md).
+
 <a id="cadastro-post-404-get-empresa"></a>
 
 #### Encadeamento **POST** cadastro empresa → **GET** **404** (**FR-SOL-DIAG-01**, **FR-SOL-ANT-01**)

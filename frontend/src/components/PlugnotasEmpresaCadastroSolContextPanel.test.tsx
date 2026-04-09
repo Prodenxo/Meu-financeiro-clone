@@ -43,6 +43,21 @@ describe('PlugnotasEmpresaCadastroSolContextPanel', () => {
     expect(container.textContent).toContain('Cadastro ainda não foi criado no emissor');
   });
 
+  it('SOL-L1: aria-label da região prioriza cadastro antes da consulta (FR-BRIEF-OP-05)', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<PlugnotasEmpresaCadastroSolContextPanel state="L1" showPlaybook={false} />);
+    });
+    const region = container.querySelector('[role="region"][aria-label]');
+    expect(region).toBeTruthy();
+    const label = (region?.getAttribute('aria-label') ?? '').toLowerCase();
+    const iCadastro = label.indexOf('cadastro');
+    const iConsulta = label.indexOf('consulta');
+    expect(iCadastro).toBeGreaterThanOrEqual(0);
+    expect(iConsulta).toBeGreaterThanOrEqual(0);
+    expect(iCadastro).toBeLessThan(iConsulta);
+  });
+
   it('SOL-L2: mostra título de registro pendente (story P1 activa flag na página)', async () => {
     const root = createRoot(container);
     await act(async () => {
