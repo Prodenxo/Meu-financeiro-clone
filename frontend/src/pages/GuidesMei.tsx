@@ -80,7 +80,8 @@ import {
 import {
   getApiErrorCodeFromUnknownError,
   getHttpStatusFromUnknownError as getFiscalHttpStatus,
-  getPlugnotasCodeFromUnknownError as getFiscalErrorCode
+  getPlugnotasCodeFromUnknownError as getFiscalErrorCode,
+  getPlugnotasRequestFromUnknownError as getFiscalRequestMeta
 } from '../utils/apiClientError';
 import {
   mapMeiGuideValidateErrorToUserMessage,
@@ -196,7 +197,9 @@ import {
 function formatMeiFiscalErr(error: unknown, fallback: string): string {
   return formatFiscalError(
     error instanceof Error ? error.message : fallback,
-    getFiscalErrorCode(error)
+    getFiscalErrorCode(error),
+    getFiscalHttpStatus(error),
+    getFiscalRequestMeta(error)
   );
 }
 
@@ -1272,11 +1275,18 @@ export default function GuidesMei() {
     setPlugnotasPendingRetry(null);
     setPlugnotasEmpresaRetryDetail(null);
     setPlugnotasEmpresaFase2PostOk(true);
+    const operation = companyResponse.operation || null;
     const primary = opts.isRetryOnly
-      ? 'Dados do emitente foram registrados no serviço de emissão fiscal com sucesso.'
+      ? operation === 'updated' || operation === 'existing'
+        ? 'Dados do emitente foram sincronizados com sucesso no emissor fiscal.'
+        : 'Dados do emitente foram registrados no serviço de emissão fiscal com sucesso.'
       : opts.certificateRecoveredFrom409
-        ? 'Seu certificado já estava no emissor; os dados do emitente foram registrados.'
-        : 'Certificado e dados do emitente foram enviados ao serviço de emissão.';
+        ? operation === 'updated' || operation === 'existing'
+          ? 'Seu certificado já estava no emissor; os dados do emitente foram sincronizados.'
+          : 'Seu certificado já estava no emissor; os dados do emitente foram registrados.'
+        : operation === 'updated' || operation === 'existing'
+          ? 'Cadastro da empresa localizado no emissor; os dados do emitente foram sincronizados.'
+          : 'Certificado e dados do emitente foram enviados ao serviço de emissão.';
     setCertificateSuccess({
       primary,
       secondary: canViewNfse ? MSG_SUCESSO_PATCH_DOCUMENTOS_ATIVOS_EMISSOR : undefined
@@ -1322,9 +1332,7 @@ export default function GuidesMei() {
         setPlugnotasPendingRetry(null);
         setPlugnotasEmpresaFase2PostOk(null);
       } else {
-        const rawMessage = error instanceof Error ? error.message : 'Erro ao registrar empresa.';
-        const fiscalCode = getFiscalErrorCode(error);
-        setPlugnotasEmpresaRetryDetail(formatFiscalError(rawMessage, fiscalCode));
+        setPlugnotasEmpresaRetryDetail(formatMeiFiscalErr(error, 'Erro ao registrar empresa.'));
         setGuiaMeiEmpresaFase2FailFlag(userId, plugnotasPendingRetry.cnpj);
       }
     } finally {
@@ -1744,9 +1752,7 @@ export default function GuidesMei() {
           setCertificateError(null);
           setCertificateErrorFiscalCode(null);
           setCertificateErrorHttpStatus(null);
-          const rawMessage = cause instanceof Error ? cause.message : 'Erro ao registrar empresa.';
-          const fiscalCode = getFiscalErrorCode(cause);
-          setPlugnotasEmpresaRetryDetail(formatFiscalError(rawMessage, fiscalCode));
+          setPlugnotasEmpresaRetryDetail(formatMeiFiscalErr(cause, 'Erro ao registrar empresa.'));
           const retryCnpj = normalizeDoc(String(error.cnpj || cnpjForFiscal || ''));
           const retryCert = String(error.certificadoId || '').trim();
           if (retryCert && retryCnpj.length === 14) {
@@ -1772,9 +1778,8 @@ export default function GuidesMei() {
           setCertificateErrorHttpStatus(null);
         } else {
           setCertificateConnectivityAlert(false);
-          const rawMessage = src instanceof Error ? src.message : 'Erro ao enviar certificado.';
           const fiscalCode = getFiscalErrorCode(src);
-          const fallbackMessage = formatFiscalError(rawMessage, fiscalCode);
+          const fallbackMessage = formatMeiFiscalErr(src, 'Erro ao enviar certificado.');
           setCertificateErrorFiscalCode(fiscalCode);
           setCertificateErrorHttpStatus(getFiscalHttpStatus(src));
           setCertificateError(
@@ -1785,9 +1790,8 @@ export default function GuidesMei() {
         }
       } else {
         setCertificateConnectivityAlert(false);
-        const rawMessage = error instanceof Error ? error.message : 'Erro ao enviar certificado.';
         const fiscalCode = getFiscalErrorCode(error);
-        const fallbackMessage = formatFiscalError(rawMessage, fiscalCode);
+        const fallbackMessage = formatMeiFiscalErr(error, 'Erro ao enviar certificado.');
         setCertificateErrorFiscalCode(fiscalCode);
         setCertificateErrorHttpStatus(getFiscalHttpStatus(error));
         setCertificateError(

@@ -6,6 +6,7 @@ import {
   getApiErrorCodeFromUnknownError,
   getHttpStatusFromUnknownError,
   getPlugnotasCodeFromUnknownError,
+  getPlugnotasRequestFromUnknownError,
 } from './apiClientError';
 
 describe('ApiClientError', () => {
@@ -59,5 +60,18 @@ describe('ApiClientError', () => {
     );
     expect(err.apiErrorCode).toBe('MEI_GUIDE_SERPRO_UNAVAILABLE');
     expect(getApiErrorCodeFromUnknownError(err)).toBe('MEI_GUIDE_SERPRO_UNAVAILABLE');
+  });
+
+  it('apiClientErrorFromPayload anexa plugnotasRequest quando presente em errors', () => {
+    const err = apiClientErrorFromPayload(
+      {
+        success: false,
+        message: 'Falha ao cadastrar',
+        errors: { plugnotasRequest: { method: 'post', path: '/empresa' } }
+      },
+      buildApiErrorMessage
+    );
+    expect(err.plugnotasRequest).toEqual({ method: 'POST', path: '/empresa' });
+    expect(getPlugnotasRequestFromUnknownError(err)).toEqual({ method: 'POST', path: '/empresa' });
   });
 });

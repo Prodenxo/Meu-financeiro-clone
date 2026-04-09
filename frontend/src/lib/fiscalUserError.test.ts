@@ -10,6 +10,7 @@ import {
   isLikelyUserFacingFiscalValidationMessage,
   formatMeiFiscalMappedForAlert,
   PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02,
+  stripPlugnotasRequestSuffix,
 } from './fiscalUserError';
 
 describe('mapMeiFiscalErrorToCopy', () => {
@@ -31,6 +32,15 @@ describe('mapMeiFiscalErrorToCopy', () => {
     });
     expect(copy.gatewayUpstream).toBe(true);
     expect(copy.description).toBe(MEI_FISCAL_GATEWAY_UPSTREAM_DESCRIPTION);
+  });
+
+  it('remove o sufixo técnico plugnotasRequest da mensagem mostrada à UI', () => {
+    expect(
+      stripPlugnotasRequestSuffix('Falha ao cadastrar (POST /empresa no emissor fiscal)', {
+        method: 'POST',
+        path: '/empresa',
+      })
+    ).toBe('Falha ao cadastrar');
   });
 
   it('mapeia certificado_409_sem_id com título e link de documentação', () => {
@@ -118,5 +128,17 @@ describe('mapMeiFiscalErrorToCopy', () => {
     const copy = mapMeiFiscalErrorToCopy({ rawMessage: raw, plugnotasCode: null });
     expect(copy.title).toBe('Validação ou rejeição no provedor');
     expect(copy.description).toContain('NCM');
+  });
+
+  it('usa GET /empresa/:cnpj + empresa_nao_cadastrada para manter causalidade de cadastro pendente', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage:
+        'Não há cadastro desta empresa no emissor fiscal para o token e ambiente configurados. (GET /empresa/12345678000190 no emissor fiscal)',
+      plugnotasCode: 'empresa_nao_cadastrada',
+      plugnotasRequest: { method: 'GET', path: '/empresa/12345678000190' },
+    });
+    expect(copy.title).toBe('Cadastro da empresa ainda não concluído');
+    expect(copy.description).toMatch(/cadastro ainda não foi concluído|cadastro ainda não foi concluido/i);
+    expect(copy.description).not.toMatch(/GET \/empresa|POST \/empresa|rota errada/i);
   });
 });

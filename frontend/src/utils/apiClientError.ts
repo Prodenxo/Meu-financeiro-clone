@@ -1,6 +1,11 @@
 import type { ApiErrorPayload } from './buildApiErrorMessage';
 import { getPlugnotasCodeFromApiErrors } from './plugnotasApiErrorCode';
 
+export type PlugnotasRequestMeta = {
+  method: string;
+  path: string;
+};
+
 /** Extrai `errors.code` do JSON de erro da API (`success: false`). */
 export function getApiErrorCodeFromApiErrors(errors: unknown): string | null {
   if (!errors || typeof errors !== 'object' || Array.isArray(errors)) return null;
@@ -8,11 +13,26 @@ export function getApiErrorCodeFromApiErrors(errors: unknown): string | null {
   return typeof raw === 'string' && raw.length > 0 ? raw : null;
 }
 
+export function getPlugnotasRequestFromApiErrors(errors: unknown): PlugnotasRequestMeta | null {
+  if (!errors || typeof errors !== 'object' || Array.isArray(errors)) return null;
+  const raw = (errors as Record<string, unknown>).plugnotasRequest;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const method = typeof (raw as { method?: unknown }).method === 'string'
+    ? String((raw as { method?: unknown }).method).trim().toUpperCase()
+    : '';
+  const path = typeof (raw as { path?: unknown }).path === 'string'
+    ? String((raw as { path?: unknown }).path).trim()
+    : '';
+  if (!method || !path) return null;
+  return { method, path };
+}
+
 /** Erro HTTP JSON da API (`success: false`) com metadados opcionais para a UI (US-MEI-FISC-03). */
 export class ApiClientError extends Error {
   readonly plugnotasCode: string | null;
   /** Código estável em `payload.errors.code` (ex.: MEI_GUIDE_SERPRO_UNAVAILABLE). */
   readonly apiErrorCode: string | null;
+  readonly plugnotasRequest: PlugnotasRequestMeta | null;
   readonly payload: ApiErrorPayload | null;
   /** Status HTTP da resposta quando o erro veio de JSON `success: false` (mapeamento fiscal / gateway). */
   readonly httpStatus: number | null;
@@ -22,6 +42,7 @@ export class ApiClientError extends Error {
     options?: {
       plugnotasCode?: string | null;
       apiErrorCode?: string | null;
+      plugnotasRequest?: PlugnotasRequestMeta | null;
       payload?: ApiErrorPayload | null;
       httpStatus?: number | null;
     }
@@ -30,6 +51,7 @@ export class ApiClientError extends Error {
     this.name = 'ApiClientError';
     this.plugnotasCode = options?.plugnotasCode ?? null;
     this.apiErrorCode = options?.apiErrorCode ?? null;
+    this.plugnotasRequest = options?.plugnotasRequest ?? null;
     this.payload = options?.payload ?? null;
     this.httpStatus =
       options?.httpStatus != null && Number.isFinite(options.httpStatus)
@@ -43,6 +65,14 @@ export function getPlugnotasCodeFromUnknownError(err: unknown): string | null {
   if (err && typeof err === 'object' && 'plugnotasCode' in err) {
     const v = (err as { plugnotasCode?: unknown }).plugnotasCode;
     return typeof v === 'string' && v.length > 0 ? v : null;
+  }
+  return null;
+}
+
+export function getPlugnotasRequestFromUnknownError(err: unknown): PlugnotasRequestMeta | null {
+  if (err instanceof ApiClientError) return err.plugnotasRequest;
+  if (err && typeof err === 'object' && 'plugnotasRequest' in err) {
+    return getPlugnotasRequestFromApiErrors({ plugnotasRequest: (err as { plugnotasRequest?: unknown }).plugnotasRequest });
   }
   return null;
 }
@@ -74,6 +104,7 @@ export function apiClientErrorFromPayload(
   return new ApiClientError(buildMessage(payload), {
     plugnotasCode: getPlugnotasCodeFromApiErrors(payload?.errors),
     apiErrorCode: getApiErrorCodeFromApiErrors(payload?.errors),
+    plugnotasRequest: getPlugnotasRequestFromApiErrors(payload?.errors),
     payload: (payload as ApiErrorPayload | null | undefined) ?? null,
     httpStatus: init?.httpStatus ?? null,
   });

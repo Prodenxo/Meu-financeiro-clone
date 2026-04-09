@@ -588,6 +588,41 @@ Exemplos de `BASE`: `https://api.plugnotas.com.br` (produção) ou `https://api.
 - Opcional no backend: defina `PLUGNOTAS_API_PATH_PREFIX` (ex.: `/api`) em `backend/.env` e no deploy; o backend monta todas as chamadas ao Plugnotas como `PLUGNOTAS_API_BASE_URL` + prefixo + path (ex.: `/empresa/...`). Reinicie o backend após alterar.
 - Alternativa: incluir o prefixo diretamente em `PLUGNOTAS_API_BASE_URL` (ex.: `https://api.plugnotas.com.br/api`) e deixar `PLUGNOTAS_API_PATH_PREFIX` vazio — evite duplicar o segmento.
 
+### 2f) Matriz canónica ENDP — ambiente, fallback e consulta do cadastro empresa
+
+Esta é a matriz operacional canónica da iniciativa **FR-ENDP** para validar `POST /empresa`, fallback `PATCH` e leitura correta do `GET` posterior sem concluir "rota errada" cedo demais.
+
+#### Regras de uso
+
+1. Preencher uma linha por execução real em dev, homologação ou produção controlada.
+2. Não anexar token, payload bruto, senha de certificado, `.pfx/.p12`, CNPJ completo nem respostas completas do provedor.
+3. Registar o ambiente por `PLUGNOTAS_API_BASE_URL` e, quando aplicável, `PLUGNOTAS_API_PATH_PREFIX`, sempre sem segredos.
+4. Se o backend/UI devolver `errors.plugnotasRequest`, `errors.plugnotasCode` ou `httpStatus`, usar estes metadados na coluna de evidência ou resultado observado sem copiar o JSON completo.
+5. Antes de classificar como "rota errada", confirmar coerência entre `PLUGNOTAS_API_BASE_URL`, `PLUGNOTAS_API_KEY` e `PLUGNOTAS_API_PATH_PREFIX`, além do cenário imediatamente anterior (`POST` ou `PATCH`) que originou a consulta.
+
+#### Campos obrigatórios por linha
+
+| cenário | pré-condição/entrada | resultado esperado | resultado observado | decisão | evidência/local do registo |
+|---------|----------------------|--------------------|---------------------|---------|-----------------------------|
+| nome curto do cenário validado | ambiente, dados e ação executada sem segredos | comportamento esperado segundo PRD/arquitetura | síntese factual do que ocorreu | `sem gap`, `gap documentado sem bloqueio` ou `gap bloqueante para release` | link/ID de story, ticket, log redigido, screenshot interna ou nota de QA |
+
+#### Matriz mínima
+
+| cenário | pré-condição/entrada | resultado esperado | resultado observado | decisão | evidência/local do registo |
+|---------|----------------------|--------------------|---------------------|---------|-----------------------------|
+| Ambiente coerente antes do cadastro | `PLUGNOTAS_API_BASE_URL` e `PLUGNOTAS_API_KEY` do mesmo ambiente; `PLUGNOTAS_API_PATH_PREFIX` vazio ou alinhado à conta; backend reiniciado após mudança | Smoke test e/ou primeira chamada do fluxo não indicam mistura sandbox/produção nem prefixo duplicado; path lógico mantém `/empresa` | Preencher com host usado, prefixo efetivo e síntese do teste | Preencher | Story/ticket interno + data + host base sem chave |
+| `POST /empresa` bem-sucedido | Certificado e payload mínimos válidos; ambiente coerente; BFF em `POST /api/mei-notas/setup/emissao-fiscal/empresa` | Empresa cadastrada no emissor; UI não fala em rota nova; consulta posterior encontra a empresa no mesmo ambiente | Preencher com status HTTP/BFF, operação percebida e síntese da UI | Preencher | Registo redigido de QA ou log interno sem payload bruto |
+| `POST` com conflito seguido de fallback `PATCH` | Empresa já existente no mesmo token/ambiente; backend com política de fallback ativa | Backend trata conflito como atualização, preserva narrativa operacional de sincronização e não abre falso erro arquitetural | Preencher com indícios de fallback (`operation=updated|existing`, status e copy exibida) | Preencher | Story/ticket + evidência redigida do backend/UI |
+| `POST` falho seguido de `GET` sem empresa | Primeiro cadastro falha por payload/validação ou erro de ambiente; depois ocorre consulta `GET /empresa/:cnpj` no mesmo ambiente | `GET` negativo é interpretado como consequência do cadastro não concluído; não concluir "rota errada" sem revisar ambiente e erro anterior | Preencher com erro anterior, metadados (`plugnotasCode`, `plugnotasRequest`, `httpStatus`) e síntese da narrativa final | Preencher | Ticket de QA/suporte com mensagem redigida e referência ao passo anterior |
+| Diferenciação entre ambiente/configuração e payload/contrato | Um cenário de erro com suspeita de ambiente e outro com rejeição do payload | Equipa consegue separar "host/token/prefixo incoerente" de "dados enviados rejeitados" antes de escalar arquitetura | Preencher com classificação final e razão curta | Preencher | Story/ticket + links para logs redigidos, DevTools Response ou runbook aplicado |
+
+#### Guardrails de evidência
+
+- Em logs ou screenshots, mascarar CNPJ para formato parcial e nunca incluir `x-api-key`, senha, ficheiro de certificado ou payload completo.
+- Quando a evidência vier do browser, preferir a aba **Response** e anotar só `message`, `errors.plugnotasRequest`, `errors.plugnotasCode` e `httpStatus` quando existirem.
+- Quando a evidência vier do backend, preferir logs redigidos já suportados pelo serviço; se houver JSON, copiar apenas campos necessários ao diagnóstico.
+- Em produção, anexar a evidência em ticket/sistema interno; evitar persistir detalhes sensíveis no Git.
+
 ### 3) PDF/XML indisponivel
 - Confirmar se a nota ja foi concluida/autorizada.
 - Atualizar status da nota via sincronizacao antes de novo download.

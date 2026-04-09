@@ -7,6 +7,7 @@ import {
 export const PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02 =
   'prefeitura_ibge_apenas_insuficiente_dp02';
 import { getPlugnotasCodeFromUnknownError, getHttpStatusFromUnknownError } from '../utils/apiClientError';
+import type { PlugnotasRequestMeta } from '../utils/apiClientError';
 
 /** Alinhado à Story 6.3 / Guia MEI: acima disto, mensagem longa exige expansão ou área rolável. */
 export const FISCAL_ERROR_LONG_THRESHOLD = 300;
@@ -23,6 +24,29 @@ export type MeiFiscalUserCopy = {
   /** Gateway upstream Plugnotas (502–504): UI suprime HTML bruto e ajusta rodapé. */
   gatewayUpstream?: boolean;
 };
+
+function normalizePlugnotasRequestMeta(
+  value: PlugnotasRequestMeta | null | undefined
+): PlugnotasRequestMeta | null {
+  if (!value) return null;
+  const method = String(value.method || '').trim().toUpperCase();
+  const path = String(value.path || '').trim();
+  if (!method || !path) return null;
+  return { method, path };
+}
+
+export function stripPlugnotasRequestSuffix(
+  rawMessage: string,
+  plugnotasRequest?: PlugnotasRequestMeta | null
+): string {
+  const normalized = normalizePlugnotasRequestMeta(plugnotasRequest);
+  const raw = String(rawMessage || '').trim();
+  if (!raw || !normalized) return raw;
+  const escapedMethod = normalized.method.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedPath = normalized.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const suffix = new RegExp(`\\s*\\(${escapedMethod}\\s+${escapedPath}\\s+no emissor fiscal\\)$`, 'i');
+  return raw.replace(suffix, '').trim();
+}
 
 /** Paridade com `PLUGNOTAS_GATEWAY_UPSTREAM_PUBLIC_MESSAGE_PT` no backend. */
 export const MEI_FISCAL_GATEWAY_UPSTREAM_DESCRIPTION =
@@ -127,9 +151,11 @@ export function mapMeiFiscalErrorToCopy(input: {
   rawMessage: string;
   plugnotasCode?: string | null;
   httpStatus?: number | null;
+  plugnotasRequest?: PlugnotasRequestMeta | null;
 }): MeiFiscalUserCopy {
   const code = input.plugnotasCode?.trim() || null;
-  const raw = (input.rawMessage || '').trim();
+  const request = normalizePlugnotasRequestMeta(input.plugnotasRequest);
+  const raw = stripPlugnotasRequestSuffix(input.rawMessage || '', request);
   const lower = raw.toLowerCase();
 
   if (
@@ -242,6 +268,27 @@ export function mapMeiFiscalErrorToCopy(input: {
   }
 
   if (
+    code === 'empresa_nao_cadastrada'
+    || (
+      request?.method === 'GET'
+      && request.path.startsWith('/empresa/')
+      && (
+        lower.includes('não localizamos')
+        || lower.includes('nao localizamos')
+        || lower.includes('não encontrou cadastro')
+        || lower.includes('nao encontrou cadastro')
+      )
+    )
+  ) {
+    return {
+      title: 'Cadastro da empresa ainda não concluído',
+      description:
+        'A consulta não encontrou a empresa no emissor porque o cadastro ainda não foi concluído com sucesso. '
+        + 'Corrija o erro anterior e tente registrar a empresa novamente antes de consultar de novo.',
+    };
+  }
+
+  if (
     lower.includes('não há cadastro desta empresa no plugnotas')
     || lower.includes('nao ha cadastro desta empresa no plugnotas')
     || lower.includes('não há cadastro desta empresa no emissor fiscal')
@@ -268,9 +315,19 @@ export function mapMeiFiscalErrorToCopy(input: {
   }
 
   if (
-    lower.includes('rota')
-    && (lower.includes('não existe') || lower.includes('nao existe'))
-    && (lower.includes('serviço') || lower.includes('servico'))
+    (
+      lower.includes('rota')
+      && (lower.includes('não existe') || lower.includes('nao existe'))
+      && (lower.includes('serviço') || lower.includes('servico'))
+    )
+    || (
+      request?.path === '/empresa'
+      && isMeiFiscalGatewayUpstreamError({
+        rawMessage: raw,
+        plugnotasCode: code,
+        httpStatus: input.httpStatus,
+      })
+    )
   ) {
     return {
       title: 'Configuração do emissor fiscal',
@@ -323,12 +380,14 @@ export function meiFiscalToastMessage(err: unknown, fallback: string): string {
 export function formatMeiFiscalErrorForIntegrations(
   rawMessage: string,
   plugnotasCode?: string | null,
-  httpStatus?: number | null
+  httpStatus?: number | null,
+  plugnotasRequest?: PlugnotasRequestMeta | null
 ): string {
   const copy = mapMeiFiscalErrorToCopy({
     rawMessage,
     plugnotasCode: plugnotasCode ?? null,
     httpStatus: httpStatus ?? null,
+    plugnotasRequest: plugnotasRequest ?? null,
   });
   return formatMeiFiscalMappedForAlert(copy);
 }
