@@ -1,6 +1,5 @@
 import {
   MEI_GUIDE_SERPRO_UNAVAILABLE,
-  MEI_GUIDE_VALIDATE_CONS_C_BODY,
   MEI_GUIDE_VALIDATE_CONS_C_TITLE
 } from './mapMeiGuideValidateErrorToUserMessage';
 
@@ -18,8 +17,10 @@ import {
  * **FR-PREF-HINT-01 / PREF-L1:** `isPlugnotasNfseConfigPrefeituraRequirementMessage`, `getPlugnotasEmpresaCadastroErrorUxVariant`
  * — ver `docs/operacao-mei-nfse.md` (#nfse-config-prefeitura-cadastro-pref).
  *
- * **FR-CID-UX-02 / CID-L1:** `isPlugnotasEmpresaIbgeCidadeMessage` — spec UX
- * `ux-spec-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md` secção 3.2 (não confundir com PREF-L1 sem sinais IBGE).
+ * **FR-CID-UX-02 / CID-L1; FR-TIBGE-UX-01 / TIBGE-L1:** `isPlugnotasEmpresaIbgeCidadeMessage` — spec UX
+ * `ux-spec-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md` §3.2;
+ * `ux-spec-correcao-ibge-tabela-plugnotas-400-get-404-2026-04-09.md` §3.1 (campo `codigoIBGECidade` na mensagem do emissor).
+ * PRD: `PRD-correcao-ibge-tabela-plugnotas-400-get-404-2026-04-09.md` (**NFR-TIBGE-02:** payload continua só `endereco.codigoCidade`).
  */
 
 /** Spec UX §4.2 — prestador / cidade de prestação (linha curta). */
@@ -151,8 +152,10 @@ export function isPlugnotasNfseConfigPrefeituraRequirementMessage(message: strin
 }
 
 /**
- * CID-L1 (spec UX §3.2): mensagem indica falha no código IBGE do município / tabela de cidades do emissor.
- * **Não** corresponde a mensagem só PREF-L1 (`nfse.config.prefeitura`) sem estes sinais — ver story FR-CID P1.
+ * CID-L1 / **TIBGE-L1** (spec UX §3.1–3.2): mensagem indica falha no código IBGE do município / tabela de cidades do emissor.
+ * Inclui citações a **`fields.endereco.codigoIBGECidade`** no texto Plugnotas (após `normalizeForMatch`: `codigoibgecidade`).
+ * **NFR-TIBGE-02:** o JSON enviado pela app mantém apenas **`endereco.codigoCidade`** — não duplicar `codigoIBGECidade` no payload.
+ * **Não** corresponde a mensagem só PREF-L1 (`nfse.config.prefeitura`) sem estes sinais — ver FR-CID P1 / FR-TIBGE P1.
  */
 export function isPlugnotasEmpresaIbgeCidadeMessage(message: string): boolean {
   const m = normalizeForMatch(message);
@@ -171,9 +174,13 @@ export function isPlugnotasEmpresaIbgeCidadeMessage(message: string): boolean {
       m.includes('municipio') ||
       m.includes('municipios'));
 
+  /** Inclui **TIBGE-L1**: `codigoIBGECidade` / `fields.endereco.codigoIBGECidade` (substring `codigoibgecidade` após normalizar). */
   const hasCodigoIbgeMunicipio =
     m.includes('ibge') &&
-    (m.includes('codigocidade') || m.includes('codigo ibge') || m.includes('codigo do municipio'));
+    (m.includes('codigocidade') ||
+      m.includes('codigo ibge') ||
+      m.includes('codigo do municipio') ||
+      m.includes('codigoibgecidade'));
 
   return hasEnderecoCodigoCidade || hasTabelaIbge || hasCodigoIbgeMunicipio;
 }

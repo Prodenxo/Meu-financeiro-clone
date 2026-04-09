@@ -68,6 +68,33 @@ describe('EmissaoFiscalErrorAlert', () => {
     expect(container.querySelector('[role="note"]')?.textContent).toContain('tabela de cidades');
   });
 
+  it('FR-TIBGE-UX-01 / TIBGE-L1: hint IBGE quando mensagem cita fields.endereco.codigoIBGECidade e tabela', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <EmissaoFiscalErrorAlert
+          documentTypeLabel="NFS-e"
+          message="Falha na validação: fields.endereco.codigoIBGECidade — valor não encontrado na tabela de cidades do IBGE."
+        />
+      );
+    });
+    expect(container.textContent).toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
+    expect(container.querySelector('[role="note"]')).toBeTruthy();
+  });
+
+  it('FR-TIBGE / UX §3.2: híbrido PREF-L1 + TIBGE — hint IBGE não substitui prefeitura-config', async () => {
+    const hybrid =
+      'Falha na validação: fields.nfse.config.prefeitura: Preenchimento obrigatório. fields.endereco.codigoIBGECidade não consta na tabela de cidades do IBGE.';
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<EmissaoFiscalErrorAlert documentTypeLabel="NFS-e" message={hybrid} />);
+    });
+    expect(container.textContent).toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
+    expect(
+      container.querySelector('[role="region"][aria-label="Configuração de prefeitura no NFS-e"]')
+    ).toBeTruthy();
+  });
+
   it('FR-CID-UX-02: mensagem só prefeitura não mostra hint IBGE', async () => {
     const root = createRoot(container);
     await act(async () => {
@@ -227,6 +254,16 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     await act(async () => {
       root.render(
         <GuiaMeiEmpresaCadastroErrorPanel message="HTTP 400: fields.endereco.codigoCidade não localizado na tabela IBGE." />
+      );
+    });
+    expect(container.textContent).toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
+  });
+
+  it('FR-TIBGE-UX-01: painel cadastro mostra hint IBGE com codigoIBGECidade (mensagem Plugnotas)', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <GuiaMeiEmpresaCadastroErrorPanel message="HTTP 400: fields.endereco.codigoIBGECidade não consta na tabela de cidades do IBGE." />
       );
     });
     expect(container.textContent).toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);

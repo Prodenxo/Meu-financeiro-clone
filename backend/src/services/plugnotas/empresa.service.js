@@ -6,6 +6,7 @@ import {
   isEmpresaCadastroPlugnotasPath,
   logPlugnotasEmpresaCadastro400Request
 } from './plugnotas-empresa-cadastro-debug.js';
+import { logPlugnotasEmpresaIbgeTable400 } from './plugnotas-empresa-ibge-table-400-log.js';
 import {
   logPlugnotasCertificado409Resolve,
   PLUGNOTAS_CERT_409_RESOLVE_STEPS
@@ -30,6 +31,7 @@ import {
   stripDocumentosAtivos
 } from './plugnotas-empresa-documentos-ativos.js';
 import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.js';
+import { isPlugnotasIbgeTableRejectMessage } from '../../utils/plugnotasIbgeTableRejectMessage.js';
 import { applyNfseConfigPrefeituraDeriveIbge } from './nfsePrefeituraPayload.js';
 import {
   resolvePlugnotasGatewayUpstreamForClient,
@@ -206,6 +208,9 @@ const requestJson = async (method, path, body) => {
         && isEmpresaCadastroPlugnotasPath(path)
       ) {
         logPlugnotasEmpresaCadastro400Request({ method, path, body });
+        if (isPlugnotasIbgeTableRejectMessage(rawMessage)) {
+          logPlugnotasEmpresaIbgeTable400({ method, path, body });
+        }
       }
       if (process.env.NODE_ENV !== 'production' || isPlugnotasDebugExplicitlyEnabled()) {
         const pathLog = maskPlugnotasPathOrUrlForLog(path);

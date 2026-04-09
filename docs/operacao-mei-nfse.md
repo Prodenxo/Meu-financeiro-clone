@@ -1,6 +1,7 @@
 # Operacao MEI/NFSe
 
-**Caminhos relativos:** links para `stories/`, `prd/`, `adr/`, `brief/`, `qa/` neste ficheiro são relativos à pasta **`docs/`** (o próprio ficheiro está em `docs/operacao-mei-nfse.md`). URLs `https://...` são absolutas.
+**Caminhos relativos:** links para `stories/`, `prd/`, `adr/`, `brief/`, `qa/` neste ficheiro são relativos à pasta **`docs/`** (o próprio ficheiro está em `docs/operacao-mei-nfse.md`). URLs `https://...` são absolutas.  
+**Equivalência com stories:** um destino `prd/PRD-….md` aqui é o mesmo ficheiro em `docs/prd/` referido como `../prd/PRD-….md` a partir de `docs/stories/*.md` (critérios de aceite das stories usam frequentemente esta segunda forma).
 
 <a id="guia-mei-escopo-apenas-nfse"></a>
 
@@ -75,7 +76,7 @@
 
 #### Encadeamento **POST** cadastro empresa → **GET** **404** (**FR-SOL-DIAG-01**, **FR-SOL-ANT-01**)
 
-- Se o **`POST`** `…/emissao-fiscal/empresa` falhar (ex.: **400** com `nfse.config.prefeitura`), o Plugnotas **não** cria a empresa na conta; um **`GET`** `…/emissao-fiscal/empresa?cpfCnpj=` pode devolver **404** (*não localizamos empresa*). Isto é **esperado**: o **404** não indica por si um “bug só da consulta” — trata primeiro o erro do **envio** (POST) ou conclui o cadastro com sucesso antes de esperar dados na consulta. Consolidação para suporte: [Triagem: erros na consola do browser](#triagem-erros-consola-guia-mei) (**FR-CONS-MAP-01**).
+- Se o **`POST`** `…/emissao-fiscal/empresa` falhar (ex.: **400** com `nfse.config.prefeitura` **ou** **400** com validação de **cidade IBGE** / tabela de municípios em `endereco`), o Plugnotas **não** cria a empresa na conta; um **`GET`** `…/emissao-fiscal/empresa?cpfCnpj=` pode devolver **404** (*não localizamos empresa*). Isto é **esperado**: o **404** não indica por si um “bug só da consulta” — trata primeiro o erro do **envio** (POST) ou conclui o cadastro com sucesso antes de esperar dados na consulta. Distinção entre tipos de **400**: [400 cadastro empresa: qual erro?](#cadastro-empresa-400-qual-erro). Consolidação para suporte: [Triagem: erros na consola do browser](#triagem-erros-consola-guia-mei) (**FR-CONS-MAP-01**).
 - **Antipadrões:** (1) assumir que **inscrição municipal** na raiz do JSON substitui **`nfse.config.prefeitura`** quando o erro citar esse campo — ver [secção PREF](#nfse-config-prefeitura-cadastro-pref); (2) **repetir só o GET** esperando 200 sem corrigir o POST; (3) assumir que **`nfse.nacional: true`** no payload dispensa **`prefeitura`** em **todas** as contas (**NFR-N04**).
 - **Produto / UX:** PRD [`PRD-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](prd/PRD-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md); spec [`ux-spec-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](specs/ux-spec-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md); arquitetura [`architecture-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](technical/architecture-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md). A Guia MEI mostra blocos contextuais (`PlugnotasEmpresaCadastroSolContextPanel`) e heurística `resolvePlugnotasEmpresaCadastroSolUxState` em `frontend/src/utils/plugnotasEmpresaCadastroSolUx.ts`.
 - **Marcador de sessão (SOL-L2 / P1):** após falha confirmada do POST fase 2 (cadastro empresa), o cliente grava em `sessionStorage` a chave `mei:empresaFase2Fail:v1:${userId}:${cnpj14}` com **apenas** `{ t: number }` (TTL ~30 min; sem texto de erro). Limpeza após POST 2xx de empresa ou GET com dados de cadastro parseáveis; expirado → UX volta ao estado neutro **SOL-L3**. Código: `frontend/src/utils/guiaMeiEmpresaFase2FailFlag.ts`.
@@ -88,6 +89,30 @@
 - **Formato técnico:** o aplicativo normaliza o código para **string com apenas dígitos** (7 dígitos típicos de município IBGE) no cliente e no servidor antes de `POST`/`PATCH` `/empresa`, para evitar rejeição só por tipo JSON (ex.: número vs string) ou caracteres não numéricos colados na consulta CNPJ.
 - **Dados incorrectos na fonte:** se, após normalização, o **conteúdo** ainda não existir na tabela que o emissor usa, o **400** pode persistir — aí o utilizador deve conferir município e código no cadastro CNPJ ou na base oficial do IBGE; não é falha de “formato” corrigível só no app.
 - **Referências:** PRD [`PRD-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md`](prd/PRD-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md); arquitetura [`architecture-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md`](technical/architecture-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md).
+- **Quadro consolidado** (CID vs TIBGE vs PREF) e **runbook** de escalação: [400 cadastro empresa: qual erro?](#cadastro-empresa-400-qual-erro) e [Runbook: rejeição IBGE com código aparentemente correcto](#cadastro-empresa-erro-ibge-tabela).
+
+<a id="cadastro-empresa-400-qual-erro"></a>
+<a id="cadastro-empresa-erro-ibge-tabela"></a>
+
+#### 400 cadastro empresa: qual erro? — **CID** vs **TIBGE** vs **PREF** (**FR-TIBGE-DOC-01**)
+
+Use esta tabela para desambiguar mensagens de validação no **`POST`** `…/emissao-fiscal/empresa` antes de abrir ticket no provedor ou assumir bug só do **`GET`**.
+
+| Tema | O que é | Sintomas típicos na mensagem | PRD / artefactos |
+| --- | --- | --- | --- |
+| **CID** (formato / tipo) | Normalização de **`endereco.codigoCidade`**: string só com dígitos, paridade cliente ↔ BFF; evita **400** só por número vs string ou caracteres estranhos. | Erros de tipo, serialização, ou texto que indique formato inválido **antes** de falar em “tabela IBGE” no sentido semântico. | [`PRD-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md`](prd/PRD-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md); [`architecture-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md`](technical/architecture-plugnotas-empresa-codigo-cidade-ibge-2026-04-08.md) |
+| **TIBGE** (tabela do emissor) | O **conteúdo** do código (7 dígitos) **não existe** na tabela de municípios que o **Plugnotas** usa, ou está **incoerente** com cidade/UF (dados CNPJ desactualizados, homónimos). A mensagem pode citar **`fields.endereco.codigoIBGECidade`** — no **payload** da app o campo canónico continua **`endereco.codigoCidade`**. | *«…não encontrada na tabela de cidades do IBGE»*, *«codigoIBGECidade»*, `fields.endereco.codigoCidade` com falha de lookup. | [`PRD-correcao-ibge-tabela-plugnotas-400-get-404-2026-04-09.md`](prd/PRD-correcao-ibge-tabela-plugnotas-400-get-404-2026-04-09.md); [`ux-spec-correcao-ibge-tabela-plugnotas-400-get-404-2026-04-09.md`](specs/ux-spec-correcao-ibge-tabela-plugnotas-400-get-404-2026-04-09.md); [`architecture-correcao-ibge-tabela-plugnotas-400-get-404-2026-04-09.md`](technical/architecture-correcao-ibge-tabela-plugnotas-400-get-404-2026-04-09.md) |
+| **PREF** / **SOL** | Configuração municipal no ramo **`nfse.config`** (ex.: **`nfse.config.prefeitura`**) ou narrativa **POST falhou → GET 404**. | `nfse.config.prefeitura` obrigatório; encadeamento com [404 no GET](#cadastro-post-404-get-empresa). | PREF: [`PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md`](prd/PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md); SOL: [`PRD-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md`](prd/PRD-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md), [Encadeamento POST → GET 404](#cadastro-post-404-get-empresa) |
+
+**Nota:** **NFR-TIBGE-01** — não há neste produto uma cópia local completa da tabela IBGE para substituir a do emissor; a correcção passa por dados correctos e, em último caso, ticket ao **Plugnotas** (ver runbook abaixo).
+
+##### Runbook — rejeição cidade IBGE / tabela (**FR-TIBGE-OPS-01**)
+
+1. No DevTools (rede), confirmar o valor enviado em **`endereco.codigoCidade`** no corpo do **POST** (após normalização no cliente).  
+2. Comparar com a [consulta oficial de municípios IBGE](https://www.ibge.gov.br/explica/codigos-dos-municipios-do-brasil-1670360003609) para o **mesmo** município e UF do formulário.  
+3. Se o código estiver **incorrecto** — corrigir dados (manual ou nova consulta CNPJ) e repetir o **POST**.  
+4. Se o código estiver **correcto** na fonte IBGE e o **400** persistir — abrir **ticket** junto do **Plugnotas** (ambiente, conta, código IBGE; CNPJ apenas conforme política do fornecedor) e registar evidência interna em [`docs/evidence/`](evidence/) quando aplicável (**sem** PII em repositório público).  
+5. **GET 404** após falha do **POST** — comportamento **esperado** até existir **POST** 2xx; ver [Encadeamento POST → GET 404](#cadastro-post-404-get-empresa).
 
 #### Sandbox vs produção (**NFR-N04**)
 
@@ -140,8 +165,9 @@ O frontend não reparseia JSON do emissor: usa a **string de erro** já consolid
 
 | Gatilho | Pedido BFF (típico) | Sintoma na rede / consola | Causa provável | Próximo passo |
 | --- | --- | --- | --- | --- |
-| **CONS-B** (cadastro / consulta empresa) | `GET /api/mei-notas/setup/emissao-fiscal/empresa?cpfCnpj=` | **404** (`success: false` no JSON da app) | Depois de um **`POST` empresa falhado**, o Plugnotas **não criou** a empresa na conta; o **404 é esperado** até existir registo aceite. **Não** é, por si só, “bug só da consulta”. | Tratar primeiro o **erro do `POST`** (ex.: **400** `prefeitura`) ou concluir o cadastro com sucesso antes de esperar **200** no GET. Ver [Encadeamento POST → GET 404](#cadastro-post-404-get-empresa). |
+| **CONS-B** (cadastro / consulta empresa) | `GET /api/mei-notas/setup/emissao-fiscal/empresa?cpfCnpj=` | **404** (`success: false` no JSON da app) | Depois de um **`POST` empresa falhado**, o Plugnotas **não criou** a empresa na conta; o **404 é esperado** até existir registo aceite. **Não** é, por si só, “bug só da consulta”. | Tratar primeiro o **erro do `POST`** (ex.: **400** `prefeitura` ou **400** cidade IBGE) ou concluir o cadastro com sucesso antes de esperar **200** no GET. Ver [Encadeamento POST → GET 404](#cadastro-post-404-get-empresa). |
 | **CONS-A / PREF** | `POST` ou `PATCH …/emissao-fiscal/empresa` | **400** com texto citando **`nfse.config.prefeitura`** ou `fields.nfse.config.prefeitura` | Validador do **Plugnotas** exige configuração de prefeitura dentro de **`nfse.config`**; é **distinto** de preencher só **`inscricaoMunicipal`** na raiz do JSON. | PRD [**FR-PREF**](prd/PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md), spec UX PREF e [secção PREF neste runbook](#nfse-config-prefeitura-cadastro-pref). |
+| **CONS-A / TIBGE** (cidade IBGE) | `POST` ou `PATCH …/emissao-fiscal/empresa` | **400** citando **tabela de cidades do IBGE**, `codigoIBGECidade`, `fields.endereco.codigoCidade` com lookup inválido | Código de município **rejeitado pela tabela do emissor** ou incoerente com endereço — **distinto** de [CID](#cadastro-empresa-400-qual-erro) (só formato) e de [PREF](#nfse-config-prefeitura-cadastro-pref). | [400 cadastro empresa: qual erro?](#cadastro-empresa-400-qual-erro), [Runbook IBGE](#cadastro-empresa-erro-ibge-tabela), PRD [**FR-TIBGE**](prd/PRD-correcao-ibge-tabela-plugnotas-400-get-404-2026-04-09.md). |
 | **CONS-C** (validate guia / Serpro) | `POST /api/mei-guide/validate` | **HTTP 503** com `errors.code: MEI_GUIDE_SERPRO_UNAVAILABLE` e `integration: serpro` *(contrato pós [P0 Serpro](stories/story-fr-cons-p0-serpro-emitir-503-mei-guide-validate.md))*; em cenários legados pode ainda aparecer **400** com mensagem genérica até alinhar cliente | Falha **5xx** ou indisponibilidade no **Serpro** (`/Emitir`); **não** desbloqueia cadastro no Plugnotas nem substitui correção de **`prefeitura`**. | Copy **CONS-C** na UI (spec UX CONS §6); orientar “tentar mais tarde” / canal Receita, **sem** misturar com NFS-e Nacional ou painel de empresa. |
 
 ### Ordem de verificação sugerida (suporte)

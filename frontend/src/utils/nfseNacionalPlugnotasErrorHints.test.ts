@@ -151,7 +151,7 @@ describe('nfseNacionalPlugnotasErrorHints', () => {
     });
   });
 
-  describe('isPlugnotasEmpresaIbgeCidadeMessage (FR-CID-UX-02 / CID-L1)', () => {
+  describe('isPlugnotasEmpresaIbgeCidadeMessage (FR-CID-UX-02 / CID-L1; FR-TIBGE-UX-01 / TIBGE-L1)', () => {
     it.each([
       ['Valor não encontrado na tabela de cidades do IBGE.', true],
       [
@@ -161,6 +161,14 @@ describe('nfseNacionalPlugnotasErrorHints', () => {
       ['HTTP 400: endereco.codigoCidade inválido para o cadastro da empresa.', true],
       ['O código IBGE informado não existe na tabela utilizada pelo emissor.', true],
       ['JSON: codigoCidade incompatível com tabela IBGE.', true],
+      [
+        'Falha na validação: fields.endereco.codigoIBGECidade — valor não encontrado na tabela de cidades do IBGE.',
+        true
+      ],
+      [
+        'HTTP 400: fields.endereco.codigoIBGECidade inválido segundo a tabela de municípios do emissor.',
+        true
+      ],
       [
         'Falha na validação do JSON de Empresa: fields.nfse.config.prefeitura: Preenchimento obrigatório',
         false

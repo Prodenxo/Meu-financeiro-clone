@@ -97,4 +97,16 @@ describe('nfEmissionCompany', () => {
     expect(endereco.codigoCidade).toBe('3550308');
     expect(typeof endereco.codigoCidade).toBe('string');
   });
+
+  it('NFR-TIBGE-02: endereco não inclui codigoIBGECidade duplicado (canónico: só codigoCidade)', () => {
+    const payload = buildNfEmissionEmpresaPayload({
+      cnpj: '12345678000190',
+      certificadoId: 'cert-abc',
+      form: fullValidForm()
+    });
+    const endereco = payload.endereco as Record<string, unknown>;
+    expect(endereco).not.toHaveProperty('codigoIBGECidade');
+    expect(endereco).not.toHaveProperty('codigoIbgeCidade');
+    expect(Object.keys(endereco).some((k) => k.toLowerCase().includes('codigoibge'))).toBe(false);
+  });
 });
