@@ -11,6 +11,7 @@ import {
   formatMeiFiscalMappedForAlert,
   PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02,
   PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED,
+  resolveMeiFiscalScenario,
   stripPlugnotasRequestSuffix,
 } from './fiscalUserError';
 
@@ -76,6 +77,28 @@ describe('mapMeiFiscalErrorToCopy', () => {
     expect(copy.description).toMatch(/nfs-e nacional/i);
     expect(copy.description).not.toMatch(/login|senha/i);
     expect(copy.description).not.toMatch(/rota errada/i);
+  });
+
+  it('ROB: payload_contrato prioriza contrato estruturado do backend para revisão de dados', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage: 'Falha na validação do JSON de Empresa: endereco.logradouro inválido',
+      plugnotasCode: 'payload_contrato',
+      httpStatus: 400,
+      plugnotasRequest: { method: 'POST', path: '/empresa' },
+    });
+    expect(copy.title).toBe('Revise os dados do cadastro');
+    expect(copy.description).toMatch(/revise cnpj|endereço|campos obrigatórios/i);
+  });
+
+  it('ROB: ambiente_configuracao usa código estruturado sem depender de heurística textual', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage: 'Token inválido no emissor',
+      plugnotasCode: 'ambiente_configuracao',
+      httpStatus: 401,
+      plugnotasRequest: { method: 'POST', path: '/empresa' },
+    });
+    expect(copy.title).toBe('Configuração do emissor fiscal');
+    expect(copy.description).toMatch(/url base|token|ambiente/i);
   });
 
   it('usa fallback para payload que parece JSON de API', () => {
@@ -154,5 +177,34 @@ describe('mapMeiFiscalErrorToCopy', () => {
     expect(copy.title).toBe('Cadastro da empresa ainda não concluído');
     expect(copy.description).toMatch(/cadastro ainda não foi concluído|cadastro ainda não foi concluido/i);
     expect(copy.description).not.toMatch(/GET \/empresa|POST \/empresa|rota errada/i);
+  });
+
+  it('ROB: resolveMeiFiscalScenario respeita precedência estruturada entre ambiente, payload e ausência de cadastro', () => {
+    expect(
+      resolveMeiFiscalScenario({
+        rawMessage: 'Service Unavailable',
+        plugnotasCode: 'plugnotas_gateway_503',
+        httpStatus: 503,
+        plugnotasRequest: { method: 'POST', path: '/empresa' },
+      })
+    ).toBe('ambiente_configuracao');
+
+    expect(
+      resolveMeiFiscalScenario({
+        rawMessage: 'Falha na validação do JSON de Empresa',
+        plugnotasCode: 'payload_contrato',
+        httpStatus: 400,
+        plugnotasRequest: { method: 'POST', path: '/empresa' },
+      })
+    ).toBe('payload_contrato');
+
+    expect(
+      resolveMeiFiscalScenario({
+        rawMessage: 'Não há cadastro desta empresa no emissor fiscal',
+        plugnotasCode: 'empresa_nao_cadastrada',
+        httpStatus: 404,
+        plugnotasRequest: { method: 'GET', path: '/empresa/12345678000190' },
+      })
+    ).toBe('empresa_nao_cadastrada');
   });
 });

@@ -619,6 +619,47 @@ Esta é a matriz operacional canónica da iniciativa **FR-ENDP** para validar `P
 | `POST` falho seguido de `GET` sem empresa | Primeiro cadastro falha por payload/validação ou erro de ambiente; depois ocorre consulta `GET /empresa/:cnpj` no mesmo ambiente | `GET` negativo é interpretado como consequência do cadastro não concluído; não concluir "rota errada" sem revisar ambiente e erro anterior | Preencher com erro anterior, metadados (`plugnotasCode`, `plugnotasRequest`, `httpStatus`) e síntese da narrativa final | Preencher | Ticket de QA/suporte com mensagem redigida e referência ao passo anterior |
 | Diferenciação entre ambiente/configuração e payload/contrato | Um cenário de erro com suspeita de ambiente e outro com rejeição do payload | Equipa consegue separar "host/token/prefixo incoerente" de "dados enviados rejeitados" antes de escalar arquitetura | Preencher com classificação final e razão curta | Preencher | Story/ticket + links para logs redigidos, DevTools Response ou runbook aplicado |
 
+<a id="rob-matriz-operacional-cenarios-cadastro-empresa-plugnotas"></a>
+
+### 2f.1) Matriz canónica ROB — cenários robustos do cadastro empresa PlugNotas
+
+Esta é a matriz operacional canónica da iniciativa **FR-ROB** para classificar, registar e revisar o cadastro de empresa no PlugNotas sem confundir sucesso nacional, ambiente, payload, fallback, exceção municipal bloqueada e ausência posterior da empresa.
+
+#### Regras de uso ROB
+
+1. Usar esta matriz quando a análise exigir visão consolidada dos cenários do cadastro empresa, acima das matrizes específicas ENDP e NATEX.
+2. Preencher uma linha por execução real ou por incidente revisado com evidência suficiente e redigida.
+3. Não anexar token, payload bruto, certificado, `login`/`senha` de prefeitura, CNPJ completo nem resposta integral do emissor.
+4. Sempre que existirem, registar `plugnotasCode`, `plugnotasRequest.method`, `plugnotasRequest.path` e `httpStatus` como evidência estruturada, sem colar o JSON completo.
+5. Preservar a cadeia causal do fluxo: `POST /empresa` -> fallback `PATCH /empresa/:cnpj` -> `GET /empresa/:cnpj`.
+6. Não classificar "rota errada" enquanto a evidência útil apontar para ambiente/configuração, rejeição de payload, fallback resolvido ou exceção municipal bloqueada.
+
+#### Colunas obrigatórias da matriz ROB
+
+| cenário | pré-condição/entrada | resultado esperado | resultado observado | classificação final | decisão | evidência/local do registo |
+|---------|----------------------|--------------------|---------------------|---------------------|---------|-----------------------------|
+| nome canónico do cenário ROB | ambiente, ação executada e contexto mínimo sem segredos | comportamento esperado segundo PRD/arquitetura/UX ROB | síntese factual do que ocorreu | classe operacional final usada por QA/operação | `sem gap`, `gap documentado sem bloqueio`, `triagem operacional concluída` ou `gap bloqueante para release` | ticket/story/runbook, log redigido, screenshot interna ou nota de QA |
+
+#### Matriz mínima ROB
+
+| cenário | pré-condição/entrada | resultado esperado | resultado observado | classificação final | decisão | evidência/local do registo |
+|---------|----------------------|--------------------|---------------------|---------------------|---------|-----------------------------|
+| `success_nacional` | Ambiente coerente; `POST /api/mei-notas/setup/emissao-fiscal/empresa`; payload válido; fluxo NFS-e Nacional sem credenciais municipais | Empresa é cadastrada com sucesso no emissor; UI comunica sucesso nacional sem linguagem de endpoint; consulta posterior encontra a empresa no mesmo ambiente | Preencher com status, `operation=created` quando disponível e síntese da copy mostrada | `success_nacional` | Preencher | Ticket/nota de QA + response/log redigido |
+| `ambiente_configuracao` | Host/base URL, token, prefixo ou gateway/upstream incompatível; ou `plugnotasCode = ambiente_configuracao` / `plugnotas_gateway_*` | Equipa classifica o incidente como problema de integração/ambiente antes de culpar dados do formulário ou rota | Preencher com host/prefixo redigidos, `httpStatus`, `plugnotasCode` e razão curta | `ambiente_configuracao` | Preencher | Ticket/story + referência ao runbook ENDP/ROB + log redigido |
+| `payload_contrato` | `POST /empresa` com rejeição 400 do emissor por dados enviados ou contrato do payload; `plugnotasCode = payload_contrato` quando disponível | Caso é tratado como revisão de dados/contrato do emissor; UI orienta correção de campos e não reclassifica como problema de ambiente | Preencher com mensagem redigida, campos citados e metadados disponíveis | `payload_contrato` | Preencher | Ticket interno + response/log redigido |
+| `fallback_sync` | Empresa já existente no mesmo token/ambiente; backend resolve conflito via `PATCH /empresa/:cnpj`; `operation=updated|existing` | Fluxo é registado como sincronização/atualização bem-sucedida, não como erro; UI comunica sincronização do emitente | Preencher com indícios de fallback, `operation`, status e copy exibida | `fallback_sync` | Preencher | Story/ticket + evidência redigida do backend/UI |
+| `prefeitura_login_required_blocked` | `POST /empresa` devolve erro do emissor exigindo `prefeitura.login`, `prefeitura.senha` ou `plugnotasCode = prefeitura_login_required_blocked` | Caso é tratado como exceção municipal bloqueada; permanece **não suportado no fluxo nacional**; não se recolhem credenciais no produto | Registar explicitamente a origem da evidência (`plugnotasCode`, `plugnotasRequest`, `httpStatus`, mensagem/log redigido) e a narrativa final sem "endpoint errado" | `não suportado no fluxo nacional` | Preencher | Ticket de suporte/QA + story NATEX/ROB + link para esta secção |
+| `empresa_nao_cadastrada` | Após falha anterior relevante em `POST` ou ausência de cadastro no mesmo ambiente, ocorre `GET /empresa/:cnpj` negativo com `plugnotasCode = empresa_nao_cadastrada` quando disponível | `GET` negativo é tratado como consequência do cadastro não concluído; não apaga a causa raiz anterior nem vira incidente isolado de rota | Preencher com referência cruzada ao passo anterior, `plugnotasRequest`, `httpStatus` e síntese da narrativa final | `empresa_nao_cadastrada` | Preencher | Mesmo ticket do erro anterior + nota de causalidade |
+
+#### Guardrails ROB de classificação e evidência
+
+- Se `fallback_sync` ocorrer, não abrir incidente de erro arquitetural; registar como sincronização operacional bem-sucedida.
+- Se `empresa_nao_cadastrada` vier após erro anterior relevante, apontar a causa raiz anterior na mesma linha ou no mesmo ticket antes de fechar a triagem.
+- Na linha `prefeitura_login_required_blocked`, usar obrigatoriamente `classificação final = não suportado no fluxo nacional`.
+- Na linha `ambiente_configuracao`, distinguir explicitamente `host/token/prefixo/upstream` de rejeição de payload.
+- Na linha `payload_contrato`, citar apenas o campo ou grupo funcional rejeitado; não copiar payload bruto.
+- Em qualquer cenário, preferir evidência redigida do backend/browser: `message`, `plugnotasCode`, `plugnotasRequest`, `httpStatus`, `operation`, referência a log ou ticket.
+
 <a id="natex-matriz-operacional-excecao-municipal-bloqueada"></a>
 
 ### 2g) Matriz canónica NATEX — triagem da exceção municipal bloqueada no fluxo nacional

@@ -25,6 +25,7 @@ import {
   mapMeiFiscalErrorToCopy
 } from '../lib/fiscalUserError';
 import { meiFiscalUserCopyToUserFacing } from '../lib/meiFiscalUserCopyToUserFacing';
+import type { PlugnotasRequestMeta } from '../utils/apiClientError';
 import UserFacingErrorBlock from './UserFacingErrorBlock';
 import {
   PlugnotasMunicipalRequirementOperacaoBody,
@@ -177,6 +178,8 @@ type EmissaoFiscalErrorAlertProps = {
   documentTypeLabel: string;
   message: string;
   plugnotasCode?: string | null;
+  httpStatus?: number | null;
+  plugnotasRequest?: PlugnotasRequestMeta | null;
 };
 
 type NfseNacionalDocHintLinkTone = Extract<LongFiscalErrorTone, 'danger' | 'rose'>;
@@ -266,9 +269,11 @@ function NfseNacionalOperacaoDocHint({ message, linkTone = 'danger' }: NfseNacio
 export function EmissaoFiscalErrorAlert({
   documentTypeLabel,
   message,
-  plugnotasCode = null
+  plugnotasCode = null,
+  httpStatus = null,
+  plugnotasRequest = null
 }: EmissaoFiscalErrorAlertProps) {
-  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode });
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode, httpStatus, plugnotasRequest });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
     variant: 'inline',
     rawMessage: message,
@@ -292,15 +297,19 @@ type PlugnotasIntegrationErrorAlertProps = {
   message: string;
   title?: string;
   plugnotasCode?: string | null;
+  httpStatus?: number | null;
+  plugnotasRequest?: PlugnotasRequestMeta | null;
 };
 
 /** Outras operações (lista, download, cancelamento): bloco unificado + dica NFS-e Nacional quando aplicável. */
 export function PlugnotasIntegrationErrorAlert({
   message,
   title,
-  plugnotasCode = null
+  plugnotasCode = null,
+  httpStatus = null,
+  plugnotasRequest = null
 }: PlugnotasIntegrationErrorAlertProps) {
-  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode });
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode, httpStatus, plugnotasRequest });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
     variant: 'inline',
     rawMessage: message,
@@ -323,9 +332,11 @@ export function PlugnotasIntegrationErrorAlert({
 export function EmissaoFiscalErrorAlertModal({
   documentTypeLabel,
   message,
-  plugnotasCode = null
+  plugnotasCode = null,
+  httpStatus = null,
+  plugnotasRequest = null
 }: EmissaoFiscalErrorAlertProps) {
-  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode });
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode, httpStatus, plugnotasRequest });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
     variant: 'modal_body',
     rawMessage: message,
@@ -426,6 +437,7 @@ type GuiaMeiEmpresaCadastroErrorPanelProps = {
   fiscalApiErrorCode?: string | null;
   /** Status HTTP da resposta JSON de erro, quando disponível (ex.: `ApiClientError.httpStatus`). */
   fiscalHttpStatus?: number | null;
+  plugnotasRequest?: PlugnotasRequestMeta | null;
 };
 
 /**
@@ -435,7 +447,8 @@ export function GuiaMeiEmpresaCadastroErrorPanel({
   message,
   fiscalErrorCode = null,
   fiscalApiErrorCode = null,
-  fiscalHttpStatus = null
+  fiscalHttpStatus = null,
+  plugnotasRequest = null
 }: GuiaMeiEmpresaCadastroErrorPanelProps) {
   const showNfceHint = shouldOfferNfceCadastroDocHint(message);
   const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message, fiscalApiErrorCode);
@@ -456,6 +469,7 @@ export function GuiaMeiEmpresaCadastroErrorPanel({
     rawMessage: message,
     plugnotasCode: fiscalErrorCode,
     httpStatus: fiscalHttpStatus,
+    plugnotasRequest,
   });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
     variant: 'inline',

@@ -49,7 +49,10 @@ test('empresa service valida payload obrigatório', async () => {
 });
 
 test('empresa service cria empresa com POST /empresa', async () => {
-  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const {
+    cadastrarEmpresaPlugNotas,
+    inferEmpresaCadastroScenario
+  } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
 
@@ -73,6 +76,7 @@ test('empresa service cria empresa com POST /empresa', async () => {
     assert.equal(calls[0].options.method, 'POST');
     assert.equal(response.operation, 'created');
     assert.equal(response.cnpj, '17422651000172');
+    assert.equal(inferEmpresaCadastroScenario({ operation: response.operation }), 'success_nacional');
     const sent = JSON.parse(calls[0].options.body);
     assert.ok(sent.nfce && typeof sent.nfce === 'object');
     assert.equal(sent.nfce.ativo, false);
@@ -368,7 +372,10 @@ test('empresa service POST modo apenas NFSe: inativa nfce/nfe sem config mesmo s
 });
 
 test('empresa service tenta atualização quando empresa já existe', async () => {
-  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const {
+    cadastrarEmpresaPlugNotas,
+    inferEmpresaCadastroScenario
+  } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
 
@@ -396,6 +403,7 @@ test('empresa service tenta atualização quando empresa já existe', async () =
     assert.equal(calls[1].options.method, 'PATCH');
     assert.match(calls[1].url, /\/empresa\/17422651000172$/);
     assert.equal(response.operation, 'updated');
+    assert.equal(inferEmpresaCadastroScenario({ operation: response.operation }), 'fallback_sync');
     assert.equal(response.cnpj, '17422651000172');
     const patchBody = JSON.parse(calls[1].options.body);
     assert.equal(patchBody.nfce.ativo, false);
@@ -998,7 +1006,11 @@ test('empresa service atualizar inclui plugnotasUpdateAttempts quando todas as r
 });
 
 test('empresa service POST /empresa inclui detalhes de validação no 400', async () => {
-  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const {
+    cadastrarEmpresaPlugNotas,
+    PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE,
+    inferEmpresaCadastroScenario
+  } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   global.fetch = async () => createJsonResponse(400, {
     message: 'Falha na validação do JSON de Empresa',
@@ -1017,6 +1029,16 @@ test('empresa service POST /empresa inclui detalhes de validação no 400', asyn
         assert.equal(err.status, 400);
         assert.match(String(err.message), /endereco\.logradouro/);
         assert.match(String(err.message), /inválido/);
+        assert.equal(err.errors?.plugnotasCode, PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE);
+        assert.equal(
+          inferEmpresaCadastroScenario({
+            status: err.status,
+            method: err.errors?.plugnotasRequest?.method,
+            path: err.errors?.plugnotasRequest?.path,
+            plugnotasCode: err.errors?.plugnotasCode
+          }),
+          'payload_contrato'
+        );
         assert.ok(
           !String(err.errors?.plugnotasCode || '').startsWith('plugnotas_gateway_'),
           'CR-GW-02: 400 validação não deve usar código plugnotas_gateway_*'
@@ -1060,7 +1082,10 @@ test('empresa service classifica upstream 400 de prefeitura.login como exceção
 });
 
 test('empresa service POST /empresa: 502 HTML normaliza mensagem + plugnotas_gateway_502 (integração requestJson)', async () => {
-  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const {
+    cadastrarEmpresaPlugNotas,
+    inferEmpresaCadastroScenario
+  } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const html = '<html><body>502 Bad Gateway</body></html>';
   global.fetch = async () => createHtmlErrorResponse(502, html);
@@ -1079,6 +1104,15 @@ test('empresa service POST /empresa: 502 HTML normaliza mensagem + plugnotas_gat
         assert.equal(err.errors?.plugnotasCode, 'plugnotas_gateway_502');
         assert.equal(err.errors?.plugnotasRequest?.method, 'POST');
         assert.ok(String(err.errors?.plugnotasRequest?.path || '').includes('/empresa'));
+        assert.equal(
+          inferEmpresaCadastroScenario({
+            status: err.status,
+            method: err.errors?.plugnotasRequest?.method,
+            path: err.errors?.plugnotasRequest?.path,
+            plugnotasCode: err.errors?.plugnotasCode
+          }),
+          'ambiente_configuracao'
+        );
         return true;
       }
     );
@@ -1090,7 +1124,8 @@ test('empresa service POST /empresa: 502 HTML normaliza mensagem + plugnotas_gat
 test('POST falho por prefeitura.login bloqueado e GET posterior negativo preservam causalidade', async () => {
   const {
     cadastrarEmpresaPlugNotas,
-    consultarEmpresaPlugNotas
+    consultarEmpresaPlugNotas,
+    inferEmpresaCadastroScenario
   } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
@@ -1133,8 +1168,58 @@ test('POST falho por prefeitura.login bloqueado e GET posterior negativo preserv
     assert.equal(getError?.status, 404);
     assert.equal(getError?.errors?.plugnotasRequest?.method, 'GET');
     assert.equal(getError?.errors?.plugnotasRequest?.path, '/empresa/17422651000172');
-    assert.notEqual(getError?.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
+    assert.equal(getError?.errors?.plugnotasCode, 'empresa_nao_cadastrada');
+    assert.equal(
+      inferEmpresaCadastroScenario({
+        status: getError?.status,
+        method: getError?.errors?.plugnotasRequest?.method,
+        path: getError?.errors?.plugnotasRequest?.path,
+        plugnotasCode: getError?.errors?.plugnotasCode
+      }),
+      'empresa_nao_cadastrada'
+    );
     assert.doesNotMatch(String(getError?.message || ''), /rota errada/i);
+    assert.match(String(getError?.message || ''), /Não há cadastro desta empresa no emissor fiscal/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('empresa service classifica 401 como ambiente/configuração sem criar scenarioCode novo', async () => {
+  const {
+    cadastrarEmpresaPlugNotas,
+    PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE,
+    inferEmpresaCadastroScenario
+  } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  global.fetch = async () => createJsonResponse(401, {
+    message: 'Token inválido'
+  });
+
+  try {
+    await assert.rejects(
+      () => cadastrarEmpresaPlugNotas({
+        cpfCnpj: '17422651000172',
+        certificado: 'cert-1',
+        razaoSocial: 'Empresa Teste'
+      }),
+      (err) => {
+        assert.ok(err instanceof HttpError);
+        assert.equal(err.status, 401);
+        assert.equal(err.errors?.plugnotasCode, PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE);
+        assert.equal(
+          inferEmpresaCadastroScenario({
+            status: err.status,
+            method: err.errors?.plugnotasRequest?.method,
+            path: err.errors?.plugnotasRequest?.path,
+            plugnotasCode: err.errors?.plugnotasCode
+          }),
+          'ambiente_configuracao'
+        );
+        assert.equal(Object.prototype.hasOwnProperty.call(err.errors || {}, 'scenarioCode'), false);
+        return true;
+      }
+    );
   } finally {
     global.fetch = originalFetch;
   }

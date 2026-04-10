@@ -202,8 +202,13 @@ function formatMeiFiscalErr(error: unknown, fallback: string): string {
   );
 }
 
-function nfseErrorSummaryLine(rawMessage: string, plugnotasCode: string | null): string {
-  const copy = mapMeiFiscalErrorToCopy({ rawMessage, plugnotasCode });
+function nfseErrorSummaryLine(
+  rawMessage: string,
+  plugnotasCode: string | null,
+  httpStatus: number | null,
+  plugnotasRequest: ReturnType<typeof getFiscalRequestMeta>
+): string {
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage, plugnotasCode, httpStatus, plugnotasRequest });
   const line = `${copy.title}: ${copy.description}`.replace(/\s+/g, ' ').trim();
   return line.length > 200 ? `${line.slice(0, 197)}…` : line;
 }
@@ -718,6 +723,8 @@ export default function GuidesMei() {
   const [nfseError, setNfseError] = useState<{
     rawMessage: string;
     plugnotasCode: string | null;
+    httpStatus: number | null;
+    plugnotasRequest: ReturnType<typeof getFiscalRequestMeta>;
   } | null>(null);
   const [nfseErrorKind, setNfseErrorKind] = useState<'emission' | 'operation' | null>(null);
   const [nfseSuccess, setNfseSuccess] = useState<string | null>(null);
@@ -736,13 +743,23 @@ export default function GuidesMei() {
 
   const setEmissionNfseError = useCallback((error: unknown, fallback: string) => {
     const raw = error instanceof Error ? error.message : fallback;
-    setNfseError({ rawMessage: (raw || fallback).trim(), plugnotasCode: getFiscalErrorCode(error) });
+    setNfseError({
+      rawMessage: (raw || fallback).trim(),
+      plugnotasCode: getFiscalErrorCode(error),
+      httpStatus: getFiscalHttpStatus(error),
+      plugnotasRequest: getFiscalRequestMeta(error)
+    });
     setNfseErrorKind('emission');
   }, []);
 
   const setOperationNfseError = useCallback((error: unknown, fallback: string) => {
     const raw = error instanceof Error ? error.message : fallback;
-    setNfseError({ rawMessage: (raw || fallback).trim(), plugnotasCode: getFiscalErrorCode(error) });
+    setNfseError({
+      rawMessage: (raw || fallback).trim(),
+      plugnotasCode: getFiscalErrorCode(error),
+      httpStatus: getFiscalHttpStatus(error),
+      plugnotasRequest: getFiscalRequestMeta(error)
+    });
     setNfseErrorKind('operation');
   }, []);
   const [nfseCatalogLoading, setNfseCatalogLoading] = useState(false);
@@ -3145,7 +3162,12 @@ export default function GuidesMei() {
                   loading={nfseLoading || meiLimiteServidorLoading}
                   errorMessage={
                     nfseError && nfseErrorKind === 'operation'
-                      ? nfseErrorSummaryLine(nfseError.rawMessage, nfseError.plugnotasCode)
+                      ? nfseErrorSummaryLine(
+                        nfseError.rawMessage,
+                        nfseError.plugnotasCode,
+                        nfseError.httpStatus,
+                        nfseError.plugnotasRequest
+                      )
                       : null
                   }
                   canViewNfse
@@ -4704,6 +4726,8 @@ export default function GuidesMei() {
                   documentTypeLabel={emissionFeedbackDocumentLabel}
                   message={nfseError.rawMessage}
                   plugnotasCode={nfseError.plugnotasCode}
+                  httpStatus={nfseError.httpStatus}
+                  plugnotasRequest={nfseError.plugnotasRequest}
                 />
               </div>
             ) : null}
@@ -4712,6 +4736,8 @@ export default function GuidesMei() {
                 <FiscalProviderErrorAlert
                   message={nfseError.rawMessage}
                   plugnotasCode={nfseError.plugnotasCode}
+                  httpStatus={nfseError.httpStatus}
+                  plugnotasRequest={nfseError.plugnotasRequest}
                 />
               </div>
             ) : null}

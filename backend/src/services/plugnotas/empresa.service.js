@@ -149,6 +149,69 @@ const plugnotasRequestErrors = (method, path, httpStatus = null) => ({
   ...(Number.isFinite(httpStatus) ? { httpStatus } : {})
 });
 
+const PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE = 'payload_contrato';
+const PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE = 'ambiente_configuracao';
+const PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE = 'empresa_nao_cadastrada';
+
+const isGatewayLikePlugnotasCode = (code) => /^plugnotas_gateway_\d+$/.test(String(code || ''));
+
+const isEmpresaPayloadContratoRequest = (method, path, status, gateway) => (
+  String(method || '').toUpperCase() === 'POST'
+  && isEmpresaCadastroPlugnotasPath(path)
+  && Number(status) === 400
+  && !gateway
+);
+
+const resolveEmpresaPlugnotasErrorCode = ({ method, path, status, gateway, rawMessage }) => {
+  if (Number(status) === 400 && isPrefeituraLoginRequiredUpstreamMessage(rawMessage)) {
+    return PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE;
+  }
+  if (gateway) return gateway.plugnotasCode;
+  if (Number(status) === 401 || Number(status) === 403) {
+    return PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE;
+  }
+  if (String(method || '').toUpperCase() === 'GET' && String(path || '').startsWith('/empresa/') && Number(status) === 404) {
+    return PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE;
+  }
+  if (isEmpresaPayloadContratoRequest(method, path, status, gateway)) {
+    return PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE;
+  }
+  return null;
+};
+
+const inferEmpresaCadastroScenario = ({
+  operation = '',
+  status = null,
+  method = '',
+  path = '',
+  plugnotasCode = ''
+} = {}) => {
+  const operationNorm = String(operation || '').trim().toLowerCase();
+  const code = String(plugnotasCode || '').trim();
+  const methodNorm = String(method || '').trim().toUpperCase();
+  const pathNorm = String(path || '').trim();
+  const statusNum = Number.isFinite(Number(status)) ? Number(status) : null;
+
+  if (code === PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE) return 'prefeitura_login_required_blocked';
+  if (code === PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE || isGatewayLikePlugnotasCode(code)) {
+    return 'ambiente_configuracao';
+  }
+  if (operationNorm === 'updated' || operationNorm === 'existing') return 'fallback_sync';
+  if (code === PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE) return 'payload_contrato';
+  if (code === PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE) return 'empresa_nao_cadastrada';
+  if (statusNum === 401 || statusNum === 403 || statusNum === 502 || statusNum === 503 || statusNum === 504) {
+    return 'ambiente_configuracao';
+  }
+  if (methodNorm === 'GET' && pathNorm.startsWith('/empresa/') && statusNum === 404) {
+    return 'empresa_nao_cadastrada';
+  }
+  if (isEmpresaPayloadContratoRequest(methodNorm, pathNorm, statusNum, null)) {
+    return 'payload_contrato';
+  }
+  if (operationNorm === 'created') return 'success_nacional';
+  return null;
+};
+
 const ensureConfigured = () => {
   if (!env.PLUGNOTAS_API_BASE_URL) {
     throw badRequest('Serviço de emissão fiscal não configurado');
@@ -202,24 +265,24 @@ const requestJson = async (method, path, body) => {
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
       const rawMessage = messageFromPlugnotasPayload(payload, response.statusText);
-      const prefeituraLoginBlocked = response.status === 400 && isPrefeituraLoginRequiredUpstreamMessage(rawMessage);
       const gateway = resolvePlugnotasGatewayUpstreamForClient(response.status);
+      const resolvedPlugnotasCode = resolveEmpresaPlugnotasErrorCode({
+        method,
+        path,
+        status: response.status,
+        gateway,
+        rawMessage
+      });
+      const prefeituraLoginBlocked = resolvedPlugnotasCode === PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE;
       const message = prefeituraLoginBlocked
         ? PREFEITURA_LOGIN_REQUIRED_BLOCKED_MESSAGE
         : gateway
           ? gateway.publicMessage
           : rawMessage;
-      const errors = prefeituraLoginBlocked
-        ? {
-            ...plugnotasRequestErrors(method, path, response.status),
-            plugnotasCode: PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE
-          }
-        : gateway
-          ? {
-              ...plugnotasRequestErrors(method, path, response.status),
-              plugnotasCode: gateway.plugnotasCode
-            }
-          : plugnotasRequestErrors(method, path, response.status);
+      const errors = {
+        ...plugnotasRequestErrors(method, path, response.status),
+        ...(resolvedPlugnotasCode ? { plugnotasCode: resolvedPlugnotasCode } : {})
+      };
       const fullUrl = `${baseUrl}${path}`;
       if (
         response.status === 400
@@ -604,7 +667,30 @@ export const consultarEmpresaPlugNotas = async (cnpjInput) => {
   if (cnpj.length !== 14) {
     throw badRequest('CNPJ da empresa deve ter 14 dígitos');
   }
-  return await requestJson('GET', `/empresa/${encodeURIComponent(cnpj)}`);
+  try {
+    return await requestJson('GET', `/empresa/${encodeURIComponent(cnpj)}`);
+  } catch (err) {
+    if (
+      err instanceof HttpError
+      && err.status === 404
+      && inferEmpresaCadastroScenario({
+        status: err.status,
+        method: err.errors?.plugnotasRequest?.method,
+        path: err.errors?.plugnotasRequest?.path,
+        plugnotasCode: err.errors?.plugnotasCode
+      }) === 'empresa_nao_cadastrada'
+    ) {
+      throw new HttpError(
+        404,
+        MSG_EMPRESA_NAO_CADASTRADA_EMISSOR,
+        {
+          ...err.errors,
+          plugnotasCode: PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE
+        }
+      );
+    }
+    throw err;
+  }
 };
 
 /**
@@ -668,7 +754,7 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   if (isEmpresaNaoLocalizadaPlugnotas404(err)) {
     throw badRequest(MSG_EMPRESA_NAO_CADASTRADA_EMISSOR, {
       plugnotasUpdateAttempts: failures,
-      plugnotasCode: 'empresa_nao_cadastrada'
+      plugnotasCode: PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE
     });
   }
   const msg = err instanceof Error
@@ -746,4 +832,11 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
       }
     };
   }
+};
+
+export {
+  inferEmpresaCadastroScenario,
+  PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE,
+  PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE,
+  PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE
 };

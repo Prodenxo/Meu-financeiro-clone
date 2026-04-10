@@ -196,6 +196,24 @@ describe('PlugnotasIntegrationErrorAlert', () => {
     expect(container.textContent).toContain('ambiente nacional');
     expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
   });
+
+  it('ROB: usa contrato estruturado para ambiente/configuração sem expor endpoint como narrativa', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PlugnotasIntegrationErrorAlert
+          title="Falha na operação"
+          message="Token inválido (POST /empresa no emissor fiscal)"
+          plugnotasCode="ambiente_configuracao"
+          httpStatus={401}
+          plugnotasRequest={{ method: 'POST', path: '/empresa' }}
+        />
+      );
+    });
+    expect(container.textContent).toContain('Configuração do emissor fiscal');
+    expect(container.textContent).toMatch(/URL base|token|ambiente/i);
+    expect(container.textContent).not.toContain('POST /empresa');
+  });
 });
 
 describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
@@ -345,6 +363,22 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     expect(
       Array.from(container.querySelectorAll('button')).some((b) => b.textContent?.includes('Ver detalhes completos'))
     ).toBe(false);
+  });
+
+  it('ROB: payload_contrato mostra revisão de dados em vez de narrativa genérica do provedor', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <GuiaMeiEmpresaCadastroErrorPanel
+          message="Falha na validação do JSON de Empresa: endereco.logradouro inválido"
+          fiscalErrorCode="payload_contrato"
+          fiscalHttpStatus={400}
+          plugnotasRequest={{ method: 'POST', path: '/empresa' }}
+        />
+      );
+    });
+    expect(container.textContent).toContain('Revise os dados do cadastro');
+    expect(container.textContent).not.toContain('POST /empresa');
   });
 
   it('exibe checklist e Saiba mais quando fiscalErrorCode é certificado_409_sem_id (US-MEI-FISC-03)', async () => {
