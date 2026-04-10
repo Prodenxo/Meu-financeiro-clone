@@ -6,6 +6,8 @@ import {
 /** DP-PLOGIN-02 — BFF bloqueia cadastro só com IBGE em município da lista (`prefeituraIbgeOnlyBlock.js`). */
 export const PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02 =
   'prefeitura_ibge_apenas_insuficiente_dp02';
+export const PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED =
+  'prefeitura_login_required_blocked';
 import { getPlugnotasCodeFromUnknownError, getHttpStatusFromUnknownError } from '../utils/apiClientError';
 import type { PlugnotasRequestMeta } from '../utils/apiClientError';
 
@@ -179,6 +181,15 @@ export function mapMeiFiscalErrorToCopy(input: {
         'Nem todos os municípios ficam disponíveis neste fluxo sem dados adicionais da prefeitura no emissor fiscal. '
         + 'Para o seu município, o cadastro costuma exigir configuração além do código IBGE. '
         + 'Isto não é um erro das suas credenciais MEI — contacte o suporte ou consulte a documentação do emissor.',
+    };
+  }
+
+  if (code === PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED) {
+    return {
+      title: 'Exceção municipal não suportada neste fluxo',
+      description:
+        'Este cadastro segue NFS-e Nacional como padrão. Quando o emissor exigir acesso ao portal da prefeitura, '
+        + 'o caso fica fora deste fluxo e precisa de triagem operacional com suporte ou com o painel do emissor.',
     };
   }
 

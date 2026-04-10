@@ -108,7 +108,7 @@ describe('EmissaoFiscalErrorAlert', () => {
     expect(
       container.querySelector('[role="region"][aria-label="Acesso ao portal da prefeitura no NFS-e"]')
     ).toBeTruthy();
-    expect(container.textContent).toContain('acesso ao sistema da prefeitura');
+    expect(container.textContent).toContain('acesso ao portal da prefeitura');
     expect(
       container.querySelector('[role="region"][aria-label="Configuração de prefeitura no NFS-e"]')
     ).toBeNull();

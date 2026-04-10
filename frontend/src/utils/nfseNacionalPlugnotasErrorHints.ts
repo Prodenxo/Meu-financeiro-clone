@@ -170,13 +170,7 @@ export function isPlugnotasPrefeituraLoginRequiredMessage(message: string): bool
 
   if (m.includes('nfce') && !m.includes('nfse')) return false;
 
-  if (
-    m.includes('prefeitura_portal_credenciais_disabled') ||
-    ((m.includes('nao esta activo') || m.includes('não está activo')) &&
-      (m.includes('credencial') || m.includes('login/senha')))
-  ) {
-    return false;
-  }
+  if (m.includes('prefeitura_login_required_blocked')) return true;
 
   const hasPathLoginOrSenha =
     m.includes('prefeitura.login') ||
@@ -361,10 +355,14 @@ export function shouldOfferNfseNacionalOperacaoDocHint(
   if (fiscalApiErrorCode === MEI_GUIDE_SERPRO_UNAVAILABLE) return false;
   if (isMeiGuideSerproConsCUserFacingText(message)) return false;
   return (
+    isPlugnotasPrefeituraLoginRequiredMessage(message) ||
     shouldOfferNfseNacionalOperacaoDocHintNacionalPatterns(message) ||
     isPlugnotasEmpresaMunicipalRequirementMessage(message)
   );
 }
 
 /** DP-PLOGIN-02 — mesmo valor que `errors.plugnotasCode` no BFF; copy canónica em `mapMeiFiscalErrorToCopy` (`fiscalUserError.ts`). */
-export { PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02 } from '../lib/fiscalUserError';
+export {
+  PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02,
+  PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED
+} from '../lib/fiscalUserError';

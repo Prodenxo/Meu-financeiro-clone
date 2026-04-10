@@ -54,7 +54,6 @@ import {
   type NfEmissionCompanyForm,
   type NfEmissionRegimeTributario
 } from '../utils/nfEmissionCompany';
-import { isPrefeituraPortalCredentialsUiEnabled } from '../utils/prefeituraPortalCredentialsUi';
 import { normalizeIbgeMunicipioCodigo } from '../utils/ibgeMunicipioCodigo';
 import {
   DEFAULT_DOCUMENTOS_ATIVOS,
@@ -3705,6 +3704,18 @@ export default function GuidesMei() {
                   <p className="admin-field-hint mb-2">
                     {dadosMinimosEmitenteHint}
                   </p>
+                  <div
+                    role="note"
+                    aria-label="NFS-e Nacional como padrão"
+                    className="mb-3 rounded-lg border border-sky-200/80 bg-sky-50/80 p-3 text-sm leading-relaxed text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-100"
+                  >
+                    <p className="font-semibold">NFS-e Nacional é o padrão desta jornada.</p>
+                    <p className="mt-1">
+                      Preencha os dados do emitente e tente o cadastro nacional primeiro. Se o emissor exigir acesso ao
+                      portal da prefeitura, a Guia MEI trata isso como exceção municipal bloqueada e orienta a triagem sem
+                      pedir login ou senha aqui.
+                    </p>
+                  </div>
                   {showRequisitosNfeNfcePlaceholder ? <MeiCadastroRequisitosNfeNfcePlaceholder /> : null}
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
@@ -3759,50 +3770,6 @@ export default function GuidesMei() {
                       Opcional. É o número da inscrição na prefeitura; não substitui configurações extras que o emissor
                       possa pedir no cadastro NFS-e.
                     </p>
-                    {isPrefeituraPortalCredentialsUiEnabled() ? (
-                      <>
-                        <div className="md:col-span-2 mt-2 rounded-lg border border-amber-200/80 bg-amber-50/80 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
-                          <p
-                            id="mei-prefeitura-portal-heading"
-                            className="mb-2 text-xs font-semibold text-amber-900 dark:text-amber-200"
-                          >
-                            Acesso ao portal municipal (NFS-e)
-                          </p>
-                          <p className="mb-2 text-xs text-slate-700 dark:text-slate-300">
-                            Dados sensíveis para o sistema da prefeitura, quando o emissor os exigir — não confundir com a
-                            inscrição municipal acima. Não partilhe estas credenciais em chats públicos.
-                          </p>
-                          <div className="grid gap-2 md:grid-cols-2">
-                            <input
-                              id="mei-prefeitura-portal-usuario"
-                              className="planner-input-compact"
-                              type="text"
-                              name="prefeitura_portal_usuario"
-                              autoComplete="off"
-                              value={nfEmissionCompanyForm.prefeituraPortalUsuario}
-                              onChange={(event) => updateNfEmissionCompanyForm({
-                                prefeituraPortalUsuario: event.target.value
-                              })}
-                              placeholder="Utilizador do portal (opcional)"
-                              aria-labelledby="mei-prefeitura-portal-heading"
-                            />
-                            <input
-                              id="mei-prefeitura-portal-senha"
-                              className="planner-input-compact"
-                              type="password"
-                              name="prefeitura_portal_senha"
-                              autoComplete="new-password"
-                              value={nfEmissionCompanyForm.prefeituraPortalSenha}
-                              onChange={(event) => updateNfEmissionCompanyForm({
-                                prefeituraPortalSenha: event.target.value
-                              })}
-                              placeholder="Senha do portal (opcional)"
-                              aria-labelledby="mei-prefeitura-portal-heading"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    ) : null}
                   </div>
                   <div className="mt-2 grid gap-2 md:grid-cols-4">
                     <input

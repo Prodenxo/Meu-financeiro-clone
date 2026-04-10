@@ -47,7 +47,7 @@ export function PlugnotasPrefeituraConfigNfseOperacaoBody() {
 export function PlugnotasPrefeituraLoginRequiredNfseOperacaoTitle() {
   return (
     <>
-      O serviço de emissão pediu dados de acesso ao sistema da prefeitura para concluir o cadastro de NFS-e neste município
+      Este município exige acesso ao portal da prefeitura, e esse cenário não é suportado neste fluxo
     </>
   );
 }
@@ -56,11 +56,10 @@ export function PlugnotasPrefeituraLoginRequiredNfseOperacaoTitle() {
 export function PlugnotasPrefeituraLoginRequiredNfseOperacaoBody() {
   return (
     <>
-      Isto <strong className="font-semibold">não</strong> é o mesmo que “cidade não reconhecida” na tabela do emissor nem
-      “falta só o código IBGE” quando esse fluxo já foi tratado — aqui o bloqueio costuma ser{' '}
-      <strong className="font-semibold">credencial do portal municipal</strong> exigida pelo emissor. Para o próximo passo,
-      use o guia de operação, o suporte ou o painel do emissor;{' '}
-      <strong className="font-semibold">não</strong> partilhe senhas em chats públicos.
+      Isto <strong className="font-semibold">não</strong> é erro de rota nem falta só de código IBGE. O emissor exigiu{' '}
+      <strong className="font-semibold">credencial do portal municipal</strong>, mas a Guia MEI não recolhe nem envia esse
+      tipo de acesso. O próximo passo é seguir a triagem operacional no guia, no suporte ou no painel do emissor, sem
+      tentar preencher login ou senha aqui.
     </>
   );
 }

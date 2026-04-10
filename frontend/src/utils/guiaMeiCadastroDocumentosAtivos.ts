@@ -56,7 +56,7 @@ export function getTituloBlocoDadosMinimosEmitente(d: DocumentosAtivosState): st
 export function getHintBlocoDadosMinimosEmitente(d: DocumentosAtivosState): string {
   const onlyNfse = d.nfse && !d.nfe && !d.nfce;
   return onlyNfse
-    ? 'Campos com * são obrigatórios para a configuração inicial. A inscrição estadual não é solicitada (política MEI). Inscrição municipal é opcional; preencha se o emissor exigir.'
+    ? 'Campos com * são obrigatórios para a configuração inicial em NFS-e Nacional. A inscrição estadual não é solicitada (política MEI). Inscrição municipal é opcional; login e senha de prefeitura não fazem parte deste fluxo.'
     : 'Preencha os campos obrigatórios para os documentos selecionados. Campos com * são obrigatórios onde indicado.';
 }
 

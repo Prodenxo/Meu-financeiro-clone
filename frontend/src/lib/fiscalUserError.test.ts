@@ -10,6 +10,7 @@ import {
   isLikelyUserFacingFiscalValidationMessage,
   formatMeiFiscalMappedForAlert,
   PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02,
+  PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED,
   stripPlugnotasRequestSuffix,
 } from './fiscalUserError';
 
@@ -62,6 +63,19 @@ describe('mapMeiFiscalErrorToCopy', () => {
     expect(copy.title).toContain('Limite');
     expect(copy.description).toMatch(/município|emissor/i);
     expect(copy.description).not.toMatch(/culpa|erro seu/i);
+  });
+
+  it('FR-NATEX: prefeitura_login_required_blocked gera copy de exceção municipal bloqueada sem pedir credenciais', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage: 'ignored when code set',
+      plugnotasCode: PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED,
+      httpStatus: 400,
+      plugnotasRequest: { method: 'POST', path: '/empresa' },
+    });
+    expect(copy.title).toContain('Exceção municipal');
+    expect(copy.description).toMatch(/nfs-e nacional/i);
+    expect(copy.description).not.toMatch(/login|senha/i);
+    expect(copy.description).not.toMatch(/rota errada/i);
   });
 
   it('usa fallback para payload que parece JSON de API', () => {

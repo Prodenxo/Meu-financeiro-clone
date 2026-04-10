@@ -1,6 +1,5 @@
 import type { DocumentosAtivosState } from './plugnotasEmpresaDocumentosAtivos';
 import { normalizeIbgeMunicipioCodigo } from './ibgeMunicipioCodigo';
-import { isPrefeituraPortalCredentialsUiEnabled } from './prefeituraPortalCredentialsUi';
 
 const normalizeDoc = (value: string) => value.replace(/\D/g, '');
 
@@ -42,9 +41,6 @@ export type NfEmissionCompanyForm = {
   codigoCidade: string;
   descricaoCidade: string;
   estado: string;
-  /** DP-PLOGIN-01 — só enviados quando UI + backend activos (`VITE_*` / env servidor). */
-  prefeituraPortalUsuario: string;
-  prefeituraPortalSenha: string;
 };
 
 export const getDefaultNfEmissionCompanyForm = (): NfEmissionCompanyForm => ({
@@ -62,9 +58,7 @@ export const getDefaultNfEmissionCompanyForm = (): NfEmissionCompanyForm => ({
   bairro: '',
   codigoCidade: '',
   descricaoCidade: '',
-  estado: '',
-  prefeituraPortalUsuario: '',
-  prefeituraPortalSenha: ''
+  estado: ''
 });
 
 export const getNfEmissionCompanyValidationMessage = (form: NfEmissionCompanyForm): string | null => {
@@ -80,13 +74,6 @@ export const getNfEmissionCompanyValidationMessage = (form: NfEmissionCompanyFor
   if (!hasRequiredText(form.codigoCidade)) return 'Informe o código IBGE da cidade.';
   if (!hasRequiredText(form.descricaoCidade)) return 'Informe a cidade da empresa.';
   if (String(form.estado ?? '').trim().length !== 2) return 'Informe a UF com 2 letras (ex.: PR).';
-  if (isPrefeituraPortalCredentialsUiEnabled()) {
-    const pu = String(form.prefeituraPortalUsuario ?? '').trim();
-    const ps = String(form.prefeituraPortalSenha ?? '').trim();
-    if ((pu && !ps) || (!pu && ps)) {
-      return 'Informe utilizador e senha do portal da prefeitura em conjunto (ou deixe ambos em branco).';
-    }
-  }
   return null;
 };
 
@@ -119,18 +106,6 @@ export const buildNfEmissionEmpresaPayload = ({
     endereco.complemento = form.complemento.trim();
   }
 
-  const nfseConfig: Record<string, unknown> = { producao: true };
-  if (
-    isPrefeituraPortalCredentialsUiEnabled()
-    && String(form.prefeituraPortalUsuario ?? '').trim()
-    && String(form.prefeituraPortalSenha ?? '').trim()
-  ) {
-    nfseConfig.prefeitura = {
-      login: String(form.prefeituraPortalUsuario).trim(),
-      senha: String(form.prefeituraPortalSenha).trim()
-    };
-  }
-
   const payload: Record<string, unknown> = {
     cpfCnpj: cnpj,
     razaoSocial: form.razaoSocial.trim(),
@@ -143,7 +118,7 @@ export const buildNfEmissionEmpresaPayload = ({
     nfse: {
       ativo: true,
       tipoContrato: 0,
-      config: nfseConfig,
+      config: { producao: true },
       [PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON
     },
     /** Alinhado a US-MEI-NFS-01 / ADR apenas NFS-e — backend reforça o mesmo contrato. */

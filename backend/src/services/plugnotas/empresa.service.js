@@ -33,7 +33,12 @@ import {
 import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.js';
 import { isPlugnotasIbgeTableRejectMessage } from '../../utils/plugnotasIbgeTableRejectMessage.js';
 import { applyNfseConfigPrefeituraDeriveIbge } from './nfsePrefeituraPayload.js';
-import { applyPrefeituraPortalCredentialsPolicy } from './prefeituraPortalCredentials.js';
+import {
+  applyPrefeituraPortalCredentialsPolicy,
+  isPrefeituraLoginRequiredUpstreamMessage,
+  PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE,
+  PREFEITURA_LOGIN_REQUIRED_BLOCKED_MESSAGE
+} from './prefeituraPortalCredentials.js';
 import { applyPrefeituraIbgeOnlyBlockPolicy } from './prefeituraIbgeOnlyBlock.js';
 import {
   resolvePlugnotasGatewayUpstreamForClient,
@@ -139,8 +144,9 @@ const messageFromPlugnotasPayload = (payload, statusText) => {
 };
 
 /** Metadados para o cliente (Network / apiClient) identificar qual chamada ao Plugnotas falhou. */
-const plugnotasRequestErrors = (method, path) => ({
-  plugnotasRequest: { method, path }
+const plugnotasRequestErrors = (method, path, httpStatus = null) => ({
+  plugnotasRequest: { method, path },
+  ...(Number.isFinite(httpStatus) ? { httpStatus } : {})
 });
 
 const ensureConfigured = () => {
@@ -196,11 +202,24 @@ const requestJson = async (method, path, body) => {
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
       const rawMessage = messageFromPlugnotasPayload(payload, response.statusText);
+      const prefeituraLoginBlocked = response.status === 400 && isPrefeituraLoginRequiredUpstreamMessage(rawMessage);
       const gateway = resolvePlugnotasGatewayUpstreamForClient(response.status);
-      const message = gateway ? gateway.publicMessage : rawMessage;
-      const errors = gateway
-        ? { ...plugnotasRequestErrors(method, path), plugnotasCode: gateway.plugnotasCode }
-        : plugnotasRequestErrors(method, path);
+      const message = prefeituraLoginBlocked
+        ? PREFEITURA_LOGIN_REQUIRED_BLOCKED_MESSAGE
+        : gateway
+          ? gateway.publicMessage
+          : rawMessage;
+      const errors = prefeituraLoginBlocked
+        ? {
+            ...plugnotasRequestErrors(method, path, response.status),
+            plugnotasCode: PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE
+          }
+        : gateway
+          ? {
+              ...plugnotasRequestErrors(method, path, response.status),
+              plugnotasCode: gateway.plugnotasCode
+            }
+          : plugnotasRequestErrors(method, path, response.status);
       const fullUrl = `${baseUrl}${path}`;
       if (
         response.status === 400
@@ -283,8 +302,8 @@ const requestFormData = async (method, path, body) => {
       const gateway = resolvePlugnotasGatewayUpstreamForClient(response.status);
       const message = gateway ? gateway.publicMessage : rawMessage;
       const errors = gateway
-        ? { ...plugnotasRequestErrors(method, path), plugnotasCode: gateway.plugnotasCode }
-        : plugnotasRequestErrors(method, path);
+        ? { ...plugnotasRequestErrors(method, path, response.status), plugnotasCode: gateway.plugnotasCode }
+        : plugnotasRequestErrors(method, path, response.status);
       const fullUrl = `${baseUrl}${path}`;
       if (process.env.NODE_ENV !== 'production' || isPlugnotasDebugExplicitlyEnabled()) {
         const pathLog = maskPlugnotasPathOrUrlForLog(path);
@@ -606,6 +625,7 @@ export const atualizarEmpresaPlugNotas = async (input) => {
 
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
+  applyPrefeituraPortalCredentialsPolicy(payload);
 
   const cert = payload.certificado;
   if (cert === undefined || cert === null || String(cert).trim() === '') {
@@ -624,7 +644,6 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   }
 
   normalizePayloadEnderecoCodigoCidade(payload);
-  applyPrefeituraPortalCredentialsPolicy(payload);
   applyNfsePrefeituraIbgeIfEnabled(payload);
   applyPrefeituraIbgeOnlyBlockPolicy(payload);
 
@@ -674,13 +693,13 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
 
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
+  applyPrefeituraPortalCredentialsPolicy(payload);
 
   const docPost = resolveDocumentosAtivosForPost(payload);
   stripDocumentosAtivos(payload);
   applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection);
 
   normalizePayloadEnderecoCodigoCidade(payload);
-  applyPrefeituraPortalCredentialsPolicy(payload);
   applyNfsePrefeituraIbgeIfEnabled(payload);
   applyPrefeituraIbgeOnlyBlockPolicy(payload);
 

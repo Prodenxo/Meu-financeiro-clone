@@ -6,6 +6,7 @@ import {
   NFSE_NACIONAL_OPERACAO_DOC_ANCHOR,
   NFSE_NACIONAL_PLUGNOTAS_HINT_PATTERNS_DOC,
   PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02,
+  PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED,
   PLUGNOTAS_EMPRESA_CONSULT_PENDENTE_CADASTRO_PREFIX,
   getNfseNacionalOperacaoHelpHref,
   getPlugnotasEmpresaCadastroErrorUxVariant,
@@ -145,12 +146,11 @@ describe('nfseNacionalPlugnotasErrorHints', () => {
     expect(isPlugnotasNfseConfigPrefeituraRequirementMessage(bffDp02)).toBe(false);
   });
 
-  it('DP-PLOGIN-01 regressão: código BFF prefeitura_portal_credenciais_disabled mantém PREF-L1 / prefeitura-config', () => {
-    const msg =
-      'Envio de credenciais do portal da prefeitura (login/senha em nfse.config.prefeitura) não está activo neste ambiente.';
-    expect(isPlugnotasNfseConfigPrefeituraRequirementMessage(msg)).toBe(true);
+  it('FR-NATEX regressão: código BFF prefeitura_login_required_blocked mantém variante prefeitura-login-required', () => {
+    const msg = `Falha tratada no BFF (${PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED}).`;
+    expect(isPlugnotasPrefeituraLoginRequiredMessage(msg)).toBe(true);
     expect(shouldOfferNfseNacionalOperacaoDocHint(msg)).toBe(true);
-    expect(getPlugnotasEmpresaCadastroErrorUxVariant(msg)).toBe('prefeitura-config');
+    expect(getPlugnotasEmpresaCadastroErrorUxVariant(msg)).toBe('prefeitura-login-required');
   });
 
   it('PREF-L2 (spec UX §3.2): só IM obrigatória → municipal-generic, não prefeitura-config', () => {

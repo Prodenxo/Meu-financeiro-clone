@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   buildNfEmissionEmpresaPayload,
   getDefaultNfEmissionCompanyForm,
@@ -21,10 +21,6 @@ const fullValidForm = () => ({
 });
 
 describe('nfEmissionCompany', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   it('getNfEmissionCompanyValidationMessage aceita formulário completo; IE pela política MEI (US-MEI-NFS-02)', () => {
     const base = fullValidForm();
     expect(getNfEmissionCompanyValidationMessage(base)).toBeNull();
@@ -102,13 +98,8 @@ describe('nfEmissionCompany', () => {
     expect(typeof endereco.codigoCidade).toBe('string');
   });
 
-  it('DP-PLOGIN-01: com VITE flag — inclui nfse.config.prefeitura login/senha quando ambos preenchidos', () => {
-    vi.stubEnv('VITE_PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED', 'true');
-    const form = {
-      ...fullValidForm(),
-      prefeituraPortalUsuario: 'test-user',
-      prefeituraPortalSenha: 'test-secret'
-    };
+  it('FR-NATEX: payload de empresa não inclui credenciais municipais no bloco nfse.config.prefeitura', () => {
+    const form = fullValidForm();
     const payload = buildNfEmissionEmpresaPayload({
       cnpj: '12345678000190',
       certificadoId: 'cert-abc',
@@ -116,13 +107,7 @@ describe('nfEmissionCompany', () => {
     });
     const nfse = payload.nfse as Record<string, unknown>;
     const config = nfse.config as Record<string, unknown>;
-    expect(config.prefeitura).toEqual({ login: 'test-user', senha: 'test-secret' });
-  });
-
-  it('DP-PLOGIN-01: validação exige par completo quando flag VITE ligada', () => {
-    vi.stubEnv('VITE_PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED', 'true');
-    const form = { ...fullValidForm(), prefeituraPortalUsuario: 'only-user', prefeituraPortalSenha: '' };
-    expect(getNfEmissionCompanyValidationMessage(form)).toContain('conjunto');
+    expect(config.prefeitura).toBeUndefined();
   });
 
   it('NFR-TIBGE-02: endereco não inclui codigoIBGECidade duplicado (canónico: só codigoCidade)', () => {

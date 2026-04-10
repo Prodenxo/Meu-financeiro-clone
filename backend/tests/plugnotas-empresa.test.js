@@ -90,6 +90,46 @@ test('empresa service cria empresa com POST /empresa', async () => {
   }
 });
 
+test('empresa service bloqueia login/senha de prefeitura antes do POST /empresa', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return createJsonResponse(200, {
+      message: 'Cadastro efetuado com sucesso',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await assert.rejects(
+      () => cadastrarEmpresaPlugNotas({
+        cpfCnpj: '17422651000172',
+        certificado: 'cert-1',
+        razaoSocial: 'Empresa Teste',
+        nfse: {
+          ativo: true,
+          config: {
+            producao: true,
+            prefeitura: { codigoIbge: '3550308', login: 'user', senha: 'secret' }
+          }
+        }
+      }),
+      (err) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
+        assert.match(String(err.message), /não aceita credenciais/i);
+        return true;
+      }
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('POST normaliza endereco.codigoCidade numérico para string só dígitos (FR-CID-BE-01)', async () => {
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
@@ -989,6 +1029,36 @@ test('empresa service POST /empresa inclui detalhes de validação no 400', asyn
   }
 });
 
+test('empresa service classifica upstream 400 de prefeitura.login como exceção municipal bloqueada', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  global.fetch = async () => createJsonResponse(400, {
+    message: 'Falha na validação do JSON de Empresa: fields.nfse.config.prefeitura.login: Preenchimento obrigatório'
+  });
+
+  try {
+    await assert.rejects(
+      () => cadastrarEmpresaPlugNotas({
+        cpfCnpj: '17422651000172',
+        certificado: 'cert-1',
+        razaoSocial: 'Empresa Teste'
+      }),
+      (err) => {
+        assert.ok(err instanceof HttpError);
+        assert.equal(err.status, 400);
+        assert.equal(err.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
+        assert.equal(err.errors?.plugnotasRequest?.method, 'POST');
+        assert.equal(err.errors?.plugnotasRequest?.path, '/empresa');
+        assert.equal(err.errors?.httpStatus, 400);
+        assert.match(String(err.message), /nfs-e nacional/i);
+        return true;
+      }
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('empresa service POST /empresa: 502 HTML normaliza mensagem + plugnotas_gateway_502 (integração requestJson)', async () => {
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
@@ -1012,6 +1082,59 @@ test('empresa service POST /empresa: 502 HTML normaliza mensagem + plugnotas_gat
         return true;
       }
     );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('POST falho por prefeitura.login bloqueado e GET posterior negativo preservam causalidade', async () => {
+  const {
+    cadastrarEmpresaPlugNotas,
+    consultarEmpresaPlugNotas
+  } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (calls.length === 1) {
+      return createJsonResponse(400, {
+        message: 'Falha na validação do JSON de Empresa: fields.nfse.config.prefeitura.login: Preenchimento obrigatório'
+      });
+    }
+    return createJsonResponse(404, { message: 'Empresa não encontrada' });
+  };
+
+  try {
+    let postError = null;
+    await assert.rejects(
+      () => cadastrarEmpresaPlugNotas({
+        cpfCnpj: '17422651000172',
+        certificado: 'cert-1',
+        razaoSocial: 'Empresa Teste'
+      }),
+      (err) => {
+        postError = err;
+        return true;
+      }
+    );
+    let getError = null;
+    await assert.rejects(
+      () => consultarEmpresaPlugNotas('17422651000172'),
+      (err) => {
+        getError = err;
+        return true;
+      }
+    );
+
+    assert.equal(calls.length, 2);
+    assert.equal(postError?.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
+    assert.equal(postError?.errors?.plugnotasRequest?.method, 'POST');
+    assert.equal(postError?.errors?.plugnotasRequest?.path, '/empresa');
+    assert.equal(getError?.status, 404);
+    assert.equal(getError?.errors?.plugnotasRequest?.method, 'GET');
+    assert.equal(getError?.errors?.plugnotasRequest?.path, '/empresa/17422651000172');
+    assert.notEqual(getError?.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
+    assert.doesNotMatch(String(getError?.message || ''), /rota errada/i);
   } finally {
     global.fetch = originalFetch;
   }

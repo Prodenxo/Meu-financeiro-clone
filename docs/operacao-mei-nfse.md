@@ -64,29 +64,34 @@
 
 <a id="plogin-400-prefeitura-login-obrigatorio-triagem"></a>
 
-##### Triagem **P1** — HTTP **400** com **`prefeitura.login` / `senha` obrigatório** (FR-PLOGIN)
+##### Triagem **P1** — HTTP **400** com **`prefeitura.login` / `senha` obrigatório** (FR-NATEX canónico)
 
-**Sintoma:** resposta **400** do **Plugnotas** (upstream) cuja mensagem indica explicitamente **`nfse.config.prefeitura.login`**, **`prefeitura.login`**, **`prefeitura.senha`** ou texto equivalente — o validador exige **credenciais do portal municipal** no ramo `prefeitura`, não apenas um bloco `nfse.config.prefeitura` com **`codigoIbge`**.
+**Sintoma:** resposta **400** do **Plugnotas** (upstream) cuja mensagem indica explicitamente **`nfse.config.prefeitura.login`**, **`prefeitura.login`**, **`prefeitura.senha`** ou texto equivalente.
+
+**Classificação canónica NATEX:** este cenário é uma **exceção municipal não suportada no fluxo nacional**. A jornada padrão do produto continua sendo **NFS-e Nacional**. O frontend **não recolhe** `login`/`senha` de prefeitura e o backend **não aceita nem encaminha** essas credenciais neste percurso.
 
 **Não confundir com:**
 
 1. **TIBGE / CID** — erro sobre **`endereco.codigoCidade`**, valor não encontrado na **tabela de cidades IBGE** do emissor, ou `codigoIBGECidade`: ver [endereco.codigoCidade e tabela IBGE](#endereco-codigo-cidade-ibge-plugnotas) e [400 cadastro empresa: qual erro? — CID vs TIBGE vs PREF](#cadastro-empresa-400-qual-erro).  
 2. **Só falta `nfse.config.prefeitura` / trilho B** — o backend pode derivar **`nfse.config.prefeitura.codigoIbge`** a partir de **`endereco.codigoCidade`** com **`PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE=true`**; isso **não** dispensa **login/senha** quando o Plugnotas as exige no schema — ver [Trilho B — env `PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE`](#prefb-trilho-b-env-derive-ibge) e [Spike P0 — trilho B](#p0-prefeitura-spike-trilho-b).  
 3. **400 do BFF (DP-PLOGIN-02)** — bloqueio interno `prefeitura_ibge_apenas_insuficiente_dp02` **antes** do emissor — ver [DP-PLOGIN-02](#dp02-prefeitura-ibge-apenas-bloqueio).
+4. **Erro de endpoint / rota errada** — esta classificação é indevida enquanto o erro útil vier do emissor pedindo `prefeitura.login`/`senha`. Não reclassificar este caso como problema de rota.
 
-**Referências canónicas:** PRD [`PRD-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md`](prd/PRD-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md); spec UX [`ux-spec-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md`](specs/ux-spec-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md); arquitetura [`architecture-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md`](technical/architecture-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md).
+**Referências canónicas:** PRD [`PRD-nfse-nacional-padrao-com-excecao-credenciais-prefeitura-plugnotas-2026-04-09.md`](prd/PRD-nfse-nacional-padrao-com-excecao-credenciais-prefeitura-plugnotas-2026-04-09.md); spec UX [`ux-spec-nfse-nacional-padrao-bloqueio-excecao-credenciais-prefeitura-plugnotas-2026-04-10.md`](specs/ux-spec-nfse-nacional-padrao-bloqueio-excecao-credenciais-prefeitura-plugnotas-2026-04-10.md); arquitetura [`architecture-nfse-nacional-padrao-bloqueio-excecao-credenciais-prefeitura-plugnotas-2026-04-10.md`](technical/architecture-nfse-nacional-padrao-bloqueio-excecao-credenciais-prefeitura-plugnotas-2026-04-10.md).
 
 **Contrato público (Plugnotas) — FR-PLOGIN-03:** [Documentação da API (Postman)](https://documenter.getpostman.com/view/3720339/2sB3WpSh1R?version=latest) — ramo `prefeitura`; **não** copiar credenciais para o Git nem para tickets públicos.
 
-**FR-PLOGIN-01 — evidência em ticket interno ou acta (sem secrets em canal aberto):**
+**Registo mínimo em ticket interno ou acta (sem secrets em canal aberto):**
 
 1. Guardar **mensagem de erro completa** (texto ou screenshot) e **ambiente** (homologação/produção).  
-2. Se possível, **payload ou excerto redigido** enviado ao Plugnotas (`login`/`senha` substituídos por `***` ou marcador) para provar se o ramo `nfse.config.prefeitura` incluía ou não credenciais.  
-3. Registar em **ticket interno ou acta**; **não** colar tokens, certificados nem credenciais reais em Slack/Git público (**NFR-PLOGIN-02**).
+2. Se possível, guardar **metadados redigidos** do erro (`plugnotasCode`, `plugnotasRequest.method`, `plugnotasRequest.path`, `httpStatus`) ou referência ao log/response correspondente.  
+3. Registar em **ticket interno ou acta**; **não** colar tokens, certificados nem credenciais reais em Slack/Git público.
 
-**Quando persistir após dados coerentes e revisão de ambiente:** alinhar **FR-BRIEF-OP-06** e **FR-PREFB-ESC-01** — [Programa briefing (FR-BRIEF-OP)](#programa-briefing-fr-brief-op); [Trilho B — escalação FR-PREFB-ESC-01](#prefb-trilho-b-env-derive-ibge); PRD PREF [`PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md`](prd/PRD-plugnotas-empresa-nfse-config-prefeitura-payload-2026-04-08.md); PRD P0 [`PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md`](prd/PRD-acao-p0-cadastro-empresa-prefeitura-400-get-404-2026-04-08.md).
+**Orientação operacional:** não pedir credenciais ao utilizador, não abrir tarefa para recolha de `login`/`senha` no produto e não tratar o caso como endpoint errado. Classificar como **não suportado no fluxo nacional** e encaminhar a triagem via runbook/suporte apropriado.
 
-**Ver também:** [DP-PLOGIN-01 — credenciais do portal municipal](#dp01-prefeitura-portal-credenciais) (opt-in produto); [Quadro CID / TIBGE / PREF](#cadastro-empresa-400-qual-erro).
+**Causalidade:** se o `POST` do cadastro falhar com esta exceção, um `GET` posterior sem empresa é apenas consequência do cadastro não concluído. O `GET` negativo não substitui a causa raiz registada no `POST`.
+
+**Ver também:** [Quadro CID / TIBGE / PREF](#cadastro-empresa-400-qual-erro); [Matriz canónica NATEX — exceção municipal bloqueada](#natex-matriz-operacional-excecao-municipal-bloqueada).
 
 <a id="p0-prefeitura-spike-trilho-b"></a>
 
@@ -101,13 +106,11 @@
 
 <a id="dp01-prefeitura-portal-credenciais"></a>
 
-##### DP-PLOGIN-01 — credenciais do portal municipal (`login` / `senha` em `nfse.config.prefeitura`)
+##### DP-PLOGIN-01 — histórico legado de credenciais do portal municipal
 
-- **Opt-in:** backend `PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED` e frontend `VITE_PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED` (ambos por defeito desligados até decisão PO). Com ambos **ligados**, a Guia MEI pode recolher «utilizador do portal» e «senha do portal» e o BFF valida antes do Plugnotas; ver ADR [`ADR-plugnotas-empresa-payload-apenas-nfse.md`](adr/ADR-plugnotas-empresa-payload-apenas-nfse.md) complemento 2026-04-09.
-- **Activar / desactivar (QA ou piloto):** definir as duas variáveis (`true` / ausente ou `false`); **reiniciar** o backend e **recompilar** o frontend de dev (Vite lê `VITE_*` ao arranque). **Promoção a GA** — owner: @po conforme pré-condições da story DP-PLOGIN-01.
-- **Checklist manual ramo desactivado (defeito):** secção «Acesso ao portal municipal» **não** aparece no passo empresa da Guia MEI; envio de `nfse.config.prefeitura.login`/`senha` ao BFF → **400** `prefeitura_portal_credenciais_disabled` (mensagem clara, sem segredo no corpo da resposta).
-- **Checklist manual ramo activado (ambas as flags `true`):** bloco «Acesso ao portal municipal (NFS-e)» visível; par utilizador+senha validado no cliente e no BFF; heurísticas de erro municipal (`nfseNacionalPlugnotasErrorHints`) mantêm variante **prefeitura-config** para a mensagem BFF de recurso desactivado (cita `nfse.config.prefeitura`) — regressão em `nfseNacionalPlugnotasErrorHints.test.ts`.
-- **Suporte:** não solicitar credenciais reais em tickets públicos; triagem distinta do trilho B só IBGE — [Triagem PLOGIN — 400 `prefeitura.login`](#plogin-400-prefeitura-login-obrigatorio-triagem); PRD [`PRD-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md`](prd/PRD-400-nfse-prefeitura-login-obrigatorio-plugnotas-2026-04-09.md).
+- Esta secção fica mantida apenas como **histórico** de análise anterior.
+- A política vigente do produto para a jornada Guia MEI / NFS-e Nacional foi revista pela iniciativa **FR-NATEX**: o frontend **não** apresenta campos de `login`/`senha` de prefeitura e o backend **não** aceita nem encaminha essas credenciais neste fluxo.
+- Para operação, QA e suporte, usar como referência canónica a triagem [FR-NATEX](#plogin-400-prefeitura-login-obrigatorio-triagem) e a [matriz canónica NATEX](#natex-matriz-operacional-excecao-municipal-bloqueada).
 
 <a id="dp02-prefeitura-ibge-apenas-bloqueio"></a>
 
@@ -615,6 +618,44 @@ Esta é a matriz operacional canónica da iniciativa **FR-ENDP** para validar `P
 | `POST` com conflito seguido de fallback `PATCH` | Empresa já existente no mesmo token/ambiente; backend com política de fallback ativa | Backend trata conflito como atualização, preserva narrativa operacional de sincronização e não abre falso erro arquitetural | Preencher com indícios de fallback (`operation=updated|existing`, status e copy exibida) | Preencher | Story/ticket + evidência redigida do backend/UI |
 | `POST` falho seguido de `GET` sem empresa | Primeiro cadastro falha por payload/validação ou erro de ambiente; depois ocorre consulta `GET /empresa/:cnpj` no mesmo ambiente | `GET` negativo é interpretado como consequência do cadastro não concluído; não concluir "rota errada" sem revisar ambiente e erro anterior | Preencher com erro anterior, metadados (`plugnotasCode`, `plugnotasRequest`, `httpStatus`) e síntese da narrativa final | Preencher | Ticket de QA/suporte com mensagem redigida e referência ao passo anterior |
 | Diferenciação entre ambiente/configuração e payload/contrato | Um cenário de erro com suspeita de ambiente e outro com rejeição do payload | Equipa consegue separar "host/token/prefixo incoerente" de "dados enviados rejeitados" antes de escalar arquitetura | Preencher com classificação final e razão curta | Preencher | Story/ticket + links para logs redigidos, DevTools Response ou runbook aplicado |
+
+<a id="natex-matriz-operacional-excecao-municipal-bloqueada"></a>
+
+### 2g) Matriz canónica NATEX — triagem da exceção municipal bloqueada no fluxo nacional
+
+Esta é a matriz operacional canónica da iniciativa **FR-NATEX** para triagem do caso em que o emissor exige `prefeitura.login`/`senha`, apesar de a jornada do produto seguir **NFS-e Nacional** como padrão.
+
+#### Regras de uso
+
+1. Usar esta matriz quando a dúvida principal for distinguir **exceção municipal bloqueada** de erro de ambiente, IBGE ou payload genérico.
+2. Não recolher `login`/`senha` de prefeitura no produto nem pedir essas credenciais ao utilizador como passo de troubleshooting.
+3. Não classificar o caso como "endpoint errado" quando a evidência útil vier do emissor exigindo `prefeitura.login`/`senha`.
+4. Se existir `GET` sem empresa após o `POST` falho, registar o `GET` como consequência e preservar a causa raiz do `POST`.
+5. Registar apenas evidência redigida: `plugnotasCode`, `plugnotasRequest.method`, `plugnotasRequest.path`, `httpStatus`, mensagem redigida e referência ao ticket/log.
+
+#### Campos obrigatórios por linha
+
+| cenário | pré-condição/entrada | resultado esperado | resultado observado | decisão | evidência/local do registo |
+|---------|----------------------|--------------------|---------------------|---------|-----------------------------|
+| nome curto do cenário | ambiente e ação executada sem segredos | comportamento esperado segundo PRD/arquitetura NATEX | síntese factual do que ocorreu | `sem gap`, `triagem operacional concluída` ou `gap bloqueante para release` | ticket/story/runbook, log redigido, screenshot interna ou nota de QA |
+
+#### Matriz mínima NATEX
+
+| cenário | pré-condição/entrada | resultado esperado | resultado observado | decisão | evidência/local do registo |
+|---------|----------------------|--------------------|---------------------|---------|-----------------------------|
+| Sucesso nacional padrão | Fluxo Guia MEI em ambiente coerente, sem recolha de credenciais municipais, cadastro em `POST /api/mei-notas/setup/emissao-fiscal/empresa` | Empresa é cadastrada ou sincronizada sem qualquer referência a `login`/`senha` de prefeitura; narrativa permanece NFS-e Nacional | Preencher com status, síntese da UI e resultado final | Preencher | Ticket/nota de QA + response/log redigido |
+| Erro de ambiente/configuração | Host, token ou prefixo incoerente entre ambientes | Equipa distingue erro de ambiente antes de culpar payload ou exceção municipal | Preencher com host/prefixo redigidos, classificação final e razão curta | Preencher | Ticket/story + referência ao runbook ENDP ou log redigido |
+| Erro IBGE ou payload genérico | Cadastro falha por `codigoCidade`, IBGE ou outro campo rejeitado sem exigir credencial municipal | Caso é classificado como payload/contrato ou dado municipal genérico, distinto de exceção bloqueada | Preencher com mensagem redigida e metadados disponíveis | Preencher | Ticket interno + response/log redigido |
+| Exceção municipal bloqueada (`prefeitura.login` / `senha` obrigatório) | `POST` devolve erro do emissor exigindo `prefeitura.login`, `prefeitura.senha` ou `plugnotasCode = prefeitura_login_required_blocked` | Caso é classificado como **não suportado no fluxo nacional**; não se recolhem credenciais no produto; não se trata como endpoint errado | Registar explicitamente: classificação final = `não suportado no fluxo nacional`; origem da evidência = `plugnotasCode`, mensagem redigida e/ou referência ao response/log; decisão operacional final = triagem via runbook/suporte sem pedir credenciais; local do ticket/story/runbook associado | Preencher | Ticket de suporte/QA + story NATEX + link para esta secção do runbook |
+| `GET` negativo posterior a `POST` bloqueado | Após erro do `POST`, ocorre consulta `GET /empresa/:cnpj` no mesmo ambiente e a empresa não é encontrada | `GET` negativo é registado como consequência do cadastro não concluído; a causa raiz continua sendo a exceção do `POST` | Preencher com referência cruzada ao erro anterior e narrativa final sem "rota errada" | Preencher | Mesmo ticket do `POST` + nota de causalidade |
+
+#### Guardrails específicos da exceção bloqueada
+
+- Não anexar nem solicitar `login`, `senha`, certificado, token ou payload bruto.
+- Quando a linha da exceção bloqueada for preenchida, usar obrigatoriamente a classificação final `não suportado no fluxo nacional`.
+- A origem da evidência deve apontar para pelo menos um entre `plugnotasCode`, mensagem redigida ou referência objetiva ao response/log.
+- A decisão operacional final deve indicar consulta a runbook/suporte apropriado, sem abrir ação para recolha de credenciais no frontend ou no backend.
+- Se houver `GET` posterior sem empresa, ligar a evidência ao mesmo ticket e manter a cadeia causal `POST` falho -> `GET` negativo.
 
 #### Guardrails de evidência
 

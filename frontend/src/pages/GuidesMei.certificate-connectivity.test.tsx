@@ -638,6 +638,7 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     cadastrarCertificadoEmissaoNfMock.mockResolvedValueOnce({ id: 'cert-plug-1', message: 'ok' });
     cadastrarEmpresaEmissaoNfMock.mockRejectedValueOnce(
       new ApiClientError('Falha na validação do JSON de Empresa (POST /empresa no emissor fiscal)', {
+        plugnotasCode: 'prefeitura_login_required_blocked',
         plugnotasRequest: { method: 'POST', path: '/empresa' },
         httpStatus: 400
       })
@@ -697,7 +698,11 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
 
     const text = container.textContent ?? '';
     expect(
-      text.includes('Cadastro da empresa ainda não concluído')
+      text.includes('Exceção municipal não suportada neste fluxo')
+      || text.includes('município exige acesso ao portal da prefeitura')
+      || text.includes('credencial do portal municipal')
+      || text.includes('não é erro de rota')
+      || text.includes('cadastro ainda não foi concluído')
       || text.includes('cadastro ainda não foi criado no emissor')
       || text.includes('o cadastro ainda não foi concluído')
       || text.includes('Os dados do emitente não foram concluídos')
@@ -706,6 +711,7 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     expect(text).not.toContain('rota errada');
     expect(text).not.toContain('POST /empresa');
     expect(text).not.toContain('GET /empresa/12345678000190');
+    expect(text).not.toMatch(/Utilizador do portal|Senha do portal|login\/senha|prefeitura_portal_/i);
 
     await act(async () => {
       root.unmount();
@@ -844,6 +850,8 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
 
     const placeholdersEstadual = panel!.querySelectorAll('input[placeholder*="estadual" i]');
     expect(placeholdersEstadual.length).toBe(0);
+    expect(container.textContent).toContain('NFS-e Nacional é o padrão desta jornada');
+    expect(panel!.textContent).not.toMatch(/Utilizador do portal|Senha do portal|Acesso ao portal municipal/i);
 
     const controls = Array.from(panel!.querySelectorAll('input, select'));
     for (const el of controls) {
@@ -865,9 +873,6 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
       'Email fiscal (opcional)',
       '__select__',
       'Inscrição municipal (opcional)',
-      ...(import.meta.env.VITE_PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED === 'true'
-        ? ['Utilizador do portal (opcional)', 'Senha do portal (opcional)']
-        : []),
       'CEP *',
       'Tipo logradouro',
       'Logradouro *',

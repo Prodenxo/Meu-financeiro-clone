@@ -2,18 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyPrefeituraPortalCredentialsPolicy,
-  isPrefeituraPortalCredentialsEnabled
+  isPrefeituraLoginRequiredUpstreamMessage,
+  PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE
 } from '../src/services/plugnotas/prefeituraPortalCredentials.js';
 
-const orig = process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED;
-
-test.afterEach(() => {
-  process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = orig;
-});
-
-test('flag desligada — rejeita login/senha no payload', () => {
-  process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = 'false';
-  assert.equal(isPrefeituraPortalCredentialsEnabled(), false);
+test('bloqueia login/senha no payload antes da chamada canónica', () => {
   const payload = {
     nfse: {
       ativo: true,
@@ -25,12 +18,14 @@ test('flag desligada — rejeita login/senha no payload', () => {
   };
   assert.throws(
     () => applyPrefeituraPortalCredentialsPolicy(payload),
-    (err) => err.status === 400 && String(err.message).includes('não está activo')
+    (err) =>
+      err.status === 400
+      && err.errors?.plugnotasCode === PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE
+      && String(err.message).includes('não aceita credenciais')
   );
 });
 
-test('flag desligada — objecto só com codigoIbge passa', () => {
-  process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = 'false';
+test('objecto só com codigoIbge passa', () => {
   const payload = {
     nfse: {
       ativo: true,
@@ -44,44 +39,36 @@ test('flag desligada — objecto só com codigoIbge passa', () => {
   assert.deepEqual(payload.nfse.config.prefeitura, { codigoIbge: '3550308' });
 });
 
-test('flag ligada — merge e trim; preserva codigoIbge', () => {
-  process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = 'true';
+test('mesmo com campos vazios, a presença das chaves login/senha é bloqueada', () => {
   const payload = {
     nfse: {
       ativo: true,
       config: {
         producao: true,
-        prefeitura: { codigoIbge: '3550308', login: '  test-user  ', senha: '  test-pass  ' }
+        prefeitura: { codigoIbge: '3550308', login: '', senha: '   ' }
       }
     }
   };
-  applyPrefeituraPortalCredentialsPolicy(payload);
-  assert.deepEqual(payload.nfse.config.prefeitura, {
-    codigoIbge: '3550308',
-    login: 'test-user',
-    senha: 'test-pass'
-  });
-});
-
-test('flag ligada — só login preenchido falha', () => {
-  process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = 'true';
-  const payload = {
-    nfse: { ativo: true, config: { producao: true, prefeitura: { login: 'x' } } }
-  };
   assert.throws(
     () => applyPrefeituraPortalCredentialsPolicy(payload),
-    (err) => err.status === 400 && String(err.message).includes('conjunto')
+    (err) => err.status === 400 && err.errors?.plugnotasCode === PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE
   );
 });
 
-test('flag ligada — login e senha vazios remove campos', () => {
-  process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = 'true';
-  const payload = {
-    nfse: {
-      ativo: true,
-      config: { producao: true, prefeitura: { codigoIbge: '3550308', login: '', senha: '   ' } }
-    }
-  };
-  applyPrefeituraPortalCredentialsPolicy(payload);
-  assert.deepEqual(payload.nfse.config.prefeitura, { codigoIbge: '3550308' });
+test('classifica mensagem upstream de prefeitura.login obrigatório', () => {
+  assert.equal(
+    isPrefeituraLoginRequiredUpstreamMessage(
+      'Falha na validação do JSON de Empresa: fields.nfse.config.prefeitura.login: Preenchimento obrigatório'
+    ),
+    true
+  );
+});
+
+test('não classifica mensagens sem exigência explícita de prefeitura.login/senha', () => {
+  assert.equal(
+    isPrefeituraLoginRequiredUpstreamMessage(
+      'Falha na validação do JSON de Empresa: fields.endereco.logradouro: Preenchimento obrigatório'
+    ),
+    false
+  );
 });
