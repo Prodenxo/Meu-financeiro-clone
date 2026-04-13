@@ -767,6 +767,77 @@ Roteiro operacional único para o cenário TOP em que o cadastro empresa falha n
   - decisão binária (`esperado` vs `regressão`);
   - checklist de redaction.
 
+<a id="tro-protocolo-operacional-prefeitura-login-required-blocked"></a>
+
+### 2i) TRO — protocolo canónico de triagem e evidência operacional (`prefeitura_login_required_blocked`)
+
+Protocolo canónico da iniciativa **FR-TRO** para reduzir retrabalho operacional e evitar reclassificação indevida como erro de endpoint.
+
+#### Regras obrigatórias FR-TRO
+
+1. Se `plugnotasCode = prefeitura_login_required_blocked`, classificar como **`não suportado no fluxo nacional`**.
+2. Não diagnosticar o caso como "endpoint errado" quando o contrato de erro estiver presente.
+3. Não solicitar `login`/`senha` de prefeitura no produto ou no troubleshooting da ocorrência.
+4. Se houver `GET` negativo após o `POST` falho, registar o `GET` como consequência e manter a causa raiz no `POST`.
+5. Encerrar sempre com decisão binária:
+   - `esperado pela política vigente`; ou
+   - `regressão técnica a corrigir`.
+
+#### Evidência mínima obrigatória (FR-TRO-03)
+
+Registar no artefato local e no ticket interno, com redaction:
+
+- `message`
+- `errors.plugnotasCode`
+- `errors.plugnotasRequest.method`
+- `errors.plugnotasRequest.path`
+- `errors.httpStatus`
+
+#### Nomeação e rastreabilidade de artefatos `docs/qa/`
+
+- Padrão prioritário para novas ocorrências FR-TRO:  
+  `docs/qa/tro-prefeitura-login-required-blocked-YYYY-MM-DD-<ticket-ou-incidente>.md`
+- Compatibilidade legado: artefatos `top-...` continuam válidos para histórico.
+- Quando existir referência a arquivo legado `top-...`, explicitar no resumo da execução o mapeamento legado -> ocorrência atual (`tro-...` + ticket interno).
+
+#### Template mínimo TRO (resumo)
+
+```md
+# Evidência TRO Operacao/QA — prefeitura_login_required_blocked
+
+- Data da execução:
+- Responsável:
+- Story ID:
+- Ticket interno (ID/link):
+- Ambiente:
+
+## Evidência mínima FR-TRO-03
+- message:
+- errors.plugnotasCode:
+- errors.plugnotasRequest.method:
+- errors.plugnotasRequest.path:
+- errors.httpStatus:
+
+## Causalidade operacional (quando aplicável)
+- Registro do POST falho:
+- Registro do GET posterior:
+- Interpretação: GET negativo como consequência do POST falho
+
+## Decisão final
+- Classificação:
+- Decisão: esperado pela política vigente | regressão técnica a corrigir
+```
+
+#### Governanca de escalonamento FR-TRO-07/08 (produto/operacao)
+
+- Fonte canonica de decisao de escalonamento:  
+  `docs/architecture/project-decisions/tro-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md`
+- Regras:
+  1. manter politica vigente enquanto nenhum gatilho FR-TRO-08 estiver ativo;
+  2. abrir PRD dedicado somente quando houver gatilho confirmado (volume recorrente com impacto operacional, demanda comercial explicita, ou decisao estrategica de ampliar cobertura municipal);
+  3. vincular decisao ao ticket interno + evidencia local `docs/qa/` da ocorrencia/cluster.
+  4. apos cada encerramento de ocorrencia/cluster TRO, atualizar o artefato canonico de governanca com registro de manutencao (ticket, decisao, responsavel e proxima revisao).
+
 ### 3) PDF/XML indisponivel
 - Confirmar se a nota ja foi concluida/autorizada.
 - Atualizar status da nota via sincronizacao antes de novo download.
