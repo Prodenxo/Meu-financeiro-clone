@@ -3,16 +3,16 @@
 **ID:** STORY-FR-TRO-P1-PRODUTO-OPERACAO-GOVERNANCA-GATILHOS-ESCALONAMENTO-PREFEITURA-LOGIN-REQUIRED-BLOCKED-2026-04-13  
 **Prioridade:** P1  
 **Status:** Ready for Review  
-**Depende de:** [`docs/stories/story-fr-tro-p1-operacao-qa-protocolo-triagem-evidencia-prefeitura-login-required-blocked-2026-04-13.md`](./story-fr-tro-p1-operacao-qa-protocolo-triagem-evidencia-prefeitura-login-required-blocked-2026-04-13.md), [`docs/prd/PRD-tratativa-operacional-prefeitura-login-required-blocked-2026-04-13.md`](../prd/PRD-tratativa-operacional-prefeitura-login-required-blocked-2026-04-13.md), [`docs/specs/ux-spec-tratativa-operacional-prefeitura-login-required-blocked-2026-04-13.md`](../specs/ux-spec-tratativa-operacional-prefeitura-login-required-blocked-2026-04-13.md), [`docs/technical/architecture-tratativa-operacional-prefeitura-login-required-blocked-2026-04-13.md`](../technical/architecture-tratativa-operacional-prefeitura-login-required-blocked-2026-04-13.md)  
-**Fonte PRD:** [`docs/prd/PRD-tratativa-operacional-prefeitura-login-required-blocked-2026-04-13.md`](../prd/PRD-tratativa-operacional-prefeitura-login-required-blocked-2026-04-13.md) — **FR-TRO-05**, **FR-TRO-07**, **FR-TRO-08**, **NFR-TRO-04** (alinhado a metricas da secao 10 e riscos da secao 11)  
-**UX:** secao 5 (FR mapeados), secao 6.4 (decisao e encaminhamento), secao 11 (criterios)  
-**Arquitetura:** secao 8 (motor de decisao), secao 9 (observabilidade), secao 10 (rastreabilidade), secao 11 (criterios)
+**Depende de:** [`docs/stories/story-fr-tro-p1-operacao-qa-protocolo-triagem-evidencia-prefeitura-login-required-blocked-2026-04-13.md`](./story-fr-tro-p1-operacao-qa-protocolo-triagem-evidencia-prefeitura-login-required-blocked-2026-04-13.md), [`docs/prd/PRD-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md`](../prd/PRD-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md), [`docs/specs/ux-spec-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md`](../specs/ux-spec-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md), [`docs/technical/architecture-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md`](../technical/architecture-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md), [`docs/architecture/project-decisions/tro-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md`](../architecture/project-decisions/tro-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md)  
+**Fonte PRD:** [`docs/prd/PRD-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md`](../prd/PRD-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md) — **FR-TRO-05**, **FR-TRO-07**, **FR-TRO-08**, **NFR-TRO-04**, **NFR-TRO-05**, **CR-TRO-03**, **CR-TRO-04** (alinhado as metricas da secao 12 e aos riscos da secao 13)  
+**UX:** secao 3 (principios de design), secao 6.3 (fluxo C - decisao de escalonamento), secao 11 (mapeamento PRD -> UX), secao 12 (criterios), secao 13 (handoff)  
+**Arquitetura:** secao 4 (invariantes), secao 9.2 (escalonamento governado), secao 9.3 (saidas obrigatorias por cluster), secao 10 (compatibilidade brownfield), secao 13 (riscos tecnicos), secao 14 (rastreabilidade PRD + UX -> arquitetura), secao 15 (criterios tecnicos)
 
 ## Executor Assignment
 
 | Campo | Valor |
 |-------|--------|
-| **executor** | @analyst |
+| **executor** | @dev |
 | **quality_gate** | @pm |
 | **revisao** | @po / @architect |
 | **quality_gate_tools** | revisao de governanca documental, consistencia com PRD/arquitetura e verificacao de rastreabilidade com ticket interno |
@@ -29,9 +29,34 @@
 
 ## Contexto
 
-- O PRD define que a tratativa padrao atual e operacional, com decisao `esperado` vs `regressao`.
-- O escalonamento para nova iniciativa nao e automatico: depende de gatilhos de recorrencia/impacto.
-- A arquitetura reforca que a saida operacional deve registrar decisao e contexto suficiente para produto decidir sem ambiguidade.
+- O PRD de resolucao governada separa explicitamente o trilho A (tratativa imediata) do trilho B (escalonamento condicional por gatilho).
+- O escalonamento para iniciativa nova nao e automatico: depende exclusivamente dos 3 gatilhos FR-TRO-08 e da decisao formal por ocorrencia/cluster.
+- A arquitetura reforca que a saida operacional deve registrar ticket, evidencia redigida, decisao binaria e proxima revisao para produto decidir sem ambiguidade.
+
+---
+
+## Mapa de fontes canonicas
+
+- [PRD §9.2 — Trilho B de escalonamento](../prd/PRD-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md#prd-fr-tro-trilho-b-escalonamento): define que o escalonamento depende exclusivamente dos gatilhos FR-TRO-08.
+- [PRD §12 — Metricas de sucesso](../prd/PRD-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md#prd-fr-tro-metricas-sucesso): fornece as metricas usadas como entrada obrigatoria da decisao de produto.
+- [PRD §13 — Riscos e mitigacao](../prd/PRD-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md#prd-fr-tro-riscos-mitigacao): contextualiza os riscos de deriva operacional e atraso estrategico mitigados por esta governanca.
+- [PRD §14 / Story 1.2](../prd/PRD-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md#prd-fr-tro-story-12): registra a origem desta story na decomposicao do Epic 1.
+- [UX §6.3 — Fluxo C de escalonamento](../specs/ux-spec-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md#ux-fr-tro-fluxo-c-escalonamento): descreve o fluxo de decisao produto/operacao por gatilho.
+- [UX §12 — Criterios de aceite UX/front-end](../specs/ux-spec-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md#ux-fr-tro-criterios-aceite): valida a coerencia do handoff e da decisao governada.
+- [UX §13 — Handoff](../specs/ux-spec-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md#ux-fr-tro-handoff): reforca a continuidade entre operacao, produto e proximos passos.
+- [Arquitetura §9.2 — Escalonamento governado](../technical/architecture-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md#arch-fr-tro-escalonamento-governado): define a regra tecnica do trilho B.
+- [Arquitetura §9.3 — Saidas obrigatorias por cluster](../technical/architecture-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md#arch-fr-tro-saidas-cluster): fixa as saidas documentais obrigatorias por ocorrencia/cluster.
+- [Arquitetura §13 — Riscos tecnicos](../technical/architecture-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md#arch-fr-tro-riscos-tecnicos): apoia a leitura do risco residual e da manutencao continua.
+- [Artefato canonico de governanca TRO](../architecture/project-decisions/tro-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md#tro-gov-gatilhos): consolida os gatilhos, entradas, decisao e manutencao do cluster.
+- [Runbook TRO](../operacao-mei-nfse.md#tro-protocolo-operacional-prefeitura-login-required-blocked): ponto operacional de consulta e cross-link para a governanca.
+
+---
+
+## Nota de governanca do artefato
+
+- Este arquivo e um artefato vivo de story: as secoes canonicas de requisito e preparo de execucao vao de `Executor Assignment` ate `Tasks / Subtasks`.
+- As secoes a partir de `Historico de execucao do cluster auditado` preservam a execucao documental revisada da ocorrencia/cluster e nao alteram os requisitos canonicos; `CodeRabbit Integration` permanece como metadado canonico de revisao do template.
+- O `executor` acima foi alinhado ao historico auditado desta entrega, mantendo coerencia com `Dev Agent Record` e com o artefato canonico de governanca.
 
 ---
 
@@ -100,7 +125,7 @@
 - Tickets internos relacionados:
 - Referencias de evidencia local (`docs/qa/`):
 - Referencia de runbook:
-- Leitura das metricas PRD secao 10:
+- Leitura das metricas PRD secao 12:
 
 ## Decisao de produto (por ocorrencia/cluster)
 - Resultado: manter politica vigente | abrir PRD dedicado de iniciativa nova
@@ -123,6 +148,12 @@
 
 ---
 
+## Historico de execucao do cluster auditado
+
+As secoes abaixo registram a execucao documental auditada desta story e preservam o contexto do cluster avaliado para revisoes futuras.
+
+---
+
 ## Checklist de Preparacao para Execucao (DoR)
 
 - [x] Tickets/ocorrencias representativas selecionados para amostra de revisao.
@@ -139,13 +170,16 @@
 - [x] Artefato principal de governanca foi criado/atualizado no caminho definido.
 - [x] Decisao formal por ocorrencia/cluster foi registrada como `manter politica vigente` ou `abrir PRD dedicado`.
 - [x] Tickets e evidencias locais estao vinculados no artefato sem lacunas de rastreabilidade.
-- [x] Metricas da secao 10 do PRD foram explicitamente usadas na decisao.
+- [x] Metricas da secao 12 do PRD foram explicitamente usadas na decisao.
 - [x] `Dev Agent Record` e `File list` foram atualizados para handoff do executor para quality gate.
 
 ---
 
-## File list (esperada / a confirmar na execucao)
+## File list do cluster auditado
 
+- [x] `docs/prd/PRD-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md` *(ancoras adicionadas para trilho B, metricas, riscos e origem da story 1.2)*
+- [x] `docs/specs/ux-spec-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md` *(ancoras adicionadas para fluxo C e handoff)*
+- [x] `docs/technical/architecture-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md` *(ancoras adicionadas para escalonamento governado, saidas por cluster e riscos tecnicos)*
 - [x] `docs/architecture/project-decisions/tro-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md`
 - [x] `docs/operacao-mei-nfse.md` *(cross-link adicionado para o artefato de governanca FR-TRO-07/08)*
 - [x] `docs/stories/story-fr-tro-p1-produto-operacao-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md`
@@ -176,12 +210,16 @@ Ready for Review
 
 ### File list
 
+- `docs/prd/PRD-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md`
+- `docs/specs/ux-spec-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md`
+- `docs/technical/architecture-resolucao-governada-prefeitura-login-required-blocked-2026-04-13.md`
 - `docs/architecture/project-decisions/tro-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md`
 - `docs/operacao-mei-nfse.md`
 - `docs/stories/story-fr-tro-p1-produto-operacao-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md`
 
 ### Debug Log References
 
+- Ancoras estaveis adicionadas em PRD/UX spec/arquitetura para navegabilidade da story 1.2 e rastreabilidade precisa por secao.
 - Artefato principal criado em `docs/architecture/project-decisions/tro-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md`, com os 3 gatilhos FR-TRO-08 sem extensoes e com decisao formal por cluster.
 - Cross-link de governanca adicionado ao runbook em `docs/operacao-mei-nfse.md`, secao `2i) TRO`.
 - Entradas obrigatorias de decisao vinculadas no artefato (ticket, runbook e evidencias locais `docs/qa/`), incluindo compatibilidade legado `top-...` + atual `tro-...`.
@@ -192,7 +230,7 @@ Ready for Review
 - Story concluida com foco documental de produto/operacao, sem alteracao funcional de aplicacao.
 - Governanca FR-TRO-07/08 consolidada em fonte canonica unica (`docs/architecture/project-decisions/...`) para baixo overhead e sem duplicidade contraditoria.
 - Decisao do cluster atual registrada como `manter politica vigente`, pois nenhum gatilho FR-TRO-08 foi marcado.
-- Leitura das metricas do PRD secao 10 incorporada como entrada obrigatoria da decisao.
+- Leitura das metricas do PRD secao 12 incorporada como entrada obrigatoria da decisao.
 - Ajuste pos-QA concluido: risco residual de deriva reduzido com regra explicita de manutencao continua (evento de atualizacao, responsabilidades e checklist por update).
 - Gates de codigo N/A nesta execucao (nenhuma alteracao de frontend/backend).
 
@@ -200,6 +238,8 @@ Ready for Review
 
 - 2026-04-13 — Story criada por @sm para governanca de escalonamento de iniciativa nova na tratativa FR-TRO.
 - 2026-04-13 — Story refinada por @sm conforme criterios do @po: status de prontidao, matriz AC->Tasks->Evidencia, artefato de governanca com caminho concreto, DoR/PO Gate e template minimo obrigatorio.
+- 2026-04-13 — Story alinhada por @sm aos artefatos de resolucao governada (PRD, UX spec e arquitetura) mantendo o historico de execucao FR-TRO.
+- 2026-04-13 — Story refinada por @sm conforme reavaliacao do @po: ownership alinhado ao executor auditado, mapa de fontes canonicas com links por secao/ancora e correcao da referencia de metricas do PRD para a secao 12.
 - 2026-04-13 — @dev implementou governanca FR-TRO-07/08: criou artefato canonico de gatilhos/escalonamento, adicionou cross-link no runbook e atualizou checklist/Dev Agent Record para handoff ao quality gate.
 - 2026-04-13 — @dev corrigiu ponto residual do QA: adicionou protocolo explicito de manutencao continua no artefato de governanca e reforcou a obrigatoriedade de atualizacao no runbook.
 
@@ -212,8 +252,17 @@ Ready for Review
 - **Resumo:** implementacao documental aderente aos ACs de governanca FR-TRO-GOV-01..06, com artefato canonico de escalonamento criado, cross-link no runbook e decisao formal por cluster registrada.
 - **Achados:** sem findings de severidade HIGH/MEDIUM nesta revisao.
 - **Evidencias verificadas:**
-  - Artefato principal de governanca em `docs/architecture/project-decisions/tro-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md` com os 3 gatilhos FR-TRO-08, entradas obrigatorias, leitura de metricas PRD §10 e decisao formal (`manter politica vigente`).
+  - Artefato principal de governanca em `docs/architecture/project-decisions/tro-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md` com os 3 gatilhos FR-TRO-08, entradas obrigatorias, leitura de metricas PRD §12 e decisao formal (`manter politica vigente`).
   - Vinculo de rastreabilidade com ticket interno, runbook e evidencias locais `docs/qa/` (incluindo mapeamento legado `top-...` e atual `tro-...`).
   - Fonte canonica de baixo overhead reforcada no runbook em `docs/operacao-mei-nfse.md` (secao TRO com referencia ao artefato de governanca).
 - **Risco residual (baixo):** a governanca depende de atualizacao disciplinada por ocorrencia/cluster futuro; se nao houver manutencao do artefato canonico, pode haver deriva operacional ao longo do tempo.
-
+- 2026-04-13 — Revisao @qa (Quinn) — reteste independente da governanca FR-TRO-07/08
+- **Gate:** **PASS**
+- **Resumo:** reteste confirma aderencia aos ACs FR-TRO-GOV-01..06; o artefato canonico continua coerente com a story, o runbook referencia a fonte unica correta e a manutencao continua foi explicitada sem introduzir gatilhos ou thresholds fora do PRD.
+- **Achados:** sem findings de severidade HIGH/MEDIUM nesta revisao.
+- **Evidencias verificadas:**
+  - `docs/architecture/project-decisions/tro-governanca-gatilhos-escalonamento-prefeitura-login-required-blocked-2026-04-13.md` com 3 gatilhos FR-TRO-08, entradas obrigatorias, decisao formal, follow-up e protocolo de manutencao continua.
+  - `docs/operacao-mei-nfse.md` com cross-link canonico e regra operacional de atualizacao do artefato apos cada encerramento de ocorrencia/cluster TRO.
+  - Story e Dev Agent Record consistentes com a implementacao documental entregue.
+- **Validacoes executadas:** `npm run lint` (PASS com 68 warnings preexistentes no frontend), `npm run typecheck` (PASS), `npm test` (PASS).
+- **Risco residual (baixo):** a qualidade da governanca segue dependente de atualizacao disciplinada do registro de manutencao a cada nova ocorrencia/cluster.

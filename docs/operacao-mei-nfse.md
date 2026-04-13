@@ -809,7 +809,7 @@ Registar no artefato local e no ticket interno, com redaction:
 - Responsável:
 - Story ID:
 - Ticket interno (ID/link):
-- Ambiente:
+- Ambiente (local/homologacao/producao controlada):
 
 ## Evidência mínima FR-TRO-03
 - message:
@@ -824,8 +824,12 @@ Registar no artefato local e no ticket interno, com redaction:
 - Interpretação: GET negativo como consequência do POST falho
 
 ## Decisão final
-- Classificação:
+- Classificação: nao suportado no fluxo nacional | outro
 - Decisão: esperado pela política vigente | regressão técnica a corrigir
+
+## Checklist de redaction
+- [ ] Sem token/certificado/credenciais em claro
+- [ ] Sem payload sensível bruto
 ```
 
 #### Governanca de escalonamento FR-TRO-07/08 (produto/operacao)
