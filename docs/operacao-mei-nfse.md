@@ -705,6 +705,68 @@ Esta é a matriz operacional canónica da iniciativa **FR-NATEX** para triagem d
 - Quando a evidência vier do backend, preferir logs redigidos já suportados pelo serviço; se houver JSON, copiar apenas campos necessários ao diagnóstico.
 - Em produção, anexar a evidência em ticket/sistema interno; evitar persistir detalhes sensíveis no Git.
 
+<a id="top-roteiro-operacional-prefeitura-login-required-blocked"></a>
+
+### 2h) TOP — roteiro canónico de teste operacional (`prefeitura_login_required_blocked`)
+
+Roteiro operacional único para o cenário TOP em que o cadastro empresa falha no `POST` com `HTTP 400` e `errors.plugnotasCode = prefeitura_login_required_blocked`.
+
+#### Pré-condições mínimas (reprodutibilidade)
+
+1. Backend e frontend ativos no mesmo ambiente (local/homologação/produção controlada).
+2. `PLUGNOTAS_API_BASE_URL` e `PLUGNOTAS_API_KEY` coerentes entre si.
+3. Se houver mudança de `.env`, reiniciar o backend antes da execução.
+4. Coleta de evidência obrigatoriamente redigida (sem token, senha, certificado ou payload bruto).
+
+#### Passo A — executar cadastro na Guia MEI
+
+1. Submeter o cadastro pelo fluxo Guia MEI.
+2. Confirmar que a narrativa da UI não trata o caso como "endpoint errado".
+3. Não solicitar `login`/`senha` municipal no produto.
+
+#### Passo B — capturar response do `POST` (FR-TOP-04)
+
+1. Em DevTools Network, abrir a response do `POST /api/mei-notas/setup/emissao-fiscal/empresa`.
+2. Registar, no mínimo:
+   - `message`
+   - `errors.plugnotasCode`
+   - `errors.plugnotasRequest.method`
+   - `errors.plugnotasRequest.path`
+   - `errors.httpStatus`
+3. Correlacionar com log backend redigido do mesmo evento (`[plugnotas empresa cadastro] ... 400 request payload (redacted)`), usando proximidade temporal + método/path + `httpStatus` + `plugnotasCode`.
+
+#### Passo C — validar causalidade do `GET` posterior (quando aplicável)
+
+1. Executar `GET /api/mei-notas/setup/emissao-fiscal/empresa?cpfCnpj=...` no mesmo ambiente.
+2. Se o `GET` for negativo (`empresa_nao_cadastrada`), registar como consequência do `POST` falho.
+3. Não substituir a causa raiz do `POST` pela consulta `GET`.
+
+#### Passo D — classificação final ROB/NATEX e decisão binária
+
+1. Classificar o cenário com base na matriz ROB/NATEX desta secção.
+2. Regra obrigatória: com `plugnotasCode = prefeitura_login_required_blocked`, usar `classificação final = não suportado no fluxo nacional`.
+3. Registrar decisão final somente como:
+   - `esperado pela política vigente`; ou
+   - `regressão técnica a corrigir`.
+
+#### Checklist de correlação frontend ↔ backend
+
+- Mesma janela temporal entre response browser e log backend redigido.
+- `plugnotasRequest.method` coerente (`POST` no erro primário; `GET` apenas como consequência quando aplicável).
+- `plugnotasRequest.path` coerente (`/empresa` no erro primário).
+- `httpStatus` e `plugnotasCode` alinhados entre as evidências.
+- Evidência anexada com CNPJ mascarado e referência de ticket interno.
+
+#### Destino canónico da evidência TOP
+
+- Registar em ticket interno/QA com referência à story TOP.
+- Manter artefato local em `docs/qa/top-prefeitura-login-required-blocked-2026-04-10.md` (ou equivalente) com:
+  - campos FR-TOP-04;
+  - causalidade do `GET` (quando aplicável);
+  - classificação final ROB/NATEX;
+  - decisão binária (`esperado` vs `regressão`);
+  - checklist de redaction.
+
 ### 3) PDF/XML indisponivel
 - Confirmar se a nota ja foi concluida/autorizada.
 - Atualizar status da nota via sincronizacao antes de novo download.
