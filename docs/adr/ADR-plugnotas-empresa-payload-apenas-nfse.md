@@ -48,6 +48,7 @@ Story: [`story-fr-cons-p0-plugnotas-empresa-backend-trilho-b-nfse-prefeitura.md`
 
 **FR-P0-SPIKE-01 / FR-P0-DOC-01:** fecho documental do spike e decisão trilho **B** — [`docs/evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md`](../evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md); story [`docs/stories/story-fr-cons-p0-plugnotas-empresa-spike-prefeitura-decisao-doc.md`](../stories/story-fr-cons-p0-plugnotas-empresa-spike-prefeitura-decisao-doc.md). Runbook: [`docs/operacao-mei-nfse.md`](../operacao-mei-nfse.md) âncora `#p0-prefeitura-spike-trilho-b`.
 
+<a id="adr-plugnotas-politica-local-credenciais"></a>
 ## Complemento (2026-04-09) — DP-PLOGIN-01: credenciais do portal municipal (`nfse.config.prefeitura.login` / `senha`)
 
 - **Opt-in:** `PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED=true` no backend (defeito `false` até decisão PO / rollout). O frontend espelha com `VITE_PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED=true` para mostrar os campos no Guia MEI.
