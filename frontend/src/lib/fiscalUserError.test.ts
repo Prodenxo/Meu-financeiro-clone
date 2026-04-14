@@ -182,6 +182,15 @@ describe('mapMeiFiscalErrorToCopy', () => {
   it('ROB: resolveMeiFiscalScenario respeita precedência estruturada entre ambiente, payload e ausência de cadastro', () => {
     expect(
       resolveMeiFiscalScenario({
+        rawMessage: 'ignored',
+        plugnotasCode: PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02,
+        httpStatus: 400,
+        plugnotasRequest: { method: 'POST', path: '/empresa' },
+      })
+    ).toBe('prefeitura_ibge_apenas_insuficiente_dp02');
+
+    expect(
+      resolveMeiFiscalScenario({
         rawMessage: 'Service Unavailable',
         plugnotasCode: 'plugnotas_gateway_503',
         httpStatus: 503,

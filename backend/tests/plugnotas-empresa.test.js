@@ -31,6 +31,31 @@ const createHtmlErrorResponse = (status, htmlBody) => ({
   text: async () => htmlBody
 });
 
+const buildEmpresaEnderecoValido = (overrides = {}) => ({
+  codigoCidade: '3550308',
+  estado: 'SP',
+  uf: 'SP',
+  logradouro: 'Rua A',
+  numero: '1',
+  bairro: 'Centro',
+  cep: '01000000',
+  ...overrides
+});
+
+const createCidadePreflightResponse = (overrides = {}) =>
+  createJsonResponse(200, {
+    padraoNacional: { producao: true, homologacao: false },
+    login: { producao: false, homologacao: false },
+    senha: { producao: false, homologacao: false },
+    ...overrides
+  });
+
+const assertOfficialNfseContract = (nfse) => {
+  assert.equal(nfse?.config?.nfseNacional, true);
+  assert.equal(nfse?.config?.consultaNfseNacional, true);
+  assert.equal(Object.prototype.hasOwnProperty.call(nfse || {}, 'nacional'), false);
+};
+
 test('empresa service valida payload obrigatório', async () => {
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
 
@@ -57,6 +82,9 @@ test('empresa service cria empresa com POST /empresa', async () => {
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options });
     return createJsonResponse(200, {
       message: 'Cadastro efetuado com sucesso',
@@ -68,7 +96,8 @@ test('empresa service cria empresa com POST /empresa', async () => {
     const response = await cadastrarEmpresaPlugNotas({
       cpfCnpj: '17422651000172',
       certificado: 'cert-1',
-      razaoSocial: 'Empresa Teste'
+      razaoSocial: 'Empresa Teste',
+      endereco: buildEmpresaEnderecoValido()
     });
 
     assert.equal(calls.length, 1);
@@ -83,12 +112,219 @@ test('empresa service cria empresa com POST /empresa', async () => {
     assert.equal(sent.nfe.ativo, false);
     assert.equal('config' in sent.nfce, false);
     assert.equal(sent.inscricaoEstadual, 'ISENTO');
-    assert.equal(sent.nfse?.nacional, true);
+    assertOfficialNfseContract(sent.nfse);
     assert.equal(
       Object.prototype.hasOwnProperty.call(sent.nfse?.config || {}, 'prefeitura'),
       false,
       'sem PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE não enviar prefeitura derivada (NFR-P0-REG-01)'
     );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('empresa service bloqueia localmente quando endereco.codigoCidade está ausente antes do preflight', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return createCidadePreflightResponse();
+  };
+
+  try {
+    await assert.rejects(
+      () =>
+        cadastrarEmpresaPlugNotas({
+          cpfCnpj: '17422651000172',
+          certificado: 'cert-1',
+          razaoSocial: 'Empresa Teste',
+          endereco: buildEmpresaEnderecoValido({ codigoCidade: undefined })
+        }),
+      (err) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.errors?.plugnotasCode, 'payload_contrato');
+        assert.equal(err.errors?.runtimeDecision?.scenario, 'payload_contrato');
+        assert.equal(err.errors?.runtimeDecision?.consultedMunicipio, false);
+        assert.equal(err.errors?.runtimeDecision?.upstreamCallSkipped, true);
+        return true;
+      }
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('empresa service bloqueia município com login obrigatório já no preflight dinâmico', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse({
+        login: { producao: true, homologacao: false },
+        senha: { producao: false, homologacao: false }
+      });
+    }
+    return createJsonResponse(200, {
+      message: 'Cadastro efetuado com sucesso',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await assert.rejects(
+      () =>
+        cadastrarEmpresaPlugNotas({
+          cpfCnpj: '17422651000172',
+          certificado: 'cert-1',
+          razaoSocial: 'Empresa Teste',
+          endereco: buildEmpresaEnderecoValido()
+        }),
+      (err) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
+        assert.equal(err.errors?.runtimeDecision?.scenario, 'prefeitura_login_required_blocked');
+        assert.equal(err.errors?.runtimeDecision?.consultedMunicipio, true);
+        assert.equal(err.errors?.runtimeDecision?.codigoIbge, '3550308');
+        return true;
+      }
+    );
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /\/nfse\/cidades\/3550308$/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('empresa service bloqueia DP02 no preflight quando não há padrão nacional elegível', async () => {
+  const { cadastrarEmpresaPlugNotas, inferEmpresaCadastroScenario } = await import(
+    '../src/services/plugnotas/empresa.service.js'
+  );
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse({
+        padraoNacional: { producao: false, homologacao: false }
+      });
+    }
+    return createJsonResponse(200, {
+      message: 'Cadastro efetuado com sucesso',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await assert.rejects(
+      () =>
+        cadastrarEmpresaPlugNotas({
+          cpfCnpj: '17422651000172',
+          certificado: 'cert-1',
+          razaoSocial: 'Empresa Teste',
+          endereco: buildEmpresaEnderecoValido()
+        }),
+      (err) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.errors?.plugnotasCode, 'prefeitura_ibge_apenas_insuficiente_dp02');
+        assert.equal(
+          inferEmpresaCadastroScenario({ plugnotasCode: err.errors?.plugnotasCode }),
+          'prefeitura_ibge_apenas_insuficiente_dp02'
+        );
+        assert.equal(err.errors?.runtimeDecision?.padraoNacionalEnabled, false);
+        assert.equal(err.errors?.runtimeDecision?.upstreamCallSkipped, true);
+        return true;
+      }
+    );
+    assert.equal(calls.length, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('empresa service não segue para POST /empresa quando o preflight falha tecnicamente', async () => {
+  const { cadastrarEmpresaPlugNotas, inferEmpresaCadastroScenario } = await import(
+    '../src/services/plugnotas/empresa.service.js'
+  );
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (String(url).includes('/nfse/cidades/')) {
+      return createJsonResponse(503, { message: 'Município indisponível' });
+    }
+    return createJsonResponse(200, {
+      message: 'Cadastro efetuado com sucesso',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await assert.rejects(
+      () =>
+        cadastrarEmpresaPlugNotas({
+          cpfCnpj: '17422651000172',
+          certificado: 'cert-1',
+          razaoSocial: 'Empresa Teste',
+          endereco: buildEmpresaEnderecoValido()
+        }),
+      (err) => {
+        assert.equal(err.status, 503);
+        assert.equal(err.errors?.plugnotasCode, 'plugnotas_gateway_503');
+        assert.equal(err.errors?.plugnotasRequest?.method, 'GET');
+        assert.match(String(err.errors?.plugnotasRequest?.path || ''), /\/nfse\/cidades\/3550308$/);
+        assert.equal(
+          inferEmpresaCadastroScenario({ status: err.status, plugnotasCode: err.errors?.plugnotasCode }),
+          'ambiente_configuracao'
+        );
+        return true;
+      }
+    );
+    assert.equal(calls.length, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('empresa service reutiliza o mesmo preflight no fallback POST -> PATCH', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    const entry = { url: String(url), options };
+    calls.push(entry);
+    if (entry.url.includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
+    if (entry.options.method === 'POST') {
+      return createJsonResponse(409, { message: 'Empresa já cadastrada' });
+    }
+    return createJsonResponse(200, {
+      message: 'Empresa atualizada',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    const response = await cadastrarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      certificado: 'cert-1',
+      razaoSocial: 'Empresa Teste',
+      endereco: buildEmpresaEnderecoValido()
+    });
+
+    assert.equal(response.operation, 'updated');
+    assert.equal(calls.filter((entry) => entry.url.includes('/nfse/cidades/')).length, 1);
+    assert.equal(calls.filter((entry) => entry.options.method === 'POST').length, 1);
+    assert.equal(calls.filter((entry) => entry.options.method === 'PATCH').length, 1);
   } finally {
     global.fetch = originalFetch;
   }
@@ -140,6 +376,9 @@ test('POST normaliza endereco.codigoCidade numérico para string só dígitos (F
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options });
     return createJsonResponse(200, {
       message: 'OK',
@@ -176,6 +415,9 @@ test('PATCH normaliza endereco.codigoCidade numérico para string só dígitos (
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options, body: options.body });
     return createJsonResponse(200, {
       message: 'Empresa atualizada',
@@ -201,12 +443,57 @@ test('PATCH normaliza endereco.codigoCidade numérico para string só dígitos (
   }
 });
 
+test('empresa service faz preflight antes do PATCH explícito usando o ambiente alvo', async () => {
+  const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options, body: options.body });
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse({
+        padraoNacional: { producao: false, homologacao: true },
+        login: { producao: true, homologacao: false },
+        senha: { producao: false, homologacao: false }
+      });
+    }
+    return createJsonResponse(200, {
+      message: 'Empresa atualizada',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await atualizarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      razaoSocial: 'Empresa Teste',
+      nfse: {
+        ativo: true,
+        tipoContrato: 0,
+        config: { producao: false, nfseNacional: true, consultaNfseNacional: true }
+      },
+      endereco: buildEmpresaEnderecoValido()
+    });
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].options.method, 'GET');
+    assert.match(calls[0].url, /\/nfse\/cidades\/3550308$/);
+    assert.equal(calls[1].options.method, 'PATCH');
+    assert.match(calls[1].url, /\/empresa\/17422651000172$/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('POST com documentosAtivos só NFSe equivale ao default e não envia campo interno ao Plugnotas (CR-CAD-DOC-01)', async () => {
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options });
     return createJsonResponse(200, {
       message: 'OK',
@@ -219,6 +506,7 @@ test('POST com documentosAtivos só NFSe equivale ao default e não envia campo 
       cpfCnpj: '17422651000172',
       certificado: 'cert-1',
       razaoSocial: 'Empresa Teste',
+      endereco: buildEmpresaEnderecoValido(),
       documentosAtivos: { nfse: true, nfe: false, nfce: false }
     });
     const sent = JSON.parse(calls[0].options.body);
@@ -226,7 +514,7 @@ test('POST com documentosAtivos só NFSe equivale ao default e não envia campo 
     assert.equal(sent.nfce.ativo, false);
     assert.equal('config' in sent.nfce, false);
     assert.equal(sent.nfe.ativo, false);
-    assert.equal(sent.nfse?.nacional, true);
+    assertOfficialNfseContract(sent.nfse);
     assert.equal(sent.inscricaoEstadual, 'ISENTO');
   } finally {
     global.fetch = originalFetch;
@@ -251,6 +539,9 @@ test('POST com documentosAtivos só nfce true (nfse false) monta nfce ativo e nf
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options });
     return createJsonResponse(200, {
       message: 'OK',
@@ -282,6 +573,9 @@ test('POST com documentosAtivos nfe true envia bloco nfe ativo com config mínim
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options });
     return createJsonResponse(200, {
       message: 'OK',
@@ -293,6 +587,7 @@ test('POST com documentosAtivos nfe true envia bloco nfe ativo com config mínim
     await cadastrarEmpresaPlugNotas({
       cpfCnpj: '17422651000172',
       certificado: 'cert-1',
+      endereco: buildEmpresaEnderecoValido(),
       documentosAtivos: { nfse: true, nfe: true, nfce: false }
     });
     const sent = JSON.parse(calls[0].options.body);
@@ -343,6 +638,9 @@ test('empresa service POST modo apenas NFSe: inativa nfce/nfe sem config mesmo s
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options });
     return createJsonResponse(200, {
       message: 'OK',
@@ -355,6 +653,7 @@ test('empresa service POST modo apenas NFSe: inativa nfce/nfe sem config mesmo s
       cpfCnpj: '17422651000172',
       certificado: 'cert-1',
       razaoSocial: 'Empresa Teste',
+      endereco: buildEmpresaEnderecoValido(),
       nfce: {
         ativo: true,
         tipoContrato: 0,
@@ -365,7 +664,7 @@ test('empresa service POST modo apenas NFSe: inativa nfce/nfe sem config mesmo s
     assert.equal(sent.nfce.ativo, false);
     assert.equal('config' in sent.nfce, false);
     assert.equal(sent.nfe.ativo, false);
-    assert.equal(sent.nfse?.nacional, true);
+    assertOfficialNfseContract(sent.nfse);
   } finally {
     global.fetch = originalFetch;
   }
@@ -380,6 +679,9 @@ test('empresa service tenta atualização quando empresa já existe', async () =
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options });
     if (calls.length === 1) {
       return createJsonResponse(409, { message: 'Empresa já cadastrada' });
@@ -394,7 +696,8 @@ test('empresa service tenta atualização quando empresa já existe', async () =
     const response = await cadastrarEmpresaPlugNotas({
       cpfCnpj: '17422651000172',
       certificado: 'cert-1',
-      razaoSocial: 'Empresa Teste'
+      razaoSocial: 'Empresa Teste',
+      endereco: buildEmpresaEnderecoValido()
     });
 
     assert.equal(calls.length, 2);
@@ -408,13 +711,13 @@ test('empresa service tenta atualização quando empresa já existe', async () =
     const patchBody = JSON.parse(calls[1].options.body);
     assert.equal(patchBody.nfce.ativo, false);
     assert.equal('config' in patchBody.nfce, false);
-    assert.equal(patchBody.nfse?.nacional, true);
+    assertOfficialNfseContract(patchBody.nfse);
   } finally {
     global.fetch = originalFetch;
   }
 });
 
-test('empresa service PATCH com nfse no corpo sem nacional: adiciona nacional true', async () => {
+test('empresa service PATCH adapta shape legado para contrato oficial', async () => {
   const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
@@ -431,16 +734,16 @@ test('empresa service PATCH com nfse no corpo sem nacional: adiciona nacional tr
     await atualizarEmpresaPlugNotas({
       cpfCnpj: '17422651000172',
       razaoSocial: 'Empresa Teste',
-      nfse: { ativo: true, tipoContrato: 0, config: { producao: true } }
+      nfse: { ativo: true, tipoContrato: 0, nacional: true }
     });
     const sent = JSON.parse(calls[0].body);
-    assert.equal(sent.nfse.nacional, true);
+    assertOfficialNfseContract(sent.nfse);
   } finally {
     global.fetch = originalFetch;
   }
 });
 
-test('empresa service PATCH com nfse.nacional false: não sobrescreve', async () => {
+test('empresa service PATCH prioriza shape oficial quando legado e oficial coexistem', async () => {
   const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
@@ -457,10 +760,15 @@ test('empresa service PATCH com nfse.nacional false: não sobrescreve', async ()
     await atualizarEmpresaPlugNotas({
       cpfCnpj: '17422651000172',
       razaoSocial: 'Empresa Teste',
-      nfse: { ativo: true, tipoContrato: 0, nacional: false }
+      nfse: {
+        ativo: true,
+        tipoContrato: 0,
+        nacional: false,
+        config: { producao: true, nfseNacional: true, consultaNfseNacional: true }
+      }
     });
     const sent = JSON.parse(calls[0].body);
-    assert.equal(sent.nfse.nacional, false);
+    assertOfficialNfseContract(sent.nfse);
   } finally {
     global.fetch = originalFetch;
   }
@@ -833,6 +1141,9 @@ test('empresa service POST preserva inscricaoEstadual quando cliente informa', a
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options });
     return createJsonResponse(200, {
       message: 'OK',
@@ -845,6 +1156,7 @@ test('empresa service POST preserva inscricaoEstadual quando cliente informa', a
       cpfCnpj: '17422651000172',
       certificado: 'cert-1',
       razaoSocial: 'Empresa Teste',
+      endereco: buildEmpresaEnderecoValido(),
       inscricaoEstadual: '123456789'
     });
     const sent = JSON.parse(calls[0].options.body);
@@ -897,7 +1209,7 @@ test('empresa service atualiza empresa sem certificado no payload', async () => 
     const response = await atualizarEmpresaPlugNotas({
       cpfCnpj: '17422651000172',
       razaoSocial: 'Empresa Teste',
-      endereco: { logradouro: 'Rua A', numero: '1' }
+      endereco: buildEmpresaEnderecoValido({ logradouro: 'Rua A', numero: '1' })
     });
 
     assert.equal(response.operation, 'updated');
@@ -1012,17 +1324,23 @@ test('empresa service POST /empresa inclui detalhes de validação no 400', asyn
     inferEmpresaCadastroScenario
   } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
-  global.fetch = async () => createJsonResponse(400, {
-    message: 'Falha na validação do JSON de Empresa',
-    errors: [{ field: 'endereco.logradouro', error: 'inválido' }]
-  });
+  global.fetch = async (url) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
+    return createJsonResponse(400, {
+      message: 'Falha na validação do JSON de Empresa',
+      errors: [{ field: 'endereco.logradouro', error: 'inválido' }]
+    });
+  };
 
   try {
     await assert.rejects(
       () => cadastrarEmpresaPlugNotas({
         cpfCnpj: '17422651000172',
         certificado: 'cert-1',
-        razaoSocial: 'Empresa Teste'
+        razaoSocial: 'Empresa Teste',
+        endereco: buildEmpresaEnderecoValido()
       }),
       (err) => {
         assert.ok(err instanceof HttpError);
@@ -1054,16 +1372,22 @@ test('empresa service POST /empresa inclui detalhes de validação no 400', asyn
 test('empresa service classifica upstream 400 de prefeitura.login como exceção municipal bloqueada', async () => {
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
-  global.fetch = async () => createJsonResponse(400, {
-    message: 'Falha na validação do JSON de Empresa: fields.nfse.config.prefeitura.login: Preenchimento obrigatório'
-  });
+  global.fetch = async (url) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
+    return createJsonResponse(400, {
+      message: 'Falha na validação do JSON de Empresa: fields.nfse.config.prefeitura.login: Preenchimento obrigatório'
+    });
+  };
 
   try {
     await assert.rejects(
       () => cadastrarEmpresaPlugNotas({
         cpfCnpj: '17422651000172',
         certificado: 'cert-1',
-        razaoSocial: 'Empresa Teste'
+        razaoSocial: 'Empresa Teste',
+        endereco: buildEmpresaEnderecoValido()
       }),
       (err) => {
         assert.ok(err instanceof HttpError);
@@ -1088,14 +1412,20 @@ test('empresa service POST /empresa: 502 HTML normaliza mensagem + plugnotas_gat
   } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const html = '<html><body>502 Bad Gateway</body></html>';
-  global.fetch = async () => createHtmlErrorResponse(502, html);
+  global.fetch = async (url) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
+    return createHtmlErrorResponse(502, html);
+  };
 
   try {
     await assert.rejects(
       () => cadastrarEmpresaPlugNotas({
         cpfCnpj: '17422651000172',
         certificado: 'cert-1',
-        razaoSocial: 'Empresa Teste'
+        razaoSocial: 'Empresa Teste',
+        endereco: buildEmpresaEnderecoValido()
       }),
       (err) => {
         assert.ok(err instanceof HttpError);
@@ -1130,6 +1460,9 @@ test('POST falho por prefeitura.login bloqueado e GET posterior negativo preserv
   const originalFetch = global.fetch;
   const calls = [];
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options });
     if (calls.length === 1) {
       return createJsonResponse(400, {
@@ -1145,7 +1478,8 @@ test('POST falho por prefeitura.login bloqueado e GET posterior negativo preserv
       () => cadastrarEmpresaPlugNotas({
         cpfCnpj: '17422651000172',
         certificado: 'cert-1',
-        razaoSocial: 'Empresa Teste'
+        razaoSocial: 'Empresa Teste',
+        endereco: buildEmpresaEnderecoValido()
       }),
       (err) => {
         postError = err;
@@ -1185,6 +1519,52 @@ test('POST falho por prefeitura.login bloqueado e GET posterior negativo preserv
   }
 });
 
+test('GET /empresa 404 de rota inválida classifica ambiente/configuração sem mascarar ausência de cadastro', async () => {
+  const {
+    consultarEmpresaPlugNotas,
+    PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE,
+    inferEmpresaCadastroScenario
+  } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  global.fetch = async () => createJsonResponse(404, {
+    message: 'Esta rota não existe no serviço'
+  });
+
+  try {
+    await assert.rejects(
+      () => consultarEmpresaPlugNotas('17422651000172'),
+      (err) => {
+        assert.ok(err instanceof HttpError);
+        assert.equal(err.status, 404);
+        assert.equal(err.errors?.plugnotasCode, PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE);
+        assert.equal(
+          inferEmpresaCadastroScenario({
+            status: err.status,
+            method: err.errors?.plugnotasRequest?.method,
+            path: err.errors?.plugnotasRequest?.path,
+            plugnotasCode: err.errors?.plugnotasCode
+          }),
+          'ambiente_configuracao'
+        );
+        assert.equal(
+          inferEmpresaCadastroScenario({
+            status: 404,
+            method: 'GET',
+            path: '/empresa/17422651000172',
+            plugnotasCode: ''
+          }),
+          null
+        );
+        assert.doesNotMatch(String(err.message || ''), /não há cadastro desta empresa no emissor fiscal/i);
+        assert.match(String(err.message || ''), /Esta rota não existe no serviço/i);
+        return true;
+      }
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('empresa service classifica 401 como ambiente/configuração sem criar scenarioCode novo', async () => {
   const {
     cadastrarEmpresaPlugNotas,
@@ -1192,16 +1572,22 @@ test('empresa service classifica 401 como ambiente/configuração sem criar scen
     inferEmpresaCadastroScenario
   } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
-  global.fetch = async () => createJsonResponse(401, {
-    message: 'Token inválido'
-  });
+  global.fetch = async (url) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
+    return createJsonResponse(401, {
+      message: 'Token inválido'
+    });
+  };
 
   try {
     await assert.rejects(
       () => cadastrarEmpresaPlugNotas({
         cpfCnpj: '17422651000172',
         certificado: 'cert-1',
-        razaoSocial: 'Empresa Teste'
+        razaoSocial: 'Empresa Teste',
+        endereco: buildEmpresaEnderecoValido()
       }),
       (err) => {
         assert.ok(err instanceof HttpError);
@@ -1259,6 +1645,9 @@ test('empresa service trata conflito sem update como sucesso operacional', async
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     calls.push({ url: String(url), options });
     if (calls.length === 1) {
       return createJsonResponse(409, { message: 'Empresa já cadastrada' });
@@ -1270,7 +1659,8 @@ test('empresa service trata conflito sem update como sucesso operacional', async
     const response = await cadastrarEmpresaPlugNotas({
       cpfCnpj: '17422651000172',
       certificado: 'cert-1',
-      razaoSocial: 'Empresa Teste'
+      razaoSocial: 'Empresa Teste',
+      endereco: buildEmpresaEnderecoValido()
     });
 
     assert.equal(calls.length, 2);
@@ -1284,7 +1674,7 @@ test('empresa service trata conflito sem update como sucesso operacional', async
   }
 });
 
-test('POST com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeitura.codigoIbge (trilho B)', async () => {
+test('POST oficial não volta a derivar nfse.config.prefeitura.codigoIbge no hot path', async () => {
   const prevDerive = process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
   process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE = 'true';
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
@@ -1292,6 +1682,13 @@ test('POST com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeitu
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse({
+        padraoNacional: { producao: true, homologacao: false },
+        login: { producao: false, homologacao: false },
+        senha: { producao: false, homologacao: false }
+      });
+    }
     calls.push({ url: String(url), options });
     return createJsonResponse(200, {
       message: 'OK',
@@ -1315,7 +1712,8 @@ test('POST com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeitu
     });
     assert.equal(calls.length, 1);
     const sent = JSON.parse(calls[0].options.body);
-    assert.deepEqual(sent.nfse.config.prefeitura, { codigoIbge: '4115200' });
+    assertOfficialNfseContract(sent.nfse);
+    assert.equal(Object.prototype.hasOwnProperty.call(sent.nfse.config || {}, 'prefeitura'), false);
   } finally {
     global.fetch = originalFetch;
     if (prevDerive === undefined) delete process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
@@ -1323,7 +1721,7 @@ test('POST com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeitu
   }
 });
 
-test('PATCH com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeitura.codigoIbge (trilho B, coerência POST)', async () => {
+test('PATCH oficial não volta a derivar nfse.config.prefeitura.codigoIbge no hot path', async () => {
   const prevDerive = process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
   process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE = 'true';
   const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
@@ -1331,6 +1729,13 @@ test('PATCH com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeit
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse({
+        padraoNacional: { producao: true, homologacao: false },
+        login: { producao: false, homologacao: false },
+        senha: { producao: false, homologacao: false }
+      });
+    }
     calls.push({ url: String(url), options, body: options.body });
     return createJsonResponse(200, {
       message: 'Empresa atualizada',
@@ -1342,7 +1747,11 @@ test('PATCH com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeit
     await atualizarEmpresaPlugNotas({
       cpfCnpj: '17422651000172',
       razaoSocial: 'Empresa Teste',
-      nfse: { ativo: true, tipoContrato: 0, config: { producao: true } },
+      nfse: {
+        ativo: true,
+        tipoContrato: 0,
+        config: { producao: true, nfseNacional: true, consultaNfseNacional: true }
+      },
       endereco: {
         codigoCidade: '4115200',
         estado: 'PR',
@@ -1355,7 +1764,8 @@ test('PATCH com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeit
     assert.equal(calls.length, 1);
     assert.equal(calls[0].options.method, 'PATCH');
     const sent = JSON.parse(calls[0].body);
-    assert.deepEqual(sent.nfse.config.prefeitura, { codigoIbge: '4115200' });
+    assertOfficialNfseContract(sent.nfse);
+    assert.equal(Object.prototype.hasOwnProperty.call(sent.nfse.config || {}, 'prefeitura'), false);
   } finally {
     global.fetch = originalFetch;
     if (prevDerive === undefined) delete process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
@@ -1363,7 +1773,7 @@ test('PATCH com PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE inclui nfse.config.prefeit
   }
 });
 
-test('POST DP-PLOGIN-02: bloqueio BFF antes do Plugnotas quando trilho B + IBGE na lista', async () => {
+test('PATCH legado mantém bloqueio BFF antes do Plugnotas quando rollback por IBGE está ativo', async () => {
   const prevDerive = process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE;
   const prevBlock = process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED;
   const prevCodes = process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES;
@@ -1371,7 +1781,7 @@ test('POST DP-PLOGIN-02: bloqueio BFF antes do Plugnotas quando trilho B + IBGE 
   process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED = 'true';
   process.env.PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES = '4115200';
 
-  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
   global.fetch = async () => {
@@ -1385,17 +1795,16 @@ test('POST DP-PLOGIN-02: bloqueio BFF antes do Plugnotas quando trilho B + IBGE 
   try {
     await assert.rejects(
       () =>
-        cadastrarEmpresaPlugNotas({
+        atualizarEmpresaPlugNotas({
           cpfCnpj: '17422651000172',
-          certificado: 'cert-1',
           razaoSocial: 'Empresa Teste',
-          endereco: {
-            codigoCidade: '4115200',
-            estado: 'PR',
-            logradouro: 'Rua A',
-            numero: '1',
-            bairro: 'Centro',
-            cep: '87000000'
+          nfse: {
+            ativo: true,
+            tipoContrato: 0,
+            nacional: true,
+            config: {
+              prefeitura: { codigoIbge: '4115200' }
+            }
           }
         }),
       (err) =>

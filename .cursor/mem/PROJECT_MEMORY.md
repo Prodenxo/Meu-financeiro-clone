@@ -30,6 +30,7 @@ Não grave secrets, tokens nem dados pessoais.
 - Dados mínimos NFS-e do emitente: colunas em `user_mei_certificates` (migrações `20260326140000_*` e `20260326150000_add_tipo_logradouro_user_mei_certificates.sql` para tipo de via); gravação via `POST /mei-guide/certificate` (multipart) e `PATCH /mei-guide/certificate/emitente-nfse`; leitura em `GET /mei-guide/certificate/status` no campo `nfseEmitente`.
 - **2026-04-07 — FR-CAD-DOC P1 (UX):** título/hint do bloco dados mínimos em `guiaMeiCadastroDocumentosAtivos.ts`; banner NF-e/NFC-e com `VITE_GUIA_MEI_EMISSAO_NFE_NFCE_UI`; secção `<details>` requisitos adicionais (`MeiCadastroRequisitosNfeNfcePlaceholder`).
 - **2026-04-07 — FR-CAD-DOC P1:** coluna `documentos_ativos` **jsonb** nullable em `user_mei_certificates` (`20260407130000_add_documentos_ativos_user_mei_certificates.sql`); espelho após POST/PATCH empresa Plugnotas (`saveDocumentosAtivosMirror` via `mei-notas-documentos-mirror.js`); leitura em `GET /mei-guide/certificate/status` como `documentosAtivos`; script `db:verify` / `db:apply` inclui a coluna. **RLS** (`20260407150000_user_mei_certificates_rls.sql`): políticas *own row* com `auth.uid() = user_id`; backend com service role contorna RLS.
+- **2026-04-14 — RTCAD / cadastro empresa PlugNotas:** arquitetura alvo do MVP = manter `frontend -> BFF -> PlugNotas`, migrar o outbound para `nfse.config.nfseNacional` + `nfse.config.consultaNfseNacional`, e executar preflight obrigatório `GET /nfse/cidades/{codigoIbge}` no BFF antes de `POST`/`PATCH`; caminho nacional deixa de depender de `prefeitura.codigoIbge` como hot path principal e a fase 2 de credenciais municipais continua separada.
 
 ## Supabase — ambientes e deploy (CORR-02)
 
@@ -84,6 +85,7 @@ GitHub Actions: `.github/workflows/corr03-smoke-backend.yml` executa o mesmo smo
 
 ## Última atualização
 
+- **2026-04-14** — Arquitetura RTCAD documentada: contrato oficial + preflight municipal obrigatório no BFF antes do cadastro empresa PlugNotas; fase 2 municipal segue fora do MVP.
 - **2026-04-07** — FR-CAD-DOC P1 UX (banner/título/campos condicionais): `guiaMeiCadastroDocumentosAtivos*` + componentes `MeiCadastroNfeNfceInfoBanner` / `MeiCadastroRequisitosNfeNfcePlaceholder`.
 - **2026-04-07** — FR-CAD-DOC P1 pós-QA: migração RLS `user_mei_certificates` + `mei-notas-documentos-mirror.js` + testes `mei-notas-documentos-mirror.test.js`.
 - **2026-04-07** — FR-CAD-DOC P1: espelho `documentos_ativos` em Supabase + consumo no status/hidratação Guia MEI; `npm run lint` / `typecheck` / `test` na raiz verdes após entrega.

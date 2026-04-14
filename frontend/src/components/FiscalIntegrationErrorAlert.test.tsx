@@ -381,6 +381,21 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     expect(container.textContent).not.toContain('POST /empresa');
   });
 
+  it('RTCAD a11y: mantém apenas um alerta principal por cenário', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <GuiaMeiEmpresaCadastroErrorPanel
+          message="Token inválido (POST /empresa no emissor fiscal)"
+          fiscalErrorCode="ambiente_configuracao"
+          fiscalHttpStatus={401}
+          plugnotasRequest={{ method: 'POST', path: '/empresa' }}
+        />
+      );
+    });
+    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+  });
+
   it('exibe checklist e Saiba mais quando fiscalErrorCode é certificado_409_sem_id (US-MEI-FISC-03)', async () => {
     const root = createRoot(container);
     await act(async () => {

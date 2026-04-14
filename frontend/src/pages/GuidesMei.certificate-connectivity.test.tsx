@@ -489,6 +489,71 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     container.remove();
   });
 
+  it('RTCAD: bloqueio municipal estável não oferece CTA principal de retry cego', async () => {
+    authState.role = 'admin';
+    authState.mei = false;
+    uploadMeiCertificateMock.mockResolvedValueOnce({
+      hasUserCertificate: true,
+      hasEnvCertificate: false,
+      documento: '12345678000190',
+      certValidFrom: null,
+      certValidTo: null
+    });
+    cadastrarCertificadoEmissaoNfMock.mockResolvedValueOnce({ id: 'cert-plug-1', message: 'ok' });
+    cadastrarEmpresaEmissaoNfMock.mockRejectedValueOnce(
+      new ApiClientError('Falha na validação do JSON de Empresa (POST /empresa no emissor fiscal)', {
+        plugnotasCode: 'prefeitura_login_required_blocked',
+        plugnotasRequest: { method: 'POST', path: '/empresa' },
+        httpStatus: 400
+      })
+    );
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find((b) => b.textContent?.includes('Certificado e DAS'))
+        ?.click();
+    });
+
+    const fileInput = container.querySelector('input[type=file]') as HTMLInputElement;
+    const passInput = container.querySelector('input[type=password]') as HTMLInputElement;
+    const submitBtn = findGuidesMeiCertPrimaryCta(container);
+
+    await act(async () => {
+      fillCnpjMei(container);
+      setFileInputFiles(fileInput, new File(['x'], 'test.p12'));
+      setTextInputValue(passInput, 'secret');
+      fillNfEmissionCompanyMinimum(container);
+    });
+
+    await act(async () => {
+      submitBtn?.click();
+    });
+
+    const retryBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tentar registrar empresa novamente')
+    );
+    const primaryBtn = findGuidesMeiCertPrimaryCta(container) as HTMLButtonElement | undefined;
+
+    expect(container.textContent).toContain('Exceção municipal não suportada neste fluxo');
+    expect(container.textContent).toContain('guia de operação fiscal');
+    expect(container.textContent).not.toMatch(/Utilizador do portal|Senha do portal|login\/senha/i);
+    expect(retryBtn).toBeUndefined();
+    expect(primaryBtn?.disabled).toBe(true);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it('ENDP P0: sucesso operacional após fallback PATCH mantém narrativa de sincronização, sem fluxo paralelo', async () => {
     authState.role = 'admin';
     authState.mei = false;
@@ -618,6 +683,65 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
     expect(atualizarEmpresaEmissaoNfMock).toHaveBeenCalled();
     expect(patchMeiCertificateEmitenteNfseMock).toHaveBeenCalled();
     expect(cadastrarCertificadoEmissaoNfMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('RTCAD: consulta preserva contrato estruturado para ambiente/configuração no painel da UI', async () => {
+    authState.role = 'admin';
+    authState.mei = false;
+    consultarEmpresaEmissaoNfMock.mockRejectedValueOnce(
+      new ApiClientError('Falha remota genérica', {
+        plugnotasCode: 'ambiente_configuracao',
+        httpStatus: 401,
+        plugnotasRequest: { method: 'GET', path: '/empresa/12345678000190' }
+      })
+    );
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<GuidesMei />);
+    });
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find((b) => b.textContent?.includes('Certificado e DAS'))
+        ?.click();
+    });
+
+    await act(async () => {
+      fillCnpjMei(container);
+      fillNfEmissionCompanyMinimum(container);
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    invalidateMeiEmpresaGetCache(null, '12345678000190');
+    const consultBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Consultar cadastro no emissor')
+    );
+    expect(consultBtn).toBeTruthy();
+
+    await act(async () => {
+      consultBtn?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const headings = Array.from(container.querySelectorAll('h3')).map((el) => el.textContent || '');
+    expect(headings.some((title) => title.includes('Configuração do emissor fiscal'))).toBe(true);
+    expect(container.textContent).toMatch(/URL base|token|ambiente/i);
+    expect(container.textContent).not.toContain('GET /empresa/12345678000190');
 
     await act(async () => {
       root.unmount();

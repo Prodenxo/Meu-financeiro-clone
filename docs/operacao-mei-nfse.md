@@ -660,6 +660,28 @@ Esta é a matriz operacional canónica da iniciativa **FR-ROB** para classificar
 - Na linha `payload_contrato`, citar apenas o campo ou grupo funcional rejeitado; não copiar payload bruto.
 - Em qualquer cenário, preferir evidência redigida do backend/browser: `message`, `plugnotasCode`, `plugnotasRequest`, `httpStatus`, `operation`, referência a log ou ticket.
 
+<a id="rtcad-matriz-validacao-municipio-ambiente"></a>
+
+### 2f.2) RTCAD — matriz executável por município e ambiente
+
+Esta secção liga a taxonomia ROB/NATEX/TRO ao artefato de validação final do Epic 1 RTCAD, consolidado em `docs/qa/qa-matriz-rtcad-cadastro-empresa-plugnotas-2026-04-14.md`.
+
+#### Regras de uso RTCAD
+
+1. Usar a matriz RTCAD quando a decisão depender explicitamente do par `município/IBGE + ambiente` e não apenas da taxonomia ROB.
+2. Manter uma linha por cenário e ambiente, marcando explicitamente se a evidência veio de `automatizado executado`, `manual executado` ou `preparo controlado`.
+3. Registar sempre `município/IBGE`, `ambiente`, `resultado do preflight`, `chamada de cadastro`, `classificação BFF`, `estado UX esperado` e `observações operacionais`.
+4. Reaproveitar a taxonomia ROB/NATEX/TRO e acrescentar `prefeitura_ibge_apenas_insuficiente_dp02` quando o preflight identificar município sem caminho nacional elegível e sem `login`/`senha` explícitos.
+5. Quando o mesmo `codigoIbge` variar por ambiente, manter linhas separadas e citar a fonte da diferença para evitar generalização indevida sobre município real.
+6. Preservar a redaction já definida neste runbook: sem token, payload bruto, certificado, `login`/`senha` ou CNPJ completo.
+
+#### Referências canónicas RTCAD
+
+- Matriz consolidada: `docs/qa/qa-matriz-rtcad-cadastro-empresa-plugnotas-2026-04-14.md`
+- Taxonomia base de classificação: secção ROB desta página
+- Exceção municipal bloqueada: secções NATEX, TOP e TRO desta página
+- Evidência manual já disponível para `prefeitura_login_required_blocked`: `docs/qa/top-prefeitura-login-required-blocked-2026-04-10.md` e `docs/qa/tro-prefeitura-login-required-blocked-2026-04-13-inc-tro-2026-04-13-plogin-blocked.md`
+
 <a id="natex-matriz-operacional-excecao-municipal-bloqueada"></a>
 
 ### 2g) Matriz canónica NATEX — triagem da exceção municipal bloqueada no fluxo nacional

@@ -11,10 +11,12 @@ const normalizeDoc = (value: string) => value.replace(/\D/g, '');
 export const PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA = 'ISENTO';
 
 /**
- * Default “NFS-e Nacional ON” no bloco `nfse` — espelha `PLUGNOTAS_NFSE_NACIONAL_*` no backend.
+ * Contrato oficial PlugNotas para NFS-e Nacional no cadastro da empresa.
+ * Política MVP: `consultaNfseNacional` acompanha `nfseNacional`.
  * @see docs/adr/ADR-plugnotas-nfse-nacional-empresa-spike.md (US-MEI-NAT-02)
  */
-export const PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY = 'nacional' as const;
+export const PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY = 'nfseNacional' as const;
+export const PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY = 'consultaNfseNacional' as const;
 export const PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON = true;
 
 const hasRequiredText = (value: unknown) => String(value || '').trim().length > 0;
@@ -118,8 +120,11 @@ export const buildNfEmissionEmpresaPayload = ({
     nfse: {
       ativo: true,
       tipoContrato: 0,
-      config: { producao: true },
-      [PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON
+      config: {
+        producao: true,
+        [PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
+        [PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON
+      }
     },
     /** Alinhado a US-MEI-NFS-01 / ADR apenas NFS-e — backend reforça o mesmo contrato. */
     nfe: { ativo: false, tipoContrato: 0 },

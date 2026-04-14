@@ -15,6 +15,12 @@ const createJsonResponse = (status, payload) => ({
   json: async () => payload
 });
 
+const createCidadePreflightResponse = () => createJsonResponse(200, {
+  padraoNacional: { producao: true, homologacao: false },
+  login: { producao: false, homologacao: false },
+  senha: { producao: false, homologacao: false }
+});
+
 test('logPlugnotasEmpresaIbgeTable400: payload estruturado sem CNPJ completo nem payload JSON', async () => {
   const { logPlugnotasEmpresaIbgeTable400 } = await import(
     '../src/services/plugnotas/plugnotas-empresa-ibge-table-400-log.js'
@@ -100,10 +106,15 @@ test('produção: POST /empresa 400 com mensagem IBGE-tabela regista console.inf
     errLines.push(a.map((x) => (typeof x === 'string' ? x : '')).join(' '));
   };
   const originalFetch = global.fetch;
-  global.fetch = async () => createJsonResponse(400, {
-    message:
-      'Falha: fields.endereco.codigoIBGECidade não consta na tabela de cidades do IBGE.'
-  });
+  global.fetch = async (url) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
+    return createJsonResponse(400, {
+      message:
+        'Falha: fields.endereco.codigoIBGECidade não consta na tabela de cidades do IBGE.'
+    });
+  };
 
   try {
     const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');

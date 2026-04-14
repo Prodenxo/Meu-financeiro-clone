@@ -32,6 +32,7 @@ export type MeiFiscalScenario =
   | 'ambiente_configuracao'
   | 'payload_contrato'
   | 'fallback_sync'
+  | 'prefeitura_ibge_apenas_insuficiente_dp02'
   | 'prefeitura_login_required_blocked'
   | 'empresa_nao_cadastrada';
 
@@ -108,6 +109,9 @@ export function resolveMeiFiscalScenario(input: {
   const lower = raw.toLowerCase();
   const operation = String(input.operation || '').trim().toLowerCase();
 
+  if (code === PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02) {
+    return 'prefeitura_ibge_apenas_insuficiente_dp02';
+  }
   if (code === PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED) {
     return 'prefeitura_login_required_blocked';
   }
@@ -271,7 +275,7 @@ export function mapMeiFiscalErrorToCopy(input: {
     };
   }
 
-  if (code === PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02) {
+  if (scenario === 'prefeitura_ibge_apenas_insuficiente_dp02') {
     return {
       title: 'Limite do serviço — prefeitura no NFS-e',
       description:

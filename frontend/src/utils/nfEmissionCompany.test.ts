@@ -5,7 +5,8 @@ import {
   getNfEmissionCompanyValidationMessage,
   PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
   PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
-  PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY
+  PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY,
+  PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY
 } from './nfEmissionCompany';
 
 const fullValidForm = () => ({
@@ -56,7 +57,10 @@ describe('nfEmissionCompany', () => {
     expect(nfe.ativo).toBe(false);
     expect('config' in nfe).toBe(false);
     const nfse = payload.nfse as Record<string, unknown>;
-    expect(nfse[PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
+    const config = nfse.config as Record<string, unknown>;
+    expect(config[PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
+    expect(config[PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
+    expect('nacional' in nfse).toBe(false);
   });
 
   it('buildNfEmissionEmpresaPayload sempre envia IE pela política MEI e omite certificado no PATCH', () => {
@@ -73,7 +77,10 @@ describe('nfEmissionCompany', () => {
     expect(nfe.ativo).toBe(false);
     expect('config' in nfe).toBe(false);
     const nfse = payload.nfse as Record<string, unknown>;
-    expect(nfse[PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
+    const config = nfse.config as Record<string, unknown>;
+    expect(config[PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
+    expect(config[PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
+    expect('nacional' in nfse).toBe(false);
   });
 
   it('buildNfEmissionEmpresaPayload inclui documentosAtivos quando fornecido (cadastro Guia MEI)', () => {

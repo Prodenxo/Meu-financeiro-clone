@@ -1,12 +1,15 @@
 /**
- * DP-PLOGIN-02 — evitar envio ao Plugnotas de `nfse.config.prefeitura` apenas com `codigoIbge` quando a política
- * (lista IBGE + opt-in) indica que o emissor costuma exigir dados adicionais (ex.: portal municipal).
+ * DP-PLOGIN-02 — fallback emergencial de rollout para evitar envio ao Plugnotas de
+ * `nfse.config.prefeitura` apenas com `codigoIbge` quando a política (lista IBGE + opt-in)
+ * indica que o emissor costuma exigir dados adicionais (ex.: portal municipal).
  *
  * **Opt-in:** `PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED=true` e lista não vazia em
  * `PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES` (códigos IBGE de 7 dígitos, separados por vírgula).
  * Lista vazia ⇒ nenhum bloqueio (mitiga falsos positivos em todos os municípios).
  *
- * Executar **após** `applyNfsePrefeituraIbgeIfEnabled` / derivação trilho B e **após** política de credenciais DP01.
+ * Com o preflight municipal dinâmico ativo, este módulo deixa de ser a fonte primária da decisão.
+ * Executar apenas como guarda legada após `applyNfsePrefeituraIbgeIfEnabled` / derivação trilho B
+ * e após a política de credenciais DP01.
  *
  * @see docs/stories/story-fr-plogin-backlog-dp02-bloqueio-prefeitura-incompleta-servidor.md
  * @see docs/adr/ADR-plugnotas-empresa-payload-apenas-nfse.md

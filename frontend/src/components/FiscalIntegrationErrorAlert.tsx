@@ -481,7 +481,7 @@ export function GuiaMeiEmpresaCadastroErrorPanel({
     fiscalApiErrorCode === MEI_GUIDE_SERPRO_UNAVAILABLE || isMeiGuideSerproConsCUserFacingText(message);
 
   return (
-    <div className="admin-alert-danger space-y-2" role="alert">
+    <div className="admin-alert-danger space-y-2">
       <UserFacingErrorBlock {...facing} />
       {isGatewayUpstream ? null : <LongFiscalErrorMessage message={message} tone="danger" />}
       {suppressIbgeCidadeHintForSerproCons ? null : <PlugnotasIbgeCidadeOperacaoHint message={message} />}

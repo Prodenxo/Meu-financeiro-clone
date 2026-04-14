@@ -19,7 +19,22 @@ const createJsonResponse = (status, payload) => ({
 
 const empresaPayloadMin = () => JSON.stringify({
   cpfCnpj: '17422651000172',
-  razaoSocial: 'Empresa Teste Composite'
+  razaoSocial: 'Empresa Teste Composite',
+  endereco: {
+    codigoCidade: '3550308',
+    estado: 'SP',
+    uf: 'SP',
+    logradouro: 'Rua A',
+    numero: '1',
+    bairro: 'Centro',
+    cep: '01000000'
+  }
+});
+
+const createCidadePreflightResponse = () => createJsonResponse(200, {
+  padraoNacional: { producao: true, homologacao: false },
+  login: { producao: false, homologacao: false },
+  senha: { producao: false, homologacao: false }
 });
 
 const mountApp = async (controller) => {
@@ -70,6 +85,9 @@ test('HTTP POST …/emitente — sucesso composto (certificado + empresa)', asyn
     const u = String(url);
     if (u.includes('127.0.0.1') || u.includes('localhost')) {
       return originalFetch(url, init);
+    }
+    if (u.includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
     }
     if (u.includes('/certificado') && !u.includes('/empresa')) {
       return createJsonResponse(200, { message: 'OK', data: { id: 'cert-orch-1' } });
@@ -169,6 +187,9 @@ test('HTTP POST …/emitente — falha fase empresa inclui orchestrationPhase', 
     if (u.includes('127.0.0.1') || u.includes('localhost')) {
       return originalFetch(url, init);
     }
+    if (u.includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     if (u.includes('/certificado') && !u.includes('/empresa')) {
       return createJsonResponse(200, { message: 'OK', data: { id: 'cert-orch-2' } });
     }
@@ -218,6 +239,9 @@ test('HTTP POST …/emitente — sucesso com documentosAtivos chama espelho (QA 
     if (u.includes('127.0.0.1') || u.includes('localhost')) {
       return originalFetch(url, init);
     }
+    if (u.includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     if (u.includes('/certificado') && !u.includes('/empresa')) {
       return createJsonResponse(200, { message: 'OK', data: { id: 'cert-doc-mirror' } });
     }
@@ -241,6 +265,15 @@ test('HTTP POST …/emitente — sucesso com documentosAtivos chama espelho (QA 
     const payloadJson = JSON.stringify({
       cpfCnpj: '17422651000172',
       razaoSocial: 'Empresa Doc Mirror',
+      endereco: {
+        codigoCidade: '3550308',
+        estado: 'SP',
+        uf: 'SP',
+        logradouro: 'Rua A',
+        numero: '1',
+        bairro: 'Centro',
+        cep: '01000000'
+      },
       documentosAtivos: { nfse: true, nfe: false, nfce: false }
     });
     const body = new FormData();

@@ -86,7 +86,7 @@ import {
   mapMeiGuideValidateErrorToUserMessage,
   type MeiGuideValidateMappedError
 } from '../utils/mapMeiGuideValidateErrorToUserMessage';
-import { mapMeiFiscalErrorToCopy } from '../lib/fiscalUserError';
+import { mapMeiFiscalErrorToCopy, resolveMeiFiscalScenario } from '../lib/fiscalUserError';
 import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import {
@@ -211,6 +211,50 @@ function nfseErrorSummaryLine(
   const copy = mapMeiFiscalErrorToCopy({ rawMessage, plugnotasCode, httpStatus, plugnotasRequest });
   const line = `${copy.title}: ${copy.description}`.replace(/\s+/g, ' ').trim();
   return line.length > 200 ? `${line.slice(0, 197)}…` : line;
+}
+
+type MeiFiscalUiErrorState = {
+  message: string;
+  rawMessage: string;
+  apiErrorCode: string | null;
+  plugnotasCode: string | null;
+  httpStatus: number | null;
+  plugnotasRequest: ReturnType<typeof getFiscalRequestMeta>;
+};
+
+function createPlainMeiFiscalUiErrorState(message: string): MeiFiscalUiErrorState {
+  const normalized = String(message || '').trim();
+  return {
+    message: normalized,
+    rawMessage: normalized,
+    apiErrorCode: null,
+    plugnotasCode: null,
+    httpStatus: null,
+    plugnotasRequest: null
+  };
+}
+
+function createMeiFiscalUiErrorState(
+  error: unknown,
+  fallback: string,
+  overrideMessage?: string
+): MeiFiscalUiErrorState {
+  const raw = error instanceof Error ? error.message : fallback;
+  const rawMessage = (raw || fallback).trim();
+  const plugnotasCode = getFiscalErrorCode(error);
+  const httpStatus = getFiscalHttpStatus(error);
+  const plugnotasRequest = getFiscalRequestMeta(error);
+
+  return {
+    message:
+      overrideMessage?.trim()
+      || formatFiscalError(rawMessage || fallback, plugnotasCode, httpStatus, plugnotasRequest),
+    rawMessage,
+    apiErrorCode: getApiErrorCodeFromUnknownError(error),
+    plugnotasCode,
+    httpStatus,
+    plugnotasRequest
+  };
 }
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
@@ -633,6 +677,7 @@ export default function GuidesMei() {
     cnpj: string;
   } | null>(null);
   const [plugnotasEmpresaRetryDetail, setPlugnotasEmpresaRetryDetail] = useState<string | null>(null);
+  const [plugnotasEmpresaRetryMeta, setPlugnotasEmpresaRetryMeta] = useState<MeiFiscalUiErrorState | null>(null);
   /** FR-SOL: alimenta `lastPostEmpresaPhase2Ok` no resolver (true = POST empresa concluiu; false = falha com retry; null = desconhecido). */
   const [plugnotasEmpresaFase2PostOk, setPlugnotasEmpresaFase2PostOk] = useState<boolean | null>(null);
   /** FR-SOL-P1 follow-up QA: força re-leitura do sessionStorage (TTL) sem depender só de outras interacções. */
@@ -793,15 +838,10 @@ export default function GuidesMei() {
   /** Deteta troca para o separador NFS-e e dispara refetch do catálogo (CAT-MEI-05 / FR-CAT-07). */
   const prevMeiWorkspaceRef = useRef<GuidesMeiWorkspace | null>(null);
   const [nfEmissionCompanySyncLoading, setNfEmissionCompanySyncLoading] = useState<'consult' | 'patch' | null>(null);
-  const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<string | null>(null);
-  /** `errors.code` BFF quando o erro vem de `ApiClientError` (paridade com painel certificado / FR-CONS-P1). */
-  const [nfEmissionCompanySyncFiscalApiErrorCode, setNfEmissionCompanySyncFiscalApiErrorCode] = useState<
-    string | null
-  >(null);
+  const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<MeiFiscalUiErrorState | null>(null);
   const [nfEmissionCompanySyncSuccess, setNfEmissionCompanySyncSuccess] = useState<string | null>(null);
   const clearNfEmissionCompanySyncErrorState = useCallback(() => {
     setNfEmissionCompanySyncError(null);
-    setNfEmissionCompanySyncFiscalApiErrorCode(null);
   }, []);
   const [documentosAtivos, setDocumentosAtivos] = useState<DocumentosAtivosState>(() => ({
     ...DEFAULT_DOCUMENTOS_ATIVOS
@@ -967,10 +1007,35 @@ export default function GuidesMei() {
     []
   );
 
+  const plugnotasRetryScenario = useMemo(() => {
+    if (!plugnotasEmpresaRetryMeta) return null;
+    return resolveMeiFiscalScenario({
+      rawMessage: plugnotasEmpresaRetryMeta.rawMessage,
+      plugnotasCode: plugnotasEmpresaRetryMeta.plugnotasCode,
+      httpStatus: plugnotasEmpresaRetryMeta.httpStatus,
+      plugnotasRequest: plugnotasEmpresaRetryMeta.plugnotasRequest
+    });
+  }, [plugnotasEmpresaRetryMeta]);
+
+  const plugnotasRetryBlockedByScenario = useMemo(
+    () =>
+      plugnotasRetryScenario === 'prefeitura_login_required_blocked'
+      || plugnotasRetryScenario === 'prefeitura_ibge_apenas_insuficiente_dp02',
+    [plugnotasRetryScenario]
+  );
+
+  const plugnotasRetryActionAvailable = useMemo(
+    () =>
+      Boolean(plugnotasPendingRetry)
+      && !meiPlugnotasEmpresaBlockedExternally
+      && !plugnotasRetryBlockedByScenario,
+    [plugnotasPendingRetry, meiPlugnotasEmpresaBlockedExternally, plugnotasRetryBlockedByScenario]
+  );
+
   const plugnotasPrimaryActionEnabled = useMemo(() => {
     if (isUploadingCert || empresaRegistroRetryBusy) return false;
-    if (meiPlugnotasEmpresaBlockedExternally && plugnotasPendingRetry) return false;
     if (plugnotasPendingRetry) {
+      if (!plugnotasRetryActionAvailable) return false;
       return nfEmissionFormAndDocsOkForPlugnotas && plugnotasCnpjOkForSubmit;
     }
     if (!certificateFile || !certificatePassword.trim()) return false;
@@ -987,12 +1052,16 @@ export default function GuidesMei() {
     certificatePassword,
     canViewNfse,
     nfEmissionFormAndDocsOkForPlugnotas,
-    plugnotasCnpjOkForSubmit
+    plugnotasCnpjOkForSubmit,
+    plugnotasRetryActionAvailable
   ]);
 
   const plugnotasPrimaryDisabledHint = useMemo(() => {
     if (plugnotasPrimaryActionEnabled || isUploadingCert || empresaRegistroRetryBusy) return null;
     if (plugnotasPendingRetry) {
+      if (plugnotasRetryBlockedByScenario) {
+        return 'Neste cenário o cadastro automático pelo site não está disponível. Revise os dados do emitente e siga o guia de operação fiscal antes de tentar novamente.';
+      }
       if (meiPlugnotasEmpresaBlockedExternally) {
         return 'Neste cenário o cadastro automático pelo site não está disponível. Use o guia de operação fiscal ou o suporte do emissor antes de insistir no envio.';
       }
@@ -1024,6 +1093,7 @@ export default function GuidesMei() {
     empresaRegistroRetryBusy,
     meiPlugnotasEmpresaBlockedExternally,
     plugnotasPendingRetry,
+    plugnotasRetryBlockedByScenario,
     certificateFile,
     certificatePassword,
     canViewNfse,
@@ -1290,6 +1360,7 @@ export default function GuidesMei() {
     setCertificatePassword('');
     setPlugnotasPendingRetry(null);
     setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasEmpresaRetryMeta(null);
     setPlugnotasEmpresaFase2PostOk(true);
     const operation = companyResponse.operation || null;
     const primary = opts.isRetryOnly
@@ -1310,7 +1381,7 @@ export default function GuidesMei() {
   }, [userId, nfEmissionCompanyForm, updateNfseForm, canViewNfse, clearNfEmissionCompanySyncErrorState]);
 
   const handleRetryPlugnotasEmpresaRegistro = useCallback(async () => {
-    if (!plugnotasPendingRetry) return;
+    if (!plugnotasPendingRetry || !plugnotasRetryActionAvailable) return;
     const companyValidationMessage = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
     if (companyValidationMessage) {
       setCertificateErrorFiscalCode(null);
@@ -1328,6 +1399,7 @@ export default function GuidesMei() {
     setCertificateErrorFiscalCode(null);
     setCertificateErrorHttpStatus(null);
     setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasEmpresaRetryMeta(null);
     setEmpresaRegistroRetryBusy(true);
     setPlugnotasSubmitPhase('empresa');
     try {
@@ -1346,9 +1418,12 @@ export default function GuidesMei() {
       if (isFetchConnectivityFailure(error)) {
         setCertificateConnectivityAlert(true);
         setPlugnotasPendingRetry(null);
+        setPlugnotasEmpresaRetryMeta(null);
         setPlugnotasEmpresaFase2PostOk(null);
       } else {
-        setPlugnotasEmpresaRetryDetail(formatMeiFiscalErr(error, 'Erro ao registrar empresa.'));
+        const retryError = createMeiFiscalUiErrorState(error, 'Erro ao registrar empresa.');
+        setPlugnotasEmpresaRetryDetail(retryError.message);
+        setPlugnotasEmpresaRetryMeta(retryError);
         setGuiaMeiEmpresaFase2FailFlag(userId, plugnotasPendingRetry.cnpj);
       }
     } finally {
@@ -1366,7 +1441,8 @@ export default function GuidesMei() {
     documentosAtivos,
     finalizePlugnotasEmpresaCadastroSuccess,
     loadCertificateStatus,
-    userId
+    userId,
+    plugnotasRetryActionAvailable
   ]);
 
   const updateNfseServico = (updates: Partial<EmitirNfseInput['servico']>) => {
@@ -1688,6 +1764,7 @@ export default function GuidesMei() {
     setCertificateSuccess(null);
     setPlugnotasPendingRetry(null);
     setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasEmpresaRetryMeta(null);
     setPlugnotasEmpresaFase2PostOk(null);
     setPlugnotasSubmitPhase('idle');
     setIsUploadingCert(true);
@@ -1762,13 +1839,16 @@ export default function GuidesMei() {
           setCertificateErrorHttpStatus(null);
           setPlugnotasPendingRetry(null);
           setPlugnotasEmpresaRetryDetail(null);
+          setPlugnotasEmpresaRetryMeta(null);
           setPlugnotasEmpresaFase2PostOk(null);
         } else {
+          const retryError = createMeiFiscalUiErrorState(cause, 'Erro ao registrar empresa.');
           setCertificateConnectivityAlert(false);
           setCertificateError(null);
           setCertificateErrorFiscalCode(null);
           setCertificateErrorHttpStatus(null);
-          setPlugnotasEmpresaRetryDetail(formatMeiFiscalErr(cause, 'Erro ao registrar empresa.'));
+          setPlugnotasEmpresaRetryDetail(retryError.message);
+          setPlugnotasEmpresaRetryMeta(retryError);
           const retryCnpj = normalizeDoc(String(error.cnpj || cnpjForFiscal || ''));
           const retryCert = String(error.certificadoId || '').trim();
           if (retryCert && retryCnpj.length === 14) {
@@ -1844,9 +1924,10 @@ export default function GuidesMei() {
     setDocumentosAtivosHydrationError(null);
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
-      setNfEmissionCompanySyncFiscalApiErrorCode(null);
       setNfEmissionCompanySyncError(
-        'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
+        createPlainMeiFiscalUiErrorState(
+          'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
+        )
       );
       return;
     }
@@ -1885,15 +1966,21 @@ export default function GuidesMei() {
         }
       }
     } catch (error) {
-      const formatted = formatMeiFiscalErr(error, 'Falha ao consultar cadastro no serviço de emissão fiscal.');
+      const mappedError = createMeiFiscalUiErrorState(
+        error,
+        'Falha ao consultar cadastro no serviço de emissão fiscal.'
+      );
       const sessionPostFailedFlag =
         cnpj.length === 14 && isGuiaMeiEmpresaFase2FailFlagActive(userId, cnpj);
-      setNfEmissionCompanySyncFiscalApiErrorCode(getApiErrorCodeFromUnknownError(error));
       setNfEmissionCompanySyncError(
-        withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(formatted, {
-          pendingRetryPanel: Boolean(plugnotasPendingRetry),
-          sessionPostFailedFlag
-        })
+        createMeiFiscalUiErrorState(
+          error,
+          'Falha ao consultar cadastro no serviço de emissão fiscal.',
+          withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(mappedError.message, {
+            pendingRetryPanel: Boolean(plugnotasPendingRetry),
+            sessionPostFailedFlag
+          })
+        )
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -1906,8 +1993,7 @@ export default function GuidesMei() {
     setDocumentosAtivosSubmitError(null);
     const companyValidationMessage = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
     if (companyValidationMessage) {
-      setNfEmissionCompanySyncFiscalApiErrorCode(null);
-      setNfEmissionCompanySyncError(companyValidationMessage);
+      setNfEmissionCompanySyncError(createPlainMeiFiscalUiErrorState(companyValidationMessage));
       return;
     }
     const docMsg = getDocumentosAtivosValidationMessage(documentosAtivos);
@@ -1918,9 +2004,10 @@ export default function GuidesMei() {
     }
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
-      setNfEmissionCompanySyncFiscalApiErrorCode(null);
       setNfEmissionCompanySyncError(
-        'CNPJ de 14 dígitos é obrigatório (campo CNPJ do MEI ou prestador na NFSe).'
+        createPlainMeiFiscalUiErrorState(
+          'CNPJ de 14 dígitos é obrigatório (campo CNPJ do MEI ou prestador na NFSe).'
+        )
       );
       return;
     }
@@ -1941,9 +2028,10 @@ export default function GuidesMei() {
         );
       } catch (persistErr) {
         const msg = persistErr instanceof Error ? persistErr.message : String(persistErr);
-        setNfEmissionCompanySyncFiscalApiErrorCode(null);
         setNfEmissionCompanySyncError(
-          `Empresa atualizada no emissor fiscal, mas os dados não foram gravados nesta aplicação: ${msg}`
+          createPlainMeiFiscalUiErrorState(
+            `Empresa atualizada no emissor fiscal, mas os dados não foram gravados nesta aplicação: ${msg}`
+          )
         );
         return;
       }
@@ -1968,9 +2056,8 @@ export default function GuidesMei() {
         // mantém sucesso principal; snapshots podem actualizar na próxima carga
       }
     } catch (error) {
-      setNfEmissionCompanySyncFiscalApiErrorCode(getApiErrorCodeFromUnknownError(error));
       setNfEmissionCompanySyncError(
-        formatMeiFiscalErr(error, 'Falha ao atualizar empresa no serviço de emissão fiscal.')
+        createMeiFiscalUiErrorState(error, 'Falha ao atualizar empresa no serviço de emissão fiscal.')
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -1987,9 +2074,10 @@ export default function GuidesMei() {
   const handleDocumentosAtivosSincronizarPlugnotas = useCallback(async () => {
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
-      setNfEmissionCompanySyncFiscalApiErrorCode(null);
       setNfEmissionCompanySyncError(
-        'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
+        createPlainMeiFiscalUiErrorState(
+          'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
+        )
       );
       return;
     }
@@ -2004,15 +2092,18 @@ export default function GuidesMei() {
       });
       await loadCertificateStatus();
     } catch (error) {
-      const formatted = formatMeiFiscalErr(error, 'Falha ao sincronizar com o emissor fiscal.');
+      const mappedError = createMeiFiscalUiErrorState(error, 'Falha ao sincronizar com o emissor fiscal.');
       const sessionPostFailedFlag =
         cnpj.length === 14 && isGuiaMeiEmpresaFase2FailFlagActive(userId, cnpj);
-      setNfEmissionCompanySyncFiscalApiErrorCode(getApiErrorCodeFromUnknownError(error));
       setNfEmissionCompanySyncError(
-        withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(formatted, {
-          pendingRetryPanel: Boolean(plugnotasPendingRetry),
-          sessionPostFailedFlag
-        })
+        createMeiFiscalUiErrorState(
+          error,
+          'Falha ao sincronizar com o emissor fiscal.',
+          withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(mappedError.message, {
+            pendingRetryPanel: Boolean(plugnotasPendingRetry),
+            sessionPostFailedFlag
+          })
+        )
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -2033,8 +2124,9 @@ export default function GuidesMei() {
       }
       setNfEmissionCompanySyncSuccess('Dados do emitente salvos com sucesso.');
     } catch (error) {
-      setNfEmissionCompanySyncFiscalApiErrorCode(getApiErrorCodeFromUnknownError(error));
-      setNfEmissionCompanySyncError(formatMeiFiscalErr(error, 'Falha ao salvar dados do emitente.'));
+      setNfEmissionCompanySyncError(
+        createMeiFiscalUiErrorState(error, 'Falha ao salvar dados do emitente.')
+      );
     } finally {
       setNfEmissionCompanySyncLoading(null);
     }
@@ -2052,6 +2144,7 @@ export default function GuidesMei() {
     setCertificateSuccess(null);
     setPlugnotasPendingRetry(null);
     setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasEmpresaRetryMeta(null);
     setPlugnotasEmpresaFase2PostOk(null);
     setPlugnotasSubmitPhase('idle');
     setIsRemovingCert(true);
@@ -2670,7 +2763,7 @@ export default function GuidesMei() {
   }, []);
 
   useEffect(() => {
-    const err = nfEmissionCompanySyncError?.trim();
+    const err = nfEmissionCompanySyncError?.message.trim();
     if (!err || !isPlugnotasEmpresaConsultNotFoundMessage(err)) {
       return undefined;
     }
@@ -2692,7 +2785,7 @@ export default function GuidesMei() {
     const sessionPostFailedFlag =
       cnpjParaSolSessionFlag.length === 14 &&
       isGuiaMeiEmpresaFase2FailFlagActive(userId, cnpjParaSolSessionFlag);
-    const err = nfEmissionCompanySyncError?.trim();
+    const err = nfEmissionCompanySyncError?.message.trim();
     if (!err || !isPlugnotasEmpresaConsultNotFoundMessage(err)) {
       return resolvePlugnotasEmpresaCadastroSolUxState({
         lastPostEmpresaPhase2Ok: plugnotasEmpresaFase2PostOk,
@@ -2717,7 +2810,7 @@ export default function GuidesMei() {
   ]);
 
   const plugnotasEmpresaLastGetCoherent = useMemo(() => {
-    const err = nfEmissionCompanySyncError?.trim();
+    const err = nfEmissionCompanySyncError?.message.trim();
     if (!err) return true;
     return !isPlugnotasEmpresaConsultNotFoundMessage(err);
   }, [nfEmissionCompanySyncError]);
@@ -2788,8 +2881,11 @@ export default function GuidesMei() {
       nodes.push(
         <div key="nfse-fb-sync" className="space-y-2 text-xs">
           <GuiaMeiEmpresaCadastroErrorPanel
-            message={nfEmissionCompanySyncError}
-            fiscalApiErrorCode={nfEmissionCompanySyncFiscalApiErrorCode}
+            message={nfEmissionCompanySyncError.message}
+            fiscalApiErrorCode={nfEmissionCompanySyncError.apiErrorCode}
+            fiscalErrorCode={nfEmissionCompanySyncError.plugnotasCode}
+            fiscalHttpStatus={nfEmissionCompanySyncError.httpStatus}
+            plugnotasRequest={nfEmissionCompanySyncError.plugnotasRequest}
           />
           <PlugnotasEmpresaCadastroSolContextPanel
             state={plugnotasCadastroSolUxState}
@@ -2865,7 +2961,6 @@ export default function GuidesMei() {
     hasUserCertificate,
     nfEmissionCompanyForm.razaoSocial,
     nfEmissionCompanySyncError,
-    nfEmissionCompanySyncFiscalApiErrorCode,
     nfseEmitentePendingApply,
     plugnotasCadastroSolUxState,
     setActiveWorkspace
@@ -2976,18 +3071,21 @@ export default function GuidesMei() {
   const nfseNacionalOperacaoHelpHref = useMemo(() => getNfseNacionalOperacaoHelpHref(), []);
   const plugnotasRetryMunicipalOperacaoHint = useMemo(
     () =>
-      Boolean(
+      plugnotasRetryBlockedByScenario
+      || Boolean(
         plugnotasEmpresaRetryDetail &&
           isPlugnotasEmpresaMunicipalRequirementMessage(plugnotasEmpresaRetryDetail)
       ),
-    [plugnotasEmpresaRetryDetail]
+    [plugnotasRetryBlockedByScenario, plugnotasEmpresaRetryDetail]
   );
   const plugnotasRetryEmpresaUxVariant = useMemo(
     () =>
-      plugnotasEmpresaRetryDetail
-        ? getPlugnotasEmpresaCadastroErrorUxVariant(plugnotasEmpresaRetryDetail)
-        : 'generic',
-    [plugnotasEmpresaRetryDetail]
+      plugnotasRetryScenario === 'prefeitura_login_required_blocked'
+        ? 'prefeitura-login-required'
+        : plugnotasEmpresaRetryDetail
+          ? getPlugnotasEmpresaCadastroErrorUxVariant(plugnotasEmpresaRetryDetail)
+          : 'generic',
+    [plugnotasRetryScenario, plugnotasEmpresaRetryDetail]
   );
 
   const showRequisitosNfeNfcePlaceholder = useMemo(
@@ -3329,8 +3427,9 @@ export default function GuidesMei() {
                 Não foi possível concluir o registro da empresa
               </p>
               <p className="text-amber-950/95 dark:text-amber-100/90">
-                O certificado pode já ter sido enviado ao emissor fiscal. Os dados do emitente não foram concluídos.
-                Você pode tentar registrar a empresa novamente sem enviar o arquivo outra vez.
+                {plugnotasRetryActionAvailable
+                  ? 'O certificado pode já ter sido enviado ao emissor fiscal. Os dados do emitente não foram concluídos. Você pode tentar registrar a empresa novamente sem enviar o arquivo outra vez.'
+                  : 'O certificado pode já ter sido enviado ao emissor fiscal. Os dados do emitente não foram concluídos. Neste cenário, revise os dados do emitente e siga o guia de operação fiscal antes de insistir no cadastro automático.'}
               </p>
               {plugnotasEmpresaRetryDetail ? (
                 <p className="text-amber-900 dark:text-amber-200/95">{plugnotasEmpresaRetryDetail}</p>
@@ -3459,8 +3558,11 @@ export default function GuidesMei() {
           {nfEmissionCompanySyncError ? (
             <>
               <GuiaMeiEmpresaCadastroErrorPanel
-                message={nfEmissionCompanySyncError}
-                fiscalApiErrorCode={nfEmissionCompanySyncFiscalApiErrorCode}
+                message={nfEmissionCompanySyncError.message}
+                fiscalApiErrorCode={nfEmissionCompanySyncError.apiErrorCode}
+                fiscalErrorCode={nfEmissionCompanySyncError.plugnotasCode}
+                fiscalHttpStatus={nfEmissionCompanySyncError.httpStatus}
+                plugnotasRequest={nfEmissionCompanySyncError.plugnotasRequest}
               />
               <PlugnotasEmpresaCadastroSolContextPanel state={plugnotasCadastroSolUxState} showPlaybook />
             </>
@@ -3559,6 +3661,7 @@ export default function GuidesMei() {
                     setCertificateErrorHttpStatus(null);
                     setPlugnotasPendingRetry(null);
                     setPlugnotasEmpresaRetryDetail(null);
+                    setPlugnotasEmpresaRetryMeta(null);
                     setPlugnotasEmpresaFase2PostOk(null);
                     setCertificateFile(event.target.files?.[0] || null);
                   }}
@@ -3574,6 +3677,7 @@ export default function GuidesMei() {
                     setCertificateErrorHttpStatus(null);
                     setPlugnotasPendingRetry(null);
                     setPlugnotasEmpresaRetryDetail(null);
+                    setPlugnotasEmpresaRetryMeta(null);
                     setPlugnotasEmpresaFase2PostOk(null);
                     setCertificatePassword(event.target.value);
                   }}
@@ -3928,7 +4032,7 @@ export default function GuidesMei() {
                       : undefined
                   }
                   onClick={() => {
-                    if (plugnotasPendingRetry) {
+                    if (plugnotasRetryActionAvailable) {
                       void handleRetryPlugnotasEmpresaRegistro();
                     } else {
                       void handleCertificateUpload();
@@ -3944,7 +4048,7 @@ export default function GuidesMei() {
                         ? 'Enviando...'
                         : isUploadingCert
                           ? 'Enviando e configurando...'
-                          : plugnotasPendingRetry
+                          : plugnotasRetryActionAvailable
                             ? 'Tentar registrar empresa novamente'
                             : canViewNfse
                               ? 'Concluir configuração fiscal'
@@ -4136,8 +4240,11 @@ export default function GuidesMei() {
           )}
           {nfEmissionCompanySyncError ? (
             <GuiaMeiEmpresaCadastroErrorPanel
-              message={nfEmissionCompanySyncError}
-              fiscalApiErrorCode={nfEmissionCompanySyncFiscalApiErrorCode}
+              message={nfEmissionCompanySyncError.message}
+              fiscalApiErrorCode={nfEmissionCompanySyncError.apiErrorCode}
+              fiscalErrorCode={nfEmissionCompanySyncError.plugnotasCode}
+              fiscalHttpStatus={nfEmissionCompanySyncError.httpStatus}
+              plugnotasRequest={nfEmissionCompanySyncError.plugnotasRequest}
             />
           ) : null}
           {nfEmissionCompanySyncSuccess && (

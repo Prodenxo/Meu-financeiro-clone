@@ -7,9 +7,8 @@
  */
 import { badRequest } from '../../utils/errors.js';
 import {
+  applyNfseNationalContractPolicy,
   PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
-  PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
-  PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY
 } from './plugnotas-mei-empresa-policy.js';
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -172,22 +171,6 @@ const normalizeInscricaoEstadualApenasNfse = (payload) => {
 };
 
 /**
- * POST: default NFS-e Nacional ON quando nfse ativo.
- * @param {Record<string, unknown>} payload
- */
-const applyNfseNacionalDefaultForPost = (payload) => {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
-  const base =
-    payload.nfse && typeof payload.nfse === 'object' && !Array.isArray(payload.nfse)
-      ? { ...payload.nfse }
-      : { ativo: true, tipoContrato: 0, config: { producao: true } };
-  payload.nfse = {
-    ...base,
-    [PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON
-  };
-};
-
-/**
  * Monta apenas nfse / nfe / nfce (sem IE). POST e PATCH com `documentosAtivos` partilham esta árvore.
  * @param {Record<string, unknown>} payload
  * @param {{ nfse: boolean, nfe: boolean, nfce: boolean }} selection
@@ -195,7 +178,7 @@ const applyNfseNacionalDefaultForPost = (payload) => {
 const assignDocumentBlocksFromSelection = (payload, selection) => {
   if (selection.nfse) {
     payload.nfse = { ativo: true, tipoContrato: 0, config: { producao: true } };
-    applyNfseNacionalDefaultForPost(payload);
+    applyNfseNationalContractPolicy(payload);
   } else {
     payload.nfse = { ...PLUGNOTAS_EMPRESA_DOC_INATIVO };
   }
