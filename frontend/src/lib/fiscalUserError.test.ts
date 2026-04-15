@@ -204,6 +204,26 @@ describe('mapMeiFiscalErrorToCopy', () => {
     ).toBe('prefeitura_login_required_fallback_available');
   });
 
+  it('FR-PFLNAT P1: preflight híbrido resolvido (success_nacional, IBGE 5002704, requiresLogin) + operation created → success_nacional (não PLOGIN)', () => {
+    expect(
+      resolveMeiFiscalScenario({
+        rawMessage: 'Cadastro em análise no emissor.',
+        plugnotasCode: null,
+        httpStatus: null,
+        operation: 'created',
+        runtimeDecision: {
+          scenario: 'success_nacional',
+          consultedMunicipio: true,
+          codigoIbge: '5002704',
+          padraoNacionalEnabled: true,
+          requiresLogin: true,
+          requiresSenha: false,
+          upstreamCallSkipped: false,
+        },
+      })
+    ).toBe('success_nacional');
+  });
+
   it('FR-ALNFB: prefeitura_login_required_fallback_available gera copy do segundo passo (sem culpar endpoint)', () => {
     const copy = mapMeiFiscalErrorToCopy({
       rawMessage: 'ignored',

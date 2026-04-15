@@ -24,6 +24,9 @@ Não grave secrets, tokens nem dados pessoais.
 
 ## Decisões de arquitetura
 
+- **2026-04-15 — FR-PFLNAT (P2):** runbook [`docs/operacao-mei-nfse.md`](docs/operacao-mei-nfse.md) — âncora `#pflnat-preflight-nacional-vs-login-municipal-suporte`; linha REC500 «BFF / classificação» pré vs pós-motor; seguimento @qa: «Decisão formal» §18 (épico/rollout) vs motor PFLNAT + parágrafo «Leitura conjunta».
+- **2026-04-15 — FR-PFLNAT (P1) QA:** [`docs/qa/pflnat-p1-matriz-preflight-hibrido-evidencia.md`](docs/qa/pflnat-p1-matriz-preflight-hibrido-evidencia.md) — gate P0/CI (§0), pacote PR §2.1, spot check `/guias-mei` §3, sign-off §4; testes `fiscalUserError` / `nfseNacionalPlugnotasErrorHints`.
+- **2026-04-15 — FR-PFLNAT (P0):** `resolveEmpresaCadastroMunicipioRuntimeDecision` concede `success_nacional` / `allowUpstream` quando `padraoNacionalEnabled === true` e `attemptNfseMode === 'nacional'` antes de `prefeitura_login_required_*`, exceto `authRequired && hasValidPair && !prefeituraCredentialsEnabled` (§4 PFLNAT). Testes de bloqueio por login municipal sem nacional usam preflight com `padraoNacional: false` nos mocks.
 - **2026-04-07 — FR-POSQA-07 (POSQA-5):** smoke opcional Plugnotas — `scripts/smoke-nfe-nfce-plugnotas.mjs` + `npm run smoke:plugnotas:nfe-nfce`; CI GitHub só com secrets `PLUGNOTAS_API_BASE_URL` / `PLUGNOTAS_API_KEY` (workflow não bloqueia PR se ausentes).
 - **2026-04-07 — Empresa Plugnotas NF-e/NFC-e (FR-POSQA-03 / PRD §8.1):** decisão **D1** — documentação + bloqueio honesto na UI (`MeiFiscalCapabilityCallout`, `parsePlugnotasEmpresaCapabilities`); **D2/D3** em backlog. ADR `docs/technical/adr-empresa-plugnotas-nfe-nfce-d1-2026-04-07.md`.
 - **2026-04-02 — Limite de faturamento MEI (LIM-MEI-01):** agregado MVP no cliente a partir de `NfseRecord[]` (`listarNfse`); ADR `docs/technical/mei-limite-faturamento-agregado-2026-04-02.md`; helpers `frontend/src/utils/meiLimiteFaturamento.ts` + `meiLimiteFaturamentoConfig.ts`.
@@ -85,6 +88,9 @@ GitHub Actions: `.github/workflows/corr03-smoke-backend.yml` executa o mesmo smo
 
 ## Última atualização
 
+- **2026-04-15** — FR-PFLNAT P2: secção PFLNAT no runbook `operacao-mei-nfse.md`; story P2 critérios doc fechados — PR + aprovação @po / @qa por equipa.
+- **2026-04-15** — FR-PFLNAT P1: revisão doc QA pós-@qa (§0–§4); story actualizada; sign-off @qa / gate P0+CI permanecem com equipa.
+- **2026-04-15** — FR-PFLNAT P0: motor `empresa-cadastro-runtime-decision.js` — precedência nacional sobre bloqueio por login municipal no modo nacional default; regressão em `empresa-cadastro-runtime-rec500-regression.test.js` + integração `plugnotas-empresa.test.js` / `mei-notas-empresa-http.test.js`.
 - **2026-04-15** — REC500 Epic 2 (`regra governada runtime 5002704`): story cancelada enquanto PRD §18 for `manter policy vigente`; reabrir só com decisão `correcao controlada` + PRD/arquitetura alinhados (`docs/stories/story-fr-rec500-p2-backend-regra-governada-runtime-5002704-2026-04-14.md`).
 - **2026-04-14** — Arquitetura RTCAD documentada: contrato oficial + preflight municipal obrigatório no BFF antes do cadastro empresa PlugNotas; fase 2 municipal segue fora do MVP.
 - **2026-04-07** — FR-CAD-DOC P1 UX (banner/título/campos condicionais): `guiaMeiCadastroDocumentosAtivos*` + componentes `MeiCadastroNfeNfceInfoBanner` / `MeiCadastroRequisitosNfeNfcePlaceholder`.

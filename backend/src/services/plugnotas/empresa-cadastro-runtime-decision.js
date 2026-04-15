@@ -194,6 +194,35 @@ export const resolveEmpresaCadastroMunicipioRuntimeDecision = (preflight, govern
     };
   }
 
+  /**
+   * DP-PFLNAT-01 / AD-PFLNAT-01: com NFS-e Nacional disponível no preflight, o percurso
+   * `attemptNfseMode === 'nacional'` deve permitir upstream antes de bloquear só com base em
+   * `requiresLogin` / `requiresSenha` (município híbrido). Exceção explícita §4 arquitetura:
+   * par credencial presente com política municipal desligada.
+   */
+  if (natOk && attemptNfseMode === 'nacional') {
+    if (authRequired && hasValidPair && !prefeituraCredentialsEnabled) {
+      return {
+        allowUpstream: false,
+        runtimeDecision: buildRuntimeDecisionFromPreflight(
+          'prefeitura_login_required_blocked',
+          preflight,
+          true,
+          { attemptMode: attemptNfseMode }
+        )
+      };
+    }
+    return {
+      allowUpstream: true,
+      runtimeDecision: buildRuntimeDecisionFromPreflight(
+        'success_nacional',
+        preflight,
+        false,
+        { attemptMode: 'nacional' }
+      )
+    };
+  }
+
   if (!authRequired && natOk) {
     return {
       allowUpstream: true,

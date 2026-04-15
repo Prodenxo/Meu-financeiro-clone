@@ -167,6 +167,7 @@ test('empresa service bloqueia município com login obrigatório já no prefligh
     calls.push({ url: String(url), options });
     if (String(url).includes('/nfse/cidades/')) {
       return createCidadePreflightResponse({
+        padraoNacional: { producao: false, homologacao: false },
         login: { producao: true, homologacao: false },
         senha: { producao: false, homologacao: false }
       });
@@ -202,7 +203,7 @@ test('empresa service bloqueia município com login obrigatório já no prefligh
   }
 });
 
-test('empresa service REC500 P2: IBGE 5002704 com preflight híbrido (nacional+login) mantém prefeitura_login_required_blocked e não chama POST /empresa', async () => {
+test('empresa service FR-PFLNAT: IBGE 5002704 preflight híbrido (nacional+login) permite POST /empresa', async () => {
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
@@ -223,32 +224,23 @@ test('empresa service REC500 P2: IBGE 5002704 com preflight híbrido (nacional+l
   };
 
   try {
-    await assert.rejects(
-      () =>
-        cadastrarEmpresaPlugNotas({
-          cpfCnpj: '17422651000172',
-          certificado: 'cert-1',
-          razaoSocial: 'Empresa Teste',
-          endereco: buildEmpresaEnderecoValido({ codigoCidade: '5002704' })
-        }),
-      (err) => {
-        assert.equal(err.status, 400);
-        assert.equal(err.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
-        assert.equal(err.errors?.runtimeDecision?.scenario, 'prefeitura_login_required_blocked');
-        assert.equal(err.errors?.runtimeDecision?.codigoIbge, '5002704');
-        assert.equal(err.errors?.runtimeDecision?.padraoNacionalEnabled, true);
-        assert.equal(err.errors?.runtimeDecision?.requiresLogin, true);
-        return true;
-      }
-    );
-    assert.equal(calls.length, 1);
+    const response = await cadastrarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      certificado: 'cert-1',
+      razaoSocial: 'Empresa Teste',
+      endereco: buildEmpresaEnderecoValido({ codigoCidade: '5002704' })
+    });
+    assert.equal(response.operation, 'created');
+    assert.equal(response.runtimeDecision?.scenario, 'success_nacional');
+    assert.equal(calls.length, 2);
     assert.match(calls[0].url, /\/nfse\/cidades\/5002704$/);
+    assert.match(calls[1].url, /\/empresa$/);
   } finally {
     global.fetch = originalFetch;
   }
 });
 
-test('FR-ALNFB 1.1: auth municipal + flag credenciais on + sem credenciais → prefeitura_login_required_fallback_available (sem POST /empresa)', async () => {
+test('FR-ALNFB 1.1: auth municipal + sem nacional + flag credenciais on + sem credenciais → prefeitura_login_required_fallback_available (sem POST /empresa)', async () => {
   const prevFlag = process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED;
   process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = 'true';
 
@@ -260,6 +252,7 @@ test('FR-ALNFB 1.1: auth municipal + flag credenciais on + sem credenciais → p
     calls.push({ url: String(url), options });
     if (String(url).includes('/nfse/cidades/')) {
       return createCidadePreflightResponse({
+        padraoNacional: { producao: false, homologacao: false },
         login: { producao: true, homologacao: false },
         senha: { producao: false, homologacao: false }
       });

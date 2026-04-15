@@ -153,10 +153,17 @@ describe('nfseNacionalPlugnotasErrorHints', () => {
     expect(getPlugnotasEmpresaCadastroErrorUxVariant(msg)).toBe('prefeitura-login-required');
   });
 
-  it('REC500 P2 regressão: bloqueio BFF permanece L1 — não promove “sucesso nacional” para IBGE 5002704 no hint', () => {
+  it('PLOGIN-UX-L1: quando a mensagem incorpora o código BFF prefeitura_login_required_blocked (ex.: erro a jusante), L1 mantém prefeitura-login-required — distinto do preflight híbrido pós-PFLNAT sem esse código', () => {
     const msg5002704 = `Falha tratada no BFF (${PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED}) contexto IBGE 5002704 híbrido.`;
     expect(getPlugnotasEmpresaCadastroErrorUxVariant(msg5002704)).toBe('prefeitura-login-required');
     expect(isPlugnotasPrefeituraLoginRequiredMessage(msg5002704)).toBe(true);
+  });
+
+  it('FR-PFLNAT P1: texto só com “5002704” e “híbrido” sem código PLOGIN nem frases L1 → não classifica como prefeitura-login-required', () => {
+    const semCodigoPlogin =
+      'Não foi possível concluir o cadastro para o município 5002704 (cenário híbrido). Verifique os dados.';
+    expect(isPlugnotasPrefeituraLoginRequiredMessage(semCodigoPlogin)).toBe(false);
+    expect(getPlugnotasEmpresaCadastroErrorUxVariant(semCodigoPlogin)).not.toBe('prefeitura-login-required');
   });
 
   it('PREF-L2 (spec UX §3.2): só IM obrigatória → municipal-generic, não prefeitura-config', () => {

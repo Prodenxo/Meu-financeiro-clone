@@ -34,6 +34,7 @@
 - A UX spec exige distinção explícita entre sucesso nacional, sincronização, payload, ambiente, exceção municipal e `GET` negativo posterior.
 - Como o preflight varia por ambiente, a matriz precisa comprovar cobertura efetiva de `producao` e `homologacao`, e não apenas carregar a coluna `ambiente` como metadado passivo.
 - Esta story pode gerar um artefato em `docs/qa/` e atualizar o runbook operacional se a triagem precisar de reforço textual.
+- **Relacionado (epic PFLNAT):** matriz híbrido nacional vs login municipal e evidência reexecutável — [`story-fr-pflnat-p1-qa-regressao-matriz-preflight-hibrido.md`](./story-fr-pflnat-p1-qa-regressao-matriz-preflight-hibrido.md), artefato [`docs/qa/pflnat-p1-matriz-preflight-hibrido-evidencia.md`](../qa/pflnat-p1-matriz-preflight-hibrido-evidencia.md).
 
 ---
 

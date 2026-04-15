@@ -115,7 +115,7 @@ test('HTTP POST /api/mei-notas/setup/emissao-fiscal/empresa bloqueia município 
     upstreamCalls.push({ url: u, init });
     if (u.includes('/nfse/cidades/')) {
       return createJsonResponse(200, {
-        padraoNacional: { producao: true, homologacao: false },
+        padraoNacional: { producao: false, homologacao: false },
         login: { producao: true, homologacao: false },
         senha: { producao: false, homologacao: false }
       });
@@ -164,7 +164,7 @@ test('HTTP POST /api/mei-notas/setup/emissao-fiscal/empresa bloqueia município 
   }
 });
 
-test('HTTP POST REC500 P2: IBGE 5002704 com preflight híbrido retorna prefeitura_login_required_blocked (sem POST /empresa)', async () => {
+test('HTTP POST FR-PFLNAT: IBGE 5002704 preflight híbrido segue para POST /empresa', async () => {
   const controller = await import('../src/controllers/mei-notas.controller.js');
   const { app, __setGetRequesterContextForTests } = await mountApp(controller);
   const originalFetch = global.fetch;
@@ -211,14 +211,15 @@ test('HTTP POST REC500 P2: IBGE 5002704 com preflight híbrido retorna prefeitur
       })
     });
 
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 200);
     const json = await res.json();
-    assert.equal(json.success, false);
-    assert.equal(json.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
-    assert.equal(json.errors?.runtimeDecision?.codigoIbge, '5002704');
-    assert.equal(json.errors?.runtimeDecision?.padraoNacionalEnabled, true);
-    assert.equal(upstreamCalls.length, 1);
+    assert.equal(json.success, true);
+    assert.equal(json.data?.runtimeDecision?.scenario, 'success_nacional');
+    assert.equal(json.data?.runtimeDecision?.codigoIbge, '5002704');
+    assert.equal(json.data?.runtimeDecision?.padraoNacionalEnabled, true);
+    assert.equal(upstreamCalls.length, 2);
     assert.match(upstreamCalls[0].url, /\/nfse\/cidades\/5002704$/);
+    assert.match(upstreamCalls[1].url, /\/empresa$/);
   } finally {
     global.fetch = originalFetch;
     __setGetRequesterContextForTests(null);
@@ -295,7 +296,7 @@ test('HTTP POST /api/mei-notas/setup/emissao-fiscal/empresa rejeita credenciais 
   }
 });
 
-test('HTTP POST: auth municipal exigida + flag credenciais on + sem credenciais → prefeitura_login_required_fallback_available', async () => {
+test('HTTP POST: auth municipal exigida + sem nacional + flag credenciais on + sem credenciais → prefeitura_login_required_fallback_available', async () => {
   const prevFlag = process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED;
   process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = 'true';
 
@@ -312,7 +313,7 @@ test('HTTP POST: auth municipal exigida + flag credenciais on + sem credenciais 
     upstreamCalls.push({ url: u, init });
     if (u.includes('/nfse/cidades/')) {
       return createJsonResponse(200, {
-        padraoNacional: { producao: true, homologacao: false },
+        padraoNacional: { producao: false, homologacao: false },
         login: { producao: true, homologacao: false },
         senha: { producao: false, homologacao: false }
       });
