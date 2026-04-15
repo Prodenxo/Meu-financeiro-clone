@@ -14,6 +14,12 @@ const createJsonResponse = (status, payload) => ({
   json: async () => payload
 });
 
+const createCidadePreflightResponse = () => createJsonResponse(200, {
+  padraoNacional: { producao: true, homologacao: false },
+  login: { producao: false, homologacao: false },
+  senha: { producao: false, homologacao: false }
+});
+
 test('isEmpresaCadastroPlugnotasPath reconhece POST e PATCH empresa', async () => {
   const { isEmpresaCadastroPlugnotasPath } = await import(
     '../src/services/plugnotas/plugnotas-empresa-cadastro-debug.js'
@@ -67,7 +73,12 @@ test('fora de produção, POST /empresa 400 loga JSON redigido sem CNPJ completo
     lines.push(a.map((x) => (typeof x === 'string' ? x : '')).join(' '));
   };
   const originalFetch = global.fetch;
-  global.fetch = async () => createJsonResponse(400, { message: 'Falha validação' });
+  global.fetch = async (url) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
+    return createJsonResponse(400, { message: 'Falha validação' });
+  };
 
   try {
     const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
@@ -76,7 +87,15 @@ test('fora de produção, POST /empresa 400 loga JSON redigido sem CNPJ completo
         cpfCnpj: '17422651000172',
         certificado: 'id-certificado-longo',
         razaoSocial: 'Empresa',
-        senha: 'nao-pode-vazar'
+        senha: 'nao-pode-vazar',
+        endereco: {
+          codigoCidade: '3550308',
+          estado: 'SP',
+          logradouro: 'Rua A',
+          numero: '1',
+          bairro: 'Centro',
+          cep: '01000000'
+        }
       }),
       (e) => e.status === 400
     );

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -53,6 +54,7 @@ import {
   type NfEmissionCompanyForm,
   type NfEmissionRegimeTributario
 } from '../utils/nfEmissionCompany';
+import { normalizeIbgeMunicipioCodigo } from '../utils/ibgeMunicipioCodigo';
 import {
   DEFAULT_DOCUMENTOS_ATIVOS,
   documentosAtivosDivergem,
@@ -62,6 +64,11 @@ import {
   mergeDocumentosAtivosPrecedence,
   type DocumentosAtivosState
 } from '../utils/plugnotasEmpresaDocumentosAtivos';
+import {
+  clearGuiaMeiEmpresaFase2FailFlag,
+  isGuiaMeiEmpresaFase2FailFlagActive,
+  setGuiaMeiEmpresaFase2FailFlag
+} from '../utils/guiaMeiEmpresaFase2FailFlag';
 import { fetchEmpresaJsonWithMeiCache, invalidateMeiEmpresaGetCache } from '../utils/guiaMeiEmpresaGetCache';
 import { isFetchConnectivityFailure } from '../utils/isFetchConnectivityFailure';
 import {
@@ -69,17 +76,50 @@ import {
   retryPlugnotasEmpresaRegistro,
   submitPlugnotasEmitenteSetup
 } from '../utils/plugnotasEmitenteSetup';
-import { getPlugnotasCodeFromUnknownError as getFiscalErrorCode } from '../utils/apiClientError';
-import { mapMeiFiscalErrorToCopy } from '../lib/fiscalUserError';
+import {
+  getApiErrorCodeFromUnknownError,
+  getHttpStatusFromUnknownError as getFiscalHttpStatus,
+  getPlugnotasCodeFromUnknownError as getFiscalErrorCode,
+  getPlugnotasRequestFromUnknownError as getFiscalRequestMeta,
+  getRuntimeDecisionFromUnknownError
+} from '../utils/apiClientError';
+import {
+  mapMeiGuideValidateErrorToUserMessage,
+  type MeiGuideValidateMappedError
+} from '../utils/mapMeiGuideValidateErrorToUserMessage';
+import {
+  formatMeiFiscalMappedForAlert,
+  mapMeiFiscalErrorToCopy,
+  resolveMeiFiscalScenario
+} from '../lib/fiscalUserError';
 import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import {
   getNfseNacionalOperacaoHelpHref,
-  isPlugnotasEmpresaMunicipalRequirementMessage
+  getPlugnotasEmpresaCadastroErrorUxVariant,
+  isPlugnotasEmpresaConsultNotFoundMessage,
+  isPlugnotasEmpresaMunicipalRequirementMessage,
+  MEI_IBGE_CIDADE_PRESTACAO_PRESTADOR_FIELD_HINT,
+  withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable
 } from '../utils/nfseNacionalPlugnotasErrorHints';
+import { resolvePlugnotasEmpresaCadastroSolUxState } from '../utils/plugnotasEmpresaCadastroSolUx';
+import {
+  PLUGNOTAS_P0_L1_ARIA_LABEL,
+  PLUGNOTAS_P0_L1_BODY_PARAS,
+  PLUGNOTAS_P0_L1_TITLE,
+  PLUGNOTAS_P0_L2_STATUS_MESSAGE,
+  readMeiPlugnotasEmpresaCadastroBlockedExternally,
+  resolvePlugnotasEmpresaP0Overlay
+} from '../utils/plugnotasEmpresaP0Overlay';
 import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
-import { PlugnotasMunicipalRequirementOperacaoBody } from '../components/PlugnotasMunicipalRequirementOperacaoCopy';
+import {
+  PlugnotasMunicipalRequirementOperacaoBody,
+  PlugnotasPrefeituraConfigNfseOperacaoBody,
+  PlugnotasPrefeituraConfigNfseOperacaoTitle,
+  PlugnotasPrefeituraLoginRequiredNfseOperacaoBody,
+  PlugnotasPrefeituraLoginRequiredNfseOperacaoTitle
+} from '../components/PlugnotasMunicipalRequirementOperacaoCopy';
 import { MeiLimiteFaturamentoBlock } from '../components/MeiLimiteFaturamentoBlock';
 import { MeiNfseCatalogManageActions } from '../components/MeiNfseCatalogManageActions';
 import { MeiNfseListRowActions } from '../components/MeiNfseListRowActions';
@@ -90,6 +130,7 @@ import {
   LongFiscalErrorMessage,
   PlugnotasIntegrationErrorAlert as FiscalProviderErrorAlert
 } from '../components/FiscalIntegrationErrorAlert';
+import { PlugnotasEmpresaCadastroSolContextPanel } from '../components/PlugnotasEmpresaCadastroSolContextPanel';
 import type { GuidesMeiWorkspace } from './guidesMeiWorkspaceStorage';
 import {
   MEI_WORKSPACE_STORAGE_KEY,
@@ -140,6 +181,12 @@ import { MeiCadastroRequisitosNfeNfcePlaceholder } from '../components/mei/MeiCa
 import { MeiNfeLikeEmitForm } from '../components/mei/MeiNfeLikeEmitForm';
 import { useMeiPlugnotasFiscalCapability } from '../hooks/useMeiPlugnotasFiscalCapability';
 import { isNfeLikeEmissionBlockedByCapabilities } from '../utils/plugnotasEmpresaCapabilities';
+import type { EmpresaCadastroRuntimeDecision } from '../types/empresaCadastroRuntimeDecision';
+import {
+  getPrefeituraPortalCredentialsValidationMessage,
+  isPrefeituraPortalCredentialsUiEnabled,
+  mergePrefeituraPortalCredentialsIntoEmpresaPayload
+} from '../utils/prefeituraPortalCredentialsUi';
 import {
   ARIA_LABEL_REGIAO_DIVERGENCIA_DOCUMENTOS_ATIVOS,
   CTA_ATUALIZAR_VISTA_DOCUMENTOS_ATIVOS,
@@ -160,14 +207,74 @@ import {
 function formatMeiFiscalErr(error: unknown, fallback: string): string {
   return formatFiscalError(
     error instanceof Error ? error.message : fallback,
-    getFiscalErrorCode(error)
+    getFiscalErrorCode(error),
+    getFiscalHttpStatus(error),
+    getFiscalRequestMeta(error)
   );
 }
 
-function nfseErrorSummaryLine(rawMessage: string, plugnotasCode: string | null): string {
-  const copy = mapMeiFiscalErrorToCopy({ rawMessage, plugnotasCode });
+function nfseErrorSummaryLine(
+  rawMessage: string,
+  plugnotasCode: string | null,
+  httpStatus: number | null,
+  plugnotasRequest: ReturnType<typeof getFiscalRequestMeta>
+): string {
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage, plugnotasCode, httpStatus, plugnotasRequest });
   const line = `${copy.title}: ${copy.description}`.replace(/\s+/g, ' ').trim();
   return line.length > 200 ? `${line.slice(0, 197)}…` : line;
+}
+
+type MeiFiscalUiErrorState = {
+  message: string;
+  rawMessage: string;
+  apiErrorCode: string | null;
+  plugnotasCode: string | null;
+  httpStatus: number | null;
+  plugnotasRequest: ReturnType<typeof getFiscalRequestMeta>;
+  runtimeDecision: EmpresaCadastroRuntimeDecision | null;
+};
+
+function createPlainMeiFiscalUiErrorState(message: string): MeiFiscalUiErrorState {
+  const normalized = String(message || '').trim();
+  return {
+    message: normalized,
+    rawMessage: normalized,
+    apiErrorCode: null,
+    plugnotasCode: null,
+    httpStatus: null,
+    plugnotasRequest: null,
+    runtimeDecision: null
+  };
+}
+
+function createMeiFiscalUiErrorState(
+  error: unknown,
+  fallback: string,
+  overrideMessage?: string
+): MeiFiscalUiErrorState {
+  const raw = error instanceof Error ? error.message : fallback;
+  const rawMessage = (raw || fallback).trim();
+  const plugnotasCode = getFiscalErrorCode(error);
+  const httpStatus = getFiscalHttpStatus(error);
+  const plugnotasRequest = getFiscalRequestMeta(error);
+  const runtimeDecision = getRuntimeDecisionFromUnknownError(error);
+  const mapped = mapMeiFiscalErrorToCopy({
+    rawMessage,
+    plugnotasCode,
+    httpStatus,
+    plugnotasRequest,
+    runtimeDecision
+  });
+
+  return {
+    message: overrideMessage?.trim() || formatMeiFiscalMappedForAlert(mapped),
+    rawMessage,
+    apiErrorCode: getApiErrorCodeFromUnknownError(error),
+    plugnotasCode,
+    httpStatus,
+    plugnotasRequest,
+    runtimeDecision
+  };
 }
 
 const buildFilenameFromCompetencia = (competencia: string | null) => {
@@ -218,7 +325,8 @@ const emitenteSnapshotToForm = (snap: NfseEmitenteSnapshot): NfEmissionCompanyFo
     ...getDefaultNfEmissionCompanyForm(),
     ...companyFields,
     regimeTributario: regime,
-    inscricaoMunicipal: String(companyFields.inscricaoMunicipal ?? '').trim()
+    inscricaoMunicipal: String(companyFields.inscricaoMunicipal ?? '').trim(),
+    codigoCidade: normalizeIbgeMunicipioCodigo(companyFields.codigoCidade)
   };
 };
 
@@ -560,6 +668,8 @@ function MeiNfseAjudaFiscalCollapsible(props: {
 }
 
 export default function GuidesMei() {
+  const meiGuideValidateConsCTitleId = useId();
+  const prefeituraPortalCredentialsTitleId = useId();
   const { role, mei, userId } = useAuthStore();
   const canViewNfse = role === 'superadmin'
     || role === 'admin'
@@ -575,6 +685,7 @@ export default function GuidesMei() {
   const [periodError, setPeriodError] = useState<string | null>(null);
   const [certificateError, setCertificateError] = useState<string | null>(null);
   const [certificateErrorFiscalCode, setCertificateErrorFiscalCode] = useState<string | null>(null);
+  const [certificateErrorHttpStatus, setCertificateErrorHttpStatus] = useState<number | null>(null);
   const [certificateConnectivityAlert, setCertificateConnectivityAlert] = useState(false);
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [certificatePassword, setCertificatePassword] = useState('');
@@ -585,9 +696,24 @@ export default function GuidesMei() {
   const [plugnotasPendingRetry, setPlugnotasPendingRetry] = useState<{
     certificadoId: string;
     cnpj: string;
+    /** FR-ALNFB — segundo passo municipal (credenciais portal). */
+    retryKind?: 'municipal';
   } | null>(null);
+  /** Credenciais do portal — apenas memória de sessão (NFR-ALNFB-01). */
+  const [prefeituraPortalLogin, setPrefeituraPortalLogin] = useState('');
+  const [prefeituraPortalSenha, setPrefeituraPortalSenha] = useState('');
   const [plugnotasEmpresaRetryDetail, setPlugnotasEmpresaRetryDetail] = useState<string | null>(null);
+  const [plugnotasEmpresaRetryMeta, setPlugnotasEmpresaRetryMeta] = useState<MeiFiscalUiErrorState | null>(null);
+  /** FR-SOL: alimenta `lastPostEmpresaPhase2Ok` no resolver (true = POST empresa concluiu; false = falha com retry; null = desconhecido). */
+  const [plugnotasEmpresaFase2PostOk, setPlugnotasEmpresaFase2PostOk] = useState<boolean | null>(null);
+  /** FR-SOL-P1 follow-up QA: força re-leitura do sessionStorage (TTL) sem depender só de outras interacções. */
+  const [solFase2SessionFlagRevalidateTick, setSolFase2SessionFlagRevalidateTick] = useState(0);
   const [empresaRegistroRetryBusy, setEmpresaRegistroRetryBusy] = useState(false);
+  /** P0-L1: utilizador fechou o bloco «impossibilidade» (região abaixo de PREF/SOL no painel âmbar). */
+  const [plugnotasP0L1ImposibilidadeDismissed, setPlugnotasP0L1ImposibilidadeDismissed] = useState(false);
+  /** P0-L2: `role="status"` sucinto, uma transição para sucesso de fase (sem spam em poll). */
+  const [plugnotasP0L2PhaseSuccessVisible, setPlugnotasP0L2PhaseSuccessVisible] = useState(false);
+  const plugnotasP0OverlayPrevKindRef = useRef<string>('');
   const plugnotasEmpresaRetryRef = useRef<HTMLDivElement>(null);
   const [isRemovingCert, setIsRemovingCert] = useState(false);
   const [hasUserCertificate, setHasUserCertificate] = useState(false);
@@ -595,7 +721,7 @@ export default function GuidesMei() {
   const [certValidFrom, setCertValidFrom] = useState<string | null>(null);
   const [certValidTo, setCertValidTo] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<MeiGuideValidateMappedError | null>(null);
   const [validationSuccess, setValidationSuccess] = useState<string | null>(null);
   const [isDownloadingGuide, setIsDownloadingGuide] = useState(false);
 
@@ -668,6 +794,8 @@ export default function GuidesMei() {
   const [nfseError, setNfseError] = useState<{
     rawMessage: string;
     plugnotasCode: string | null;
+    httpStatus: number | null;
+    plugnotasRequest: ReturnType<typeof getFiscalRequestMeta>;
   } | null>(null);
   const [nfseErrorKind, setNfseErrorKind] = useState<'emission' | 'operation' | null>(null);
   const [nfseSuccess, setNfseSuccess] = useState<string | null>(null);
@@ -686,13 +814,23 @@ export default function GuidesMei() {
 
   const setEmissionNfseError = useCallback((error: unknown, fallback: string) => {
     const raw = error instanceof Error ? error.message : fallback;
-    setNfseError({ rawMessage: (raw || fallback).trim(), plugnotasCode: getFiscalErrorCode(error) });
+    setNfseError({
+      rawMessage: (raw || fallback).trim(),
+      plugnotasCode: getFiscalErrorCode(error),
+      httpStatus: getFiscalHttpStatus(error),
+      plugnotasRequest: getFiscalRequestMeta(error)
+    });
     setNfseErrorKind('emission');
   }, []);
 
   const setOperationNfseError = useCallback((error: unknown, fallback: string) => {
     const raw = error instanceof Error ? error.message : fallback;
-    setNfseError({ rawMessage: (raw || fallback).trim(), plugnotasCode: getFiscalErrorCode(error) });
+    setNfseError({
+      rawMessage: (raw || fallback).trim(),
+      plugnotasCode: getFiscalErrorCode(error),
+      httpStatus: getFiscalHttpStatus(error),
+      plugnotasRequest: getFiscalRequestMeta(error)
+    });
     setNfseErrorKind('operation');
   }, []);
   const [nfseCatalogLoading, setNfseCatalogLoading] = useState(false);
@@ -726,8 +864,11 @@ export default function GuidesMei() {
   /** Deteta troca para o separador NFS-e e dispara refetch do catálogo (CAT-MEI-05 / FR-CAT-07). */
   const prevMeiWorkspaceRef = useRef<GuidesMeiWorkspace | null>(null);
   const [nfEmissionCompanySyncLoading, setNfEmissionCompanySyncLoading] = useState<'consult' | 'patch' | null>(null);
-  const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<string | null>(null);
+  const [nfEmissionCompanySyncError, setNfEmissionCompanySyncError] = useState<MeiFiscalUiErrorState | null>(null);
   const [nfEmissionCompanySyncSuccess, setNfEmissionCompanySyncSuccess] = useState<string | null>(null);
+  const clearNfEmissionCompanySyncErrorState = useCallback(() => {
+    setNfEmissionCompanySyncError(null);
+  }, []);
   const [documentosAtivos, setDocumentosAtivos] = useState<DocumentosAtivosState>(() => ({
     ...DEFAULT_DOCUMENTOS_ATIVOS
   }));
@@ -748,6 +889,8 @@ export default function GuidesMei() {
   const documentosAtivosUserEditedRef = useRef(false);
   const [nfseDesativarDialogOpen, setNfseDesativarDialogOpen] = useState(false);
   const documentosAtivosNfseCheckboxRef = useRef<HTMLInputElement>(null);
+  const prefeituraPortalLoginInputRef = useRef<HTMLInputElement>(null);
+  const prefeituraPortalSenhaInputRef = useRef<HTMLInputElement>(null);
   const [brasilApiLoading, setBrasilApiLoading] = useState(false);
   const [brasilApiError, setBrasilApiError] = useState<string | null>(null);
   const [nfsePrestadorBrasilApiLoading, setNfsePrestadorBrasilApiLoading] = useState(false);
@@ -887,10 +1030,65 @@ export default function GuidesMei() {
     [canViewNfse, normalizedContribuinte]
   );
 
+  const meiPlugnotasEmpresaBlockedExternally = useMemo(
+    () => readMeiPlugnotasEmpresaCadastroBlockedExternally(),
+    []
+  );
+
+  const plugnotasRetryScenario = useMemo(() => {
+    if (!plugnotasEmpresaRetryMeta) return null;
+    return resolveMeiFiscalScenario({
+      rawMessage: plugnotasEmpresaRetryMeta.rawMessage,
+      plugnotasCode: plugnotasEmpresaRetryMeta.plugnotasCode,
+      httpStatus: plugnotasEmpresaRetryMeta.httpStatus,
+      plugnotasRequest: plugnotasEmpresaRetryMeta.plugnotasRequest,
+      runtimeDecision: plugnotasEmpresaRetryMeta.runtimeDecision
+    });
+  }, [plugnotasEmpresaRetryMeta]);
+
+  const showPrefeituraPortalCredentialsBlock = useMemo(
+    () =>
+      Boolean(
+        canViewNfse
+        && documentosAtivos.nfse
+        && plugnotasPendingRetry?.retryKind === 'municipal'
+        && isPrefeituraPortalCredentialsUiEnabled()
+        && !meiPlugnotasEmpresaBlockedExternally
+      ),
+    [
+      canViewNfse,
+      documentosAtivos.nfse,
+      plugnotasPendingRetry?.retryKind,
+      meiPlugnotasEmpresaBlockedExternally
+    ]
+  );
+
+  const prefeituraPortalCredValidationMessage = useMemo(
+    () => getPrefeituraPortalCredentialsValidationMessage(prefeituraPortalLogin, prefeituraPortalSenha),
+    [prefeituraPortalLogin, prefeituraPortalSenha]
+  );
+
+  const plugnotasRetryBlockedByScenario = useMemo(
+    () =>
+      plugnotasRetryScenario === 'prefeitura_login_required_blocked'
+      || plugnotasRetryScenario === 'prefeitura_ibge_apenas_insuficiente_dp02',
+    [plugnotasRetryScenario]
+  );
+
+  const plugnotasRetryActionAvailable = useMemo(
+    () =>
+      Boolean(plugnotasPendingRetry)
+      && !meiPlugnotasEmpresaBlockedExternally
+      && !plugnotasRetryBlockedByScenario,
+    [plugnotasPendingRetry, meiPlugnotasEmpresaBlockedExternally, plugnotasRetryBlockedByScenario]
+  );
+
   const plugnotasPrimaryActionEnabled = useMemo(() => {
     if (isUploadingCert || empresaRegistroRetryBusy) return false;
     if (plugnotasPendingRetry) {
-      return nfEmissionFormAndDocsOkForPlugnotas && plugnotasCnpjOkForSubmit;
+      if (!plugnotasRetryActionAvailable) return false;
+      if (!nfEmissionFormAndDocsOkForPlugnotas || !plugnotasCnpjOkForSubmit) return false;
+      return true;
     }
     if (!certificateFile || !certificatePassword.trim()) return false;
     if (canViewNfse) {
@@ -905,16 +1103,27 @@ export default function GuidesMei() {
     certificatePassword,
     canViewNfse,
     nfEmissionFormAndDocsOkForPlugnotas,
-    plugnotasCnpjOkForSubmit
+    plugnotasCnpjOkForSubmit,
+    plugnotasRetryActionAvailable,
+    showPrefeituraPortalCredentialsBlock
   ]);
 
   const plugnotasPrimaryDisabledHint = useMemo(() => {
     if (plugnotasPrimaryActionEnabled || isUploadingCert || empresaRegistroRetryBusy) return null;
     if (plugnotasPendingRetry) {
+      if (plugnotasRetryBlockedByScenario) {
+        return 'Neste cenário o cadastro automático pelo site não está disponível. Revise os dados do emitente e siga o guia de operação fiscal antes de tentar novamente.';
+      }
+      if (meiPlugnotasEmpresaBlockedExternally) {
+        return 'Neste cenário o cadastro automático pelo site não está disponível. Use o guia de operação fiscal ou o suporte do emissor antes de insistir no envio.';
+      }
       const c = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
       if (c) return c;
       const d = getDocumentosAtivosValidationMessage(documentosAtivos);
       if (d) return d;
+      if (showPrefeituraPortalCredentialsBlock && prefeituraPortalCredValidationMessage) {
+        return prefeituraPortalCredValidationMessage;
+      }
       if (!plugnotasCnpjOkForSubmit) {
         return 'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI.';
       }
@@ -937,13 +1146,17 @@ export default function GuidesMei() {
     plugnotasPrimaryActionEnabled,
     isUploadingCert,
     empresaRegistroRetryBusy,
+    meiPlugnotasEmpresaBlockedExternally,
     plugnotasPendingRetry,
+    plugnotasRetryBlockedByScenario,
     certificateFile,
     certificatePassword,
     canViewNfse,
     nfEmissionCompanyForm,
     documentosAtivos,
-    plugnotasCnpjOkForSubmit
+    plugnotasCnpjOkForSubmit,
+    showPrefeituraPortalCredentialsBlock,
+    prefeituraPortalCredValidationMessage
   ]);
 
   const applyDocumento = useCallback((documento?: string | null, force = false) => {
@@ -1026,6 +1239,9 @@ export default function GuidesMei() {
 
             if (!getFailed && usedJson !== undefined) {
               remoteSel = extractDocumentosAtivosFromEmpresaResponse(usedJson);
+              if (remoteSel !== null && cnpjResolved.length === 14) {
+                clearGuiaMeiEmpresaFase2FailFlag(userId, cnpjResolved);
+              }
             } else if (getFailed && firstHydration) {
               setDocumentosAtivosHydrationError(MSG_DOCUMENTOS_ATIVOS_GET_EMPRESA_HIDRATACAO_FALHOU);
             }
@@ -1172,6 +1388,8 @@ export default function GuidesMei() {
     const returnedCnpj = normalizeDoc(String(companyResponse.cnpj || cnpj));
     const formattedCnpj = formatDocument(returnedCnpj || cnpj);
     invalidateMeiEmpresaGetCache(userId, returnedCnpj || cnpj);
+    clearGuiaMeiEmpresaFase2FailFlag(userId, returnedCnpj || cnpj);
+    clearNfEmissionCompanySyncErrorState();
     setContribuinteDoc(formattedCnpj);
     updateNfseForm({
       prestadorCpfCnpj: formattedCnpj,
@@ -1199,21 +1417,34 @@ export default function GuidesMei() {
     setCertificatePassword('');
     setPlugnotasPendingRetry(null);
     setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasEmpresaRetryMeta(null);
+    setPrefeituraPortalLogin('');
+    setPrefeituraPortalSenha('');
+    setPlugnotasEmpresaFase2PostOk(true);
+    const operation = companyResponse.operation || null;
     const primary = opts.isRetryOnly
-      ? 'Dados do emitente foram registrados no serviço de emissão fiscal com sucesso.'
+      ? operation === 'updated' || operation === 'existing'
+        ? 'Dados do emitente foram sincronizados com sucesso no emissor fiscal.'
+        : 'Dados do emitente foram registrados no serviço de emissão fiscal com sucesso.'
       : opts.certificateRecoveredFrom409
-        ? 'Seu certificado já estava no emissor; os dados do emitente foram registrados.'
-        : 'Certificado e dados do emitente foram enviados ao serviço de emissão.';
+        ? operation === 'updated' || operation === 'existing'
+          ? 'Seu certificado já estava no emissor; os dados do emitente foram sincronizados.'
+          : 'Seu certificado já estava no emissor; os dados do emitente foram registrados.'
+        : operation === 'updated' || operation === 'existing'
+          ? 'Cadastro da empresa localizado no emissor; os dados do emitente foram sincronizados.'
+          : 'Certificado e dados do emitente foram enviados ao serviço de emissão.';
     setCertificateSuccess({
       primary,
       secondary: canViewNfse ? MSG_SUCESSO_PATCH_DOCUMENTOS_ATIVOS_EMISSOR : undefined
     });
-  }, [userId, nfEmissionCompanyForm, updateNfseForm, canViewNfse]);
+  }, [userId, nfEmissionCompanyForm, updateNfseForm, canViewNfse, clearNfEmissionCompanySyncErrorState]);
 
   const handleRetryPlugnotasEmpresaRegistro = useCallback(async () => {
-    if (!plugnotasPendingRetry) return;
+    if (!plugnotasPendingRetry || !plugnotasRetryActionAvailable) return;
     const companyValidationMessage = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
     if (companyValidationMessage) {
+      setCertificateErrorFiscalCode(null);
+      setCertificateErrorHttpStatus(null);
       setCertificateError(companyValidationMessage);
       return;
     }
@@ -1225,16 +1456,51 @@ export default function GuidesMei() {
     }
     setCertificateError(null);
     setCertificateErrorFiscalCode(null);
+    setCertificateErrorHttpStatus(null);
     setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasEmpresaRetryMeta(null);
     setEmpresaRegistroRetryBusy(true);
     setPlugnotasSubmitPhase('empresa');
     try {
-      const companyPayload = buildNfEmissionEmpresaPayload({
+      if (
+        plugnotasPendingRetry.retryKind === 'municipal'
+        && isPrefeituraPortalCredentialsUiEnabled()
+      ) {
+        const credMsg = getPrefeituraPortalCredentialsValidationMessage(
+          prefeituraPortalLogin,
+          prefeituraPortalSenha
+        );
+        if (credMsg) {
+          setEmpresaRegistroRetryBusy(false);
+          setPlugnotasSubmitPhase('idle');
+          queueMicrotask(() => {
+            const lt = prefeituraPortalLogin.trim();
+            const st = prefeituraPortalSenha.trim();
+            if (!lt) {
+              prefeituraPortalLoginInputRef.current?.focus();
+            } else if (!st) {
+              prefeituraPortalSenhaInputRef.current?.focus();
+            }
+          });
+          return;
+        }
+      }
+      let companyPayload: Record<string, unknown> = buildNfEmissionEmpresaPayload({
         cnpj: plugnotasPendingRetry.cnpj,
         certificadoId: plugnotasPendingRetry.certificadoId,
         form: nfEmissionCompanyForm,
         documentosAtivos
       });
+      if (
+        plugnotasPendingRetry.retryKind === 'municipal'
+        && isPrefeituraPortalCredentialsUiEnabled()
+      ) {
+        companyPayload = mergePrefeituraPortalCredentialsIntoEmpresaPayload(companyPayload, {
+          login: prefeituraPortalLogin,
+          senha: prefeituraPortalSenha,
+          codigoIbgeDigits: nfEmissionCompanyForm.codigoCidade
+        });
+      }
       const companyResponse = await retryPlugnotasEmpresaRegistro(companyPayload);
       finalizePlugnotasEmpresaCadastroSuccess(companyResponse, plugnotasPendingRetry.cnpj, {
         certificateRecoveredFrom409: false,
@@ -1244,10 +1510,13 @@ export default function GuidesMei() {
       if (isFetchConnectivityFailure(error)) {
         setCertificateConnectivityAlert(true);
         setPlugnotasPendingRetry(null);
+        setPlugnotasEmpresaRetryMeta(null);
+        setPlugnotasEmpresaFase2PostOk(null);
       } else {
-        const rawMessage = error instanceof Error ? error.message : 'Erro ao registrar empresa.';
-        const fiscalCode = getFiscalErrorCode(error);
-        setPlugnotasEmpresaRetryDetail(formatFiscalError(rawMessage, fiscalCode));
+        const retryError = createMeiFiscalUiErrorState(error, 'Erro ao registrar empresa.');
+        setPlugnotasEmpresaRetryDetail(retryError.message);
+        setPlugnotasEmpresaRetryMeta(retryError);
+        setGuiaMeiEmpresaFase2FailFlag(userId, plugnotasPendingRetry.cnpj);
       }
     } finally {
       setEmpresaRegistroRetryBusy(false);
@@ -1262,9 +1531,22 @@ export default function GuidesMei() {
     plugnotasPendingRetry,
     nfEmissionCompanyForm,
     documentosAtivos,
+    prefeituraPortalLogin,
+    prefeituraPortalSenha,
     finalizePlugnotasEmpresaCadastroSuccess,
-    loadCertificateStatus
+    loadCertificateStatus,
+    userId,
+    plugnotasRetryActionAvailable
   ]);
+
+  const handlePrefeituraPortalVoltar = useCallback(() => {
+    setPlugnotasPendingRetry(null);
+    setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasEmpresaRetryMeta(null);
+    setPrefeituraPortalLogin('');
+    setPrefeituraPortalSenha('');
+    setPlugnotasEmpresaFase2PostOk(null);
+  }, []);
 
   const updateNfseServico = (updates: Partial<EmitirNfseInput['servico']>) => {
     setNfseForm((current) => ({
@@ -1324,6 +1606,11 @@ export default function GuidesMei() {
   useEffect(() => {
     setDocumentosAtivosSubmitError(null);
   }, [documentosAtivos]);
+
+  useEffect(() => {
+    setPrefeituraPortalLogin('');
+    setPrefeituraPortalSenha('');
+  }, [nfEmissionCompanyForm.codigoCidade, documentosAtivos.nfse]);
 
   const handleSelectCatalogCliente = (id: string) => {
     setSelectedCatalogClienteId(id);
@@ -1545,6 +1832,7 @@ export default function GuidesMei() {
     if (!certificateFile) {
       setCertificateConnectivityAlert(false);
       setCertificateErrorFiscalCode(null);
+      setCertificateErrorHttpStatus(null);
       setCertificateError('Selecione o arquivo do certificado.');
       return;
     }
@@ -1552,6 +1840,7 @@ export default function GuidesMei() {
     if (!trimmedPassword) {
       setCertificateConnectivityAlert(false);
       setCertificateErrorFiscalCode(null);
+      setCertificateErrorHttpStatus(null);
       setCertificateError('Informe a senha do certificado.');
       return;
     }
@@ -1560,6 +1849,7 @@ export default function GuidesMei() {
       if (companyValidationMessage) {
         setCertificateConnectivityAlert(false);
         setCertificateErrorFiscalCode(null);
+        setCertificateErrorHttpStatus(null);
         setCertificateError(companyValidationMessage);
         return;
       }
@@ -1567,6 +1857,7 @@ export default function GuidesMei() {
       if (docMsg) {
         setCertificateConnectivityAlert(false);
         setCertificateErrorFiscalCode(null);
+        setCertificateErrorHttpStatus(null);
         setDocumentosAtivosSubmitError(docMsg);
         documentosAtivosNfseCheckboxRef.current?.focus();
         return;
@@ -1575,11 +1866,14 @@ export default function GuidesMei() {
 
     setCertificateError(null);
     setCertificateErrorFiscalCode(null);
+    setCertificateErrorHttpStatus(null);
     setDocumentosAtivosSubmitError(null);
     setCertificateConnectivityAlert(false);
     setCertificateSuccess(null);
     setPlugnotasPendingRetry(null);
     setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasEmpresaRetryMeta(null);
+    setPlugnotasEmpresaFase2PostOk(null);
     setPlugnotasSubmitPhase('idle');
     setIsUploadingCert(true);
     let uploadedToMei = false;
@@ -1650,39 +1944,64 @@ export default function GuidesMei() {
           setCertificateConnectivityAlert(true);
           setCertificateError(null);
           setCertificateErrorFiscalCode(null);
+          setCertificateErrorHttpStatus(null);
           setPlugnotasPendingRetry(null);
           setPlugnotasEmpresaRetryDetail(null);
+          setPlugnotasEmpresaRetryMeta(null);
+          setPlugnotasEmpresaFase2PostOk(null);
         } else {
+          const retryError = createMeiFiscalUiErrorState(cause, 'Erro ao registrar empresa.');
           setCertificateConnectivityAlert(false);
           setCertificateError(null);
           setCertificateErrorFiscalCode(null);
-          const rawMessage = cause instanceof Error ? cause.message : 'Erro ao registrar empresa.';
-          const fiscalCode = getFiscalErrorCode(cause);
-          setPlugnotasEmpresaRetryDetail(formatFiscalError(rawMessage, fiscalCode));
+          setCertificateErrorHttpStatus(null);
+          setPlugnotasEmpresaRetryDetail(retryError.message);
+          setPlugnotasEmpresaRetryMeta(retryError);
           const retryCnpj = normalizeDoc(String(error.cnpj || cnpjForFiscal || ''));
           const retryCert = String(error.certificadoId || '').trim();
+          const retryScenario = resolveMeiFiscalScenario({
+            rawMessage: retryError.rawMessage,
+            plugnotasCode: retryError.plugnotasCode,
+            httpStatus: retryError.httpStatus,
+            plugnotasRequest: retryError.plugnotasRequest,
+            runtimeDecision: retryError.runtimeDecision
+          });
+          const municipalFallback =
+            retryScenario === 'prefeitura_login_required_fallback_available'
+            && isPrefeituraPortalCredentialsUiEnabled();
           if (retryCert && retryCnpj.length === 14) {
-            setPlugnotasPendingRetry({ certificadoId: retryCert, cnpj: retryCnpj });
+            setPlugnotasEmpresaFase2PostOk(false);
+            setGuiaMeiEmpresaFase2FailFlag(userId, retryCnpj);
+            setPrefeituraPortalLogin('');
+            setPrefeituraPortalSenha('');
+            setPlugnotasPendingRetry({
+              certificadoId: retryCert,
+              cnpj: retryCnpj,
+              ...(municipalFallback ? { retryKind: 'municipal' as const } : {})
+            });
           } else {
             setPlugnotasPendingRetry(null);
+            setPlugnotasEmpresaFase2PostOk(null);
           }
         }
       } else if (isFetchConnectivityFailure(error)) {
         setCertificateConnectivityAlert(true);
         setCertificateError(null);
         setCertificateErrorFiscalCode(null);
+        setCertificateErrorHttpStatus(null);
       } else if (isPlugnotasEmitenteSetupError(error) && error.phase === 'certificado') {
         const src = error.cause ?? error;
         if (isFetchConnectivityFailure(src)) {
           setCertificateConnectivityAlert(true);
           setCertificateError(null);
           setCertificateErrorFiscalCode(null);
+          setCertificateErrorHttpStatus(null);
         } else {
           setCertificateConnectivityAlert(false);
-          const rawMessage = src instanceof Error ? src.message : 'Erro ao enviar certificado.';
           const fiscalCode = getFiscalErrorCode(src);
-          const fallbackMessage = formatFiscalError(rawMessage, fiscalCode);
+          const fallbackMessage = formatMeiFiscalErr(src, 'Erro ao enviar certificado.');
           setCertificateErrorFiscalCode(fiscalCode);
+          setCertificateErrorHttpStatus(getFiscalHttpStatus(src));
           setCertificateError(
             uploadedToMei
               ? `Certificado enviado no MEI, mas falhou a configuração automática da integração fiscal: ${fallbackMessage}`
@@ -1691,10 +2010,10 @@ export default function GuidesMei() {
         }
       } else {
         setCertificateConnectivityAlert(false);
-        const rawMessage = error instanceof Error ? error.message : 'Erro ao enviar certificado.';
         const fiscalCode = getFiscalErrorCode(error);
-        const fallbackMessage = formatFiscalError(rawMessage, fiscalCode);
+        const fallbackMessage = formatMeiFiscalErr(error, 'Erro ao enviar certificado.');
         setCertificateErrorFiscalCode(fiscalCode);
+        setCertificateErrorHttpStatus(getFiscalHttpStatus(error));
         setCertificateError(
           uploadedToMei
             ? `Certificado enviado no MEI, mas falhou a configuração automática da integração fiscal: ${fallbackMessage}`
@@ -1723,14 +2042,16 @@ export default function GuidesMei() {
   }, [contribuinteDoc, nfseForm.prestadorCpfCnpj]);
 
   const handleConsultarCadastroEmissor = async () => {
-    setNfEmissionCompanySyncError(null);
+    clearNfEmissionCompanySyncErrorState();
     setNfEmissionCompanySyncSuccess(null);
     setDocumentosAtivosConsultWarning(null);
     setDocumentosAtivosHydrationError(null);
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
       setNfEmissionCompanySyncError(
-        'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
+        createPlainMeiFiscalUiErrorState(
+          'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
+        )
       );
       return;
     }
@@ -1754,6 +2075,7 @@ export default function GuidesMei() {
       if (canViewNfse) {
         const mapped = mapPlugnotasEmpresaToDocumentSelection(data);
         if (mapped.kind === 'full') {
+          clearGuiaMeiEmpresaFase2FailFlag(userId, cnpj);
           documentosAtivosRemoteOrMirrorHydratedRef.current = true;
           setDocumentosAtivosRemoteSnapshot(mapped.selection);
           setDocumentosAtivos(mapped.selection);
@@ -1768,8 +2090,21 @@ export default function GuidesMei() {
         }
       }
     } catch (error) {
+      const mappedError = createMeiFiscalUiErrorState(
+        error,
+        'Falha ao consultar cadastro no serviço de emissão fiscal.'
+      );
+      const sessionPostFailedFlag =
+        cnpj.length === 14 && isGuiaMeiEmpresaFase2FailFlagActive(userId, cnpj);
       setNfEmissionCompanySyncError(
-        formatMeiFiscalErr(error, 'Falha ao consultar cadastro no serviço de emissão fiscal.')
+        createMeiFiscalUiErrorState(
+          error,
+          'Falha ao consultar cadastro no serviço de emissão fiscal.',
+          withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(mappedError.message, {
+            pendingRetryPanel: Boolean(plugnotasPendingRetry),
+            sessionPostFailedFlag
+          })
+        )
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -1777,12 +2112,12 @@ export default function GuidesMei() {
   };
 
   const handleAtualizarCadastroSemNovoCertificado = async () => {
-    setNfEmissionCompanySyncError(null);
+    clearNfEmissionCompanySyncErrorState();
     setNfEmissionCompanySyncSuccess(null);
     setDocumentosAtivosSubmitError(null);
     const companyValidationMessage = getNfEmissionCompanyValidationMessage(nfEmissionCompanyForm);
     if (companyValidationMessage) {
-      setNfEmissionCompanySyncError(companyValidationMessage);
+      setNfEmissionCompanySyncError(createPlainMeiFiscalUiErrorState(companyValidationMessage));
       return;
     }
     const docMsg = getDocumentosAtivosValidationMessage(documentosAtivos);
@@ -1794,7 +2129,9 @@ export default function GuidesMei() {
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
       setNfEmissionCompanySyncError(
-        'CNPJ de 14 dígitos é obrigatório (campo CNPJ do MEI ou prestador na NFSe).'
+        createPlainMeiFiscalUiErrorState(
+          'CNPJ de 14 dígitos é obrigatório (campo CNPJ do MEI ou prestador na NFSe).'
+        )
       );
       return;
     }
@@ -1807,6 +2144,7 @@ export default function GuidesMei() {
         documentosAtivos
       });
       const companyResponse = await atualizarEmpresaEmissaoNf(companyPayload);
+      clearGuiaMeiEmpresaFase2FailFlag(userId, cnpj);
       let updatedStatus;
       try {
         updatedStatus = await patchMeiCertificateEmitenteNfse(
@@ -1815,7 +2153,9 @@ export default function GuidesMei() {
       } catch (persistErr) {
         const msg = persistErr instanceof Error ? persistErr.message : String(persistErr);
         setNfEmissionCompanySyncError(
-          `Empresa atualizada no emissor fiscal, mas os dados não foram gravados nesta aplicação: ${msg}`
+          createPlainMeiFiscalUiErrorState(
+            `Empresa atualizada no emissor fiscal, mas os dados não foram gravados nesta aplicação: ${msg}`
+          )
         );
         return;
       }
@@ -1841,7 +2181,7 @@ export default function GuidesMei() {
       }
     } catch (error) {
       setNfEmissionCompanySyncError(
-        formatMeiFiscalErr(error, 'Falha ao atualizar empresa no serviço de emissão fiscal.')
+        createMeiFiscalUiErrorState(error, 'Falha ao atualizar empresa no serviço de emissão fiscal.')
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
@@ -1859,11 +2199,13 @@ export default function GuidesMei() {
     const cnpj = resolveCnpjParaEmissor();
     if (cnpj.length !== 14) {
       setNfEmissionCompanySyncError(
-        'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
+        createPlainMeiFiscalUiErrorState(
+          'Informe um CNPJ válido (14 dígitos) no campo CNPJ do MEI ou no prestador da NFSe.'
+        )
       );
       return;
     }
-    setNfEmissionCompanySyncError(null);
+    clearNfEmissionCompanySyncErrorState();
     setNfEmissionCompanySyncLoading('consult');
     try {
       invalidateMeiEmpresaGetCache(userId, cnpj);
@@ -1874,16 +2216,26 @@ export default function GuidesMei() {
       });
       await loadCertificateStatus();
     } catch (error) {
+      const mappedError = createMeiFiscalUiErrorState(error, 'Falha ao sincronizar com o emissor fiscal.');
+      const sessionPostFailedFlag =
+        cnpj.length === 14 && isGuiaMeiEmpresaFase2FailFlagActive(userId, cnpj);
       setNfEmissionCompanySyncError(
-        formatMeiFiscalErr(error, 'Falha ao sincronizar com o emissor fiscal.')
+        createMeiFiscalUiErrorState(
+          error,
+          'Falha ao sincronizar com o emissor fiscal.',
+          withPlugnotasEmpresaConsultPendingCadastroPrefixIfApplicable(mappedError.message, {
+            pendingRetryPanel: Boolean(plugnotasPendingRetry),
+            sessionPostFailedFlag
+          })
+        )
       );
     } finally {
       setNfEmissionCompanySyncLoading(null);
     }
-  }, [userId, loadCertificateStatus, resolveCnpjParaEmissor]);
+  }, [userId, loadCertificateStatus, resolveCnpjParaEmissor, plugnotasPendingRetry, clearNfEmissionCompanySyncErrorState]);
 
   const handleSalvarDadosEmitente = async () => {
-    setNfEmissionCompanySyncError(null);
+    clearNfEmissionCompanySyncErrorState();
     setNfEmissionCompanySyncSuccess(null);
     setNfEmissionCompanySyncLoading('patch');
     try {
@@ -1896,19 +2248,28 @@ export default function GuidesMei() {
       }
       setNfEmissionCompanySyncSuccess('Dados do emitente salvos com sucesso.');
     } catch (error) {
-      setNfEmissionCompanySyncError(formatMeiFiscalErr(error, 'Falha ao salvar dados do emitente.'));
+      setNfEmissionCompanySyncError(
+        createMeiFiscalUiErrorState(error, 'Falha ao salvar dados do emitente.')
+      );
     } finally {
       setNfEmissionCompanySyncLoading(null);
     }
   };
 
   const handleCertificateRemove = async () => {
+    const cnpjBeforeRemove = normalizeDoc(contribuinteDoc);
+    if (cnpjBeforeRemove.length === 14) {
+      clearGuiaMeiEmpresaFase2FailFlag(userId, cnpjBeforeRemove);
+    }
     setCertificateError(null);
     setCertificateErrorFiscalCode(null);
+    setCertificateErrorHttpStatus(null);
     setCertificateConnectivityAlert(false);
     setCertificateSuccess(null);
     setPlugnotasPendingRetry(null);
     setPlugnotasEmpresaRetryDetail(null);
+    setPlugnotasEmpresaRetryMeta(null);
+    setPlugnotasEmpresaFase2PostOk(null);
     setPlugnotasSubmitPhase('idle');
     setIsRemovingCert(true);
     try {
@@ -1936,9 +2297,11 @@ export default function GuidesMei() {
         setCertificateConnectivityAlert(true);
         setCertificateError(null);
         setCertificateErrorFiscalCode(null);
+        setCertificateErrorHttpStatus(null);
       } else {
         setCertificateConnectivityAlert(false);
         setCertificateErrorFiscalCode(null);
+        setCertificateErrorHttpStatus(getFiscalHttpStatus(error));
         setCertificateError(formatMeiFiscalErr(error, 'Erro ao remover certificado.'));
       }
     } finally {
@@ -1955,7 +2318,7 @@ export default function GuidesMei() {
       return;
     }
     if (normalizedContribuinte.length !== 14) {
-      setValidationError('CNPJ do MEI deve ter 14 dígitos.');
+      setValidationError({ variant: 'plain', message: 'CNPJ do MEI deve ter 14 dígitos.' });
       return;
     }
 
@@ -1968,7 +2331,7 @@ export default function GuidesMei() {
         : 'CNPJ validado com sucesso.';
       setValidationSuccess(result?.message || fallbackMessage);
     } catch (error) {
-      setValidationError(error instanceof Error ? error.message : 'Erro ao validar CNPJ.');
+      setValidationError(mapMeiGuideValidateErrorToUserMessage(error));
     } finally {
       setIsValidating(false);
     }
@@ -1996,7 +2359,7 @@ export default function GuidesMei() {
       bairro: data.bairro ?? '',
       cep: (data.cep ?? '').replace('-', ''),
       descricaoCidade: data.municipio ?? '',
-      codigoCidade: data.codigo_municipio ?? '',
+      codigoCidade: normalizeIbgeMunicipioCodigo(data.codigo_municipio ?? ''),
       estado: data.uf ?? '',
       simplesNacional: data.simples?.optante_simples_nacional ?? prev.simplesNacional,
     }));
@@ -2044,7 +2407,7 @@ export default function GuidesMei() {
           complemento: data.complemento ?? '',
           bairro: data.bairro ?? '',
           cep: (data.cep ?? '').replace('-', ''),
-          codigoCidade: data.codigo_municipio ?? '',
+          codigoCidade: normalizeIbgeMunicipioCodigo(data.codigo_municipio ?? ''),
           descricaoCidade: data.municipio ?? '',
           estado: data.uf ?? '',
         }
@@ -2513,6 +2876,115 @@ export default function GuidesMei() {
     setActiveWorkspace
   ]);
 
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        setSolFase2SessionFlagRevalidateTick((n) => n + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  useEffect(() => {
+    const err = nfEmissionCompanySyncError?.message.trim();
+    if (!err || !isPlugnotasEmpresaConsultNotFoundMessage(err)) {
+      return undefined;
+    }
+    const id = window.setInterval(() => {
+      setSolFase2SessionFlagRevalidateTick((n) => n + 1);
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [nfEmissionCompanySyncError]);
+
+  /** CNPJ alvo para marcador sessionStorage FR-SOL-P1 (paridade com `resolveCnpjParaEmissor`). */
+  const cnpjParaSolSessionFlag = useMemo(() => {
+    const d = normalizeDoc(contribuinteDoc);
+    if (d.length === 14) return d;
+    return normalizeDoc(nfseForm.prestadorCpfCnpj || '');
+  }, [contribuinteDoc, nfseForm.prestadorCpfCnpj]);
+
+  /** FR-SOL-P0/P1: estado UX encadeamento POST → GET "não encontrado"; L2 via sessionStorage após reload. */
+  const plugnotasCadastroSolUxState = useMemo(() => {
+    const sessionPostFailedFlag =
+      cnpjParaSolSessionFlag.length === 14 &&
+      isGuiaMeiEmpresaFase2FailFlagActive(userId, cnpjParaSolSessionFlag);
+    const err = nfEmissionCompanySyncError?.message.trim();
+    if (!err || !isPlugnotasEmpresaConsultNotFoundMessage(err)) {
+      return resolvePlugnotasEmpresaCadastroSolUxState({
+        lastPostEmpresaPhase2Ok: plugnotasEmpresaFase2PostOk,
+        lastGetEmpresaNotFound: false,
+        postErrorPanelVisible: false,
+        sessionPostFailedFlag: false
+      });
+    }
+    return resolvePlugnotasEmpresaCadastroSolUxState({
+      lastPostEmpresaPhase2Ok: plugnotasEmpresaFase2PostOk,
+      lastGetEmpresaNotFound: true,
+      postErrorPanelVisible: Boolean(plugnotasPendingRetry),
+      sessionPostFailedFlag
+    });
+  }, [
+    cnpjParaSolSessionFlag,
+    nfEmissionCompanySyncError,
+    plugnotasPendingRetry,
+    plugnotasEmpresaFase2PostOk,
+    solFase2SessionFlagRevalidateTick,
+    userId
+  ]);
+
+  const plugnotasEmpresaLastGetCoherent = useMemo(() => {
+    const err = nfEmissionCompanySyncError?.message.trim();
+    if (!err) return true;
+    return !isPlugnotasEmpresaConsultNotFoundMessage(err);
+  }, [nfEmissionCompanySyncError]);
+
+  const plugnotasEmpresaP0Overlay = useMemo(
+    () =>
+      resolvePlugnotasEmpresaP0Overlay({
+        configuracaoCadastroBloqueadoExternamente: meiPlugnotasEmpresaBlockedExternally,
+        lastPostEmpresaPhase2Ok: plugnotasEmpresaFase2PostOk,
+        lastGetEmpresaHasData: plugnotasEmpresaLastGetCoherent,
+        postErrorPanelVisible: Boolean(plugnotasPendingRetry && !certificateConnectivityAlert)
+      }),
+    [
+      meiPlugnotasEmpresaBlockedExternally,
+      plugnotasEmpresaFase2PostOk,
+      plugnotasEmpresaLastGetCoherent,
+      plugnotasPendingRetry,
+      certificateConnectivityAlert
+    ]
+  );
+
+  useEffect(() => {
+    setPlugnotasP0L1ImposibilidadeDismissed(false);
+  }, [plugnotasEmpresaRetryDetail]);
+
+  useEffect(() => {
+    if (!plugnotasPendingRetry) {
+      setPlugnotasP0L1ImposibilidadeDismissed(false);
+    }
+  }, [plugnotasPendingRetry]);
+
+  useEffect(() => {
+    if (plugnotasEmpresaFase2PostOk !== true) {
+      plugnotasP0OverlayPrevKindRef.current = '';
+      setPlugnotasP0L2PhaseSuccessVisible(false);
+      return;
+    }
+    const k = plugnotasEmpresaP0Overlay.kind;
+    if (k === 'phaseSuccess' && plugnotasP0OverlayPrevKindRef.current !== 'phaseSuccess') {
+      setPlugnotasP0L2PhaseSuccessVisible(true);
+    }
+    plugnotasP0OverlayPrevKindRef.current = k;
+  }, [plugnotasEmpresaFase2PostOk, plugnotasEmpresaP0Overlay.kind]);
+
+  useEffect(() => {
+    if (!plugnotasP0L2PhaseSuccessVisible) return undefined;
+    const id = window.setTimeout(() => setPlugnotasP0L2PhaseSuccessVisible(false), 6000);
+    return () => window.clearTimeout(id);
+  }, [plugnotasP0L2PhaseSuccessVisible]);
+
   /** FR-NFSE-UX-P2 §7: pilha de feedback abaixo do botão Emitir — (1) bloqueio certificado/emitente. */
   const nfseEmitFeedbackTier1 = useMemo(() => {
     const nodes: ReactNode[] = [];
@@ -2525,13 +2997,25 @@ export default function GuidesMei() {
           key="nfse-fb-cert"
           message={certificateError}
           fiscalErrorCode={certificateErrorFiscalCode}
+          fiscalHttpStatus={certificateErrorHttpStatus}
         />
       );
     }
     if (nfEmissionCompanySyncError) {
       nodes.push(
-        <div key="nfse-fb-sync" className="admin-alert-danger text-xs">
-          {nfEmissionCompanySyncError}
+        <div key="nfse-fb-sync" className="space-y-2 text-xs">
+          <GuiaMeiEmpresaCadastroErrorPanel
+            message={nfEmissionCompanySyncError.message}
+            fiscalApiErrorCode={nfEmissionCompanySyncError.apiErrorCode}
+            fiscalErrorCode={nfEmissionCompanySyncError.plugnotasCode}
+            fiscalHttpStatus={nfEmissionCompanySyncError.httpStatus}
+            plugnotasRequest={nfEmissionCompanySyncError.plugnotasRequest}
+          />
+          <PlugnotasEmpresaCadastroSolContextPanel
+            state={plugnotasCadastroSolUxState}
+            compact
+            showPlaybook={false}
+          />
         </div>
       );
     }
@@ -2597,10 +3081,12 @@ export default function GuidesMei() {
     certificateConnectivityAlert,
     certificateError,
     certificateErrorFiscalCode,
+    certificateErrorHttpStatus,
     hasUserCertificate,
     nfEmissionCompanyForm.razaoSocial,
     nfEmissionCompanySyncError,
     nfseEmitentePendingApply,
+    plugnotasCadastroSolUxState,
     setActiveWorkspace
   ]);
 
@@ -2709,11 +3195,28 @@ export default function GuidesMei() {
   const nfseNacionalOperacaoHelpHref = useMemo(() => getNfseNacionalOperacaoHelpHref(), []);
   const plugnotasRetryMunicipalOperacaoHint = useMemo(
     () =>
-      Boolean(
-        plugnotasEmpresaRetryDetail &&
-          isPlugnotasEmpresaMunicipalRequirementMessage(plugnotasEmpresaRetryDetail)
+      !showPrefeituraPortalCredentialsBlock
+      && (
+        plugnotasRetryBlockedByScenario
+        || Boolean(
+          plugnotasEmpresaRetryDetail &&
+            isPlugnotasEmpresaMunicipalRequirementMessage(plugnotasEmpresaRetryDetail)
+        )
       ),
-    [plugnotasEmpresaRetryDetail]
+    [
+      showPrefeituraPortalCredentialsBlock,
+      plugnotasRetryBlockedByScenario,
+      plugnotasEmpresaRetryDetail
+    ]
+  );
+  const plugnotasRetryEmpresaUxVariant = useMemo(
+    () =>
+      plugnotasRetryScenario === 'prefeitura_login_required_blocked'
+        ? 'prefeitura-login-required'
+        : plugnotasEmpresaRetryDetail
+          ? getPlugnotasEmpresaCadastroErrorUxVariant(plugnotasEmpresaRetryDetail)
+          : 'generic',
+    [plugnotasRetryScenario, plugnotasEmpresaRetryDetail]
   );
 
   const showRequisitosNfeNfcePlaceholder = useMemo(
@@ -2888,7 +3391,12 @@ export default function GuidesMei() {
                   loading={nfseLoading || meiLimiteServidorLoading}
                   errorMessage={
                     nfseError && nfseErrorKind === 'operation'
-                      ? nfseErrorSummaryLine(nfseError.rawMessage, nfseError.plugnotasCode)
+                      ? nfseErrorSummaryLine(
+                        nfseError.rawMessage,
+                        nfseError.plugnotasCode,
+                        nfseError.httpStatus,
+                        nfseError.plugnotasRequest
+                      )
                       : null
                   }
                   canViewNfse
@@ -3035,6 +3543,7 @@ export default function GuidesMei() {
             <GuiaMeiEmpresaCadastroErrorPanel
               message={certificateError}
               fiscalErrorCode={certificateErrorFiscalCode}
+              fiscalHttpStatus={certificateErrorHttpStatus}
             />
           ) : null}
 
@@ -3049,16 +3558,82 @@ export default function GuidesMei() {
                 Não foi possível concluir o registro da empresa
               </p>
               <p className="text-amber-950/95 dark:text-amber-100/90">
-                O certificado pode já ter sido enviado ao emissor fiscal. Os dados do emitente não foram concluídos.
-                Você pode tentar registrar a empresa novamente sem enviar o arquivo outra vez.
+                {plugnotasRetryActionAvailable
+                  ? 'O certificado pode já ter sido enviado ao emissor fiscal. Os dados do emitente não foram concluídos. Você pode tentar registrar a empresa novamente sem enviar o arquivo outra vez.'
+                  : 'O certificado pode já ter sido enviado ao emissor fiscal. Os dados do emitente não foram concluídos. Neste cenário, revise os dados do emitente e siga o guia de operação fiscal antes de insistir no cadastro automático.'}
               </p>
               {plugnotasEmpresaRetryDetail ? (
                 <p className="text-amber-900 dark:text-amber-200/95">{plugnotasEmpresaRetryDetail}</p>
               ) : null}
               {plugnotasRetryMunicipalOperacaoHint ? (
-                <p className="text-xs text-amber-950/95 dark:text-amber-100/90">
-                  <PlugnotasMunicipalRequirementOperacaoBody />
-                </p>
+                plugnotasRetryEmpresaUxVariant === 'prefeitura-login-required' ? (
+                  <div
+                    role="region"
+                    aria-label="Acesso ao portal da prefeitura no NFS-e"
+                    className="text-xs text-amber-950/95 dark:text-amber-100/90"
+                  >
+                    <p className="mb-1 font-semibold text-amber-950 dark:text-amber-50">
+                      <PlugnotasPrefeituraLoginRequiredNfseOperacaoTitle />
+                    </p>
+                    <p className="leading-snug">
+                      <PlugnotasPrefeituraLoginRequiredNfseOperacaoBody />
+                    </p>
+                  </div>
+                ) : plugnotasRetryEmpresaUxVariant === 'prefeitura-config' ? (
+                  <div
+                    role="region"
+                    aria-label="Configuração de prefeitura no NFS-e"
+                    className="text-xs text-amber-950/95 dark:text-amber-100/90"
+                  >
+                    <p className="mb-1 font-semibold text-amber-950 dark:text-amber-50">
+                      <PlugnotasPrefeituraConfigNfseOperacaoTitle />
+                    </p>
+                    <p className="leading-snug">
+                      <PlugnotasPrefeituraConfigNfseOperacaoBody />
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-950/95 dark:text-amber-100/90">
+                    <PlugnotasMunicipalRequirementOperacaoBody />
+                  </p>
+                )
+              ) : null}
+              {plugnotasEmpresaP0Overlay.kind === 'impossibility' &&
+              !plugnotasP0L1ImposibilidadeDismissed ? (
+                <div
+                  role="region"
+                  aria-label={PLUGNOTAS_P0_L1_ARIA_LABEL}
+                  className="space-y-2 rounded-md border border-amber-300/70 bg-amber-100/40 p-3 dark:border-amber-800/60 dark:bg-amber-950/40"
+                >
+                  <p className="text-sm font-semibold text-amber-950 dark:text-amber-50">
+                    {PLUGNOTAS_P0_L1_TITLE}
+                  </p>
+                  {PLUGNOTAS_P0_L1_BODY_PARAS.map((para) => (
+                    <p
+                      key={para.slice(0, 24)}
+                      className="text-xs leading-relaxed text-amber-950/95 dark:text-amber-100/90"
+                    >
+                      {para}
+                    </p>
+                  ))}
+                  <p className="text-xs">
+                    <a
+                      href={nfseNacionalOperacaoHelpHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-amber-900 underline decoration-amber-800/60 underline-offset-2 hover:text-amber-950 dark:text-amber-200/95 dark:decoration-amber-300/50 dark:hover:text-amber-100"
+                    >
+                      Ver guia de operação fiscal
+                    </a>
+                  </p>
+                  <button
+                    type="button"
+                    className="planner-button-secondary-compact"
+                    onClick={() => setPlugnotasP0L1ImposibilidadeDismissed(true)}
+                  >
+                    Entendi
+                  </button>
+                </div>
               ) : null}
               <p className="text-xs text-slate-700 dark:text-slate-300">
                 Se o problema continuar, verifique se o CNPJ e o ambiente (sandbox ou produção) coincidem com o painel do emissor ou fale com o suporte.
@@ -3102,8 +3677,26 @@ export default function GuidesMei() {
             </div>
           ) : null}
 
+          {plugnotasP0L2PhaseSuccessVisible ? (
+            <p
+              className="rounded-md border border-emerald-200/90 bg-emerald-50/90 px-3 py-2 text-sm text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/35 dark:text-emerald-100/95"
+              role="status"
+            >
+              {PLUGNOTAS_P0_L2_STATUS_MESSAGE}
+            </p>
+          ) : null}
+
           {nfEmissionCompanySyncError ? (
-            <GuiaMeiEmpresaCadastroErrorPanel message={nfEmissionCompanySyncError} />
+            <>
+              <GuiaMeiEmpresaCadastroErrorPanel
+                message={nfEmissionCompanySyncError.message}
+                fiscalApiErrorCode={nfEmissionCompanySyncError.apiErrorCode}
+                fiscalErrorCode={nfEmissionCompanySyncError.plugnotasCode}
+                fiscalHttpStatus={nfEmissionCompanySyncError.httpStatus}
+                plugnotasRequest={nfEmissionCompanySyncError.plugnotasRequest}
+              />
+              <PlugnotasEmpresaCadastroSolContextPanel state={plugnotasCadastroSolUxState} showPlaybook />
+            </>
           ) : null}
 
           {nfEmissionCompanySyncSuccess && (
@@ -3139,11 +3732,29 @@ export default function GuidesMei() {
             </div>
           )}
 
-          {validationError && (
-            <div className="admin-alert-danger">
-              {validationError}
+          {validationError?.variant === 'cons-c' ? (
+            <div
+              role="region"
+              aria-labelledby={meiGuideValidateConsCTitleId}
+              className="admin-alert-warning space-y-2"
+              data-cons-trigger="serpro-validate"
+            >
+              <p id={meiGuideValidateConsCTitleId} className="text-sm font-semibold">
+                {validationError.title}
+              </p>
+              <p className="text-sm leading-relaxed">{validationError.body}</p>
+              {validationError.rawDetail ? (
+                <details className="text-xs text-slate-600 dark:text-slate-400">
+                  <summary className="cursor-pointer select-none">Detalhe técnico</summary>
+                  <p className="mt-1 whitespace-pre-wrap">{validationError.rawDetail}</p>
+                </details>
+              ) : null}
             </div>
-          )}
+          ) : validationError?.variant === 'plain' ? (
+            <div className="admin-alert-danger" role="alert">
+              {validationError.message}
+            </div>
+          ) : null}
 
           <div className="admin-toolbar grid gap-3 lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
             <div>
@@ -3178,8 +3789,11 @@ export default function GuidesMei() {
                     setCertificateConnectivityAlert(false);
                     setCertificateError(null);
                     setCertificateErrorFiscalCode(null);
+                    setCertificateErrorHttpStatus(null);
                     setPlugnotasPendingRetry(null);
                     setPlugnotasEmpresaRetryDetail(null);
+                    setPlugnotasEmpresaRetryMeta(null);
+                    setPlugnotasEmpresaFase2PostOk(null);
                     setCertificateFile(event.target.files?.[0] || null);
                   }}
                 />
@@ -3191,8 +3805,11 @@ export default function GuidesMei() {
                     setCertificateConnectivityAlert(false);
                     setCertificateError(null);
                     setCertificateErrorFiscalCode(null);
+                    setCertificateErrorHttpStatus(null);
                     setPlugnotasPendingRetry(null);
                     setPlugnotasEmpresaRetryDetail(null);
+                    setPlugnotasEmpresaRetryMeta(null);
+                    setPlugnotasEmpresaFase2PostOk(null);
                     setCertificatePassword(event.target.value);
                   }}
                   placeholder="Senha do certificado"
@@ -3344,6 +3961,85 @@ export default function GuidesMei() {
                   <p className="admin-field-hint mb-2">
                     {dadosMinimosEmitenteHint}
                   </p>
+                  {!showPrefeituraPortalCredentialsBlock ? (
+                    <div
+                      role="note"
+                      aria-label="NFS-e Nacional como padrão"
+                      className="mb-3 rounded-lg border border-sky-200/80 bg-sky-50/80 p-3 text-sm leading-relaxed text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-100"
+                    >
+                      <p className="font-semibold">NFS-e Nacional é o padrão desta jornada.</p>
+                      <p className="mt-1">
+                        Preencha os dados do emitente e tente o cadastro nacional primeiro. Se o emissor indicar portal da
+                        prefeitura e o caso estiver elegível para continuar nesta jornada, abrimos o segundo passo com login e
+                        senha; se não estiver elegível, mostramos orientação sem pedir credenciais aqui.
+                      </p>
+                    </div>
+                  ) : (
+                    <div
+                      role="status"
+                      className="mb-3 rounded-lg border border-violet-200/85 bg-violet-50/85 p-3 text-sm leading-relaxed text-violet-950 dark:border-violet-900/50 dark:bg-violet-950/25 dark:text-violet-100"
+                    >
+                      <p className="font-semibold">Segundo passo: cadastro municipal no emissor</p>
+                      <p className="mt-1">
+                        O primeiro passo (NFS-e Nacional) não concluiu neste município. O emissor classificou o caso como
+                        elegível para continuar com credenciais do portal da prefeitura — preencha o bloco abaixo.
+                      </p>
+                    </div>
+                  )}
+                  {showPrefeituraPortalCredentialsBlock ? (
+                    <div
+                      role="region"
+                      aria-labelledby={prefeituraPortalCredentialsTitleId}
+                      className="mb-3 rounded-lg border border-slate-300/85 bg-white/90 p-3 dark:border-slate-600/80 dark:bg-slate-950/40"
+                    >
+                      <p
+                        id={prefeituraPortalCredentialsTitleId}
+                        className="text-sm font-semibold text-slate-900 dark:text-slate-100"
+                      >
+                        Credenciais do portal da prefeitura
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                        Usadas só para enviar ao emissor fiscal nesta sessão — não ficam guardadas no navegador nem em links.
+                      </p>
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        <div>
+                          <label htmlFor="mei-prefeitura-login" className="mb-1 block text-xs text-slate-600 dark:text-slate-400">
+                            Login do portal
+                          </label>
+                          <input
+                            id="mei-prefeitura-login"
+                            ref={prefeituraPortalLoginInputRef}
+                            className="planner-input-compact w-full"
+                            type="text"
+                            name="prefeitura-portal-login"
+                            autoComplete="off"
+                            value={prefeituraPortalLogin}
+                            onChange={(e) => setPrefeituraPortalLogin(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="mei-prefeitura-senha" className="mb-1 block text-xs text-slate-600 dark:text-slate-400">
+                            Senha do portal
+                          </label>
+                          <input
+                            id="mei-prefeitura-senha"
+                            ref={prefeituraPortalSenhaInputRef}
+                            className="planner-input-compact w-full"
+                            type="password"
+                            name="prefeitura-portal-senha"
+                            autoComplete="new-password"
+                            value={prefeituraPortalSenha}
+                            onChange={(e) => setPrefeituraPortalSenha(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      {prefeituraPortalCredValidationMessage ? (
+                        <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+                          {prefeituraPortalCredValidationMessage}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {showRequisitosNfeNfcePlaceholder ? <MeiCadastroRequisitosNfeNfcePlaceholder /> : null}
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
@@ -3389,7 +4085,15 @@ export default function GuidesMei() {
                       })}
                       placeholder="Inscrição municipal (opcional)"
                       autoComplete="off"
+                      aria-describedby="mei-emitente-inscricao-municipal-hint"
                     />
+                    <p
+                      id="mei-emitente-inscricao-municipal-hint"
+                      className="md:col-span-2 text-xs text-slate-600 dark:text-slate-400"
+                    >
+                      Opcional. É o número da inscrição na prefeitura; não substitui configurações extras que o emissor
+                      possa pedir no cadastro NFS-e.
+                    </p>
                   </div>
                   <div className="mt-2 grid gap-2 md:grid-cols-4">
                     <input
@@ -3438,6 +4142,7 @@ export default function GuidesMei() {
                     <input
                       className="planner-input-compact"
                       type="text"
+                      inputMode="numeric"
                       value={nfEmissionCompanyForm.codigoCidade}
                       onChange={(event) => updateNfEmissionCompanyForm({ codigoCidade: event.target.value })}
                       placeholder="Código IBGE cidade *"
@@ -3509,7 +4214,9 @@ export default function GuidesMei() {
                   />
                   {plugnotasSubmitPhase === 'certificado' && isUploadingCert && !empresaRegistroRetryBusy
                     ? 'Enviando certificado digital…'
-                    : 'Registrando empresa no emissor fiscal…'}
+                    : empresaRegistroRetryBusy && plugnotasPendingRetry?.retryKind === 'municipal'
+                      ? 'A concluir cadastro municipal no emissor fiscal…'
+                      : 'Registrando empresa no emissor fiscal…'}
                 </div>
               ) : null}
 
@@ -3525,7 +4232,7 @@ export default function GuidesMei() {
                       : undefined
                   }
                   onClick={() => {
-                    if (plugnotasPendingRetry) {
+                    if (plugnotasRetryActionAvailable) {
                       void handleRetryPlugnotasEmpresaRegistro();
                     } else {
                       void handleCertificateUpload();
@@ -3534,19 +4241,33 @@ export default function GuidesMei() {
                 >
                   {empresaRegistroRetryBusy
                     || (isUploadingCert && canViewNfse && plugnotasSubmitPhase === 'empresa')
-                    ? 'Registrando empresa no emissor fiscal…'
+                    ? plugnotasPendingRetry?.retryKind === 'municipal'
+                      ? 'A concluir cadastro municipal no emissor fiscal…'
+                      : 'Registrando empresa no emissor fiscal…'
                     : isUploadingCert && canViewNfse && plugnotasSubmitPhase === 'certificado'
                       ? 'Enviando certificado digital…'
                       : isUploadingCert && !canViewNfse
                         ? 'Enviando...'
                         : isUploadingCert
                           ? 'Enviando e configurando...'
-                          : plugnotasPendingRetry
-                            ? 'Tentar registrar empresa novamente'
+                          : plugnotasRetryActionAvailable
+                            ? showPrefeituraPortalCredentialsBlock
+                              ? 'Concluir cadastro com dados da prefeitura'
+                              : 'Tentar registrar empresa novamente'
                             : canViewNfse
                               ? 'Concluir configuração fiscal'
                               : 'Enviar certificado'}
                 </button>
+                {showPrefeituraPortalCredentialsBlock ? (
+                  <button
+                    type="button"
+                    className="planner-button-secondary-compact w-full sm:w-auto"
+                    onClick={handlePrefeituraPortalVoltar}
+                    disabled={empresaRegistroRetryBusy || isUploadingCert}
+                  >
+                    Voltar e revisar dados
+                  </button>
+                ) : null}
                 {plugnotasPrimaryDisabledHint ? (
                   <p className="text-xs text-slate-500 dark:text-slate-400 sm:max-w-md sm:flex-1">
                     {plugnotasPrimaryDisabledHint}
@@ -3731,9 +4452,15 @@ export default function GuidesMei() {
               </button>
             </div>
           )}
-          {nfEmissionCompanySyncError && (
-            <div className="admin-alert-danger text-xs">{nfEmissionCompanySyncError}</div>
-          )}
+          {nfEmissionCompanySyncError ? (
+            <GuiaMeiEmpresaCadastroErrorPanel
+              message={nfEmissionCompanySyncError.message}
+              fiscalApiErrorCode={nfEmissionCompanySyncError.apiErrorCode}
+              fiscalErrorCode={nfEmissionCompanySyncError.plugnotasCode}
+              fiscalHttpStatus={nfEmissionCompanySyncError.httpStatus}
+              plugnotasRequest={nfEmissionCompanySyncError.plugnotasRequest}
+            />
+          ) : null}
           {nfEmissionCompanySyncSuccess && (
             <div className="admin-alert-success text-xs">{nfEmissionCompanySyncSuccess}</div>
           )}
@@ -3980,17 +4707,23 @@ export default function GuidesMei() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-prestador-codigo-ibge">
                 Código IBGE da cidade do prestador
                 <span className="admin-required-mark">*</span>
               </label>
               <input
+                id="nfse-prestador-codigo-ibge"
                 className="planner-input-compact w-full"
                 type="text"
+                inputMode="numeric"
                 value={nfseForm.prestadorEndereco?.codigoCidade || ''}
                 onChange={(event) => updateNfsePrestadorEndereco({ codigoCidade: event.target.value })}
                 placeholder="3304557"
+                aria-describedby="nfse-prestador-codigo-ibge-hint"
               />
+              <p id="nfse-prestador-codigo-ibge-hint" className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                {MEI_IBGE_CIDADE_PRESTACAO_PRESTADOR_FIELD_HINT}
+              </p>
             </div>
             <div>
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
@@ -4182,10 +4915,18 @@ export default function GuidesMei() {
                   id="nfse-cidade-prestacao-codigo"
                   className="planner-input-compact w-full"
                   type="text"
+                  inputMode="numeric"
                   value={nfseForm.cidadePrestacao?.codigo || ''}
                   onChange={(event) => updateNfseCidade({ codigo: event.target.value })}
                   placeholder="Código IBGE"
+                  aria-describedby="nfse-cidade-prestacao-codigo-hint"
                 />
+                <p
+                  id="nfse-cidade-prestacao-codigo-hint"
+                  className="mt-1 text-xs text-slate-600 dark:text-slate-400"
+                >
+                  {MEI_IBGE_CIDADE_PRESTACAO_PRESTADOR_FIELD_HINT}
+                </p>
               </div>
               <div>
                 <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-cidade-prestacao-desc">
@@ -4306,6 +5047,8 @@ export default function GuidesMei() {
                   documentTypeLabel={emissionFeedbackDocumentLabel}
                   message={nfseError.rawMessage}
                   plugnotasCode={nfseError.plugnotasCode}
+                  httpStatus={nfseError.httpStatus}
+                  plugnotasRequest={nfseError.plugnotasRequest}
                 />
               </div>
             ) : null}
@@ -4314,6 +5057,8 @@ export default function GuidesMei() {
                 <FiscalProviderErrorAlert
                   message={nfseError.rawMessage}
                   plugnotasCode={nfseError.plugnotasCode}
+                  httpStatus={nfseError.httpStatus}
+                  plugnotasRequest={nfseError.plugnotasRequest}
                 />
               </div>
             ) : null}

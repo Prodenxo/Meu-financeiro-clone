@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractDocumentosAtivosFromEmpresaResponse } from '../src/services/plugnotas/plugnotas-empresa-documentos-ativos.js';
+import {
+  applyEmpresaPlugnotasDocumentSelectionForPost,
+  extractDocumentosAtivosFromEmpresaResponse
+} from '../src/services/plugnotas/plugnotas-empresa-documentos-ativos.js';
 
 test('extract: só NFS-e ativo', () => {
   const r = extractDocumentosAtivosFromEmpresaResponse({
@@ -58,6 +61,38 @@ test('extract: entrada inválida → null', () => {
   assert.equal(extractDocumentosAtivosFromEmpresaResponse(undefined), null);
   assert.equal(extractDocumentosAtivosFromEmpresaResponse([]), null);
   assert.equal(extractDocumentosAtivosFromEmpresaResponse('x'), null);
+});
+
+test('POST selection: nfseMode municipal → nfseNacional e consultaNfseNacional falsos', () => {
+  const payload = {
+    nfse: {
+      ativo: true,
+      config: {
+        producao: true,
+        prefeitura: { codigoIbge: '3550308', login: 'a', senha: 'b' }
+      }
+    }
+  };
+  applyEmpresaPlugnotasDocumentSelectionForPost(
+    payload,
+    { nfse: true, nfe: false, nfce: false },
+    { nfseMode: 'municipal' }
+  );
+  assert.equal(payload.nfse.config.nfseNacional, false);
+  assert.equal(payload.nfse.config.consultaNfseNacional, false);
+  assert.equal(payload.nfse.config.prefeitura.login, 'a');
+  assert.equal(payload.nfse.config.prefeitura.senha, 'b');
+});
+
+test('POST selection: nfseMode nacional → contrato NFS-e Nacional (padrão)', () => {
+  const payload = {};
+  applyEmpresaPlugnotasDocumentSelectionForPost(
+    payload,
+    { nfse: true, nfe: false, nfce: false },
+    { nfseMode: 'nacional' }
+  );
+  assert.equal(payload.nfse.config.nfseNacional, true);
+  assert.equal(payload.nfse.config.consultaNfseNacional, true);
 });
 
 test('extract: nfse como array estranho → tratado como inactivo', () => {

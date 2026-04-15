@@ -34,4 +34,15 @@ describe('formatPlugnotasIntegrationError', () => {
     expect(out).toContain('Certificado');
     expect(out).toContain('Documentação:');
   });
+
+  it('remove referência a POST /empresa da mensagem final quando plugnotasRequest está presente', () => {
+    const out = formatPlugnotasIntegrationError(
+      'Falha ao cadastrar empresa (POST /empresa no emissor fiscal)',
+      null,
+      400,
+      { method: 'POST', path: '/empresa' }
+    );
+    expect(out).not.toContain('POST /empresa');
+    expect(out).not.toContain('endpoint errado');
+  });
 });

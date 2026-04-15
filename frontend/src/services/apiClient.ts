@@ -45,6 +45,47 @@ export function redactInviteValidateTokenInUrlForLogs(url: string): string {
   return url.replace(/([?&])token=[^&]*/gi, '$1token=[redacted]');
 }
 
+/** FR-ALNFB / NFR-ALNFB-01: não expor credenciais do portal em `console.error` do cliente HTTP. */
+function redactPrefeituraCredentialsInObject(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(redactPrefeituraCredentialsInObject);
+  if (typeof value !== 'object') return value;
+  const o = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (k === 'prefeitura' && v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      const p = v as Record<string, unknown>;
+      out[k] = {
+        ...p,
+        ...(Object.prototype.hasOwnProperty.call(p, 'login') ? { login: '[redacted]' } : {}),
+        ...(Object.prototype.hasOwnProperty.call(p, 'senha') ? { senha: '[redacted]' } : {})
+      };
+    } else {
+      out[k] = redactPrefeituraCredentialsInObject(v);
+    }
+  }
+  return out;
+}
+
+export function redactPrefeituraCredentialsForLogs(body: unknown): unknown {
+  if (body === null || body === undefined) return body;
+  if (typeof body === 'string') {
+    const trimmed = body.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsed: unknown = JSON.parse(body);
+        const redacted = redactPrefeituraCredentialsInObject(parsed);
+        const s = JSON.stringify(redacted);
+        return s.length > 1000 ? `${s.slice(0, 997)}…` : s;
+      } catch {
+        return body.length > 1000 ? `${body.slice(0, 997)}…` : body;
+      }
+    }
+    return body.length > 1000 ? `${body.slice(0, 997)}…` : body;
+  }
+  return redactPrefeituraCredentialsInObject(body);
+}
+
 class ApiClient {
   baseUrl: string;
 
@@ -77,9 +118,7 @@ class ApiClient {
     body?: unknown;
     error?: unknown;
   }): void {
-    const normalizedBody = typeof details.body === 'string'
-      ? details.body.slice(0, 1000)
-      : details.body;
+    const normalizedBody = redactPrefeituraCredentialsForLogs(details.body);
     const headers = this.sanitizeHeaders(details.headers);
     const url = redactInviteValidateTokenInUrlForLogs(details.url);
 
@@ -176,7 +215,7 @@ class ApiClient {
         headers,
         body: payload
       });
-      throw apiClientErrorFromPayload(payload, buildApiErrorMessage);
+      throw apiClientErrorFromPayload(payload, buildApiErrorMessage, { httpStatus: response.status });
     }
 
     return payload?.data as T;
@@ -241,7 +280,7 @@ class ApiClient {
         headers,
         body: payload
       });
-      throw apiClientErrorFromPayload(payload, buildApiErrorMessage);
+      throw apiClientErrorFromPayload(payload, buildApiErrorMessage, { httpStatus: response.status });
     }
 
     return payload?.data as T;
@@ -302,7 +341,8 @@ class ApiClient {
           });
           throw apiClientErrorFromPayload(
             payload as { message?: string; errors?: unknown },
-            buildApiErrorMessage
+            buildApiErrorMessage,
+            { httpStatus: response.status }
           );
         }
         errorMessage = buildApiErrorMessage(payload) || response.statusText;

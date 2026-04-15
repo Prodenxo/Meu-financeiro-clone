@@ -6,6 +6,7 @@ import {
   isEmpresaCadastroPlugnotasPath,
   logPlugnotasEmpresaCadastro400Request
 } from './plugnotas-empresa-cadastro-debug.js';
+import { logPlugnotasEmpresaIbgeTable400 } from './plugnotas-empresa-ibge-table-400-log.js';
 import {
   logPlugnotasCertificado409Resolve,
   PLUGNOTAS_CERT_409_RESOLVE_STEPS
@@ -18,10 +19,11 @@ import {
 } from './plugnotas-certificado-listagem-parse.js';
 import { getPlugnotasRootUrl } from './root-url.js';
 import {
+  applyNfseNationalContractPolicy,
+  inspectNfseContractInput,
   PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
-  PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
-  PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY
 } from './plugnotas-mei-empresa-policy.js';
+import { consultarCidadePlugNotas } from './plugnotas-cidades.service.js';
 import {
   applyEmpresaPlugnotasDocumentSelectionForPatch,
   applyEmpresaPlugnotasDocumentSelectionForPost,
@@ -29,6 +31,38 @@ import {
   resolveDocumentosAtivosForPost,
   stripDocumentosAtivos
 } from './plugnotas-empresa-documentos-ativos.js';
+import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.js';
+import { isPlugnotasIbgeTableRejectMessage } from '../../utils/plugnotasIbgeTableRejectMessage.js';
+import { applyNfseConfigPrefeituraDeriveIbge } from './nfsePrefeituraPayload.js';
+import {
+  attachRuntimeDecisionToError,
+  buildEmpresaCadastroRuntimeDecision,
+  createEmpresaCadastroBlockedErrorFromDecision,
+  PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE_CODE,
+  PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE,
+  PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE,
+  PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE,
+  resolveEmpresaCadastroMunicipioPreflightInput,
+  resolveEmpresaCadastroMunicipioRuntimeDecision
+} from './empresa-cadastro-runtime-decision.js';
+import {
+  applyPrefeituraPortalCredentialsPolicy,
+  assertNoAmbiguousNationalWithPrefeituraCredentials,
+  extractPrefeituraPortalCredentialState,
+  isPrefeituraLoginRequiredUpstreamMessage,
+  PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE,
+  PREFEITURA_LOGIN_REQUIRED_BLOCKED_MESSAGE,
+  resolveAttemptNfseModeFromPayload,
+  sanitizePlugnotasEmpresaJsonForClientResponse
+} from './prefeituraPortalCredentials.js';
+import {
+  applyPrefeituraIbgeOnlyBlockPolicy,
+  PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02_CODE
+} from './prefeituraIbgeOnlyBlock.js';
+import {
+  resolvePlugnotasGatewayUpstreamForClient,
+  summarizePlugnotasErrorLogBody
+} from './plugnotas-gateway-upstream-error.js';
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
 /** Blocos mínimos inativos — sem `config`, para não disparar validação SEFAZ / `versaoQrCode` no Plugnotas (produto apenas NFS-e). Ver `docs/adr/ADR-plugnotas-empresa-payload-apenas-nfse.md`. */
@@ -37,6 +71,29 @@ const PLUGNOTAS_EMPRESA_APENAS_NFSE_NFCE = Object.freeze({ ativo: false, tipoCon
 
 const hasOwn = (obj, key) =>
   Object.prototype.hasOwnProperty.call(obj, key);
+
+/**
+ * Garante `endereco.codigoCidade` como string só com dígitos antes do Plugnotas (FR-CID-BE-01).
+ * Não cria `endereco` se ausente.
+ * @param {Record<string, unknown>} payload
+ */
+const normalizePayloadEnderecoCodigoCidade = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+  const endereco = payload.endereco;
+  if (!endereco || typeof endereco !== 'object' || Array.isArray(endereco)) return;
+  if (!hasOwn(endereco, 'codigoCidade')) return;
+  endereco.codigoCidade = normalizeIbgeMunicipioCodigo(endereco.codigoCidade);
+};
+
+/**
+ * Legado controlado / rollback: só deriva `nfse.config.prefeitura.codigoIbge`
+ * quando um cliente brownfield ainda chega com shape legado (`nfse.nacional`).
+ * Usa `process.env` em tempo de chamada (não só o snapshot de `env.js`) para testes e workers.
+ */
+const applyNfsePrefeituraIbgeIfEnabled = (payload) => {
+  if (process.env.PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE !== 'true') return;
+  applyNfseConfigPrefeituraDeriveIbge(payload, { derivePrefeituraIbge: true });
+};
 
 /**
  * IE ausente ou em branco → `ISENTO` (MEI sem IE coletada na UI).
@@ -48,21 +105,6 @@ const normalizeInscricaoEstadualApenasNfse = (payload) => {
   if (!ieStr) {
     payload.inscricaoEstadual = PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA;
   }
-};
-
-/**
- * PATCH: só toca `nfse` se o cliente enviou o bloco (D-N03 / FR-NA03). Preenche nacional ON se a chave não veio.
- * @param {Record<string, unknown>} payload
- */
-const applyNfseNacionalDefaultForPatch = (payload) => {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
-  if (!hasOwn(payload, 'nfse')) return;
-  const nfse = toObject(payload.nfse);
-  const next = { ...nfse };
-  if (!hasOwn(next, PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY)) {
-    next[PLUGNOTAS_NFSE_NACIONAL_PAYLOAD_KEY] = PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON;
-  }
-  payload.nfse = next;
 };
 
 /**
@@ -81,7 +123,7 @@ const applyEmpresaPlugnotasApenasNfseForPatch = (payload) => {
   if (hasOwn(payload, 'inscricaoEstadual')) {
     normalizeInscricaoEstadualApenasNfse(payload);
   }
-  applyNfseNacionalDefaultForPatch(payload);
+  applyNfseNationalContractPolicy(payload);
 };
 
 const toObject = (value) => {
@@ -107,9 +149,179 @@ const messageFromPlugnotasPayload = (payload, statusText) => {
 };
 
 /** Metadados para o cliente (Network / apiClient) identificar qual chamada ao Plugnotas falhou. */
-const plugnotasRequestErrors = (method, path) => ({
-  plugnotasRequest: { method, path }
+const plugnotasRequestErrors = (method, path, httpStatus = null) => ({
+  plugnotasRequest: { method, path },
+  ...(Number.isFinite(httpStatus) ? { httpStatus } : {})
 });
+
+const isGatewayLikePlugnotasCode = (code) => /^plugnotas_gateway_\d+$/.test(String(code || ''));
+
+const isEmpresaPayloadContratoRequest = (method, path, status, gateway) => (
+  String(method || '').toUpperCase() === 'POST'
+  && isEmpresaCadastroPlugnotasPath(path)
+  && Number(status) === 400
+  && !gateway
+);
+
+const isEmpresaNaoLocalizadaMessage = (message = '') => {
+  const normalized = String(message || '').toLowerCase();
+  return (
+    normalized.includes('não localizamos')
+    || normalized.includes('nao localizamos')
+    || normalized.includes('não encontramos')
+    || normalized.includes('nao encontramos')
+    || normalized.includes('empresa não encontrada')
+    || normalized.includes('empresa nao encontrada')
+  );
+};
+
+const resolveEmpresaPlugnotasErrorCode = ({ method, path, status, gateway, rawMessage }) => {
+  if (Number(status) === 400 && isPrefeituraLoginRequiredUpstreamMessage(rawMessage)) {
+    return PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE;
+  }
+  if (gateway) return gateway.plugnotasCode;
+  if (Number(status) === 401 || Number(status) === 403) {
+    return PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE;
+  }
+  if (String(method || '').toUpperCase() === 'GET' && String(path || '').startsWith('/empresa/') && Number(status) === 404) {
+    return isEmpresaNaoLocalizadaMessage(rawMessage)
+      ? PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE
+      : PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE;
+  }
+  if (isEmpresaPayloadContratoRequest(method, path, status, gateway)) {
+    return PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE;
+  }
+  return null;
+};
+
+const inferEmpresaCadastroScenario = ({
+  operation = '',
+  status = null,
+  method = '',
+  path = '',
+  plugnotasCode = ''
+} = {}) => {
+  const operationNorm = String(operation || '').trim().toLowerCase();
+  const code = String(plugnotasCode || '').trim();
+  const methodNorm = String(method || '').trim().toUpperCase();
+  const pathNorm = String(path || '').trim();
+  const statusNum = Number.isFinite(Number(status)) ? Number(status) : null;
+
+  if (code === PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE) return 'prefeitura_login_required_blocked';
+  if (code === PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE_CODE) {
+    return 'prefeitura_login_required_fallback_available';
+  }
+  if (code === PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02_CODE) {
+    return 'prefeitura_ibge_apenas_insuficiente_dp02';
+  }
+  if (code === PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE || isGatewayLikePlugnotasCode(code)) {
+    return 'ambiente_configuracao';
+  }
+  if (operationNorm === 'updated' || operationNorm === 'existing') return 'fallback_sync';
+  if (code === PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE) return 'payload_contrato';
+  if (code === PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE) return 'empresa_nao_cadastrada';
+  if (statusNum === 401 || statusNum === 403 || statusNum === 502 || statusNum === 503 || statusNum === 504) {
+    return 'ambiente_configuracao';
+  }
+  if (isEmpresaPayloadContratoRequest(methodNorm, pathNorm, statusNum, null)) {
+    return 'payload_contrato';
+  }
+  if (operationNorm === 'created') return 'success_nacional';
+  return null;
+};
+
+const enrichEmpresaCadastroPreflightError = (error, preflightInput) => {
+  const plugnotasCode = String(error?.errors?.plugnotasCode || '').trim();
+  if (!plugnotasCode || error?.errors?.runtimeDecision) return error;
+
+  if (
+    plugnotasCode !== PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE
+    && !isGatewayLikePlugnotasCode(plugnotasCode)
+  ) {
+    return error;
+  }
+
+  attachRuntimeDecisionToError(
+    error,
+    buildEmpresaCadastroRuntimeDecision({
+      scenario: 'ambiente_configuracao',
+      consultedMunicipio: true,
+      codigoIbge: preflightInput.codigoIbge,
+      environment: preflightInput.environment,
+      upstreamCallSkipped: true
+    })
+  );
+
+  return error;
+};
+
+/** Prioriza `process.env` em runtime (testes podem activar a flag sem recarregar `env.js`). */
+const isPrefeituraCredenciaisEnabled = () => {
+  const raw = process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED
+    ?? env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED
+    ?? '';
+  return String(raw).trim().toLowerCase() === 'true';
+};
+
+/**
+ * @param {string} operation
+ * @param {'nacional' | 'municipal'} attemptNfseMode
+ * @param {Record<string, unknown>|null|undefined} preflightRuntimeDecision
+ */
+const buildEmpresaCadastroSuccessRuntimeDecision = (operation, attemptNfseMode, preflightRuntimeDecision) => {
+  const op = String(operation || '').trim().toLowerCase();
+  const municipal = attemptNfseMode === 'municipal';
+  let scenario = 'success_nacional';
+  if (municipal) {
+    scenario = op === 'created' ? 'success_municipal' : 'fallback_sync';
+  } else if (op === 'updated' || op === 'existing') {
+    scenario = 'fallback_sync';
+  } else if (op === 'created') {
+    scenario = 'success_nacional';
+  }
+  const base = preflightRuntimeDecision && typeof preflightRuntimeDecision === 'object'
+    ? { ...preflightRuntimeDecision }
+    : {};
+  return buildEmpresaCadastroRuntimeDecision({
+    ...base,
+    scenario,
+    attemptMode: attemptNfseMode,
+    upstreamCallSkipped: false
+  });
+};
+
+const runEmpresaCadastroMunicipioPreflight = async (
+  payload,
+  {
+    operation = 'create',
+    credState,
+    attemptNfseMode = 'nacional'
+  } = {}
+) => {
+  const preflightInput = resolveEmpresaCadastroMunicipioPreflightInput(payload, { operation });
+  if (!preflightInput) return null;
+
+  try {
+    const preflight = await consultarCidadePlugNotas(preflightInput);
+    const { allowUpstream, runtimeDecision } = resolveEmpresaCadastroMunicipioRuntimeDecision(
+      preflight,
+      {
+        prefeituraCredentialsEnabled: isPrefeituraCredenciaisEnabled(),
+        attemptNfseMode,
+        credState
+      }
+    );
+
+    if (!allowUpstream) {
+      throw createEmpresaCadastroBlockedErrorFromDecision(runtimeDecision);
+    }
+
+    const municipalAuthRequired = Boolean(preflight.requiresLogin || preflight.requiresSenha);
+    return { preflight, runtimeDecision, municipalAuthRequired };
+  } catch (error) {
+    throw enrichEmpresaCadastroPreflightError(error, preflightInput);
+  }
+};
 
 const ensureConfigured = () => {
   if (!env.PLUGNOTAS_API_BASE_URL) {
@@ -163,7 +375,25 @@ const requestJson = async (method, path, body) => {
 
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
-      const message = messageFromPlugnotasPayload(payload, response.statusText);
+      const rawMessage = messageFromPlugnotasPayload(payload, response.statusText);
+      const gateway = resolvePlugnotasGatewayUpstreamForClient(response.status);
+      const resolvedPlugnotasCode = resolveEmpresaPlugnotasErrorCode({
+        method,
+        path,
+        status: response.status,
+        gateway,
+        rawMessage
+      });
+      const prefeituraLoginBlocked = resolvedPlugnotasCode === PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE;
+      const message = prefeituraLoginBlocked
+        ? PREFEITURA_LOGIN_REQUIRED_BLOCKED_MESSAGE
+        : gateway
+          ? gateway.publicMessage
+          : rawMessage;
+      const errors = {
+        ...plugnotasRequestErrors(method, path, response.status),
+        ...(resolvedPlugnotasCode ? { plugnotasCode: resolvedPlugnotasCode } : {})
+      };
       const fullUrl = `${baseUrl}${path}`;
       if (
         response.status === 400
@@ -173,37 +403,44 @@ const requestJson = async (method, path, body) => {
         && isEmpresaCadastroPlugnotasPath(path)
       ) {
         logPlugnotasEmpresaCadastro400Request({ method, path, body });
+        if (isPlugnotasIbgeTableRejectMessage(rawMessage)) {
+          logPlugnotasEmpresaIbgeTable400({ method, path, body });
+        }
       }
       if (process.env.NODE_ENV !== 'production' || isPlugnotasDebugExplicitlyEnabled()) {
         const pathLog = maskPlugnotasPathOrUrlForLog(path);
         const fullUrlLog = maskPlugnotasPathOrUrlForLog(fullUrl);
+        const ct = response.headers.get('content-type') || '';
+        const logBody = gateway
+          ? `[gateway_upstream HTTP ${response.status}]`
+          : summarizePlugnotasErrorLogBody(rawMessage, ct);
         // eslint-disable-next-line no-console
-        console.error('[plugnotas]', method, pathLog, response.status, message, fullUrlLog);
+        console.error('[plugnotas]', method, pathLog, response.status, logBody, fullUrlLog);
       }
       if (response.status === 401) {
         throw new HttpError(
           401,
           message || 'Token do serviço de emissão fiscal inválido',
-          plugnotasRequestErrors(method, path)
+          errors
         );
       }
       if (response.status === 403) {
         throw new HttpError(
           403,
           message || 'Acesso negado pelo serviço de emissão fiscal',
-          plugnotasRequestErrors(method, path)
+          errors
         );
       }
       if (response.status === 404) {
-        throw new HttpError(404, message || 'Empresa não encontrada', plugnotasRequestErrors(method, path));
+        throw new HttpError(404, message || 'Empresa não encontrada', errors);
       }
       if (response.status === 409) {
-        throw new HttpError(409, message || 'Empresa já cadastrada', plugnotasRequestErrors(method, path));
+        throw new HttpError(409, message || 'Empresa já cadastrada', errors);
       }
       throw new HttpError(
         response.status || 400,
         message || 'Erro no serviço de emissão fiscal',
-        plugnotasRequestErrors(method, path)
+        errors
       );
     }
 
@@ -235,32 +472,41 @@ const requestFormData = async (method, path, body) => {
 
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
-      const message = messageFromPlugnotasPayload(payload, response.statusText);
+      const rawMessage = messageFromPlugnotasPayload(payload, response.statusText);
+      const gateway = resolvePlugnotasGatewayUpstreamForClient(response.status);
+      const message = gateway ? gateway.publicMessage : rawMessage;
+      const errors = gateway
+        ? { ...plugnotasRequestErrors(method, path, response.status), plugnotasCode: gateway.plugnotasCode }
+        : plugnotasRequestErrors(method, path, response.status);
       const fullUrl = `${baseUrl}${path}`;
       if (process.env.NODE_ENV !== 'production' || isPlugnotasDebugExplicitlyEnabled()) {
         const pathLog = maskPlugnotasPathOrUrlForLog(path);
         const fullUrlLog = maskPlugnotasPathOrUrlForLog(fullUrl);
+        const ct = response.headers.get('content-type') || '';
+        const logBody = gateway
+          ? `[gateway_upstream HTTP ${response.status}]`
+          : summarizePlugnotasErrorLogBody(rawMessage, ct);
         // eslint-disable-next-line no-console
-        console.error('[plugnotas]', method, pathLog, response.status, message, fullUrlLog);
+        console.error('[plugnotas]', method, pathLog, response.status, logBody, fullUrlLog);
       }
       if (response.status === 401) {
         throw new HttpError(
           401,
           message || 'Token do serviço de emissão fiscal inválido',
-          plugnotasRequestErrors(method, path)
+          errors
         );
       }
       if (response.status === 403) {
         throw new HttpError(
           403,
           message || 'Acesso negado pelo serviço de emissão fiscal',
-          plugnotasRequestErrors(method, path)
+          errors
         );
       }
       throw new HttpError(
         response.status || 400,
         message || 'Erro no serviço de emissão fiscal',
-        plugnotasRequestErrors(method, path)
+        errors
       );
     }
 
@@ -294,13 +540,7 @@ const isConflictLikeError = (error) => {
 const isEmpresaNaoLocalizadaPlugnotas404 = (error) => {
   const status = Number(error?.status ?? 0);
   if (status !== 404) return false;
-  const m = String(error?.message || '').toLowerCase();
-  return (
-    m.includes('não localizamos')
-    || m.includes('nao localizamos')
-    || m.includes('não encontramos')
-    || m.includes('nao encontramos')
-  );
+  return isEmpresaNaoLocalizadaMessage(error?.message);
 };
 
 const MSG_EMPRESA_NAO_CADASTRADA_EMISSOR =
@@ -532,7 +772,30 @@ export const consultarEmpresaPlugNotas = async (cnpjInput) => {
   if (cnpj.length !== 14) {
     throw badRequest('CNPJ da empresa deve ter 14 dígitos');
   }
-  return await requestJson('GET', `/empresa/${encodeURIComponent(cnpj)}`);
+  try {
+    return await requestJson('GET', `/empresa/${encodeURIComponent(cnpj)}`);
+  } catch (err) {
+    if (
+      err instanceof HttpError
+      && err.status === 404
+      && inferEmpresaCadastroScenario({
+        status: err.status,
+        method: err.errors?.plugnotasRequest?.method,
+        path: err.errors?.plugnotasRequest?.path,
+        plugnotasCode: err.errors?.plugnotasCode
+      }) === 'empresa_nao_cadastrada'
+    ) {
+      throw new HttpError(
+        404,
+        MSG_EMPRESA_NAO_CADASTRADA_EMISSOR,
+        {
+          ...err.errors,
+          plugnotasCode: PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE
+        }
+      );
+    }
+    throw err;
+  }
 };
 
 /**
@@ -554,6 +817,24 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
 
+  const credState = extractPrefeituraPortalCredentialState(payload);
+  const attemptNfseMode = resolveAttemptNfseModeFromPayload(payload);
+  assertNoAmbiguousNationalWithPrefeituraCredentials(payload, credState);
+
+  if (credState.hasPartialKeys) {
+    throw badRequest('Informe login e senha do portal da prefeitura em conjunto (paridade obrigatória).', {
+      plugnotasCode: PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE,
+      runtimeDecision: buildEmpresaCadastroRuntimeDecision({
+        scenario: 'payload_contrato',
+        consultedMunicipio: false,
+        upstreamCallSkipped: true,
+        attemptMode: attemptNfseMode
+      })
+    });
+  }
+
+  const nfseContractInput = inspectNfseContractInput(input?.nfse);
+
   const cert = payload.certificado;
   if (cert === undefined || cert === null || String(cert).trim() === '') {
     delete payload.certificado;
@@ -562,13 +843,39 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   const docPatch = resolveDocumentosAtivosForPatch(payload);
   stripDocumentosAtivos(payload);
   if (docPatch.present && docPatch.selection) {
-    applyEmpresaPlugnotasDocumentSelectionForPatch(payload, docPatch.selection);
+    applyEmpresaPlugnotasDocumentSelectionForPatch(
+      payload,
+      docPatch.selection,
+      { nfseMode: attemptNfseMode }
+    );
     if (hasOwn(payload, 'inscricaoEstadual')) {
       normalizeInscricaoEstadualApenasNfse(payload);
     }
   } else {
     applyEmpresaPlugnotasApenasNfseForPatch(payload);
   }
+
+  normalizePayloadEnderecoCodigoCidade(payload);
+  if (!(docPatch.present && docPatch.selection)) {
+    applyNfseNationalContractPolicy(payload);
+  }
+
+  const preflightContext = await runEmpresaCadastroMunicipioPreflight(payload, {
+    operation: 'update',
+    credState,
+    attemptNfseMode
+  });
+  if (!preflightContext && nfseContractInput.usesLegacyOnlyNationalInput) {
+    applyNfsePrefeituraIbgeIfEnabled(payload);
+    applyPrefeituraIbgeOnlyBlockPolicy(payload);
+  }
+
+  applyPrefeituraPortalCredentialsPolicy(payload, {
+    prefeituraCredentialsEnabled: isPrefeituraCredenciaisEnabled(),
+    municipalAuthRequired: preflightContext?.municipalAuthRequired ?? false,
+    attemptNfseMode,
+    credState
+  });
 
   const updateResult = await tryUpdateEmpresa(cnpj, payload);
   if (updateResult.response) {
@@ -580,7 +887,12 @@ export const atualizarEmpresaPlugNotas = async (input) => {
         ? updateResult.response.message
         : fallbackMessage,
       operation: 'updated',
-      raw: updateResult.response
+      raw: sanitizePlugnotasEmpresaJsonForClientResponse(updateResult.response),
+      runtimeDecision: buildEmpresaCadastroSuccessRuntimeDecision(
+        'updated',
+        attemptNfseMode,
+        preflightContext?.runtimeDecision
+      )
     };
   }
 
@@ -591,7 +903,7 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   if (isEmpresaNaoLocalizadaPlugnotas404(err)) {
     throw badRequest(MSG_EMPRESA_NAO_CADASTRADA_EMISSOR, {
       plugnotasUpdateAttempts: failures,
-      plugnotasCode: 'empresa_nao_cadastrada'
+      plugnotasCode: PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE
     });
   }
   const msg = err instanceof Error
@@ -617,9 +929,46 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
 
+  const credState = extractPrefeituraPortalCredentialState(payload);
+  const attemptNfseMode = resolveAttemptNfseModeFromPayload(payload);
+  assertNoAmbiguousNationalWithPrefeituraCredentials(payload, credState);
+
+  if (credState.hasPartialKeys) {
+    throw badRequest('Informe login e senha do portal da prefeitura em conjunto (paridade obrigatória).', {
+      plugnotasCode: PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE,
+      runtimeDecision: buildEmpresaCadastroRuntimeDecision({
+        scenario: 'payload_contrato',
+        consultedMunicipio: false,
+        upstreamCallSkipped: true,
+        attemptMode: attemptNfseMode
+      })
+    });
+  }
+
+  const nfseContractInput = inspectNfseContractInput(input?.nfse);
+
   const docPost = resolveDocumentosAtivosForPost(payload);
   stripDocumentosAtivos(payload);
-  applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection);
+  applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection, { nfseMode: attemptNfseMode });
+
+  normalizePayloadEnderecoCodigoCidade(payload);
+
+  const preflightContext = await runEmpresaCadastroMunicipioPreflight(payload, {
+    operation: 'create',
+    credState,
+    attemptNfseMode
+  });
+  if (!preflightContext && nfseContractInput.usesLegacyOnlyNationalInput) {
+    applyNfsePrefeituraIbgeIfEnabled(payload);
+    applyPrefeituraIbgeOnlyBlockPolicy(payload);
+  }
+
+  applyPrefeituraPortalCredentialsPolicy(payload, {
+    prefeituraCredentialsEnabled: isPrefeituraCredenciaisEnabled(),
+    municipalAuthRequired: preflightContext?.municipalAuthRequired ?? false,
+    attemptNfseMode,
+    credState
+  });
 
   try {
     const response = await requestJson('POST', '/empresa', payload);
@@ -628,7 +977,12 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
       cnpj: typeof data.cnpj === 'string' ? data.cnpj : cnpj,
       message: typeof response?.message === 'string' ? response.message : 'Empresa cadastrada no serviço de emissão fiscal.',
       operation: 'created',
-      raw: response
+      raw: sanitizePlugnotasEmpresaJsonForClientResponse(response),
+      runtimeDecision: buildEmpresaCadastroSuccessRuntimeDecision(
+        'created',
+        attemptNfseMode,
+        preflightContext?.runtimeDecision
+      )
     };
   } catch (createError) {
     if (!isConflictLikeError(createError)) {
@@ -645,7 +999,12 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
           ? updateResult.response.message
           : fallbackMessage,
         operation: 'updated',
-        raw: updateResult.response
+        raw: sanitizePlugnotasEmpresaJsonForClientResponse(updateResult.response),
+        runtimeDecision: buildEmpresaCadastroSuccessRuntimeDecision(
+          'updated',
+          attemptNfseMode,
+          preflightContext?.runtimeDecision
+        )
       };
     }
 
@@ -661,7 +1020,19 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
           : String(updateResult.lastError || ''),
         attemptedEndpoints: buildUpdateAttempts(cnpj, payload)
           .map((attempt) => `${attempt.method} ${attempt.path}`)
-      }
+      },
+      runtimeDecision: buildEmpresaCadastroSuccessRuntimeDecision(
+        'existing',
+        attemptNfseMode,
+        preflightContext?.runtimeDecision
+      )
     };
   }
+};
+
+export {
+  inferEmpresaCadastroScenario,
+  PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE,
+  PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE,
+  PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE
 };

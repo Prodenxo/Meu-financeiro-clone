@@ -36,6 +36,55 @@ Quando o cliente envia **`documentosAtivos: { nfse, nfe, nfce }`** (booleanos), 
 
 Story: [`story-fr-cad-doc-p0-backend-documentos-ativos-plugnotas.md`](../stories/story-fr-cad-doc-p0-backend-documentos-ativos-plugnotas.md).
 
+## Complemento (2026-04-08) — trilho B opt-in `nfse.config.prefeitura.codigoIbge`
+
+Quando `PLUGNOTAS_NFSE_PREFEITURA_DERIVE_IBGE=true`, o BFF preenche `nfse.config.prefeitura.codigoIbge` com `endereco.codigoCidade` normalizado (7 dígitos) **apenas** se `nfse` está activo e o ramo `prefeitura` ainda não define `codigoIbge` — preserva `login` / `senha` enviados pelo cliente.
+
+A documentação pública Plugnotas (exemplo TecnoSpeed) usa com frequência `prefeitura.login` / `prefeitura.senha` para NFS-e municipal; o ramo **IBGE** serve ambientes em que o validador aceita (ou exige em conjunto) identificação por código IBGE. Confirmar conta/ambiente com **NFR-PREF-EV-01**. **Desligado por defeito** (**NFR-P0-REG-01**).
+
+Implementação: `backend/src/services/plugnotas/nfsePrefeituraPayload.js` + `empresa.service.js` após `normalizePayloadEnderecoCodigoCidade` em `POST` e `PATCH` empresa.
+
+Story: [`story-fr-cons-p0-plugnotas-empresa-backend-trilho-b-nfse-prefeitura.md`](../stories/story-fr-cons-p0-plugnotas-empresa-backend-trilho-b-nfse-prefeitura.md).
+
+**FR-P0-SPIKE-01 / FR-P0-DOC-01:** fecho documental do spike e decisão trilho **B** — [`docs/evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md`](../evidence/NFR-PREF-EV-01-plugnotas-prefeitura-spike-p0-closure-2026-04-08.md); story [`docs/stories/story-fr-cons-p0-plugnotas-empresa-spike-prefeitura-decisao-doc.md`](../stories/story-fr-cons-p0-plugnotas-empresa-spike-prefeitura-decisao-doc.md). Runbook: [`docs/operacao-mei-nfse.md`](../operacao-mei-nfse.md) âncora `#p0-prefeitura-spike-trilho-b`.
+
+<a id="adr-plugnotas-politica-local-credenciais"></a>
+## Complemento (2026-04-09) — DP-PLOGIN-01: credenciais do portal municipal (`nfse.config.prefeitura.login` / `senha`)
+
+- **Opt-in:** `PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED=true` no backend (defeito `false` até decisão PO / rollout). O frontend espelha com `VITE_PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED=true` para mostrar os campos no Guia MEI.
+- **Validação BFF:** *trim*, comprimento máximo (login 128, senha 256 caracteres), par **login+senha** obrigatório em conjunto quando qualquer um é enviado; com flag **desligada**, qualquer envio de credenciais → **400** (`prefeitura_portal_credenciais_disabled`).
+- **Merge:** preserva `codigoIbge` e derivação trilho B — ordem em `empresa.service.js`: `normalizePayloadEnderecoCodigoCidade` → `applyPrefeituraPortalCredentialsPolicy` → `applyNfsePrefeituraIbgeIfEnabled`.
+- **NFR:** logs de debug de cadastro empresa mascaram `login` / `senha` (`plugnotas-empresa-cadastro-debug.js`).
+- **Exemplo redigido (NFR-PLOGIN-01)** — valores **fictícios**; não usar em produção nem copiar para tickets com dados reais:
+
+```json
+{
+  "nfse": {
+    "ativo": true,
+    "tipoContrato": 0,
+    "config": {
+      "prefeitura": {
+        "codigoIbge": "3550308",
+        "login": "usuario-portal-exemplo-ficticio",
+        "senha": "senha-exemplo-ficticia"
+      }
+    }
+  }
+}
+```
+
+- Implementação: `backend/src/services/plugnotas/prefeituraPortalCredentials.js`; UI: `frontend/src/utils/nfEmissionCompany.ts`, `prefeituraPortalCredentialsUi.ts`.
+- Story: [`docs/stories/story-fr-plogin-backlog-dp01-credenciais-portal-prefeitura.md`](../stories/story-fr-plogin-backlog-dp01-credenciais-portal-prefeitura.md).
+
+## Complemento (2026-04-09) — DP-PLOGIN-02: bloqueio de `prefeitura` só com `codigoIbge` (lista IBGE)
+
+- **Opt-in:** `PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_ENABLED=true` e `PLUGNOTAS_NFSE_PREFEITURA_IBGE_ONLY_BLOCK_CODES` (códigos de 7 dígitos, vírgula). **Defeito desligado;** lista **vazia** ⇒ nenhum bloqueio (evita falsos positivos em municípios onde só IBGE basta — trilho B).
+- **Quando bloquear:** após derivação IBGE, se `nfse.config.prefeitura` fica **apenas** com `codigoIbge` (sem `login`/`senha` não vazios) **e** o IBGE está na lista **e** a flag está ligada → **400** BFF **antes** do Plugnotas, `errors.plugnotasCode`: **`prefeitura_ibge_apenas_insuficiente_dp02`**.
+- **Quando não bloquear:** credenciais DP01 presentes (par preenchido); ou IBGE não está na lista; ou flag desligada; ou `nfse.ativo === false`.
+- **Ordem em `empresa.service.js`:** `…` → `applyNfsePrefeituraIbgeIfEnabled` → `applyPrefeituraIbgeOnlyBlockPolicy`.
+- Implementação: `backend/src/services/plugnotas/prefeituraIbgeOnlyBlock.js`.
+- Story: [`docs/stories/story-fr-plogin-backlog-dp02-bloqueio-prefeitura-incompleta-servidor.md`](../stories/story-fr-plogin-backlog-dp02-bloqueio-prefeitura-incompleta-servidor.md).
+
 ## Consequências
 
 - Positivo: menos falhas de cadastro por validação de NFC-e inativa.

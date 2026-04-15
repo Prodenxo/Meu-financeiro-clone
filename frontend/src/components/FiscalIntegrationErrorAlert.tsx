@@ -6,9 +6,14 @@ import {
 } from '../utils/nfceEmpresaCadastroErrorHints';
 import {
   getNfseNacionalOperacaoHelpHref,
+  getPlugnotasEmpresaCadastroErrorUxVariant,
+  isMeiGuideSerproConsCUserFacingText,
+  isPlugnotasEmpresaIbgeCidadeMessage,
   isPlugnotasEmpresaMunicipalRequirementMessage,
+  MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT,
   shouldOfferNfseNacionalOperacaoDocHint
 } from '../utils/nfseNacionalPlugnotasErrorHints';
+import { MEI_GUIDE_SERPRO_UNAVAILABLE } from '../utils/mapMeiGuideValidateErrorToUserMessage';
 import {
   getGuiaMeiConnectivityHelpHref,
   GUIMEI_CONNECTIVITY_CERTIFICATE_MESSAGE
@@ -16,11 +21,19 @@ import {
 import {
   CERTIFICADO_EMISSOR_409_SEM_ID_DOC_ANCHOR,
   FISCAL_ERROR_LONG_THRESHOLD,
+  isMeiFiscalGatewayUpstreamError,
   mapMeiFiscalErrorToCopy
 } from '../lib/fiscalUserError';
 import { meiFiscalUserCopyToUserFacing } from '../lib/meiFiscalUserCopyToUserFacing';
+import type { PlugnotasRequestMeta } from '../utils/apiClientError';
 import UserFacingErrorBlock from './UserFacingErrorBlock';
-import { PlugnotasMunicipalRequirementOperacaoBody } from './PlugnotasMunicipalRequirementOperacaoCopy';
+import {
+  PlugnotasMunicipalRequirementOperacaoBody,
+  PlugnotasPrefeituraConfigNfseOperacaoBody,
+  PlugnotasPrefeituraConfigNfseOperacaoTitle,
+  PlugnotasPrefeituraLoginRequiredNfseOperacaoBody,
+  PlugnotasPrefeituraLoginRequiredNfseOperacaoTitle
+} from './PlugnotasMunicipalRequirementOperacaoCopy';
 import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
 
 const meiOperacaoNfseDocUrl =
@@ -148,10 +161,25 @@ export function LongFiscalErrorMessage({ message, tone }: LongMessageProps) {
 
 const providerHintClass = 'text-xs leading-snug text-rose-800/90 dark:text-rose-300/90';
 
+const ibgeCidadeAlertHintClass =
+  'text-sm leading-snug text-rose-800/80 dark:text-rose-300/85';
+
+/** FR-CID-UX-02: linha secundária quando a mensagem cita tabela IBGE / codigoCidade (spec UX §6.2). */
+function PlugnotasIbgeCidadeOperacaoHint({ message }: { message: string }) {
+  if (!isPlugnotasEmpresaIbgeCidadeMessage(message)) return null;
+  return (
+    <p className={ibgeCidadeAlertHintClass} role="note">
+      {MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT}
+    </p>
+  );
+}
+
 type EmissaoFiscalErrorAlertProps = {
   documentTypeLabel: string;
   message: string;
   plugnotasCode?: string | null;
+  httpStatus?: number | null;
+  plugnotasRequest?: PlugnotasRequestMeta | null;
 };
 
 type NfseNacionalDocHintLinkTone = Extract<LongFiscalErrorTone, 'danger' | 'rose'>;
@@ -171,6 +199,47 @@ function NfseNacionalOperacaoDocHint({ message, linkTone = 'danger' }: NfseNacio
     : 'Ver guia rápido (NFS-e Nacional)';
 
   if (isPlugnotasEmpresaMunicipalRequirementMessage(message)) {
+    const uxVariant = getPlugnotasEmpresaCadastroErrorUxVariant(message);
+    if (uxVariant === 'prefeitura-login-required') {
+      return (
+        <div
+          className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90"
+          role="region"
+          aria-label="Acesso ao portal da prefeitura no NFS-e"
+        >
+          <p className="mb-1 font-semibold text-rose-900 dark:text-rose-100">
+            <PlugnotasPrefeituraLoginRequiredNfseOperacaoTitle />
+          </p>
+          <p>
+            <PlugnotasPrefeituraLoginRequiredNfseOperacaoBody />{' '}
+            <a href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+              {linkLabel}
+            </a>
+            <span className="text-rose-800/85 dark:text-rose-300/85"> (abre em nova aba).</span>
+          </p>
+        </div>
+      );
+    }
+    if (uxVariant === 'prefeitura-config') {
+      return (
+        <div
+          className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90"
+          role="region"
+          aria-label="Configuração de prefeitura no NFS-e"
+        >
+          <p className="mb-1 font-semibold text-rose-900 dark:text-rose-100">
+            <PlugnotasPrefeituraConfigNfseOperacaoTitle />
+          </p>
+          <p>
+            <PlugnotasPrefeituraConfigNfseOperacaoBody />{' '}
+            <a href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+              {linkLabel}
+            </a>
+            <span className="text-rose-800/85 dark:text-rose-300/85"> (abre em nova aba).</span>
+          </p>
+        </div>
+      );
+    }
     return (
       <p className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90">
         <PlugnotasMunicipalRequirementOperacaoBody />{' '}
@@ -200,9 +269,11 @@ function NfseNacionalOperacaoDocHint({ message, linkTone = 'danger' }: NfseNacio
 export function EmissaoFiscalErrorAlert({
   documentTypeLabel,
   message,
-  plugnotasCode = null
+  plugnotasCode = null,
+  httpStatus = null,
+  plugnotasRequest = null
 }: EmissaoFiscalErrorAlertProps) {
-  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode });
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode, httpStatus, plugnotasRequest });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
     variant: 'inline',
     rawMessage: message,
@@ -216,6 +287,7 @@ export function EmissaoFiscalErrorAlert({
         <span className="normal-case tracking-normal">{documentTypeLabel}</span>
       </p>
       <UserFacingErrorBlock {...facing} />
+      <PlugnotasIbgeCidadeOperacaoHint message={message} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} /> : null}
     </div>
   );
@@ -225,15 +297,19 @@ type PlugnotasIntegrationErrorAlertProps = {
   message: string;
   title?: string;
   plugnotasCode?: string | null;
+  httpStatus?: number | null;
+  plugnotasRequest?: PlugnotasRequestMeta | null;
 };
 
 /** Outras operações (lista, download, cancelamento): bloco unificado + dica NFS-e Nacional quando aplicável. */
 export function PlugnotasIntegrationErrorAlert({
   message,
   title,
-  plugnotasCode = null
+  plugnotasCode = null,
+  httpStatus = null,
+  plugnotasRequest = null
 }: PlugnotasIntegrationErrorAlertProps) {
-  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode });
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode, httpStatus, plugnotasRequest });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
     variant: 'inline',
     rawMessage: message,
@@ -246,6 +322,7 @@ export function PlugnotasIntegrationErrorAlert({
         <p className="text-xs font-semibold text-rose-900 dark:text-rose-100">{title}</p>
       ) : null}
       <UserFacingErrorBlock {...facing} />
+      <PlugnotasIbgeCidadeOperacaoHint message={message} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} /> : null}
     </div>
   );
@@ -255,9 +332,11 @@ export function PlugnotasIntegrationErrorAlert({
 export function EmissaoFiscalErrorAlertModal({
   documentTypeLabel,
   message,
-  plugnotasCode = null
+  plugnotasCode = null,
+  httpStatus = null,
+  plugnotasRequest = null
 }: EmissaoFiscalErrorAlertProps) {
-  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode });
+  const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode, httpStatus, plugnotasRequest });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
     variant: 'modal_body',
     rawMessage: message,
@@ -271,6 +350,7 @@ export function EmissaoFiscalErrorAlertModal({
         Falha ao emitir {documentTypeLabel}
       </p>
       <UserFacingErrorBlock {...facing} />
+      <PlugnotasIbgeCidadeOperacaoHint message={message} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} linkTone="rose" /> : null}
     </div>
   );
@@ -351,19 +431,35 @@ export function GuiaMeiCertificado409SemIdChecklist() {
 
 type GuiaMeiEmpresaCadastroErrorPanelProps = {
   message: string;
-  /** Definido quando a API retorna `errors.fiscalErrorCode` (ex.: US-MEI-FISC-02). */
+  /** Definido quando a API retorna `errors.plugnotasCode` (ex.: US-MEI-FISC-02 / gateway upstream). */
   fiscalErrorCode?: string | null;
+  /** `errors.code` BFF quando disponível (ex.: FR-CONS Serpro — suprime hints NFS-e Nacional). */
+  fiscalApiErrorCode?: string | null;
+  /** Status HTTP da resposta JSON de erro, quando disponível (ex.: `ApiClientError.httpStatus`). */
+  fiscalHttpStatus?: number | null;
+  plugnotasRequest?: PlugnotasRequestMeta | null;
 };
 
 /**
  * Cadastro certificado/empresa na Guia MEI: mensagem completa (quebras + textos longos) + tom de provedor (US-NFCE-EMP-03).
  */
-export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = null }: GuiaMeiEmpresaCadastroErrorPanelProps) {
+export function GuiaMeiEmpresaCadastroErrorPanel({
+  message,
+  fiscalErrorCode = null,
+  fiscalApiErrorCode = null,
+  fiscalHttpStatus = null,
+  plugnotasRequest = null
+}: GuiaMeiEmpresaCadastroErrorPanelProps) {
   const showNfceHint = shouldOfferNfceCadastroDocHint(message);
-  const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message);
+  const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message, fiscalApiErrorCode);
   const linkClass = linkClassForTone('danger');
   const isLocalOnly = isLikelyLocalOnlyGuiaMeiEmpresaCertError(message);
   const showCert409 = fiscalErrorCode === PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID;
+  const isGatewayUpstream = isMeiFiscalGatewayUpstreamError({
+    rawMessage: message,
+    plugnotasCode: fiscalErrorCode,
+    httpStatus: fiscalHttpStatus,
+  });
   const meiEmpresaDocHref = getMeiEmpresaPlugnotasCadastroHelpHref();
   const meiEmpresaDocLinkLabel = meiOperacaoNfseDocUrl
     ? 'abra a documentação de operação'
@@ -371,7 +467,9 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = nu
 
   const copy = mapMeiFiscalErrorToCopy({
     rawMessage: message,
-    plugnotasCode: fiscalErrorCode
+    plugnotasCode: fiscalErrorCode,
+    httpStatus: fiscalHttpStatus,
+    plugnotasRequest,
   });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
     variant: 'inline',
@@ -379,11 +477,14 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = nu
     plugnotasCode: fiscalErrorCode,
     embedRawAsTechnicalDetail: false
   });
+  const suppressIbgeCidadeHintForSerproCons =
+    fiscalApiErrorCode === MEI_GUIDE_SERPRO_UNAVAILABLE || isMeiGuideSerproConsCUserFacingText(message);
 
   return (
-    <div className="admin-alert-danger space-y-2" role="alert">
+    <div className="admin-alert-danger space-y-2">
       <UserFacingErrorBlock {...facing} />
-      <LongFiscalErrorMessage message={message} tone="danger" />
+      {isGatewayUpstream ? null : <LongFiscalErrorMessage message={message} tone="danger" />}
+      {suppressIbgeCidadeHintForSerproCons ? null : <PlugnotasIbgeCidadeOperacaoHint message={message} />}
       {showCert409 ? <GuiaMeiCertificado409SemIdChecklist /> : null}
       {showNfceHint ? (
         <p className="text-xs leading-snug text-rose-800/90 dark:text-rose-300/90">
@@ -415,6 +516,12 @@ export function GuiaMeiEmpresaCadastroErrorPanel({ message, fiscalErrorCode = nu
         </p>
       ) : isLocalOnly ? (
         <p className={providerHintClass}>Corrija os dados no formulário conforme a mensagem acima e tente de novo.</p>
+      ) : isGatewayUpstream ? (
+        <p className={providerHintClass}>
+          Trata-se de indisponibilidade temporária do <strong className="font-semibold">emissor fiscal</strong>, não de
+          rejeição do certificado ou dos dados do formulário. Aguarde alguns minutos e tente de novo; se persistir,
+          confirme no servidor a URL base e a chave de API do emissor no mesmo ambiente (sandbox/produção).
+        </p>
       ) : (
         <p className={providerHintClass}>
           Quando a mensagem citar validação de JSON, campos fiscais ou integração fiscal, quem recusou o

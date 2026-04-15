@@ -1,5 +1,23 @@
-import { PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID } from '../utils/plugnotasApiErrorCode';
-import { getPlugnotasCodeFromUnknownError } from '../utils/apiClientError';
+import {
+  isPlugnotasGatewayUpstreamCode,
+  PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID,
+} from '../utils/plugnotasApiErrorCode';
+
+/** DP-PLOGIN-02 — BFF bloqueia cadastro só com IBGE em município da lista (`prefeituraIbgeOnlyBlock.js`). */
+export const PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02 =
+  'prefeitura_ibge_apenas_insuficiente_dp02';
+export const PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED =
+  'prefeitura_login_required_blocked';
+/** BFF classificação FR-ALNFB — segundo passo municipal disponível (credenciais). */
+export const PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE =
+  'prefeitura_login_required_fallback_available';
+import {
+  getPlugnotasCodeFromUnknownError,
+  getHttpStatusFromUnknownError,
+  getRuntimeDecisionFromUnknownError,
+  type PlugnotasRequestMeta
+} from '../utils/apiClientError';
+import type { EmpresaCadastroRuntimeDecision } from '../types/empresaCadastroRuntimeDecision';
 
 /** Alinhado à Story 6.3 / Guia MEI: acima disto, mensagem longa exige expansão ou área rolável. */
 export const FISCAL_ERROR_LONG_THRESHOLD = 300;
@@ -13,7 +31,168 @@ export type MeiFiscalUserCopy = {
   description: string;
   actionLabel?: string;
   href?: string;
+  /** Gateway upstream Plugnotas (502–504): UI suprime HTML bruto e ajusta rodapé. */
+  gatewayUpstream?: boolean;
 };
+
+export type MeiFiscalScenario =
+  | 'success_nacional'
+  | 'ambiente_configuracao'
+  | 'payload_contrato'
+  | 'fallback_sync'
+  | 'prefeitura_ibge_apenas_insuficiente_dp02'
+  | 'prefeitura_login_required_blocked'
+  | 'prefeitura_login_required_fallback_available'
+  | 'empresa_nao_cadastrada';
+
+function normalizePlugnotasRequestMeta(
+  value: PlugnotasRequestMeta | null | undefined
+): PlugnotasRequestMeta | null {
+  if (!value) return null;
+  const method = String(value.method || '').trim().toUpperCase();
+  const path = String(value.path || '').trim();
+  if (!method || !path) return null;
+  return { method, path };
+}
+
+export function stripPlugnotasRequestSuffix(
+  rawMessage: string,
+  plugnotasRequest?: PlugnotasRequestMeta | null
+): string {
+  const normalized = normalizePlugnotasRequestMeta(plugnotasRequest);
+  const raw = String(rawMessage || '').trim();
+  if (!raw || !normalized) return raw;
+  const escapedMethod = normalized.method.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedPath = normalized.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const suffix = new RegExp(`\\s*\\(${escapedMethod}\\s+${escapedPath}\\s+no emissor fiscal\\)$`, 'i');
+  return raw.replace(suffix, '').trim();
+}
+
+/** Paridade com `PLUGNOTAS_GATEWAY_UPSTREAM_PUBLIC_MESSAGE_PT` no backend. */
+export const MEI_FISCAL_GATEWAY_UPSTREAM_DESCRIPTION =
+  'O emissor fiscal não está a responder neste momento (erro temporário no servidor). '
+  + 'Tente de novo dentro de alguns minutos. Se o problema continuar, confirme no servidor a URL e a chave '
+  + 'de API do emissor, ou contacte o suporte do emissor fiscal.';
+
+export const MEI_FISCAL_GATEWAY_SOURCE_FOOTNOTE =
+  'Esta mensagem refere-se ao serviço de emissão de notas (emissor fiscal). Neste caso indica indisponibilidade '
+  + 'temporária, não rejeição do seu certificado ou dos dados preenchidos.';
+
+function isGatewayHttpStatus(status: number | null | undefined): boolean {
+  const s = Number(status);
+  return s === 502 || s === 503 || s === 504;
+}
+
+/** Heurística para respostas HTML de proxy (legado antes da normalização BFF). */
+export function isLikelyPlugnotasGatewayRawMessage(raw: string): boolean {
+  const t = raw.trim();
+  if (!t) return false;
+  const lower = t.toLowerCase();
+  if (lower.includes('<html') && (lower.includes('502') || lower.includes('bad gateway'))) return true;
+  if (lower.includes('502 bad gateway')) return true;
+  if (lower.includes('503 service unavailable')) return true;
+  if (lower.includes('504 gateway timeout')) return true;
+  return false;
+}
+
+export function isMeiFiscalGatewayUpstreamError(input: {
+  rawMessage: string;
+  plugnotasCode?: string | null;
+  httpStatus?: number | null;
+}): boolean {
+  if (isPlugnotasGatewayUpstreamCode(input.plugnotasCode)) return true;
+  if (isGatewayHttpStatus(input.httpStatus)) return true;
+  return isLikelyPlugnotasGatewayRawMessage(input.rawMessage);
+}
+
+export function resolveMeiFiscalScenario(input: {
+  rawMessage: string;
+  plugnotasCode?: string | null;
+  httpStatus?: number | null;
+  plugnotasRequest?: PlugnotasRequestMeta | null;
+  operation?: string | null;
+  /** Precedência sobre heurísticas de código — arquitetura §9.5 (FR-ALNFB). */
+  runtimeDecision?: EmpresaCadastroRuntimeDecision | null;
+}): MeiFiscalScenario | null {
+  const rd = input.runtimeDecision;
+  const rdScenario = typeof rd?.scenario === 'string' ? rd.scenario.trim() : '';
+  if (rdScenario === 'prefeitura_login_required_fallback_available') {
+    return 'prefeitura_login_required_fallback_available';
+  }
+  if (rdScenario === 'prefeitura_login_required_blocked') {
+    return 'prefeitura_login_required_blocked';
+  }
+
+  const code = input.plugnotasCode?.trim() || null;
+  const request = normalizePlugnotasRequestMeta(input.plugnotasRequest);
+  const raw = stripPlugnotasRequestSuffix(input.rawMessage || '', request);
+  const lower = raw.toLowerCase();
+  const operation = String(input.operation || '').trim().toLowerCase();
+
+  if (code === PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02) {
+    return 'prefeitura_ibge_apenas_insuficiente_dp02';
+  }
+  if (code === PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED) {
+    return 'prefeitura_login_required_blocked';
+  }
+  if (code === PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE) {
+    return 'prefeitura_login_required_fallback_available';
+  }
+  if (
+    code === 'ambiente_configuracao'
+    || isMeiFiscalGatewayUpstreamError({
+      rawMessage: raw,
+      plugnotasCode: code,
+      httpStatus: input.httpStatus,
+    })
+    || /\b401\b/.test(raw)
+    || /\b403\b/.test(raw)
+    || lower.includes('unauthorized')
+    || lower.includes('forbidden')
+    || lower.includes('token inválido')
+    || lower.includes('token invalido')
+    || lower.includes('url base')
+    || lower.includes('ambiente incorreto')
+    || lower.includes('a chamada')
+      && lower.includes('url base')
+  ) {
+    return 'ambiente_configuracao';
+  }
+  if (operation === 'updated' || operation === 'existing') {
+    return 'fallback_sync';
+  }
+  if (
+    code === 'payload_contrato'
+    || (
+      request?.method === 'POST'
+      && request.path === '/empresa'
+      && Number(input.httpStatus) === 400
+    )
+  ) {
+    return 'payload_contrato';
+  }
+  if (
+    code === 'empresa_nao_cadastrada'
+    || (
+      request?.method === 'GET'
+      && request.path.startsWith('/empresa/')
+      && (
+        lower.includes('não localizamos')
+        || lower.includes('nao localizamos')
+        || lower.includes('não encontrou cadastro')
+        || lower.includes('nao encontrou cadastro')
+        || lower.includes('não há cadastro desta empresa no emissor fiscal')
+        || lower.includes('nao ha cadastro desta empresa no emissor fiscal')
+      )
+    )
+  ) {
+    return 'empresa_nao_cadastrada';
+  }
+  if (operation === 'created') {
+    return 'success_nacional';
+  }
+  return null;
+}
 
 function meiOperacaoNfseDocBase(): string {
   const raw = typeof import.meta.env.VITE_MEI_OPERACAO_NFSE_DOC_URL === 'string'
@@ -80,10 +259,83 @@ export function isLikelyUserFacingFiscalValidationMessage(text: string): boolean
 export function mapMeiFiscalErrorToCopy(input: {
   rawMessage: string;
   plugnotasCode?: string | null;
+  httpStatus?: number | null;
+  plugnotasRequest?: PlugnotasRequestMeta | null;
+  runtimeDecision?: EmpresaCadastroRuntimeDecision | null;
 }): MeiFiscalUserCopy {
   const code = input.plugnotasCode?.trim() || null;
-  const raw = (input.rawMessage || '').trim();
+  const request = normalizePlugnotasRequestMeta(input.plugnotasRequest);
+  const raw = stripPlugnotasRequestSuffix(input.rawMessage || '', request);
   const lower = raw.toLowerCase();
+  const scenario = resolveMeiFiscalScenario({
+    rawMessage: raw,
+    plugnotasCode: code,
+    httpStatus: input.httpStatus,
+    plugnotasRequest: request,
+    runtimeDecision: input.runtimeDecision ?? null,
+  });
+
+  if (scenario === 'ambiente_configuracao') {
+    return {
+      title: isMeiFiscalGatewayUpstreamError({
+        rawMessage: raw,
+        plugnotasCode: code,
+        httpStatus: input.httpStatus,
+      })
+        ? 'Emissor fiscal temporariamente indisponível'
+        : 'Configuração do emissor fiscal',
+      description: isMeiFiscalGatewayUpstreamError({
+        rawMessage: raw,
+        plugnotasCode: code,
+        httpStatus: input.httpStatus,
+      })
+        ? MEI_FISCAL_GATEWAY_UPSTREAM_DESCRIPTION
+        : 'Não foi possível concluir a integração com o emissor fiscal neste ambiente. '
+          + 'Quem gere o servidor deve confirmar URL base, token e ambiente (sandbox/produção) antes de tentar novamente.',
+      gatewayUpstream: isMeiFiscalGatewayUpstreamError({
+        rawMessage: raw,
+        plugnotasCode: code,
+        httpStatus: input.httpStatus,
+      }),
+    };
+  }
+
+  if (scenario === 'prefeitura_ibge_apenas_insuficiente_dp02') {
+    return {
+      title: 'Limite do serviço — prefeitura no NFS-e',
+      description:
+        'Nem todos os municípios ficam disponíveis neste fluxo sem dados adicionais da prefeitura no emissor fiscal. '
+        + 'Para o seu município, o cadastro costuma exigir configuração além do código IBGE. '
+        + 'Isto não é um erro das suas credenciais MEI — contacte o suporte ou consulte a documentação do emissor.',
+    };
+  }
+
+  if (scenario === 'prefeitura_login_required_blocked') {
+    return {
+      title: 'Exceção municipal não suportada neste fluxo',
+      description:
+        'Este cadastro segue NFS-e Nacional como padrão. Quando o emissor exigir acesso ao portal da prefeitura, '
+        + 'o caso fica fora deste fluxo e precisa de triagem operacional com suporte ou com o painel do emissor.',
+    };
+  }
+
+  if (scenario === 'prefeitura_login_required_fallback_available') {
+    return {
+      title: 'Portal da prefeitura necessário para concluir',
+      description:
+        'O emissor indicou que este município exige autenticação no portal da prefeitura para seguir com o cadastro NFS-e. '
+        + 'Quando a integração estiver disponível nesta jornada, poderá informar login e senha do portal abaixo para '
+        + 'tentar o segundo passo — sem substituir o padrão nacional nas outras etapas.',
+    };
+  }
+
+  if (scenario === 'payload_contrato') {
+    return {
+      title: 'Revise os dados do cadastro',
+      description:
+        'O emissor fiscal recusou os dados enviados para cadastrar a empresa. Revise CNPJ, endereço e demais campos obrigatórios e tente de novo.',
+    };
+  }
 
   if (code === PLUGNOTAS_CODE_CERTIFICADO_409_SEM_ID) {
     return {
@@ -170,6 +422,15 @@ export function mapMeiFiscalErrorToCopy(input: {
     };
   }
 
+  if (scenario === 'empresa_nao_cadastrada') {
+    return {
+      title: 'Cadastro da empresa ainda não concluído',
+      description:
+        'A consulta não encontrou a empresa no emissor porque o cadastro ainda não foi concluído com sucesso. '
+        + 'Corrija o erro anterior e tente registrar a empresa novamente antes de consultar de novo.',
+    };
+  }
+
   if (
     lower.includes('não há cadastro desta empresa no plugnotas')
     || lower.includes('nao ha cadastro desta empresa no plugnotas')
@@ -197,9 +458,19 @@ export function mapMeiFiscalErrorToCopy(input: {
   }
 
   if (
-    lower.includes('rota')
-    && (lower.includes('não existe') || lower.includes('nao existe'))
-    && (lower.includes('serviço') || lower.includes('servico'))
+    (
+      lower.includes('rota')
+      && (lower.includes('não existe') || lower.includes('nao existe'))
+      && (lower.includes('serviço') || lower.includes('servico'))
+    )
+    || (
+      request?.path === '/empresa'
+      && isMeiFiscalGatewayUpstreamError({
+        rawMessage: raw,
+        plugnotasCode: code,
+        httpStatus: input.httpStatus,
+      })
+    )
   ) {
     return {
       title: 'Configuração do emissor fiscal',
@@ -240,6 +511,8 @@ export function meiFiscalToastMessage(err: unknown, fallback: string): string {
   const copy = mapMeiFiscalErrorToCopy({
     rawMessage: raw || fallback,
     plugnotasCode: getPlugnotasCodeFromUnknownError(err),
+    httpStatus: getHttpStatusFromUnknownError(err),
+    runtimeDecision: getRuntimeDecisionFromUnknownError(err),
   });
   const line = `${copy.title}: ${copy.description}`.replace(/\s+/g, ' ').trim();
   return line.length > 220 ? `${line.slice(0, 217)}…` : line;
@@ -248,10 +521,19 @@ export function meiFiscalToastMessage(err: unknown, fallback: string): string {
 /**
  * Entrada usada por `formatPlugnotasIntegrationError` (Guia MEI e integrações).
  */
-export function formatMeiFiscalErrorForIntegrations(rawMessage: string, plugnotasCode?: string | null): string {
+export function formatMeiFiscalErrorForIntegrations(
+  rawMessage: string,
+  plugnotasCode?: string | null,
+  httpStatus?: number | null,
+  plugnotasRequest?: PlugnotasRequestMeta | null,
+  runtimeDecision?: EmpresaCadastroRuntimeDecision | null
+): string {
   const copy = mapMeiFiscalErrorToCopy({
     rawMessage,
     plugnotasCode: plugnotasCode ?? null,
+    httpStatus: httpStatus ?? null,
+    plugnotasRequest: plugnotasRequest ?? null,
+    runtimeDecision: runtimeDecision ?? null,
   });
   return formatMeiFiscalMappedForAlert(copy);
 }
@@ -261,5 +543,7 @@ export function mapMeiFiscalErrorFromUnknown(err: unknown, fallbackMessage: stri
   return mapMeiFiscalErrorToCopy({
     rawMessage: raw || fallbackMessage,
     plugnotasCode: getPlugnotasCodeFromUnknownError(err),
+    httpStatus: getHttpStatusFromUnknownError(err),
+    runtimeDecision: getRuntimeDecisionFromUnknownError(err),
   });
 }

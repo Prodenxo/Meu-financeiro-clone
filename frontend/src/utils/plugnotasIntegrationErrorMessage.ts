@@ -1,4 +1,5 @@
 import { formatMeiFiscalErrorForIntegrations } from '../lib/fiscalUserError';
+import type { PlugnotasRequestMeta } from './apiClientError';
 
 /**
  * Mensagem de erro fiscal/Plugnotas para a UI (Guia MEI, alertas longos).
@@ -9,7 +10,14 @@ import { formatMeiFiscalErrorForIntegrations } from '../lib/fiscalUserError';
  */
 export function formatPlugnotasIntegrationError(
   message: string,
-  plugnotasCode?: string | null
+  plugnotasCode?: string | null,
+  httpStatus?: number | null,
+  plugnotasRequest?: PlugnotasRequestMeta | null
 ): string {
-  return formatMeiFiscalErrorForIntegrations(message, plugnotasCode ?? null);
+  return formatMeiFiscalErrorForIntegrations(
+    message,
+    plugnotasCode ?? null,
+    httpStatus ?? null,
+    plugnotasRequest ?? null
+  );
 }

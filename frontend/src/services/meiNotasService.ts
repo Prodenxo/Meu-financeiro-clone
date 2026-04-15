@@ -1,4 +1,7 @@
 import { apiClient } from './apiClient';
+import type { EmpresaCadastroRuntimeDecision } from '../types/empresaCadastroRuntimeDecision';
+
+export type { EmpresaCadastroRuntimeDecision };
 
 export type DocumentType = 'NFSE' | 'NFE' | 'NFCE' | 'CTE';
 
@@ -220,6 +223,7 @@ export interface CadastrarEmissaoNfEmpresaResponse {
   message: string | null;
   operation?: 'created' | 'updated' | 'existing';
   raw: Record<string, unknown>;
+  runtimeDecision?: EmpresaCadastroRuntimeDecision;
 }
 
 /** Resposta bruta do provedor na consulta GET empresa (formato pode variar). */

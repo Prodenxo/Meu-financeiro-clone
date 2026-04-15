@@ -206,6 +206,9 @@ export const getSerproTokens = async ({ forceRefresh = false } = {}) => {
   return { accessToken, jwtToken };
 };
 
+/** Pedidos à API Serpro (ex.: /Emitir); respeita `__setHttpClientsForTests`. */
+export const serproApiFetch = (url, options) => fetchClient(url, options);
+
 export const __setHttpClientsForTests = ({ fetchFn, mtlsFn, noMtls } = {}) => {
   fetchClient = typeof fetchFn === 'function' ? fetchFn : defaultFetchClient;
   mtlsClient = typeof mtlsFn === 'function' ? mtlsFn : defaultMtlsClient;

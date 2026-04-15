@@ -40,7 +40,8 @@ export default function UserFacingErrorBlock(props: UserFacingErrorProps) {
   }, [props.category, props.analyticsSurfaceId]);
 
   const role = props.severity === 'info' ? 'status' : 'alert';
-  const sourceLabel = USER_ERROR_SOURCE_LABEL[props.source];
+  const sourceLabel =
+    props.sourceFootnote?.trim() || USER_ERROR_SOURCE_LABEL[props.source] || '';
   const HeadingTag = props.variant === 'page_banner' ? 'h2' : 'h3';
 
   async function handleCopySupport() {
@@ -71,7 +72,7 @@ export default function UserFacingErrorBlock(props: UserFacingErrorProps) {
         {props.title}
       </HeadingTag>
       <p className="mt-1 text-sm opacity-90 leading-relaxed">{props.description}</p>
-      {sourceLabel ? (
+      {sourceLabel.trim() ? (
         <p className="mt-2 text-xs opacity-90 leading-relaxed">{sourceLabel}</p>
       ) : null}
 

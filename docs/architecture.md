@@ -114,6 +114,7 @@ O foco e evoluir a plataforma sem reescrever o sistema, aplicando mudancas em et
 - **Trade-off:** se o provedor ou a SEFAZ passar a exigir QR v2 de forma inequivoca, sera necessario incremento (payload + possivel UI) para `nfce.config.sefaz` conforme especificacao atualizada.
 - **Escopo Guia MEI apenas NFS-e:** para cadastro/atualizacao de empresa nesse produto, a decisao acima foi **substituida** por **`nfe`/`nfce` inativos sem `config`** (ver **ADR-07**). ADR-06 permanece como referencia historica e para fluxos que ainda modelem NFC-e ativa com QR v1.
 
+<a id="arch-root-plugnotas-payload-nfse"></a>
 ### ADR-07 - Guia MEI apenas NFS-e: payload empresa Plugnotas (FR-A01)
 
 - **Decisao:** no escopo **Guia MEI / apenas NFS-e**, o JSON de empresa para o Plugnotas usa `nfe` e `nfce` **inativos** (`ativo: false`, `tipoContrato: 0`) **sem** objeto `config`, e politica de `inscricaoEstadual` documentada no ADR dedicado.

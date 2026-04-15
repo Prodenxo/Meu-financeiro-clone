@@ -10,7 +10,8 @@ export interface BrasilApiCnpjResponse {
   uf: string | null;
   cep: string | null;
   email: string | null;
-  codigo_municipio: string | null;
+  /** Brasil API pode devolver número em JSON — normalizar com `normalizeIbgeMunicipioCodigo`. */
+  codigo_municipio: string | number | null;
   simples: { optante_simples_nacional: boolean } | null;
 }
 
