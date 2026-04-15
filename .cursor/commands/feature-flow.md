@@ -1,17 +1,18 @@
+---
+description: Fluxo AIOS para novas funcionalidades (analyst → po → dev → qa).
+---
+
 # Feature Flow — AIOS Orchestrated Workflow
 
 Fluxo completo para implementação de novas funcionalidades, do levantamento ao QA gate.
 
 ## Como usar
 
-**Cursor (slash command):** `/feature-flow` — definido em `.cursor/commands/feature-flow.md` (aparece ao escrever `/` no chat).
+Comando Cursor: **`/feature-flow`**. Na mesma mensagem, descreve a feature (objetivo, utilizador, critérios de sucesso).
 
-**Definição canónica AIOX:** `.aiox-core/development/workflows/feature-flow.yaml` (`workflow.id: feature-flow`), quando existir no repo.
+**Referência igual:** `.cursor/workflows/feature-flow.md`
 
-No agente **aiox-master:** `*workflow feature-flow` ou `*run-workflow feature-flow` (modo guided/engine conforme o projeto).
-
-Na mesma mensagem do comando, descreve a feature. Exemplo:
-> `/feature-flow` — Adicionar filtro de data no painel de campanhas Meta.
+**AIOX (aiox-master):** `*workflow feature-flow` ou `*run-workflow feature-flow`, quando o motor AIOX estiver disponível.
 
 ---
 

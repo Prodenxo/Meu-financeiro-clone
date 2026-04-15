@@ -1,17 +1,18 @@
+---
+description: Fluxo AIOS para investigar e corrigir bugs (analyst → po → dev → qa).
+---
+
 # Bug Fix Flow — AIOS Orchestrated Workflow
 
 Fluxo completo para investigação e correção de bugs, do diagnóstico ao QA gate.
 
 ## Como usar
 
-**Cursor (slash command):** `/bug-fix-flow` — definido em `.cursor/commands/bug-fix-flow.md` (aparece ao escrever `/` no chat).
+Comando Cursor: **`/bug-fix-flow`**. Na mesma mensagem, descreve o bug (o que falha, passos para reproduzir, mensagem de erro se houver).
 
-**Definição canónica AIOX:** `.aiox-core/development/workflows/bug-fix-flow.yaml` (`workflow.id: bug-fix-flow`), quando existir no repo.
+**Referência igual:** `.cursor/workflows/bug-fix-flow.md`
 
-No agente **aiox-master:** `*workflow bug-fix-flow` ou `*run-workflow bug-fix-flow` (modo guided/engine conforme o projeto).
-
-Na mesma mensagem do comando, descreve o bug. Exemplo:
-> `/bug-fix-flow` — Criação de campanha Meta retorna erro genérico ao salvar.
+**AIOX (aiox-master):** `*workflow bug-fix-flow` ou `*run-workflow bug-fix-flow`, quando o motor AIOX estiver disponível.
 
 ---
 
