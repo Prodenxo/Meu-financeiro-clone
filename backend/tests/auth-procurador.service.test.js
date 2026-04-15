@@ -28,6 +28,19 @@ const buildJsonResponse = (status, payload) => ({
   text: async () => JSON.stringify(payload || {})
 });
 
+const buildHtmlResponse = (status, html) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  statusText: status >= 400 ? 'Error' : 'OK',
+  headers: {
+    get: (name) => (String(name || '').toLowerCase() === 'content-type' ? 'text/html' : null)
+  },
+  json: async () => {
+    throw new Error('not json');
+  },
+  text: async () => html
+});
+
 test('auth-procurador faz fallback para mTLS após erro de certificado no OAuth sem mTLS', async () => {
   __resetAuthProcuradorStateForTests();
   let fetchCalls = 0;
@@ -86,6 +99,40 @@ test('auth-procurador preserva erro original quando fallback mTLS também falha'
         return true;
       }
     );
+    assert.equal(fetchCalls, 1);
+    assert.equal(mtlsCalls, 1);
+  } finally {
+    __resetAuthProcuradorStateForTests();
+  }
+});
+
+test('auth-procurador faz fallback para mTLS quando OAuth sem mTLS devolve 495 HTML (inglês)', async () => {
+  __resetAuthProcuradorStateForTests();
+  let fetchCalls = 0;
+  let mtlsCalls = 0;
+  const html495 = '<html><body><h1>495 SSL Certificate Error</h1>An invalid certificate has been provided.\n</body></html>\n';
+
+  __setHttpClientsForTests({
+    noMtls: true,
+    fetchFn: async () => {
+      fetchCalls += 1;
+      return buildHtmlResponse(495, html495);
+    },
+    mtlsFn: async (_url, options) => {
+      mtlsCalls += 1;
+      assert.equal(Boolean(options?.pfx), true);
+      return buildJsonResponse(200, {
+        access_token: 'token-495-fallback',
+        jwt_token: 'jwt-495-fallback',
+        expires_in: 3600
+      });
+    }
+  });
+
+  try {
+    const tokens = await getSerproTokens({ forceRefresh: true });
+    assert.equal(tokens.accessToken, 'token-495-fallback');
+    assert.equal(tokens.jwtToken, 'jwt-495-fallback');
     assert.equal(fetchCalls, 1);
     assert.equal(mtlsCalls, 1);
   } finally {

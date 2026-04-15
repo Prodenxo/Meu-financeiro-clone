@@ -35,8 +35,18 @@ const isNoMtlsEnabled = () => {
 const isAutenticaProcuradorMtlsEnabled = () => String(env.SERPRO_AUTENTICA_PROCURADOR_USE_MTLS || '').toLowerCase() === 'true';
 const OAUTH_CERT_ERROR_PATTERNS = [
   /certificado\s+digital\s+v[aá]lido/i,
-  /identificar\s+um\s+certificado/i
+  /identificar\s+um\s+certificado/i,
+  // Respostas HTML/proxy (ex.: 495) com mensagem em inglês
+  /SSL\s+Certificate\s+Error/i,
+  /invalid\s+certificate\s+has\s+been\s+provided/i
 ];
+
+const isOauthCertRelatedFailure = (result) => {
+  if (!result || result.ok) return false;
+  if (Number(result.status) === 495) return true;
+  const msg = String(result.message || '');
+  return OAUTH_CERT_ERROR_PATTERNS.some((pattern) => pattern.test(msg));
+};
 
 const loadEnvPfx = () => {
   if (!env.SERPRO_CERT_PFX_BASE64) {
@@ -157,7 +167,7 @@ export const getSerproTokens = async ({ forceRefresh = false } = {}) => {
   if (!result.ok) {
     logOauthFailure(result, 'primary');
     const originalError = badRequest(result.message || 'Erro ao autenticar com a Serpro');
-    const hasCertError = OAUTH_CERT_ERROR_PATTERNS.some((pattern) => pattern.test(String(result.message || '')));
+    const hasCertError = isOauthCertRelatedFailure(result);
     const hasPfxForFallback = Boolean(getSerproTlsConfig()?.pfx);
     const shouldRetryWithMtls = (
       isNoMtlsEnabled()
