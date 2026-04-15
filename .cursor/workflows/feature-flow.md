@@ -6,9 +6,9 @@ Fluxo completo para implementação de novas funcionalidades, do levantamento ao
 
 **Cursor (slash command):** `/feature-flow` — definido em `.cursor/commands/feature-flow.md` (aparece ao escrever `/` no chat).
 
-**Definição canónica AIOX:** `.aiox-core/development/workflows/feature-flow.yaml` (`workflow.id: feature-flow`), quando existir no repo.
+**Definição executável (YAML AIOX, versionada):** [feature-flow.yaml](./feature-flow.yaml) — `workflow.id: feature-flow`. Se o runner só ler `.aiox-core/development/workflows/`, copia ou faz symlink deste ficheiro para lá (a pasta `.aiox-core` pode estar ignorada pelo Git neste repo).
 
-No agente **aiox-master:** `*workflow feature-flow` ou `*run-workflow feature-flow` (modo guided/engine conforme o projeto).
+No agente **aiox-master:** `*workflow feature-flow` ou `*run-workflow feature-flow` (conforme o projeto apontar para `.cursor/workflows` ou cópia em `.aiox-core`).
 
 Na mesma mensagem do comando, descreve a feature. Exemplo:
 > `/feature-flow` — Adicionar filtro de data no painel de campanhas Meta.

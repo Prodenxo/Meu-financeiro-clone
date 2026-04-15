@@ -1,0 +1,196 @@
+workflow:
+  id: bug-fix-flow
+  name: Bug Fix Flow
+  version: "1.0"
+  description: >-
+    Fluxo orquestrado para correção de bugs: investigação → validação de escopo (PO)
+    → implementação cirúrgica → QA → correções iterativas quando necessário.
+  type: development
+  project_types:
+    - brownfield
+    - bug-fix
+    - maintenance
+
+  metadata:
+    elicit: true
+    confirmation_required: true
+
+  execution_modes:
+    - mode: interactive
+      description: Checkpoints por fase (analyst → po → dev → qa)
+      default: true
+    - mode: yolo
+      description: Menos interação; mantém GO do PO antes do dev
+
+  phases:
+    - phase_1: Investigação
+    - phase_2: Validação de escopo
+    - phase_3: Implementação do fix
+    - phase_4: QA gate
+    - phase_5: Fixes do QA (iterativo)
+
+  sequence:
+    - step: analyst_investigate
+      id: investigate
+      phase: 1
+      agent: analyst
+      action: Investigar causa raiz
+      notes: |
+        Objetivo: identificar causa raiz antes de alterar código.
+
+        O analyst deve:
+        1. Ler arquivos relevantes ao bug
+        2. Rastrear fluxo: frontend → serviço → API → dados
+        3. Localizar ponto de falha
+        4. Documentar causa raiz, arquivos afetados, impacto
+        5. Propor correção (sem implementar)
+
+        Entrega: causa raiz, lista de arquivos, abordagem de correção.
+
+        Handoff: ativar @po.
+      outputs:
+        - root_cause
+        - files_to_change
+        - proposed_fix_approach
+      next: validate_scope
+
+    - step: po_validate_scope
+      id: validate_scope
+      phase: 2
+      agent: po
+      action: Validar escopo da correção
+      requires: investigate
+      notes: |
+        Objetivo: confirmar que o fix é adequado e mapear side effects.
+
+        O PO deve:
+        1. Revisar a análise do analyst
+        2. Confirmar que não quebra outros fluxos indevidamente
+        3. Definir critérios de aceitação para o fix
+        4. GO ou pedir análise adicional ao analyst
+
+        Decisão:
+        - GO → @dev
+        - NO-GO → retorno ao @analyst
+
+        Fluxo linear: cada fase aguarda a anterior.
+      outputs:
+        - acceptance_criteria
+        - go_no_go
+      next: implement_fix
+      on_failure: investigate
+
+    - step: dev_implement_fix
+      id: implement_fix
+      phase: 3
+      agent: dev
+      action: Implementar correção cirúrgica
+      requires: validate_scope
+      notes: |
+        Objetivo: corrigir o bug com mudança mínima.
+
+        O dev deve:
+        1. Ler arquivos indicados pelo analyst
+        2. Implementar só o necessário para o fix
+        3. Na raiz do monorepo: `npm run typecheck` e `npm run lint`
+        4. Não refatorar código não relacionado
+        5. Bugs adjacentes: documentar, não misturar no mesmo fix
+
+        Handoff: ativar @qa.
+      outputs:
+        - patch_summary
+        - quality_commands_status
+      next: qa_review
+
+    - step: qa_review
+      id: qa_review
+      phase: 4
+      agent: qa
+      action: Revisão e regressão
+      requires: implement_fix
+      notes: |
+        Objetivo: confirmar que o bug foi resolvido sem regressões.
+
+        O QA deve:
+        1. Revisar arquivos modificados
+        2. Verificar critérios de aceitação do PO
+        3. Regressões potenciais
+        4. `npm run typecheck` e `npm run lint`
+        5. Tech debt documentado, sem bloquear o fix
+
+        Decisão: PASS | CONCERNS | FAIL
+        - FAIL → @dev com feedback (máx. 3 iterações)
+      outputs:
+        - qa_verdict
+        - qa_notes
+      next: complete
+      on_failure: fix_qa
+
+    - step: dev_fix_qa
+      id: fix_qa
+      phase: 5
+      agent: dev
+      action: Aplicar correções do QA
+      notes: |
+        Somente o indicado pelo QA; repetir até PASS ou CONCERNS.
+      outputs:
+        - fix_commits
+      next: qa_review
+
+    - workflow_end:
+      id: complete
+      action: bug_fix_complete
+      notes: |
+        Encerramento:
+        - Causa raiz documentada
+        - Critérios de aceitação (PO)
+        - typecheck e lint OK
+        - QA: PASS ou CONCERNS
+        - Tech debts documentados (não bloqueiam)
+
+  flow_diagram: |
+    ```mermaid
+    graph TD
+        A[Start: Bug Fix Flow] --> B[analyst: Investigação]
+        B --> C[po: Valida escopo]
+        C --> D{GO?}
+        D -->|Não| B
+        D -->|Sim| E[dev: Fix cirúrgico]
+        E --> F[qa: Gate]
+        F --> G{PASS / CONCERNS / FAIL?}
+        G -->|FAIL| H[dev: Fixes]
+        H --> F
+        G -->|PASS ou CONCERNS| I[Fim]
+    ```
+
+  decision_guidance:
+    when_to_use:
+      - Bugs que precisam de causa raiz antes do patch
+      - Correções que precisam de validação de produto (escopo de side effects)
+    when_not_to_use:
+      - Typos ou one-liners triviais com risco zero (fluxo pode ser encurtado por decisão da equipa)
+
+  handoff_prompts:
+    investigation_done: |
+      Investigação concluída. Próximo: @po para validar escopo e critérios.
+
+    scope_go: |
+      GO do PO. @dev pode aplicar o fix.
+
+    qa_pass: |
+      QA: PASS ou CONCERNS. Bug fix flow encerrado.
+
+    qa_fail: |
+      QA: FAIL. @dev aplica correções e reenvia para QA.
+
+metadata:
+  author: AIOX (Meu Financeiro — .cursor/workflows)
+  created_date: 2026-04-15
+  version: 1.0.0
+  source_md: .cursor/workflows/bug-fix-flow.md
+  tags:
+    - bugfix
+    - analyst
+    - po
+    - dev
+    - qa

@@ -6,9 +6,9 @@ Fluxo completo para investigação e correção de bugs, do diagnóstico ao QA g
 
 **Cursor (slash command):** `/bug-fix-flow` — definido em `.cursor/commands/bug-fix-flow.md` (aparece ao escrever `/` no chat).
 
-**Definição canónica AIOX:** `.aiox-core/development/workflows/bug-fix-flow.yaml` (`workflow.id: bug-fix-flow`), quando existir no repo.
+**Definição executável (YAML AIOX, versionada):** [bug-fix-flow.yaml](./bug-fix-flow.yaml) — `workflow.id: bug-fix-flow`. Se o runner só ler `.aiox-core/development/workflows/`, copia ou faz symlink deste ficheiro para lá.
 
-No agente **aiox-master:** `*workflow bug-fix-flow` ou `*run-workflow bug-fix-flow` (modo guided/engine conforme o projeto).
+No agente **aiox-master:** `*workflow bug-fix-flow` ou `*run-workflow bug-fix-flow` (conforme o projeto apontar para `.cursor/workflows` ou cópia em `.aiox-core`).
 
 Na mesma mensagem do comando, descreve o bug. Exemplo:
 > `/bug-fix-flow` — Criação de campanha Meta retorna erro genérico ao salvar.
