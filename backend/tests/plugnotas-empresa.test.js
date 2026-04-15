@@ -105,6 +105,7 @@ test('empresa service cria empresa com POST /empresa', async () => {
     assert.equal(calls[0].options.method, 'POST');
     assert.equal(response.operation, 'created');
     assert.equal(response.cnpj, '17422651000172');
+    assert.equal(response.runtimeDecision?.scenario, 'success_nacional');
     assert.equal(inferEmpresaCadastroScenario({ operation: response.operation }), 'success_nacional');
     const sent = JSON.parse(calls[0].options.body);
     assert.ok(sent.nfce && typeof sent.nfce === 'object');
@@ -247,6 +248,53 @@ test('empresa service REC500 P2: IBGE 5002704 com preflight híbrido (nacional+l
   }
 });
 
+test('FR-ALNFB 1.1: auth municipal + flag credenciais on + sem credenciais → prefeitura_login_required_fallback_available (sem POST /empresa)', async () => {
+  const prevFlag = process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED;
+  process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = 'true';
+
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse({
+        login: { producao: true, homologacao: false },
+        senha: { producao: false, homologacao: false }
+      });
+    }
+    return createJsonResponse(200, {
+      message: 'Cadastro efetuado com sucesso',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await assert.rejects(
+      () =>
+        cadastrarEmpresaPlugNotas({
+          cpfCnpj: '17422651000172',
+          certificado: 'cert-1',
+          razaoSocial: 'Empresa Teste',
+          endereco: buildEmpresaEnderecoValido()
+        }),
+      (err) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.errors?.plugnotasCode, 'prefeitura_login_required_fallback_available');
+        assert.equal(err.errors?.runtimeDecision?.scenario, 'prefeitura_login_required_fallback_available');
+        assert.equal(err.errors?.runtimeDecision?.upstreamCallSkipped, true);
+        return true;
+      }
+    );
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /\/nfse\/cidades\/3550308$/);
+  } finally {
+    process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = prevFlag;
+    global.fetch = originalFetch;
+  }
+});
+
 test('empresa service bloqueia DP02 no preflight quando não há padrão nacional elegível', async () => {
   const { cadastrarEmpresaPlugNotas, inferEmpresaCadastroScenario } = await import(
     '../src/services/plugnotas/empresa.service.js'
@@ -376,13 +424,16 @@ test('empresa service reutiliza o mesmo preflight no fallback POST -> PATCH', as
   }
 });
 
-test('empresa service bloqueia login/senha de prefeitura antes do POST /empresa', async () => {
+test('empresa service rejeita credenciais de prefeitura quando o preflight não exige auth municipal (payload_contrato)', async () => {
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
 
   global.fetch = async (url, options = {}) => {
     calls.push({ url: String(url), options });
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
     return createJsonResponse(200, {
       message: 'Cadastro efetuado com sucesso',
       data: { cnpj: '17422651000172' }
@@ -395,6 +446,7 @@ test('empresa service bloqueia login/senha de prefeitura antes do POST /empresa'
         cpfCnpj: '17422651000172',
         certificado: 'cert-1',
         razaoSocial: 'Empresa Teste',
+        endereco: buildEmpresaEnderecoValido(),
         nfse: {
           ativo: true,
           config: {
@@ -405,12 +457,13 @@ test('empresa service bloqueia login/senha de prefeitura antes do POST /empresa'
       }),
       (err) => {
         assert.equal(err.status, 400);
-        assert.equal(err.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
-        assert.match(String(err.message), /não aceita credenciais/i);
+        assert.equal(err.errors?.plugnotasCode, 'payload_contrato');
+        assert.equal(err.errors?.runtimeDecision?.scenario, 'payload_contrato');
         return true;
       }
     );
-    assert.equal(calls.length, 0);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /\/nfse\/cidades\//);
   } finally {
     global.fetch = originalFetch;
   }
@@ -484,6 +537,45 @@ test('PATCH normaliza endereco.codigoCidade numérico para string só dígitos (
     const sent = JSON.parse(calls[0].body);
     assert.equal(sent.endereco.codigoCidade, '3550308');
     assert.equal(typeof sent.endereco.codigoCidade, 'string');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('PATCH sucesso inclui runtimeDecision coerente (FR-ALNFB Story 1.1 / QA PATCH)', async () => {
+  const {
+    atualizarEmpresaPlugNotas,
+    inferEmpresaCadastroScenario
+  } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
+    calls.push({ url: String(url), options });
+    return createJsonResponse(200, {
+      message: 'Empresa atualizada',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    const response = await atualizarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      razaoSocial: 'Empresa Teste',
+      endereco: buildEmpresaEnderecoValido()
+    });
+
+    assert.equal(response.operation, 'updated');
+    assert.equal(response.runtimeDecision?.scenario, 'fallback_sync');
+    assert.equal(response.runtimeDecision?.upstreamCallSkipped, false);
+    assert.equal(inferEmpresaCadastroScenario({ operation: response.operation }), 'fallback_sync');
+    // PATCH sem `nfse` ativo: preflight municipal não corre (ver resolveEmpresaCadastroMunicipioPreflightInput).
+    assert.ok(calls.length >= 1);
+    assert.equal(calls[calls.length - 1].options.method, 'PATCH');
+    assert.match(calls[calls.length - 1].url, /\/empresa\/17422651000172$/);
   } finally {
     global.fetch = originalFetch;
   }

@@ -38,17 +38,22 @@ import {
   attachRuntimeDecisionToError,
   buildEmpresaCadastroRuntimeDecision,
   createEmpresaCadastroBlockedErrorFromDecision,
-  evaluateEmpresaCadastroMunicipioPreflight,
+  PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE_CODE,
   PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE,
   PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE,
   PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE,
-  resolveEmpresaCadastroMunicipioPreflightInput
+  resolveEmpresaCadastroMunicipioPreflightInput,
+  resolveEmpresaCadastroMunicipioRuntimeDecision
 } from './empresa-cadastro-runtime-decision.js';
 import {
   applyPrefeituraPortalCredentialsPolicy,
+  assertNoAmbiguousNationalWithPrefeituraCredentials,
+  extractPrefeituraPortalCredentialState,
   isPrefeituraLoginRequiredUpstreamMessage,
   PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE,
-  PREFEITURA_LOGIN_REQUIRED_BLOCKED_MESSAGE
+  PREFEITURA_LOGIN_REQUIRED_BLOCKED_MESSAGE,
+  resolveAttemptNfseModeFromPayload,
+  sanitizePlugnotasEmpresaJsonForClientResponse
 } from './prefeituraPortalCredentials.js';
 import {
   applyPrefeituraIbgeOnlyBlockPolicy,
@@ -203,6 +208,9 @@ const inferEmpresaCadastroScenario = ({
   const statusNum = Number.isFinite(Number(status)) ? Number(status) : null;
 
   if (code === PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE) return 'prefeitura_login_required_blocked';
+  if (code === PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE_CODE) {
+    return 'prefeitura_login_required_fallback_available';
+  }
   if (code === PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02_CODE) {
     return 'prefeitura_ibge_apenas_insuficiente_dp02';
   }
@@ -247,17 +255,69 @@ const enrichEmpresaCadastroPreflightError = (error, preflightInput) => {
   return error;
 };
 
-const runEmpresaCadastroMunicipioPreflight = async (payload, { operation = 'create' } = {}) => {
+/** Prioriza `process.env` em runtime (testes podem activar a flag sem recarregar `env.js`). */
+const isPrefeituraCredenciaisEnabled = () => {
+  const raw = process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED
+    ?? env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED
+    ?? '';
+  return String(raw).trim().toLowerCase() === 'true';
+};
+
+/**
+ * @param {string} operation
+ * @param {'nacional' | 'municipal'} attemptNfseMode
+ * @param {Record<string, unknown>|null|undefined} preflightRuntimeDecision
+ */
+const buildEmpresaCadastroSuccessRuntimeDecision = (operation, attemptNfseMode, preflightRuntimeDecision) => {
+  const op = String(operation || '').trim().toLowerCase();
+  const municipal = attemptNfseMode === 'municipal';
+  let scenario = 'success_nacional';
+  if (municipal) {
+    scenario = op === 'created' ? 'success_municipal' : 'fallback_sync';
+  } else if (op === 'updated' || op === 'existing') {
+    scenario = 'fallback_sync';
+  } else if (op === 'created') {
+    scenario = 'success_nacional';
+  }
+  const base = preflightRuntimeDecision && typeof preflightRuntimeDecision === 'object'
+    ? { ...preflightRuntimeDecision }
+    : {};
+  return buildEmpresaCadastroRuntimeDecision({
+    ...base,
+    scenario,
+    attemptMode: attemptNfseMode,
+    upstreamCallSkipped: false
+  });
+};
+
+const runEmpresaCadastroMunicipioPreflight = async (
+  payload,
+  {
+    operation = 'create',
+    credState,
+    attemptNfseMode = 'nacional'
+  } = {}
+) => {
   const preflightInput = resolveEmpresaCadastroMunicipioPreflightInput(payload, { operation });
   if (!preflightInput) return null;
 
   try {
     const preflight = await consultarCidadePlugNotas(preflightInput);
-    const runtimeDecision = evaluateEmpresaCadastroMunicipioPreflight(preflight);
-    if (runtimeDecision.scenario !== 'success_nacional') {
+    const { allowUpstream, runtimeDecision } = resolveEmpresaCadastroMunicipioRuntimeDecision(
+      preflight,
+      {
+        prefeituraCredentialsEnabled: isPrefeituraCredenciaisEnabled(),
+        attemptNfseMode,
+        credState
+      }
+    );
+
+    if (!allowUpstream) {
       throw createEmpresaCadastroBlockedErrorFromDecision(runtimeDecision);
     }
-    return { preflight, runtimeDecision };
+
+    const municipalAuthRequired = Boolean(preflight.requiresLogin || preflight.requiresSenha);
+    return { preflight, runtimeDecision, municipalAuthRequired };
   } catch (error) {
     throw enrichEmpresaCadastroPreflightError(error, preflightInput);
   }
@@ -756,8 +816,24 @@ export const atualizarEmpresaPlugNotas = async (input) => {
 
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
-  applyPrefeituraPortalCredentialsPolicy(payload);
-  const nfseContractInput = inspectNfseContractInput(payload.nfse);
+
+  const credState = extractPrefeituraPortalCredentialState(payload);
+  const attemptNfseMode = resolveAttemptNfseModeFromPayload(payload);
+  assertNoAmbiguousNationalWithPrefeituraCredentials(payload, credState);
+
+  if (credState.hasPartialKeys) {
+    throw badRequest('Informe login e senha do portal da prefeitura em conjunto (paridade obrigatória).', {
+      plugnotasCode: PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE,
+      runtimeDecision: buildEmpresaCadastroRuntimeDecision({
+        scenario: 'payload_contrato',
+        consultedMunicipio: false,
+        upstreamCallSkipped: true,
+        attemptMode: attemptNfseMode
+      })
+    });
+  }
+
+  const nfseContractInput = inspectNfseContractInput(input?.nfse);
 
   const cert = payload.certificado;
   if (cert === undefined || cert === null || String(cert).trim() === '') {
@@ -767,7 +843,11 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   const docPatch = resolveDocumentosAtivosForPatch(payload);
   stripDocumentosAtivos(payload);
   if (docPatch.present && docPatch.selection) {
-    applyEmpresaPlugnotasDocumentSelectionForPatch(payload, docPatch.selection);
+    applyEmpresaPlugnotasDocumentSelectionForPatch(
+      payload,
+      docPatch.selection,
+      { nfseMode: attemptNfseMode }
+    );
     if (hasOwn(payload, 'inscricaoEstadual')) {
       normalizeInscricaoEstadualApenasNfse(payload);
     }
@@ -776,12 +856,26 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   }
 
   normalizePayloadEnderecoCodigoCidade(payload);
-  applyNfseNationalContractPolicy(payload);
-  const preflightContext = await runEmpresaCadastroMunicipioPreflight(payload, { operation: 'update' });
+  if (!(docPatch.present && docPatch.selection)) {
+    applyNfseNationalContractPolicy(payload);
+  }
+
+  const preflightContext = await runEmpresaCadastroMunicipioPreflight(payload, {
+    operation: 'update',
+    credState,
+    attemptNfseMode
+  });
   if (!preflightContext && nfseContractInput.usesLegacyOnlyNationalInput) {
     applyNfsePrefeituraIbgeIfEnabled(payload);
     applyPrefeituraIbgeOnlyBlockPolicy(payload);
   }
+
+  applyPrefeituraPortalCredentialsPolicy(payload, {
+    prefeituraCredentialsEnabled: isPrefeituraCredenciaisEnabled(),
+    municipalAuthRequired: preflightContext?.municipalAuthRequired ?? false,
+    attemptNfseMode,
+    credState
+  });
 
   const updateResult = await tryUpdateEmpresa(cnpj, payload);
   if (updateResult.response) {
@@ -793,7 +887,12 @@ export const atualizarEmpresaPlugNotas = async (input) => {
         ? updateResult.response.message
         : fallbackMessage,
       operation: 'updated',
-      raw: updateResult.response
+      raw: sanitizePlugnotasEmpresaJsonForClientResponse(updateResult.response),
+      runtimeDecision: buildEmpresaCadastroSuccessRuntimeDecision(
+        'updated',
+        attemptNfseMode,
+        preflightContext?.runtimeDecision
+      )
     };
   }
 
@@ -829,20 +928,47 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
 
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
-  applyPrefeituraPortalCredentialsPolicy(payload);
-  const nfseContractInput = inspectNfseContractInput(payload.nfse);
+
+  const credState = extractPrefeituraPortalCredentialState(payload);
+  const attemptNfseMode = resolveAttemptNfseModeFromPayload(payload);
+  assertNoAmbiguousNationalWithPrefeituraCredentials(payload, credState);
+
+  if (credState.hasPartialKeys) {
+    throw badRequest('Informe login e senha do portal da prefeitura em conjunto (paridade obrigatória).', {
+      plugnotasCode: PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE,
+      runtimeDecision: buildEmpresaCadastroRuntimeDecision({
+        scenario: 'payload_contrato',
+        consultedMunicipio: false,
+        upstreamCallSkipped: true,
+        attemptMode: attemptNfseMode
+      })
+    });
+  }
+
+  const nfseContractInput = inspectNfseContractInput(input?.nfse);
 
   const docPost = resolveDocumentosAtivosForPost(payload);
   stripDocumentosAtivos(payload);
-  applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection);
+  applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection, { nfseMode: attemptNfseMode });
 
   normalizePayloadEnderecoCodigoCidade(payload);
-  applyNfseNationalContractPolicy(payload);
-  const preflightContext = await runEmpresaCadastroMunicipioPreflight(payload, { operation: 'create' });
+
+  const preflightContext = await runEmpresaCadastroMunicipioPreflight(payload, {
+    operation: 'create',
+    credState,
+    attemptNfseMode
+  });
   if (!preflightContext && nfseContractInput.usesLegacyOnlyNationalInput) {
     applyNfsePrefeituraIbgeIfEnabled(payload);
     applyPrefeituraIbgeOnlyBlockPolicy(payload);
   }
+
+  applyPrefeituraPortalCredentialsPolicy(payload, {
+    prefeituraCredentialsEnabled: isPrefeituraCredenciaisEnabled(),
+    municipalAuthRequired: preflightContext?.municipalAuthRequired ?? false,
+    attemptNfseMode,
+    credState
+  });
 
   try {
     const response = await requestJson('POST', '/empresa', payload);
@@ -851,7 +977,12 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
       cnpj: typeof data.cnpj === 'string' ? data.cnpj : cnpj,
       message: typeof response?.message === 'string' ? response.message : 'Empresa cadastrada no serviço de emissão fiscal.',
       operation: 'created',
-      raw: response
+      raw: sanitizePlugnotasEmpresaJsonForClientResponse(response),
+      runtimeDecision: buildEmpresaCadastroSuccessRuntimeDecision(
+        'created',
+        attemptNfseMode,
+        preflightContext?.runtimeDecision
+      )
     };
   } catch (createError) {
     if (!isConflictLikeError(createError)) {
@@ -868,7 +999,12 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
           ? updateResult.response.message
           : fallbackMessage,
         operation: 'updated',
-        raw: updateResult.response
+        raw: sanitizePlugnotasEmpresaJsonForClientResponse(updateResult.response),
+        runtimeDecision: buildEmpresaCadastroSuccessRuntimeDecision(
+          'updated',
+          attemptNfseMode,
+          preflightContext?.runtimeDecision
+        )
       };
     }
 
@@ -884,7 +1020,12 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
           : String(updateResult.lastError || ''),
         attemptedEndpoints: buildUpdateAttempts(cnpj, payload)
           .map((attempt) => `${attempt.method} ${attempt.path}`)
-      }
+      },
+      runtimeDecision: buildEmpresaCadastroSuccessRuntimeDecision(
+        'existing',
+        attemptNfseMode,
+        preflightContext?.runtimeDecision
+      )
     };
   }
 };

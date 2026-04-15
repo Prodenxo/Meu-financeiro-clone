@@ -1,4 +1,5 @@
 import type { ApiErrorPayload } from './buildApiErrorMessage';
+import type { EmpresaCadastroRuntimeDecision } from '../types/empresaCadastroRuntimeDecision';
 import { getPlugnotasCodeFromApiErrors } from './plugnotasApiErrorCode';
 
 export type PlugnotasRequestMeta = {
@@ -27,6 +28,14 @@ export function getPlugnotasRequestFromApiErrors(errors: unknown): PlugnotasRequ
   return { method, path };
 }
 
+/** Extrai `errors.runtimeDecision` do JSON de erro da API (FR-ALNFB / BFF). */
+export function getRuntimeDecisionFromApiErrors(errors: unknown): EmpresaCadastroRuntimeDecision | null {
+  if (!errors || typeof errors !== 'object' || Array.isArray(errors)) return null;
+  const raw = (errors as Record<string, unknown>).runtimeDecision;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  return raw as EmpresaCadastroRuntimeDecision;
+}
+
 /** Erro HTTP JSON da API (`success: false`) com metadados opcionais para a UI (US-MEI-FISC-03). */
 export class ApiClientError extends Error {
   readonly plugnotasCode: string | null;
@@ -36,6 +45,8 @@ export class ApiClientError extends Error {
   readonly payload: ApiErrorPayload | null;
   /** Status HTTP da resposta quando o erro veio de JSON `success: false` (mapeamento fiscal / gateway). */
   readonly httpStatus: number | null;
+  /** Decisão de runtime BFF (cadastro empresa / Plugnotas). */
+  readonly runtimeDecision: EmpresaCadastroRuntimeDecision | null;
 
   constructor(
     message: string,
@@ -45,6 +56,7 @@ export class ApiClientError extends Error {
       plugnotasRequest?: PlugnotasRequestMeta | null;
       payload?: ApiErrorPayload | null;
       httpStatus?: number | null;
+      runtimeDecision?: EmpresaCadastroRuntimeDecision | null;
     }
   ) {
     super(message);
@@ -57,6 +69,7 @@ export class ApiClientError extends Error {
       options?.httpStatus != null && Number.isFinite(options.httpStatus)
         ? Number(options.httpStatus)
         : null;
+    this.runtimeDecision = options?.runtimeDecision ?? null;
   }
 }
 
@@ -95,6 +108,16 @@ export function getApiErrorCodeFromUnknownError(err: unknown): string | null {
   return null;
 }
 
+export function getRuntimeDecisionFromUnknownError(err: unknown): EmpresaCadastroRuntimeDecision | null {
+  if (err instanceof ApiClientError) return err.runtimeDecision;
+  if (err && typeof err === 'object' && 'runtimeDecision' in err) {
+    const v = (err as { runtimeDecision?: unknown }).runtimeDecision;
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    return v as EmpresaCadastroRuntimeDecision;
+  }
+  return null;
+}
+
 /** Monta `ApiClientError` a partir do payload JSON de erro já parseado. */
 export function apiClientErrorFromPayload(
   payload: { message?: string; errors?: unknown; details?: string } | null | undefined,
@@ -107,5 +130,6 @@ export function apiClientErrorFromPayload(
     plugnotasRequest: getPlugnotasRequestFromApiErrors(payload?.errors),
     payload: (payload as ApiErrorPayload | null | undefined) ?? null,
     httpStatus: init?.httpStatus ?? null,
+    runtimeDecision: getRuntimeDecisionFromApiErrors(payload?.errors),
   });
 }

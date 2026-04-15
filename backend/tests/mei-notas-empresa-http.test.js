@@ -228,7 +228,7 @@ test('HTTP POST REC500 P2: IBGE 5002704 com preflight híbrido retorna prefeitur
   }
 });
 
-test('HTTP POST /api/mei-notas/setup/emissao-fiscal/empresa bloqueia credenciais municipais antes do upstream', async () => {
+test('HTTP POST /api/mei-notas/setup/emissao-fiscal/empresa rejeita credenciais fora de caso elegível (payload_contrato)', async () => {
   const controller = await import('../src/controllers/mei-notas.controller.js');
   const { app, __setGetRequesterContextForTests } = await mountApp(controller);
   const originalFetch = global.fetch;
@@ -240,7 +240,14 @@ test('HTTP POST /api/mei-notas/setup/emissao-fiscal/empresa bloqueia credenciais
       return originalFetch(url, init);
     }
     upstreamCalls.push({ url: u, init });
-    throw new Error('upstream should not be called');
+    if (u.includes('/nfse/cidades/')) {
+      return createJsonResponse(200, {
+        padraoNacional: { producao: true, homologacao: false },
+        login: { producao: false, homologacao: false },
+        senha: { producao: false, homologacao: false }
+      });
+    }
+    throw new Error('upstream Plugnotas empresa should not be called');
   };
 
   __setGetRequesterContextForTests(async () => ({ role: 'admin', mei: true }));
@@ -253,6 +260,15 @@ test('HTTP POST /api/mei-notas/setup/emissao-fiscal/empresa bloqueia credenciais
       body: JSON.stringify({
         cpfCnpj: '17422651000172',
         certificado: 'cert-1',
+        razaoSocial: 'Empresa Teste',
+        endereco: {
+          codigoCidade: '3550308',
+          logradouro: 'Rua A',
+          numero: '1',
+          bairro: 'Centro',
+          cep: '01000000',
+          uf: 'SP'
+        },
         nfse: {
           ativo: true,
           config: {
@@ -266,9 +282,176 @@ test('HTTP POST /api/mei-notas/setup/emissao-fiscal/empresa bloqueia credenciais
     assert.equal(res.status, 400);
     const json = await res.json();
     assert.equal(json.success, false);
-    assert.equal(json.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
-    assert.equal(upstreamCalls.length, 0);
+    assert.equal(json.errors?.plugnotasCode, 'payload_contrato');
+    assert.equal(json.errors?.runtimeDecision?.scenario, 'payload_contrato');
+    assert.equal(upstreamCalls.length, 1);
+    assert.match(upstreamCalls[0].url, /\/nfse\/cidades\/3550308$/);
   } finally {
+    global.fetch = originalFetch;
+    __setGetRequesterContextForTests(null);
+    await new Promise((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+});
+
+test('HTTP POST: auth municipal exigida + flag credenciais on + sem credenciais → prefeitura_login_required_fallback_available', async () => {
+  const prevFlag = process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED;
+  process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = 'true';
+
+  const controller = await import('../src/controllers/mei-notas.controller.js');
+  const { app, __setGetRequesterContextForTests } = await mountApp(controller);
+  const originalFetch = global.fetch;
+  const upstreamCalls = [];
+
+  global.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.includes('127.0.0.1') || u.includes('localhost')) {
+      return originalFetch(url, init);
+    }
+    upstreamCalls.push({ url: u, init });
+    if (u.includes('/nfse/cidades/')) {
+      return createJsonResponse(200, {
+        padraoNacional: { producao: true, homologacao: false },
+        login: { producao: true, homologacao: false },
+        senha: { producao: false, homologacao: false }
+      });
+    }
+    return createJsonResponse(200, {
+      message: 'Cadastro efetuado com sucesso',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  __setGetRequesterContextForTests(async () => ({ role: 'admin', mei: true }));
+  const { server, port } = await listen(app);
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/mei-notas/setup/emissao-fiscal/empresa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cpfCnpj: '17422651000172',
+        certificado: 'cert-1',
+        razaoSocial: 'Empresa Teste',
+        endereco: {
+          codigoCidade: '3550308',
+          logradouro: 'Rua A',
+          numero: '1',
+          bairro: 'Centro',
+          cep: '01000000',
+          uf: 'SP'
+        }
+      })
+    });
+
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.equal(json.success, false);
+    assert.equal(json.errors?.plugnotasCode, 'prefeitura_login_required_fallback_available');
+    assert.equal(json.errors?.runtimeDecision?.scenario, 'prefeitura_login_required_fallback_available');
+    assert.equal(json.errors?.runtimeDecision?.upstreamCallSkipped, true);
+    assert.equal(upstreamCalls.length, 1);
+    assert.match(upstreamCalls[0].url, /\/nfse\/cidades\/3550308$/);
+  } finally {
+    process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = prevFlag;
+    global.fetch = originalFetch;
+    __setGetRequesterContextForTests(null);
+    await new Promise((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+});
+
+test('HTTP POST: retry municipal válido + flag on → POST /empresa com nfseNacional false e runtimeDecision success_municipal', async () => {
+  const prevFlag = process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED;
+  process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = 'true';
+
+  const controller = await import('../src/controllers/mei-notas.controller.js');
+  const { app, __setGetRequesterContextForTests } = await mountApp(controller);
+  const originalFetch = global.fetch;
+  const upstreamCalls = [];
+
+  global.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.includes('127.0.0.1') || u.includes('localhost')) {
+      return originalFetch(url, init);
+    }
+    upstreamCalls.push({ url: u, init });
+    if (u.includes('/nfse/cidades/')) {
+      return createJsonResponse(200, {
+        padraoNacional: { producao: true, homologacao: false },
+        login: { producao: true, homologacao: false },
+        senha: { producao: false, homologacao: false }
+      });
+    }
+    return createJsonResponse(200, {
+      message: 'Cadastro efetuado com sucesso',
+      data: {
+        cnpj: '17422651000172',
+        nfse: {
+          config: {
+            prefeitura: {
+              codigoIbge: '3550308',
+              login: 'echo-login',
+              senha: 'echo-secret'
+            }
+          }
+        }
+      }
+    });
+  };
+
+  __setGetRequesterContextForTests(async () => ({ role: 'admin', mei: true }));
+  const { server, port } = await listen(app);
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/mei-notas/setup/emissao-fiscal/empresa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cpfCnpj: '17422651000172',
+        certificado: 'cert-1',
+        razaoSocial: 'Empresa Teste',
+        endereco: {
+          codigoCidade: '3550308',
+          logradouro: 'Rua A',
+          numero: '1',
+          bairro: 'Centro',
+          cep: '01000000',
+          uf: 'SP'
+        },
+        nfse: {
+          ativo: true,
+          config: {
+            producao: true,
+            nfseNacional: false,
+            consultaNfseNacional: false,
+            prefeitura: { codigoIbge: '3550308', login: 'portal_user', senha: 'portal_pass' }
+          }
+        }
+      })
+    });
+
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.success, true);
+    assert.equal(json.data?.runtimeDecision?.scenario, 'success_municipal');
+    assert.equal(json.data?.operation, 'created');
+
+    const postEmpresa = upstreamCalls.find((c) => c.url.includes('/empresa') && !c.url.includes('/cidades'));
+    assert.ok(postEmpresa, 'deve chamar POST /empresa');
+    const sent = JSON.parse(postEmpresa.init.body);
+    assert.equal(sent.nfse.config.nfseNacional, false);
+    assert.equal(sent.nfse.config.consultaNfseNacional, false);
+    assert.equal(sent.nfse.config.prefeitura.login, 'portal_user');
+    assert.equal(sent.nfse.config.prefeitura.senha, 'portal_pass');
+
+    assert.equal(json.data?.raw?.data?.nfse?.config?.prefeitura?.login, undefined);
+    assert.equal(json.data?.raw?.data?.nfse?.config?.prefeitura?.senha, undefined);
+    assert.equal(json.data?.raw?.data?.nfse?.config?.prefeitura?.codigoIbge, '3550308');
+  } finally {
+    process.env.PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED = prevFlag;
     global.fetch = originalFetch;
     __setGetRequesterContextForTests(null);
     await new Promise((resolve, reject) => {

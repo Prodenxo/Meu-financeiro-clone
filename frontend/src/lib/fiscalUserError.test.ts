@@ -11,6 +11,7 @@ import {
   formatMeiFiscalMappedForAlert,
   PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02,
   PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED,
+  PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE,
   resolveMeiFiscalScenario,
   stripPlugnotasRequestSuffix,
 } from './fiscalUserError';
@@ -189,6 +190,28 @@ describe('mapMeiFiscalErrorToCopy', () => {
     expect(copy.title).toBe('Cadastro da empresa ainda não concluído');
     expect(copy.description).toMatch(/cadastro ainda não foi concluído|cadastro ainda não foi concluido/i);
     expect(copy.description).not.toMatch(/GET \/empresa|POST \/empresa|rota errada/i);
+  });
+
+  it('FR-ALNFB: runtimeDecision.scenario prevalece sobre plugnotasCode divergente', () => {
+    expect(
+      resolveMeiFiscalScenario({
+        rawMessage: 'x',
+        plugnotasCode: 'payload_contrato',
+        httpStatus: 400,
+        plugnotasRequest: { method: 'POST', path: '/empresa' },
+        runtimeDecision: { scenario: 'prefeitura_login_required_fallback_available' },
+      })
+    ).toBe('prefeitura_login_required_fallback_available');
+  });
+
+  it('FR-ALNFB: prefeitura_login_required_fallback_available gera copy do segundo passo (sem culpar endpoint)', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage: 'ignored',
+      plugnotasCode: PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE,
+      httpStatus: 400,
+    });
+    expect(copy.title).toMatch(/prefeitura|portal/i);
+    expect(copy.description).not.toMatch(/endpoint|rota errada|url incorreta/i);
   });
 
   it('ROB: resolveMeiFiscalScenario respeita precedência estruturada entre ambiente, payload e ausência de cadastro', () => {

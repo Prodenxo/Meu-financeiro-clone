@@ -83,7 +83,7 @@ describe('nfEmissionCompany', () => {
     expect('nacional' in nfse).toBe(false);
   });
 
-  it('buildNfEmissionEmpresaPayload inclui documentosAtivos quando fornecido (cadastro Guia MEI)', () => {
+  it('buildNfEmissionEmpresaPayload reflete documentosAtivos no shape local do payload quando fornecido (cadastro Guia MEI)', () => {
     const payload = buildNfEmissionEmpresaPayload({
       cnpj: '12345678000190',
       certificadoId: 'cert-abc',
@@ -91,6 +91,38 @@ describe('nfEmissionCompany', () => {
       documentosAtivos: { nfse: true, nfe: true, nfce: false }
     });
     expect(payload.documentosAtivos).toEqual({ nfse: true, nfe: true, nfce: false });
+    const nfse = payload.nfse as Record<string, unknown>;
+    const nfseConfig = nfse.config as Record<string, unknown>;
+    expect(nfse.ativo).toBe(true);
+    expect(nfseConfig[PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
+    expect(nfseConfig[PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
+    const nfe = payload.nfe as Record<string, unknown>;
+    expect(nfe.ativo).toBe(true);
+    expect((nfe.config as Record<string, unknown>).producao).toBe(true);
+    const nfce = payload.nfce as Record<string, unknown>;
+    expect(nfce.ativo).toBe(false);
+    expect('config' in nfce).toBe(false);
+  });
+
+  it('buildNfEmissionEmpresaPayload não mantém nfseNacional quando NFS-e não está selecionada', () => {
+    const payload = buildNfEmissionEmpresaPayload({
+      cnpj: '12345678000190',
+      certificadoId: 'cert-abc',
+      form: fullValidForm(),
+      documentosAtivos: { nfse: false, nfe: false, nfce: true }
+    });
+
+    expect(payload.documentosAtivos).toEqual({ nfse: false, nfe: false, nfce: true });
+    const nfse = payload.nfse as Record<string, unknown>;
+    expect(nfse.ativo).toBe(false);
+    expect('config' in nfse).toBe(false);
+    const nfe = payload.nfe as Record<string, unknown>;
+    expect(nfe.ativo).toBe(false);
+    expect('config' in nfe).toBe(false);
+    const nfce = payload.nfce as Record<string, unknown>;
+    expect(nfce.ativo).toBe(true);
+    expect((nfce.config as Record<string, unknown>).producao).toBe(true);
+    expect((nfce.config as Record<string, unknown>).serie).toBe(1);
   });
 
   it('buildNfEmissionEmpresaPayload envia endereco.codigoCidade como string só dígitos quando o form tem number (FR-CID-PAY-01)', () => {

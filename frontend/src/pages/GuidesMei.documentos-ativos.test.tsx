@@ -31,6 +31,7 @@ const {
   useAuthStoreMock,
   authState,
   fetchMeiCertificateStatusMock,
+  cadastrarEmpresaEmissaoNfMock,
   consultarEmpresaEmissaoNfMock,
   atualizarEmpresaEmissaoNfMock,
   fetchNfsePrestadorPrefillMock
@@ -42,6 +43,11 @@ const {
   };
   const hook = Object.assign(() => state, { getState: () => state });
   const fetchMeiCertificateStatusMock = vi.fn(async () => defaultCertStatus());
+  const cadastrarEmpresaEmissaoNfMock = vi.fn(async () => ({
+    cnpj: '12345678000190',
+    message: 'ok',
+    raw: {}
+  }));
   const consultarEmpresaEmissaoNfMock = vi.fn(async () => ({ message: 'ok', data: {} }));
   const atualizarEmpresaEmissaoNfMock = vi.fn(async () => ({
     cnpj: '12345678000190',
@@ -60,6 +66,7 @@ const {
     useAuthStoreMock: hook,
     authState: state,
     fetchMeiCertificateStatusMock,
+    cadastrarEmpresaEmissaoNfMock,
     consultarEmpresaEmissaoNfMock,
     atualizarEmpresaEmissaoNfMock,
     fetchNfsePrestadorPrefillMock
@@ -97,7 +104,7 @@ vi.mock('../services/meiNotasService', () => ({
   baixarNfsePdf: vi.fn(async () => ({ blob: new Blob(), filename: 'nota.pdf' })),
   baixarNfseXml: vi.fn(async () => ({ blob: new Blob(), filename: 'nota.xml' })),
   cadastrarCertificadoEmissaoNf: vi.fn(async () => ({ id: 'cert-1', message: 'ok' })),
-  cadastrarEmpresaEmissaoNf: vi.fn(async () => ({ cnpj: '12345678000190', message: 'ok' })),
+  cadastrarEmpresaEmissaoNf: (...args: unknown[]) => cadastrarEmpresaEmissaoNfMock(...args),
   consultarEmpresaEmissaoNf: (...args: unknown[]) => consultarEmpresaEmissaoNfMock(...args),
   cancelarNfse: vi.fn(async () => ({})),
   emitirNfse: vi.fn(async () => ({ id: 'nfse-1', protocol: 'P-1' })),
@@ -111,6 +118,16 @@ function setTextInputValue(input: HTMLInputElement, value: string) {
   const desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
   desc?.set?.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setFileInputFiles(input: HTMLInputElement, file: File) {
+  const list = {
+    length: 1,
+    0: file,
+    item: (i: number) => (i === 0 ? file : null)
+  };
+  Object.defineProperty(input, 'files', { value: list, configurable: true });
+  input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 function fillNfEmissionCompanyMinimum(container: HTMLElement) {
@@ -157,6 +174,12 @@ describe('GuidesMei — Documentos ativos (QA FR-CAD-DOC)', () => {
     authState.userId = 'test-user-id';
     sessionStorage.clear();
     localStorage.removeItem(MEI_WORKSPACE_STORAGE_KEY);
+    cadastrarEmpresaEmissaoNfMock.mockReset();
+    cadastrarEmpresaEmissaoNfMock.mockImplementation(async () => ({
+      cnpj: '12345678000190',
+      message: 'ok',
+      raw: {}
+    }));
     atualizarEmpresaEmissaoNfMock.mockClear();
     consultarEmpresaEmissaoNfMock.mockClear();
     fetchMeiCertificateStatusMock.mockReset();
@@ -260,6 +283,81 @@ describe('GuidesMei — Documentos ativos (QA FR-CAD-DOC)', () => {
     });
     expect(container.textContent).toContain(MSG_DOCUMENTOS_ATIVOS_MIN_ONE);
     expect(atualizarEmpresaEmissaoNfMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('FR-CAD-DOC follow-up: POST empresa envia blocos ativos coerentes com os checkboxes do site', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await openCertificadoDas(container, root);
+
+    const cnpjInput = container.querySelector(
+      'input[placeholder="00.000.000/0001-00"]'
+    ) as HTMLInputElement | null;
+    expect(cnpjInput).toBeTruthy();
+    await act(async () => {
+      setTextInputValue(cnpjInput!, '12345678000190');
+      fillNfEmissionCompanyMinimum(container);
+    });
+
+    const fieldset = findDocumentosAtivosFieldset(container);
+    expect(fieldset).toBeTruthy();
+    const checkboxes = Array.from(
+      fieldset!.querySelectorAll('input[type=checkbox]')
+    ) as HTMLInputElement[];
+    expect(checkboxes).toHaveLength(3);
+
+    await act(async () => {
+      checkboxes[0]?.click();
+    });
+    await waitFor(() => {
+      expect(container.querySelector('[role=alertdialog]')).toBeTruthy();
+    });
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find((b) => b.textContent?.includes('Desativar mesmo assim'))
+        ?.click();
+    });
+    await waitFor(() => {
+      expect(container.querySelector('[role=alertdialog]')).toBeNull();
+    });
+    await act(async () => {
+      checkboxes[1]?.click();
+    });
+
+    const fileInput = container.querySelector('input[type=file]') as HTMLInputElement | null;
+    const passwordInput = container.querySelector('input[type=password]') as HTMLInputElement | null;
+    const submitBtn = Array.from(container.querySelectorAll('button')).find((b) => {
+      const text = b.textContent ?? '';
+      return text.includes('Enviar certificado') || text.includes('Concluir configuração fiscal');
+    });
+    expect(fileInput && passwordInput && submitBtn).toBeTruthy();
+
+    await act(async () => {
+      setFileInputFiles(fileInput!, new File(['x'], 'test.p12'));
+      setTextInputValue(passwordInput!, 'secret');
+    });
+
+    await act(async () => {
+      submitBtn?.click();
+    });
+
+    await waitFor(() => {
+      expect(cadastrarEmpresaEmissaoNfMock).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = cadastrarEmpresaEmissaoNfMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.documentosAtivos).toEqual({ nfse: false, nfe: true, nfce: false });
+    expect((payload.nfse as Record<string, unknown>).ativo).toBe(false);
+    expect((payload.nfe as Record<string, unknown>).ativo).toBe(true);
+    expect((payload.nfce as Record<string, unknown>).ativo).toBe(false);
+    expect('config' in (payload.nfse as Record<string, unknown>)).toBe(false);
 
     await act(async () => {
       root.unmount();

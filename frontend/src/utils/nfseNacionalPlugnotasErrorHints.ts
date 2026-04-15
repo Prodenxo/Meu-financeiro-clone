@@ -163,6 +163,9 @@ export function isPlugnotasNfseConfigPrefeituraRequirementMessage(message: strin
 /**
  * PLOGIN-UX-L1 (spec UX §5.1): emissor exige **login** e/ou **senha** do portal municipal em `nfse.config.prefeitura`.
  * **Não** cobre o aviso BFF de credenciais desactivadas (DP-PLOGIN-01 — manter `prefeitura-config`).
+ *
+ * FR-ALNFB / UX §7.3: abrir o formulário de credenciais na Guia MEI depende de `runtimeDecision` + feature flag —
+ * estas heurísticas de texto **não** substituem essa classificação.
  */
 export function isPlugnotasPrefeituraLoginRequiredMessage(message: string): boolean {
   const m = normalizeForMatch(message);

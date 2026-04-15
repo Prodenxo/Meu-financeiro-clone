@@ -111,6 +111,7 @@
 - Esta secção fica mantida apenas como **histórico** de análise anterior.
 - A política vigente do produto para a jornada Guia MEI / NFS-e Nacional foi revista pela iniciativa **FR-NATEX**: o frontend **não** apresenta campos de `login`/`senha` de prefeitura e o backend **não** aceita nem encaminha essas credenciais neste fluxo.
 - Para operação, QA e suporte, usar como referência canónica a triagem [FR-NATEX](#plogin-400-prefeitura-login-obrigatorio-triagem) e a [matriz canónica NATEX](#natex-matriz-operacional-excecao-municipal-bloqueada).
+- **FR-ALNFB (estado actual após P1 + flags):** quando as entregas P1 estiverem mergeadas e as flags estiverem ligadas conforme [Fallback municipal condicionado (FR-ALNFB)](#alnfb-fallback-municipal-operacao-qa), o produto pode oferecer **segundo passo guiado** com classificação `runtimeDecision`. Enquanto as flags estiverem **desligadas**, a triagem [FR-NATEX](#plogin-400-prefeitura-login-obrigatorio-triagem) mantém-se para o fluxo sem credenciais.
 
 <a id="dp02-prefeitura-ibge-apenas-bloqueio"></a>
 
@@ -224,6 +225,65 @@ O frontend não reparseia JSON do emissor: usa a **string de erro** já consolid
 **Implementação:** `frontend/src/utils/nfseNacionalPlugnotasErrorHints.ts` (lista `NFSE_NACIONAL_PLUGNOTAS_HINT_PATTERNS_DOC` + testes: manter alinhamento com esta tabela). **Onde aparece:** `GuiaMeiEmpresaCadastroErrorPanel`, `EmissaoFiscalErrorAlert`, `EmissaoFiscalErrorAlertModal` (link com tom `rose` no modal), `PlugnotasIntegrationErrorAlert`, painel âmbar de retry em `GuidesMei.tsx`, e corpo partilhado `PlugnotasMunicipalRequirementOperacaoCopy.tsx`.
 
 Épico: [`epic-nfse-nacional-plugnotas-prd.md`](stories/epic-nfse-nacional-plugnotas-prd.md) (**US-MEI-NAT-04**).
+
+<a id="alnfb-fallback-municipal-operacao-qa"></a>
+
+## Fallback municipal condicionado (FR-ALNFB) — operação, matriz QA e rollout
+
+**Estado do produto (2026-04):** em paralelo ao histórico [DP-PLOGIN-01](#dp01-prefeitura-portal-credenciais) e à triagem [FR-NATEX](#plogin-400-prefeitura-login-obrigatorio-triagem), o repositório segue a política **national-first + fallback municipal condicionado** do PRD [`PRD-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-fallback-municipal-2026-04-15.md`](prd/PRD-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-fallback-municipal-2026-04-15.md). **Não apagar** as secções históricas acima; usar **esta secção** quando o caso estiver coberto pelas stories P1 e por `runtimeDecision` estável no BFF (ver arquitetura [`architecture-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-fallback-municipal-2026-04-15.md`](technical/architecture-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-fallback-municipal-2026-04-15.md) §11–12).
+
+### Cenários operacionais (runbook **FR-ALNFB-11**)
+
+| # | Cenário | Leitura operacional | `runtimeDecision.scenario` / notas (BFF → UI) |
+|---|--------|---------------------|-----------------------------------------------|
+| 1 | **Nacional puro** | Cadastro com tentativa nacional; município compatível com NFS-e Nacional no preflight; sem segundo passo. | `success_nacional` (ou fluxo com `fallback_sync` após `PATCH`, conforme resposta). |
+| 2 | **Nacional com erro de contrato/dados** | Validação rejeitada (payload, IBGE, IM, schema); tratar como erro de dados/contrato **antes** de assumir fallback municipal. | `payload_contrato` ou códigos de validação sem abertura do passo municipal. |
+| 3 | **Município incompatível com NFS-e Nacional — fallback disponível** | Preflight indica autenticação municipal; política e flags permitem segundo passo guiado (credenciais só na sessão). | `prefeitura_login_required_fallback_available` — UI mostra bloco **só** com flag frontend + classificação BFF. |
+| 4 | **Município incompatível — fallback indisponível** | Auth municipal exigida mas rota guiada não elegível (política, lista DP02, ou flag backend off). | `prefeitura_login_required_blocked` ou `prefeitura_ibge_apenas_insuficiente_dp02` — estado terminal na UX guiada. |
+| 5 | **Retry municipal concluído** | Segundo envio com modo municipal e credenciais válidas de teste/conta; `POST` / `PATCH` concluídos. | `success_municipal` ou `fallback_sync` (matriz mínima arquitetura §12.2); regressão: `documentosAtivos` coerente; **sem** credenciais em logs ou tickets. |
+
+### Matriz QA mínima (**NFR-ALNFB-05**)
+
+Repetir **por ambiente** (dev / staging / produção). Colunas alinhadas a `runtimeDecision.scenario` (§12.2) e, quando útil ao diagnóstico, aos sinais §12.1 (`attemptMode`, `upstreamCallSkipped`, `consultedMunicipio`).
+
+| Ambiente | Caso | Passos resumidos | `runtimeDecision.scenario` esperado | Sinais §12.1 (opcional; registar na evidência se presentes no JSON) | Evidência (sem secrets) |
+|----------|------|------------------|----------------------------------------|---------------------------------------------------------------------|-------------------------|
+| _(preencher)_ | Feliz **nacional** | Certificado + cadastro empresa; NFS-e nacional; dados válidos para a conta | `success_nacional` (ou sucesso sem passo municipal) | _(ex.: `consultedMunicipio` no preflight)_ | Resposta BFF / log redigido; **não** colar corpo com PII. |
+| _(preencher)_ | **Retry municipal** | Após `prefeitura_login_required_fallback_available`, segundo POST com payload municipal e credenciais de **teste** | `success_municipal` ou `fallback_sync` após cadastro concluído | _(ex.: `attemptMode`, `upstreamCallSkipped` conforme resposta BFF)_ | Nota de QA ou ticket interno; **nunca** `login`/`senha` reais em Git, Slack público ou fixtures versionadas (**NFR-ALNFB-01**). |
+
+### Rollout governado (arquitetura §11.3, **DP-ALNFB-08**)
+
+**Ordem segura** (não inverter sem análise de risco):
+
+1. Deploy **backend** com código novo, **`PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED` desligada**.
+2. Deploy **frontend** com suporte aos cenários, **`VITE_PLUGNOTAS_NFSE_PREFEITURA_CREDENCIAIS_ENABLED` desligada**.
+3. Ligar a **flag frontend** (UI do segundo passo onde o BFF já sinalizar `fallback_available`).
+4. Ligar a **flag backend** (autorizar encaminhamento municipal no BFF).
+5. **Monitorizar** `runtimeDecision.scenario`, regressão do caminho nacional e erros 4xx/5xx na rota de empresa.
+
+| Papel | Owner sugerido | Critério de promoção (gate) |
+|-------|----------------|----------------------------|
+| Decisão de release | **@po** | P1 mergeadas ou RC único acordado; critérios de aceite verdes; gates repo ver § abaixo. |
+| Flags backend (host) | **@devops** / eng. de plantão | Smoke §12.2 da arquitetura em staging antes de produção. |
+| Flags frontend (build) | **@dev** / **@devops** | Env revisto no pipeline; não ativar FE antes do passo 2. |
+| Validação operacional | **@qa** | Matriz mínima por ambiente; evidências sem vazamento de credenciais. |
+
+**IV3 (PRD Story 1.4):** com flags **off**, municípios já estáveis só no nacional **não** devem mudar de modo “em silêncio”; novos caminhos são **opt-in** por variáveis de ambiente.
+
+### Smoke pós-deploy (checklist)
+
+- [ ] Caminho **nacional** sem credenciais de prefeitura continua utilizável (regressão §12.3 da arquitetura ALNFB).
+- [ ] Respostas BFF expõem `errors.runtimeDecision` quando aplicável; logs **sem** `prefeitura.login` / `prefeitura.senha` em claro (incl. cliente HTTP redigido).
+- [ ] UI distingue primeiro passo nacional vs segundo passo municipal; sem persistir credenciais em `localStorage` / querystring.
+- [ ] `prefeitura_login_required_fallback_available` **não** abre formulário sem flag frontend + sinal BFF coerente.
+
+### Referências
+
+- PRD (Story 1.4): [`docs/prd/PRD-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-fallback-municipal-2026-04-15.md`](prd/PRD-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-fallback-municipal-2026-04-15.md)
+- UX §12: [`docs/specs/ux-spec-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-fallback-municipal-2026-04-15.md`](specs/ux-spec-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-fallback-municipal-2026-04-15.md)
+- Arquitetura §11–12: [`docs/technical/architecture-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-fallback-municipal-2026-04-15.md`](technical/architecture-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-fallback-municipal-2026-04-15.md)
+
+**Gates repo (NFR-ALNFB-06):** na raiz do repositório, `npm run lint`, `npm run typecheck`, `npm run test` — executados no branch mergeado antes de promover flags em produção.
 
 <a id="triagem-erros-consola-guia-mei"></a>
 

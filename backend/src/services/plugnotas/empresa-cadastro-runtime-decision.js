@@ -13,6 +13,13 @@ export const PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE = 'payload_contrato';
 export const PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE = 'ambiente_configuracao';
 export const PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE = 'empresa_nao_cadastrada';
 
+/** DP-ALNFB — segundo passo municipal disponível (UI abre credenciais). */
+export const PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE_CODE =
+  'prefeitura_login_required_fallback_available';
+export const PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE_MESSAGE =
+  'Este município exige autenticação no portal da prefeitura para emissão. '
+  + 'Informe login e senha do portal para continuar com o cadastro municipal.';
+
 export const EMPRESA_CADASTRO_RUNTIME_PAYLOAD_CONTRATO_MESSAGE =
   'Informe um código IBGE válido do município em `endereco.codigoCidade` antes de enviar o cadastro da empresa ao emissor fiscal.';
 
@@ -29,7 +36,12 @@ const isNfseActive = (payload) => {
   return nfse.ativo !== false;
 };
 
-const buildRuntimeDecisionFromPreflight = (scenario, preflight, upstreamCallSkipped = false) => ({
+const buildRuntimeDecisionFromPreflight = (
+  scenario,
+  preflight,
+  upstreamCallSkipped = false,
+  extra = {}
+) => ({
   scenario,
   consultedMunicipio: true,
   codigoIbge: preflight.codigoIbge,
@@ -37,7 +49,8 @@ const buildRuntimeDecisionFromPreflight = (scenario, preflight, upstreamCallSkip
   padraoNacionalEnabled: preflight.padraoNacionalEnabled,
   requiresLogin: preflight.requiresLogin,
   requiresSenha: preflight.requiresSenha,
-  upstreamCallSkipped
+  upstreamCallSkipped,
+  ...extra
 });
 
 export const buildEmpresaCadastroRuntimeDecision = ({
@@ -48,7 +61,8 @@ export const buildEmpresaCadastroRuntimeDecision = ({
   padraoNacionalEnabled,
   requiresLogin,
   requiresSenha,
-  upstreamCallSkipped = false
+  upstreamCallSkipped = false,
+  attemptMode
 }) => ({
   scenario,
   consultedMunicipio,
@@ -57,7 +71,8 @@ export const buildEmpresaCadastroRuntimeDecision = ({
   ...(padraoNacionalEnabled !== undefined ? { padraoNacionalEnabled } : {}),
   ...(requiresLogin !== undefined ? { requiresLogin } : {}),
   ...(requiresSenha !== undefined ? { requiresSenha } : {}),
-  upstreamCallSkipped
+  upstreamCallSkipped,
+  ...(attemptMode ? { attemptMode } : {})
 });
 
 export const attachRuntimeDecisionToError = (error, runtimeDecision) => {
@@ -110,32 +125,191 @@ export const resolveEmpresaCadastroMunicipioPreflightInput = (
   };
 };
 
-export const evaluateEmpresaCadastroMunicipioPreflight = (preflight) => {
+/**
+ * Matriz arquitetura §7.2 — pré-upstream (sem chamada PlugNotas).
+ * @param {Record<string, unknown>} preflight
+ * @param {{
+ *   prefeituraCredentialsEnabled?: boolean,
+ *   attemptNfseMode?: 'nacional' | 'municipal',
+ *   credState?: { hasPartialKeys: boolean, hasNonEmptyCredentialPair: boolean, hasAnyPrefeituraCredentialKey: boolean }
+ * }} [governance]
+ * @returns {{ allowUpstream: boolean, runtimeDecision: Record<string, unknown> }}
+ */
+export const resolveEmpresaCadastroMunicipioRuntimeDecision = (preflight, governance = {}) => {
   if (!preflight || typeof preflight !== 'object') {
-    return buildEmpresaCadastroRuntimeDecision({
+    return {
+      allowUpstream: false,
+      runtimeDecision: buildEmpresaCadastroRuntimeDecision({
+        scenario: 'ambiente_configuracao',
+        consultedMunicipio: false,
+        upstreamCallSkipped: true
+      })
+    };
+  }
+
+  const {
+    prefeituraCredentialsEnabled = false,
+    attemptNfseMode = 'nacional',
+    credState = null
+  } = governance;
+
+  const hasPartial = Boolean(credState?.hasPartialKeys);
+  const hasValidPair = Boolean(credState?.hasNonEmptyCredentialPair);
+  const hasAnyPrefeituraKey = Boolean(credState?.hasAnyPrefeituraCredentialKey);
+
+  const authRequired = Boolean(preflight.requiresLogin || preflight.requiresSenha);
+  const natOk = preflight.padraoNacionalEnabled === true;
+
+  if (hasPartial) {
+    return {
+      allowUpstream: false,
+      runtimeDecision: buildEmpresaCadastroRuntimeDecision({
+        scenario: 'payload_contrato',
+        consultedMunicipio: true,
+        codigoIbge: preflight.codigoIbge,
+        environment: preflight.environment,
+        padraoNacionalEnabled: preflight.padraoNacionalEnabled,
+        requiresLogin: preflight.requiresLogin,
+        requiresSenha: preflight.requiresSenha,
+        upstreamCallSkipped: true,
+        attemptMode: attemptNfseMode
+      })
+    };
+  }
+
+  if (!authRequired && hasAnyPrefeituraKey) {
+    return {
+      allowUpstream: false,
+      runtimeDecision: buildEmpresaCadastroRuntimeDecision({
+        scenario: 'payload_contrato',
+        consultedMunicipio: true,
+        codigoIbge: preflight.codigoIbge,
+        environment: preflight.environment,
+        padraoNacionalEnabled: preflight.padraoNacionalEnabled,
+        requiresLogin: preflight.requiresLogin,
+        requiresSenha: preflight.requiresSenha,
+        upstreamCallSkipped: true,
+        attemptMode: attemptNfseMode
+      })
+    };
+  }
+
+  if (!authRequired && natOk) {
+    return {
+      allowUpstream: true,
+      runtimeDecision: buildRuntimeDecisionFromPreflight(
+        'success_nacional',
+        preflight,
+        false,
+        { attemptMode: 'nacional' }
+      )
+    };
+  }
+
+  if (!authRequired && !natOk) {
+    return {
+      allowUpstream: false,
+      runtimeDecision: buildRuntimeDecisionFromPreflight(
+        'prefeitura_ibge_apenas_insuficiente_dp02',
+        preflight,
+        true,
+        { attemptMode: 'nacional' }
+      )
+    };
+  }
+
+  if (authRequired && !hasValidPair) {
+    if (!prefeituraCredentialsEnabled) {
+      return {
+        allowUpstream: false,
+        runtimeDecision: buildRuntimeDecisionFromPreflight(
+          'prefeitura_login_required_blocked',
+          preflight,
+          true,
+          { attemptMode: 'nacional' }
+        )
+      };
+    }
+    return {
+      allowUpstream: false,
+      runtimeDecision: buildRuntimeDecisionFromPreflight(
+        'prefeitura_login_required_fallback_available',
+        preflight,
+        true,
+        { attemptMode: 'nacional' }
+      )
+    };
+  }
+
+  if (authRequired && hasValidPair && !prefeituraCredentialsEnabled) {
+    return {
+      allowUpstream: false,
+      runtimeDecision: buildRuntimeDecisionFromPreflight(
+        'prefeitura_login_required_blocked',
+        preflight,
+        true,
+        { attemptMode: attemptNfseMode }
+      )
+    };
+  }
+
+  if (authRequired && hasValidPair && prefeituraCredentialsEnabled) {
+    if (attemptNfseMode !== 'municipal') {
+      return {
+        allowUpstream: false,
+        runtimeDecision: buildEmpresaCadastroRuntimeDecision({
+          scenario: 'payload_contrato',
+          consultedMunicipio: true,
+          codigoIbge: preflight.codigoIbge,
+          environment: preflight.environment,
+          padraoNacionalEnabled: preflight.padraoNacionalEnabled,
+          requiresLogin: preflight.requiresLogin,
+          requiresSenha: preflight.requiresSenha,
+          upstreamCallSkipped: true,
+          attemptMode: 'nacional'
+        })
+      };
+    }
+    return {
+      allowUpstream: true,
+      runtimeDecision: buildRuntimeDecisionFromPreflight(
+        'success_municipal',
+        preflight,
+        false,
+        { attemptMode: 'municipal' }
+      )
+    };
+  }
+
+  return {
+    allowUpstream: false,
+    runtimeDecision: buildEmpresaCadastroRuntimeDecision({
       scenario: 'ambiente_configuracao',
-      consultedMunicipio: false,
+      consultedMunicipio: true,
+      codigoIbge: preflight.codigoIbge,
       upstreamCallSkipped: true
-    });
-  }
+    })
+  };
+};
 
-  if (preflight.requiresLogin || preflight.requiresSenha) {
-    return buildRuntimeDecisionFromPreflight(
-      'prefeitura_login_required_blocked',
-      preflight,
-      true
-    );
-  }
-
-  if (preflight.padraoNacionalEnabled === true) {
-    return buildRuntimeDecisionFromPreflight('success_nacional', preflight, false);
-  }
-
-  return buildRuntimeDecisionFromPreflight(
-    'prefeitura_ibge_apenas_insuficiente_dp02',
+/**
+ * Compatível com testes brownfield / REC500: flag off e sem credenciais no payload.
+ * @param {Record<string, unknown>} preflight
+ */
+export const evaluateEmpresaCadastroMunicipioPreflight = (preflight) => {
+  const { runtimeDecision } = resolveEmpresaCadastroMunicipioRuntimeDecision(
     preflight,
-    true
+    {
+      prefeituraCredentialsEnabled: false,
+      attemptNfseMode: 'nacional',
+      credState: {
+        hasPartialKeys: false,
+        hasNonEmptyCredentialPair: false,
+        hasAnyPrefeituraCredentialKey: false
+      }
+    }
   );
+  return runtimeDecision;
 };
 
 export const createEmpresaCadastroBlockedErrorFromDecision = (runtimeDecision) => {
@@ -143,6 +317,12 @@ export const createEmpresaCadastroBlockedErrorFromDecision = (runtimeDecision) =
   if (scenario === 'prefeitura_login_required_blocked') {
     return badRequest(PREFEITURA_LOGIN_REQUIRED_BLOCKED_MESSAGE, {
       plugnotasCode: PREFEITURA_LOGIN_REQUIRED_BLOCKED_CODE,
+      runtimeDecision
+    });
+  }
+  if (scenario === 'prefeitura_login_required_fallback_available') {
+    return badRequest(PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE_MESSAGE, {
+      plugnotasCode: PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE_CODE,
       runtimeDecision
     });
   }

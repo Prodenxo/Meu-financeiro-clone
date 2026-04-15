@@ -1,4 +1,7 @@
-import type { DocumentosAtivosState } from './plugnotasEmpresaDocumentosAtivos';
+import {
+  DEFAULT_DOCUMENTOS_ATIVOS,
+  type DocumentosAtivosState
+} from './plugnotasEmpresaDocumentosAtivos';
 import { normalizeIbgeMunicipioCodigo } from './ibgeMunicipioCodigo';
 
 const normalizeDoc = (value: string) => value.replace(/\D/g, '');
@@ -18,6 +21,15 @@ export const PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA = 'ISENTO';
 export const PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY = 'nfseNacional' as const;
 export const PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY = 'consultaNfseNacional' as const;
 export const PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON = true;
+
+const PLUGNOTAS_EMPRESA_DOC_INATIVO = Object.freeze({ ativo: false, tipoContrato: 0 });
+const PLUGNOTAS_NFE_ATIVO_CONFIG_MIN = Object.freeze({ producao: true });
+const PLUGNOTAS_NFCE_ATIVO_CONFIG_MIN = Object.freeze({
+  producao: true,
+  serie: 1,
+  numero: 1,
+  versaoQrCode: 2
+});
 
 const hasRequiredText = (value: unknown) => String(value || '').trim().length > 0;
 
@@ -79,6 +91,54 @@ export const getNfEmissionCompanyValidationMessage = (form: NfEmissionCompanyFor
   return null;
 };
 
+const resolveDocumentosAtivosSelection = (documentosAtivos?: DocumentosAtivosState): DocumentosAtivosState => {
+  if (!documentosAtivos) {
+    return { ...DEFAULT_DOCUMENTOS_ATIVOS };
+  }
+  return {
+    nfse: Boolean(documentosAtivos.nfse),
+    nfe: Boolean(documentosAtivos.nfe),
+    nfce: Boolean(documentosAtivos.nfce)
+  };
+};
+
+const buildNfseBlockFromSelection = (selection: DocumentosAtivosState): Record<string, unknown> => {
+  if (!selection.nfse) {
+    return { ...PLUGNOTAS_EMPRESA_DOC_INATIVO };
+  }
+  return {
+    ativo: true,
+    tipoContrato: 0,
+    config: {
+      producao: true,
+      [PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
+      [PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON
+    }
+  };
+};
+
+const buildNfeBlockFromSelection = (selection: DocumentosAtivosState): Record<string, unknown> => {
+  if (!selection.nfe) {
+    return { ...PLUGNOTAS_EMPRESA_DOC_INATIVO };
+  }
+  return {
+    ativo: true,
+    tipoContrato: 0,
+    config: { ...PLUGNOTAS_NFE_ATIVO_CONFIG_MIN }
+  };
+};
+
+const buildNfceBlockFromSelection = (selection: DocumentosAtivosState): Record<string, unknown> => {
+  if (!selection.nfce) {
+    return { ...PLUGNOTAS_EMPRESA_DOC_INATIVO };
+  }
+  return {
+    ativo: true,
+    tipoContrato: 0,
+    config: { ...PLUGNOTAS_NFCE_ATIVO_CONFIG_MIN }
+  };
+};
+
 export const buildNfEmissionEmpresaPayload = ({
   cnpj,
   certificadoId,
@@ -92,6 +152,7 @@ export const buildNfEmissionEmpresaPayload = ({
   /** Se presente, o backend monta `nfse`/`nfe`/`nfce` a partir desta selecção canónica. */
   documentosAtivos?: DocumentosAtivosState;
 }) => {
+  const documentosSelection = resolveDocumentosAtivosSelection(documentosAtivos);
   const endereco: Record<string, unknown> = {
     tipoLogradouro: form.tipoLogradouro.trim() || 'Rua',
     logradouro: form.logradouro.trim(),
@@ -117,18 +178,9 @@ export const buildNfEmissionEmpresaPayload = ({
     endereco,
     /** Sem input na UI (US-MEI-NFS-02); política alinhada ao backend US-MEI-NFS-01. */
     inscricaoEstadual: PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
-    nfse: {
-      ativo: true,
-      tipoContrato: 0,
-      config: {
-        producao: true,
-        [PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
-        [PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON
-      }
-    },
-    /** Alinhado a US-MEI-NFS-01 / ADR apenas NFS-e — backend reforça o mesmo contrato. */
-    nfe: { ativo: false, tipoContrato: 0 },
-    nfce: { ativo: false, tipoContrato: 0 }
+    nfse: buildNfseBlockFromSelection(documentosSelection),
+    nfe: buildNfeBlockFromSelection(documentosSelection),
+    nfce: buildNfceBlockFromSelection(documentosSelection)
   };
   if (form.email.trim()) {
     payload.email = form.email.trim();
@@ -144,11 +196,7 @@ export const buildNfEmissionEmpresaPayload = ({
   }
 
   if (documentosAtivos) {
-    payload.documentosAtivos = {
-      nfse: Boolean(documentosAtivos.nfse),
-      nfe: Boolean(documentosAtivos.nfe),
-      nfce: Boolean(documentosAtivos.nfce)
-    };
+    payload.documentosAtivos = { ...documentosSelection };
   }
 
   return payload;

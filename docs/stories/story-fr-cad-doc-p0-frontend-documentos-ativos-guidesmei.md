@@ -84,6 +84,7 @@ Ready for Review
 - Testes: `plugnotasEmpresaDocumentosAtivos.test.ts`, `nfEmissionCompany.test.ts` (payload com `documentosAtivos`).
 - Gates: `npm run lint`, `npm run typecheck`, `npm run test` (workspaces) — OK.
 - **Follow-up QA (2026-04-07):** validação «zero tipos» em **Atualizar cadastro** usa `documentosAtivosSubmitError` (fieldset + `role="alert"`), alinhado a **Enviar certificado**; testes RTL `GuidesMei.documentos-ativos.test.tsx` (modal NFS-e + PATCH bloqueado).
+- **Follow-up DEV (2026-04-15):** o payload local enviado pelo browser passou a espelhar `nfse/nfe/nfce.ativo` conforme os checkboxes do site; `nfse.config.nfseNacional` e `consultaNfseNacional` permanecem apenas quando `NFS-e` está ativa, reduzindo desvio entre UI e request antes da normalização do backend.
 
 ### File List (final)
 
@@ -94,6 +95,7 @@ Ready for Review
 - `frontend/src/utils/nfEmissionCompany.test.ts`
 - `frontend/src/utils/plugnotasEmpresaDocumentosAtivos.ts`
 - `frontend/src/utils/plugnotasEmpresaDocumentosAtivos.test.ts`
+- `docs/brief/brief-alinhamento-payload-local-empresa-plugnotas-documentos-ativos-2026-04-15.md`
 
 ---
 

@@ -8,8 +8,16 @@ export const PLUGNOTAS_CODE_PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02 =
   'prefeitura_ibge_apenas_insuficiente_dp02';
 export const PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED =
   'prefeitura_login_required_blocked';
-import { getPlugnotasCodeFromUnknownError, getHttpStatusFromUnknownError } from '../utils/apiClientError';
-import type { PlugnotasRequestMeta } from '../utils/apiClientError';
+/** BFF classificação FR-ALNFB — segundo passo municipal disponível (credenciais). */
+export const PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE =
+  'prefeitura_login_required_fallback_available';
+import {
+  getPlugnotasCodeFromUnknownError,
+  getHttpStatusFromUnknownError,
+  getRuntimeDecisionFromUnknownError,
+  type PlugnotasRequestMeta
+} from '../utils/apiClientError';
+import type { EmpresaCadastroRuntimeDecision } from '../types/empresaCadastroRuntimeDecision';
 
 /** Alinhado à Story 6.3 / Guia MEI: acima disto, mensagem longa exige expansão ou área rolável. */
 export const FISCAL_ERROR_LONG_THRESHOLD = 300;
@@ -34,6 +42,7 @@ export type MeiFiscalScenario =
   | 'fallback_sync'
   | 'prefeitura_ibge_apenas_insuficiente_dp02'
   | 'prefeitura_login_required_blocked'
+  | 'prefeitura_login_required_fallback_available'
   | 'empresa_nao_cadastrada';
 
 function normalizePlugnotasRequestMeta(
@@ -102,7 +111,18 @@ export function resolveMeiFiscalScenario(input: {
   httpStatus?: number | null;
   plugnotasRequest?: PlugnotasRequestMeta | null;
   operation?: string | null;
+  /** Precedência sobre heurísticas de código — arquitetura §9.5 (FR-ALNFB). */
+  runtimeDecision?: EmpresaCadastroRuntimeDecision | null;
 }): MeiFiscalScenario | null {
+  const rd = input.runtimeDecision;
+  const rdScenario = typeof rd?.scenario === 'string' ? rd.scenario.trim() : '';
+  if (rdScenario === 'prefeitura_login_required_fallback_available') {
+    return 'prefeitura_login_required_fallback_available';
+  }
+  if (rdScenario === 'prefeitura_login_required_blocked') {
+    return 'prefeitura_login_required_blocked';
+  }
+
   const code = input.plugnotasCode?.trim() || null;
   const request = normalizePlugnotasRequestMeta(input.plugnotasRequest);
   const raw = stripPlugnotasRequestSuffix(input.rawMessage || '', request);
@@ -114,6 +134,9 @@ export function resolveMeiFiscalScenario(input: {
   }
   if (code === PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED) {
     return 'prefeitura_login_required_blocked';
+  }
+  if (code === PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_FALLBACK_AVAILABLE) {
+    return 'prefeitura_login_required_fallback_available';
   }
   if (
     code === 'ambiente_configuracao'
@@ -238,6 +261,7 @@ export function mapMeiFiscalErrorToCopy(input: {
   plugnotasCode?: string | null;
   httpStatus?: number | null;
   plugnotasRequest?: PlugnotasRequestMeta | null;
+  runtimeDecision?: EmpresaCadastroRuntimeDecision | null;
 }): MeiFiscalUserCopy {
   const code = input.plugnotasCode?.trim() || null;
   const request = normalizePlugnotasRequestMeta(input.plugnotasRequest);
@@ -248,6 +272,7 @@ export function mapMeiFiscalErrorToCopy(input: {
     plugnotasCode: code,
     httpStatus: input.httpStatus,
     plugnotasRequest: request,
+    runtimeDecision: input.runtimeDecision ?? null,
   });
 
   if (scenario === 'ambiente_configuracao') {
@@ -291,6 +316,16 @@ export function mapMeiFiscalErrorToCopy(input: {
       description:
         'Este cadastro segue NFS-e Nacional como padrão. Quando o emissor exigir acesso ao portal da prefeitura, '
         + 'o caso fica fora deste fluxo e precisa de triagem operacional com suporte ou com o painel do emissor.',
+    };
+  }
+
+  if (scenario === 'prefeitura_login_required_fallback_available') {
+    return {
+      title: 'Portal da prefeitura necessário para concluir',
+      description:
+        'O emissor indicou que este município exige autenticação no portal da prefeitura para seguir com o cadastro NFS-e. '
+        + 'Quando a integração estiver disponível nesta jornada, poderá informar login e senha do portal abaixo para '
+        + 'tentar o segundo passo — sem substituir o padrão nacional nas outras etapas.',
     };
   }
 
@@ -477,6 +512,7 @@ export function meiFiscalToastMessage(err: unknown, fallback: string): string {
     rawMessage: raw || fallback,
     plugnotasCode: getPlugnotasCodeFromUnknownError(err),
     httpStatus: getHttpStatusFromUnknownError(err),
+    runtimeDecision: getRuntimeDecisionFromUnknownError(err),
   });
   const line = `${copy.title}: ${copy.description}`.replace(/\s+/g, ' ').trim();
   return line.length > 220 ? `${line.slice(0, 217)}…` : line;
@@ -489,13 +525,15 @@ export function formatMeiFiscalErrorForIntegrations(
   rawMessage: string,
   plugnotasCode?: string | null,
   httpStatus?: number | null,
-  plugnotasRequest?: PlugnotasRequestMeta | null
+  plugnotasRequest?: PlugnotasRequestMeta | null,
+  runtimeDecision?: EmpresaCadastroRuntimeDecision | null
 ): string {
   const copy = mapMeiFiscalErrorToCopy({
     rawMessage,
     plugnotasCode: plugnotasCode ?? null,
     httpStatus: httpStatus ?? null,
     plugnotasRequest: plugnotasRequest ?? null,
+    runtimeDecision: runtimeDecision ?? null,
   });
   return formatMeiFiscalMappedForAlert(copy);
 }
@@ -506,5 +544,6 @@ export function mapMeiFiscalErrorFromUnknown(err: unknown, fallbackMessage: stri
     rawMessage: raw || fallbackMessage,
     plugnotasCode: getPlugnotasCodeFromUnknownError(err),
     httpStatus: getHttpStatusFromUnknownError(err),
+    runtimeDecision: getRuntimeDecisionFromUnknownError(err),
   });
 }

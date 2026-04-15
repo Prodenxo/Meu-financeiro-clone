@@ -7,6 +7,7 @@
  */
 import { badRequest } from '../../utils/errors.js';
 import {
+  applyNfseMunicipalContractPolicy,
   applyNfseNationalContractPolicy,
   PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
 } from './plugnotas-mei-empresa-policy.js';
@@ -175,10 +176,40 @@ const normalizeInscricaoEstadualApenasNfse = (payload) => {
  * @param {Record<string, unknown>} payload
  * @param {{ nfse: boolean, nfe: boolean, nfce: boolean }} selection
  */
-const assignDocumentBlocksFromSelection = (payload, selection) => {
+const cloneIncomingPrefeituraConfig = (payload) => {
+  const raw = payload?.nfse;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const cfg = raw.config;
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return null;
+  const prefeitura = cfg.prefeitura;
+  if (prefeitura === undefined || prefeitura === null) return null;
+  if (typeof prefeitura !== 'object' || Array.isArray(prefeitura)) return null;
+  return { ...prefeitura };
+};
+
+/**
+ * @param {Record<string, unknown>} payload
+ * @param {{ nfse: boolean, nfe: boolean, nfce: boolean }} selection
+ * @param {{ nfseMode?: 'nacional' | 'municipal' }} [opts]
+ */
+const assignDocumentBlocksFromSelection = (payload, selection, opts = {}) => {
+  const nfseMode = opts.nfseMode === 'municipal' ? 'municipal' : 'nacional';
+  const incomingPrefeitura = cloneIncomingPrefeituraConfig(payload);
+
   if (selection.nfse) {
-    payload.nfse = { ativo: true, tipoContrato: 0, config: { producao: true } };
-    applyNfseNationalContractPolicy(payload);
+    payload.nfse = {
+      ativo: true,
+      tipoContrato: 0,
+      config: {
+        producao: true,
+        ...(incomingPrefeitura ? { prefeitura: incomingPrefeitura } : {})
+      }
+    };
+    if (nfseMode === 'municipal') {
+      applyNfseMunicipalContractPolicy(payload);
+    } else {
+      applyNfseNationalContractPolicy(payload);
+    }
   } else {
     payload.nfse = { ...PLUGNOTAS_EMPRESA_DOC_INATIVO };
   }
@@ -204,10 +235,11 @@ const assignDocumentBlocksFromSelection = (payload, selection) => {
  * Monta blocos nfse / nfe / nfce a partir da selecção canónica (POST).
  * @param {Record<string, unknown>} payload
  * @param {{ nfse: boolean, nfe: boolean, nfce: boolean }} selection
+ * @param {{ nfseMode?: 'nacional' | 'municipal' }} [opts]
  */
-export const applyEmpresaPlugnotasDocumentSelectionForPost = (payload, selection) => {
+export const applyEmpresaPlugnotasDocumentSelectionForPost = (payload, selection, opts = {}) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
-  assignDocumentBlocksFromSelection(payload, selection);
+  assignDocumentBlocksFromSelection(payload, selection, opts);
   normalizeInscricaoEstadualApenasNfse(payload);
 };
 
@@ -215,8 +247,9 @@ export const applyEmpresaPlugnotasDocumentSelectionForPost = (payload, selection
  * PATCH com `documentosAtivos`: mesma montagem de blocos que no POST (arquitetura §3.2).
  * @param {Record<string, unknown>} payload
  * @param {{ nfse: boolean, nfe: boolean, nfce: boolean }} selection
+ * @param {{ nfseMode?: 'nacional' | 'municipal' }} [opts]
  */
-export const applyEmpresaPlugnotasDocumentSelectionForPatch = (payload, selection) => {
+export const applyEmpresaPlugnotasDocumentSelectionForPatch = (payload, selection, opts = {}) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
-  assignDocumentBlocksFromSelection(payload, selection);
+  assignDocumentBlocksFromSelection(payload, selection, opts);
 };

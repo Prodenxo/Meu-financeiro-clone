@@ -68,3 +68,37 @@ export const applyNfseNationalContractPolicy = (payload) => {
   payload.nfse = next;
   return contractInput;
 };
+
+/**
+ * Modo municipal guiado — FR-ALNFB-06 (retry com `nfseNacional=false`).
+ * @param {Record<string, unknown>} payload
+ */
+export const applyNfseMunicipalContractPolicy = (payload) => {
+  if (!isPlainObject(payload)) return inspectNfseContractInput(null);
+
+  const nfse = toObject(payload.nfse);
+  const contractInput = inspectNfseContractInput(nfse);
+  if (!Object.keys(nfse).length) return contractInput;
+
+  const next = { ...nfse };
+  const nextConfig = toObject(next.config);
+  delete next[PLUGNOTAS_NFSE_NACIONAL_LEGACY_INPUT_KEY];
+
+  if (next.ativo === false) {
+    delete nextConfig[PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY];
+    delete nextConfig[PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY];
+    if (Object.keys(nextConfig).length) next.config = nextConfig;
+    else delete next.config;
+    payload.nfse = next;
+    return contractInput;
+  }
+
+  next.config = {
+    producao: true,
+    ...nextConfig,
+    [PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]: false,
+    [PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]: false
+  };
+  payload.nfse = next;
+  return contractInput;
+};
