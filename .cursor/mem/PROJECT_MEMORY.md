@@ -85,6 +85,7 @@ GitHub Actions: `.github/workflows/corr03-smoke-backend.yml` executa o mesmo smo
 
 ## Última atualização
 
+- **2026-04-15** — REC500 Epic 2 (`regra governada runtime 5002704`): story cancelada enquanto PRD §18 for `manter policy vigente`; reabrir só com decisão `correcao controlada` + PRD/arquitetura alinhados (`docs/stories/story-fr-rec500-p2-backend-regra-governada-runtime-5002704-2026-04-14.md`).
 - **2026-04-14** — Arquitetura RTCAD documentada: contrato oficial + preflight municipal obrigatório no BFF antes do cadastro empresa PlugNotas; fase 2 municipal segue fora do MVP.
 - **2026-04-07** — FR-CAD-DOC P1 UX (banner/título/campos condicionais): `guiaMeiCadastroDocumentosAtivos*` + componentes `MeiCadastroNfeNfceInfoBanner` / `MeiCadastroRequisitosNfeNfcePlaceholder`.
 - **2026-04-07** — FR-CAD-DOC P1 pós-QA: migração RLS `user_mei_certificates` + `mei-notas-documentos-mirror.js` + testes `mei-notas-documentos-mirror.test.js`.

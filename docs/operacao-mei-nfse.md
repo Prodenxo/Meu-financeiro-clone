@@ -681,6 +681,27 @@ Esta secção liga a taxonomia ROB/NATEX/TRO ao artefato de validação final do
 - Taxonomia base de classificação: secção ROB desta página
 - Exceção municipal bloqueada: secções NATEX, TOP e TRO desta página
 - Evidência manual já disponível para `prefeitura_login_required_blocked`: `docs/qa/top-prefeitura-login-required-blocked-2026-04-10.md` e `docs/qa/tro-prefeitura-login-required-blocked-2026-04-13-inc-tro-2026-04-13-plogin-blocked.md`
+- Caso **IBGE `5002704` (REC500)** — decisão de produto fechada e documentação operacional: ver [REC500 — IBGE `5002704` (caso recorrente conhecido)](#rec500-ibge-5002704-caso-recorrente).
+
+<a id="rec500-ibge-5002704-caso-recorrente"></a>
+
+#### REC500 — IBGE `5002704` (caso recorrente conhecido)
+
+Esta subsecção fixa a leitura operacional para **um** município com evidência consolidada no Epic 1 REC500. **Não** extrapole a conclusão a todos os cenários com `requiresLogin` / `requiresSenha` noutros IBGEs.
+
+| Dimensão | Leitura canónica (2026-04-15) |
+|----------|-------------------------------|
+| **Preflight (`producao`)** | Híbrido: `padraoNacionalEnabled=true`, `requiresLogin=true`, `requiresSenha=false` — ver [`docs/qa/rec500-preflight-5002704-ambientes-2026-04-14.md`](qa/rec500-preflight-5002704-ambientes-2026-04-14.md). |
+| **Homologação** | Evidência comparável **inconclusiva** no mesmo artefacto até nova coleta operacional. |
+| **BFF / classificação** | Bloqueio **`prefeitura_login_required_blocked`** antes do `POST /empresa` quando a policy do motor exige auth municipal — **não** é classificação de “endpoint errado”. |
+| **Decisão formal** | **`manter policy vigente`** — [`docs/prd/PRD-recorrencia-prefeitura-login-required-blocked-5002704-2026-04-14.md`](prd/PRD-recorrencia-prefeitura-login-required-blocked-5002704-2026-04-14.md) §18; espelho em [`docs/technical/architecture-recorrencia-prefeitura-login-required-blocked-5002704-2026-04-14.md`](technical/architecture-recorrencia-prefeitura-login-required-blocked-5002704-2026-04-14.md) §18. |
+| **Epic 2 (correção controlada)** | **Não** iniciado com base nesta decisão. |
+| **Rollout controlado (Epic 2 operação)** | **N/A** em 2026-04-15 — sem excepção técnica a ativar; encerramento documental e plano futuro condicional: [`docs/qa/rec500-rollout-controlado-5002704-2026-04-14.md`](qa/rec500-rollout-controlado-5002704-2026-04-14.md). |
+| **Fase 2 municipal** | **Não** confundir com Epic 2; iniciativa futura separada se a organização decidir jornada com credencial municipal (ver PRD §18). |
+| **UX** | Estado alinhado a **REC500-UX-L1** (bloqueio honesto; sem retry cego) na [`ux-spec-recorrencia-prefeitura-login-required-blocked-5002704-2026-04-14.md`](specs/ux-spec-recorrencia-prefeitura-login-required-blocked-5002704-2026-04-14.md) §7.2. |
+| **Matriz RTCAD** | Linha `RTCAD-REC500-01` em [`docs/qa/qa-matriz-rtcad-cadastro-empresa-plugnotas-2026-04-14.md`](qa/qa-matriz-rtcad-cadastro-empresa-plugnotas-2026-04-14.md). |
+
+**Guardrail:** triagem de outros municípios continua a seguir ROB/NATEX/TRO e a matriz RTCAD genérica; use esta subsecção apenas quando o **IBGE `5002704`** ou o pacote REC500 forem explicitamente referenciados.
 
 <a id="natex-matriz-operacional-excecao-municipal-bloqueada"></a>
 

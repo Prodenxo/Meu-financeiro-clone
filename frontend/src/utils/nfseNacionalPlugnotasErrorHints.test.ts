@@ -153,6 +153,12 @@ describe('nfseNacionalPlugnotasErrorHints', () => {
     expect(getPlugnotasEmpresaCadastroErrorUxVariant(msg)).toBe('prefeitura-login-required');
   });
 
+  it('REC500 P2 regressão: bloqueio BFF permanece L1 — não promove “sucesso nacional” para IBGE 5002704 no hint', () => {
+    const msg5002704 = `Falha tratada no BFF (${PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED}) contexto IBGE 5002704 híbrido.`;
+    expect(getPlugnotasEmpresaCadastroErrorUxVariant(msg5002704)).toBe('prefeitura-login-required');
+    expect(isPlugnotasPrefeituraLoginRequiredMessage(msg5002704)).toBe(true);
+  });
+
   it('PREF-L2 (spec UX §3.2): só IM obrigatória → municipal-generic, não prefeitura-config', () => {
     const l2 = 'Validação Plugnotas: inscricaoMunicipal obrigatória no payload.';
     expect(isPlugnotasNfseConfigPrefeituraRequirementMessage(l2)).toBe(false);

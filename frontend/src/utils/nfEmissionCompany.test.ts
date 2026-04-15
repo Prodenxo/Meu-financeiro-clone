@@ -117,6 +117,19 @@ describe('nfEmissionCompany', () => {
     expect(config.prefeitura).toBeUndefined();
   });
 
+  it('REC500 P2: cadastro com codigoCidade 5002704 não antecipa credenciais municipais no payload (fronteira browser)', () => {
+    const form = { ...fullValidForm(), codigoCidade: '5002704', descricaoCidade: 'Fixture' };
+    const payload = buildNfEmissionEmpresaPayload({
+      cnpj: '12345678000190',
+      certificadoId: 'cert-abc',
+      form
+    });
+    const nfse = payload.nfse as Record<string, unknown>;
+    const config = nfse.config as Record<string, unknown>;
+    expect((payload.endereco as Record<string, unknown>).codigoCidade).toBe('5002704');
+    expect(config.prefeitura).toBeUndefined();
+  });
+
   it('NFR-TIBGE-02: endereco não inclui codigoIBGECidade duplicado (canónico: só codigoCidade)', () => {
     const payload = buildNfEmissionEmpresaPayload({
       cnpj: '12345678000190',

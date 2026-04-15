@@ -164,6 +164,70 @@ test('HTTP POST /api/mei-notas/setup/emissao-fiscal/empresa bloqueia município 
   }
 });
 
+test('HTTP POST REC500 P2: IBGE 5002704 com preflight híbrido retorna prefeitura_login_required_blocked (sem POST /empresa)', async () => {
+  const controller = await import('../src/controllers/mei-notas.controller.js');
+  const { app, __setGetRequesterContextForTests } = await mountApp(controller);
+  const originalFetch = global.fetch;
+  const upstreamCalls = [];
+
+  global.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.includes('127.0.0.1') || u.includes('localhost')) {
+      return originalFetch(url, init);
+    }
+    upstreamCalls.push({ url: u, init });
+    if (u.includes('/nfse/cidades/')) {
+      return createJsonResponse(200, {
+        padraoNacional: { producao: true, homologacao: false },
+        login: { producao: true, homologacao: false },
+        senha: { producao: false, homologacao: false }
+      });
+    }
+    return createJsonResponse(200, {
+      message: 'Cadastro efetuado com sucesso',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  __setGetRequesterContextForTests(async () => ({ role: 'admin', mei: true }));
+  const { server, port } = await listen(app);
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/mei-notas/setup/emissao-fiscal/empresa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cpfCnpj: '17422651000172',
+        certificado: 'cert-1',
+        razaoSocial: 'Empresa Teste',
+        endereco: {
+          codigoCidade: '5002704',
+          logradouro: 'Rua A',
+          numero: '1',
+          bairro: 'Centro',
+          cep: '01000000',
+          uf: 'SP'
+        }
+      })
+    });
+
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.equal(json.success, false);
+    assert.equal(json.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
+    assert.equal(json.errors?.runtimeDecision?.codigoIbge, '5002704');
+    assert.equal(json.errors?.runtimeDecision?.padraoNacionalEnabled, true);
+    assert.equal(upstreamCalls.length, 1);
+    assert.match(upstreamCalls[0].url, /\/nfse\/cidades\/5002704$/);
+  } finally {
+    global.fetch = originalFetch;
+    __setGetRequesterContextForTests(null);
+    await new Promise((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+});
+
 test('HTTP POST /api/mei-notas/setup/emissao-fiscal/empresa bloqueia credenciais municipais antes do upstream', async () => {
   const controller = await import('../src/controllers/mei-notas.controller.js');
   const { app, __setGetRequesterContextForTests } = await mountApp(controller);

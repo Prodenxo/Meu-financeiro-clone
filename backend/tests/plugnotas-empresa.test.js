@@ -201,6 +201,52 @@ test('empresa service bloqueia município com login obrigatório já no prefligh
   }
 });
 
+test('empresa service REC500 P2: IBGE 5002704 com preflight híbrido (nacional+login) mantém prefeitura_login_required_blocked e não chama POST /empresa', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse({
+        padraoNacional: { producao: true, homologacao: false },
+        login: { producao: true, homologacao: false },
+        senha: { producao: false, homologacao: false }
+      });
+    }
+    return createJsonResponse(200, {
+      message: 'Cadastro efetuado com sucesso',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await assert.rejects(
+      () =>
+        cadastrarEmpresaPlugNotas({
+          cpfCnpj: '17422651000172',
+          certificado: 'cert-1',
+          razaoSocial: 'Empresa Teste',
+          endereco: buildEmpresaEnderecoValido({ codigoCidade: '5002704' })
+        }),
+      (err) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.errors?.plugnotasCode, 'prefeitura_login_required_blocked');
+        assert.equal(err.errors?.runtimeDecision?.scenario, 'prefeitura_login_required_blocked');
+        assert.equal(err.errors?.runtimeDecision?.codigoIbge, '5002704');
+        assert.equal(err.errors?.runtimeDecision?.padraoNacionalEnabled, true);
+        assert.equal(err.errors?.runtimeDecision?.requiresLogin, true);
+        return true;
+      }
+    );
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /\/nfse\/cidades\/5002704$/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('empresa service bloqueia DP02 no preflight quando não há padrão nacional elegível', async () => {
   const { cadastrarEmpresaPlugNotas, inferEmpresaCadastroScenario } = await import(
     '../src/services/plugnotas/empresa.service.js'

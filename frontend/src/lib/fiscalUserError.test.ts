@@ -79,6 +79,18 @@ describe('mapMeiFiscalErrorToCopy', () => {
     expect(copy.description).not.toMatch(/rota errada/i);
   });
 
+  it('REC500 P2 / UX spec §9.1: bloqueio BFF mantém REC500-UX-L1 sem CTA principal de retry cego (requisitos alinhados a REC500-UX-L4)', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage: 'ignored when code set',
+      plugnotasCode: PLUGNOTAS_CODE_PREFEITURA_LOGIN_REQUIRED_BLOCKED,
+      httpStatus: 400,
+      plugnotasRequest: { method: 'POST', path: '/empresa' },
+    });
+    expect(copy.actionLabel).toBeUndefined();
+    expect(copy.href).toBeUndefined();
+    expect(copy.title).toMatch(/Exceção municipal|não suportada/i);
+  });
+
   it('ROB: payload_contrato prioriza contrato estruturado do backend para revisão de dados', () => {
     const copy = mapMeiFiscalErrorToCopy({
       rawMessage: 'Falha na validação do JSON de Empresa: endereco.logradouro inválido',
