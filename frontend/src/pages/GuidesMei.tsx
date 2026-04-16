@@ -316,17 +316,27 @@ const toPeriodoApuracao = (month: string, year: number) => {
   return `${year}${month}`;
 };
 
+const clampRpsIntForm = (value: unknown, fallback: number): number => {
+  const n = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
+  if (Number.isFinite(n) && n >= 1) return n;
+  return fallback;
+};
+
 const emitenteSnapshotToForm = (snap: NfseEmitenteSnapshot): NfEmissionCompanyForm => {
   const { certDocument: _omitCert, ...companyFields } = snap;
   const r = companyFields.regimeTributario;
   const regime: NfEmissionRegimeTributario =
     r === '1' || r === '2' || r === '3' ? r : '1';
+  const def = getDefaultNfEmissionCompanyForm();
   return {
-    ...getDefaultNfEmissionCompanyForm(),
+    ...def,
     ...companyFields,
     regimeTributario: regime,
     inscricaoMunicipal: String(companyFields.inscricaoMunicipal ?? '').trim(),
-    codigoCidade: normalizeIbgeMunicipioCodigo(companyFields.codigoCidade)
+    codigoCidade: normalizeIbgeMunicipioCodigo(companyFields.codigoCidade),
+    rpsLote: clampRpsIntForm(companyFields.rpsLote, def.rpsLote),
+    rpsNumero: clampRpsIntForm(companyFields.rpsNumero, def.rpsNumero),
+    rpsSerie: String(companyFields.rpsSerie ?? def.rpsSerie).trim() || def.rpsSerie
   };
 };
 
@@ -345,7 +355,10 @@ const nfEmissionFormToPersistBody = (form: NfEmissionCompanyForm) => ({
   codigoCidade: form.codigoCidade,
   descricaoCidade: form.descricaoCidade,
   estado: form.estado,
-  simplesNacional: form.simplesNacional
+  simplesNacional: form.simplesNacional,
+  rpsLote: form.rpsLote,
+  rpsNumero: form.rpsNumero,
+  rpsSerie: form.rpsSerie
 });
 
 const triggerFileDownload = (blob: Blob, filename: string) => {
@@ -4173,6 +4186,76 @@ export default function GuidesMei() {
                       />
                       Empresa optante pelo Simples Nacional
                     </label>
+                  </div>
+                  <div
+                    className="mt-3 rounded-lg border border-slate-200/90 bg-slate-50/80 p-3 dark:border-slate-600/70 dark:bg-slate-900/40"
+                    role="group"
+                    aria-labelledby="mei-rps-config-title"
+                  >
+                    <p
+                      id="mei-rps-config-title"
+                      className="text-sm font-semibold text-slate-900 dark:text-slate-100"
+                    >
+                      Numeração RPS (PlugNotas)
+                    </p>
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                      Lote, número e série iniciais enviados ao emissor no cadastro ou atualização. Ajuste só se o seu
+                      contador ou o município indicar valores diferentes dos padrão (1 / 1 / &quot;1&quot;).
+                    </p>
+                    <div className="mt-3 grid gap-2 md:grid-cols-3">
+                      <div>
+                        <label htmlFor="mei-rps-lote" className="mb-1 block text-xs text-slate-600 dark:text-slate-400">
+                          Lote inicial
+                        </label>
+                        <input
+                          id="mei-rps-lote"
+                          className="planner-input-compact w-full"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={nfEmissionCompanyForm.rpsLote}
+                          onChange={(event) => {
+                            const v = Number.parseInt(event.target.value, 10);
+                            updateNfEmissionCompanyForm({
+                              rpsLote: Number.isFinite(v) && v >= 1 ? v : 1
+                            });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="mei-rps-numero" className="mb-1 block text-xs text-slate-600 dark:text-slate-400">
+                          Número inicial RPS
+                        </label>
+                        <input
+                          id="mei-rps-numero"
+                          className="planner-input-compact w-full"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={nfEmissionCompanyForm.rpsNumero}
+                          onChange={(event) => {
+                            const v = Number.parseInt(event.target.value, 10);
+                            updateNfEmissionCompanyForm({
+                              rpsNumero: Number.isFinite(v) && v >= 1 ? v : 1
+                            });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="mei-rps-serie" className="mb-1 block text-xs text-slate-600 dark:text-slate-400">
+                          Série
+                        </label>
+                        <input
+                          id="mei-rps-serie"
+                          className="planner-input-compact w-full"
+                          type="text"
+                          inputMode="text"
+                          value={nfEmissionCompanyForm.rpsSerie}
+                          onChange={(event) => updateNfEmissionCompanyForm({ rpsSerie: event.target.value })}
+                          placeholder="ex.: 1"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="mt-3 flex flex-col gap-2 border-t border-slate-200/80 pt-3 dark:border-slate-700/80">
                     <p className="text-xs text-slate-500 dark:text-slate-400">

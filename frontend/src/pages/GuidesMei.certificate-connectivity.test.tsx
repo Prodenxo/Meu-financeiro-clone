@@ -1006,7 +1006,10 @@ describe('GuidesMei certificado — conectividade (US-CONN-MEI-03 + US-MEI-FISC-
       'Código IBGE cidade *',
       'Cidade *',
       'UF *',
-      '__checkbox__'
+      '__checkbox__',
+      '',
+      '',
+      'ex.: 1'
     ];
 
     expect(sequence).toEqual(expectedSequence);

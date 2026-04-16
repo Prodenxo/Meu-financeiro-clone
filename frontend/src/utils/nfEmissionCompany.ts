@@ -55,7 +55,29 @@ export type NfEmissionCompanyForm = {
   codigoCidade: string;
   descricaoCidade: string;
   estado: string;
+  /** Lote inicial RPS (PlugNotas) — editável na configuração do emitente. */
+  rpsLote: number;
+  /** Número inicial RPS. */
+  rpsNumero: number;
+  /** Série RPS (texto). */
+  rpsSerie: string;
 };
+
+const clampRpsInt = (value: unknown, fallback: number): number => {
+  const n = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
+  if (Number.isFinite(n) && n >= 1) return n;
+  return fallback;
+};
+
+export const buildRpsPayloadFromForm = (form: NfEmissionCompanyForm) => ({
+  lote: clampRpsInt(form.rpsLote, 1),
+  numeracao: [
+    {
+      numero: clampRpsInt(form.rpsNumero, 1),
+      serie: String(form.rpsSerie ?? '1').trim() || '1'
+    }
+  ]
+});
 
 export const getDefaultNfEmissionCompanyForm = (): NfEmissionCompanyForm => ({
   razaoSocial: '',
@@ -72,7 +94,10 @@ export const getDefaultNfEmissionCompanyForm = (): NfEmissionCompanyForm => ({
   bairro: '',
   codigoCidade: '',
   descricaoCidade: '',
-  estado: ''
+  estado: '',
+  rpsLote: 1,
+  rpsNumero: 1,
+  rpsSerie: '1'
 });
 
 export const getNfEmissionCompanyValidationMessage = (form: NfEmissionCompanyForm): string | null => {
@@ -88,6 +113,15 @@ export const getNfEmissionCompanyValidationMessage = (form: NfEmissionCompanyFor
   if (!hasRequiredText(form.codigoCidade)) return 'Informe o código IBGE da cidade.';
   if (!hasRequiredText(form.descricaoCidade)) return 'Informe a cidade da empresa.';
   if (String(form.estado ?? '').trim().length !== 2) return 'Informe a UF com 2 letras (ex.: PR).';
+  if (!Number.isFinite(form.rpsLote) || form.rpsLote < 1) {
+    return 'Lote RPS deve ser um número inteiro maior ou igual a 1.';
+  }
+  if (!Number.isFinite(form.rpsNumero) || form.rpsNumero < 1) {
+    return 'Número inicial do RPS deve ser um inteiro maior ou igual a 1.';
+  }
+  if (!String(form.rpsSerie ?? '').trim()) {
+    return 'Informe a série do RPS (ex.: 1).';
+  }
   return null;
 };
 
@@ -198,6 +232,8 @@ export const buildNfEmissionEmpresaPayload = ({
   if (documentosAtivos) {
     payload.documentosAtivos = { ...documentosSelection };
   }
+
+  payload.rps = buildRpsPayloadFromForm(form);
 
   return payload;
 };

@@ -38,6 +38,11 @@ describe('nfEmissionCompany', () => {
       form
     });
 
+    expect(payloadEmptyIm.rps).toEqual({
+      lote: 1,
+      numeracao: [{ numero: 1, serie: '1' }]
+    });
+
     expect('inscricaoMunicipal' in payloadEmptyIm).toBe(false);
 
     const payloadWithIm = buildNfEmissionEmpresaPayload({
@@ -61,6 +66,24 @@ describe('nfEmissionCompany', () => {
     expect(config[PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
     expect(config[PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
     expect('nacional' in nfse).toBe(false);
+  });
+
+  it('buildNfEmissionEmpresaPayload inclui rps personalizado quando o formulário define lote/número/série', () => {
+    const form = {
+      ...fullValidForm(),
+      rpsLote: 10,
+      rpsNumero: 200,
+      rpsSerie: 'NF'
+    };
+    const payload = buildNfEmissionEmpresaPayload({
+      cnpj: '12345678000190',
+      certificadoId: 'cert-abc',
+      form
+    });
+    expect(payload.rps).toEqual({
+      lote: 10,
+      numeracao: [{ numero: 200, serie: 'NF' }]
+    });
   });
 
   it('buildNfEmissionEmpresaPayload sempre envia IE pela política MEI e omite certificado no PATCH', () => {

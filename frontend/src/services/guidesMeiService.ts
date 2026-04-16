@@ -43,6 +43,9 @@ export type NfseEmitenteSnapshot = Pick<
   | 'codigoCidade'
   | 'descricaoCidade'
   | 'estado'
+  | 'rpsLote'
+  | 'rpsNumero'
+  | 'rpsSerie'
 > & {
   /** `cert_document` no backend — só dígitos (FR-AP-01). */
   certDocument?: string;
