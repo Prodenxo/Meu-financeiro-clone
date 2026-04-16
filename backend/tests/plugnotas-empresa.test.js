@@ -73,7 +73,7 @@ test('empresa service valida payload obrigatório', async () => {
   );
 });
 
-test('cadastrarEmpresaPlugNotas substitui rps do input pelo bloco canónico no POST (FR-RPS-OVR-01)', async () => {
+test('cadastrarEmpresaPlugNotas preserva e sanitiza rps válido do cliente no POST', async () => {
   const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
@@ -99,8 +99,8 @@ test('cadastrarEmpresaPlugNotas substitui rps do input pelo bloco canónico no P
     });
     const sent = JSON.parse(calls[0].options.body);
     assert.deepEqual(sent.rps, {
-      lote: 1,
-      numeracao: [{ numero: 1, serie: '1' }]
+      lote: 99,
+      numeracao: [{ numero: 9, serie: 'X' }]
     });
   } finally {
     global.fetch = originalFetch;
@@ -892,7 +892,7 @@ test('empresa service tenta atualização quando empresa já existe', async () =
   }
 });
 
-test('empresa service PATCH /empresa não envia rps mesmo quando o input inclui rps', async () => {
+test('empresa service PATCH /empresa envia rps sanitizado quando o input inclui rps', async () => {
   const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
@@ -914,7 +914,10 @@ test('empresa service PATCH /empresa não envia rps mesmo quando o input inclui 
     });
     assert.equal(calls.length, 1);
     const sent = JSON.parse(calls[0].body);
-    assert.equal(Object.prototype.hasOwnProperty.call(sent, 'rps'), false);
+    assert.deepEqual(sent.rps, {
+      lote: 9,
+      numeracao: [{ numero: 9, serie: '9' }]
+    });
   } finally {
     global.fetch = originalFetch;
   }

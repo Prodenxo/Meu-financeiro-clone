@@ -180,6 +180,26 @@ export const normalizeEmitenteRowFragment = (raw, opts = {}) => {
     }
   }
 
+  const rpsLote = get('rpsLote', 'rps_lote');
+  if (rpsLote !== undefined && rpsLote !== null) {
+    const n = Number.parseInt(String(rpsLote), 10);
+    if (Number.isFinite(n) && n >= 1) out.rps_lote = n;
+    else if (!omitEmpty) out.rps_lote = null;
+  }
+
+  const rpsNumero = get('rpsNumero', 'rps_numero');
+  if (rpsNumero !== undefined && rpsNumero !== null) {
+    const n = Number.parseInt(String(rpsNumero), 10);
+    if (Number.isFinite(n) && n >= 1) out.rps_numero = n;
+    else if (!omitEmpty) out.rps_numero = null;
+  }
+
+  const rpsSerie = get('rpsSerie', 'rps_serie');
+  if (rpsSerie !== undefined && rpsSerie !== null) {
+    const t = String(rpsSerie).trim();
+    if (t || !omitEmpty) out.rps_serie = t || null;
+  }
+
   return out;
 };
 
@@ -253,7 +273,12 @@ export const emitenteRowToApiShape = (row) => {
     bairro: row.bairro != null ? String(row.bairro) : '',
     codigoCidade: codigoCidadeDigits,
     descricaoCidade: row.cidade != null ? String(row.cidade) : '',
-    estado: ufRaw
+    estado: ufRaw,
+    rpsLote: row.rps_lote != null ? Number.parseInt(String(row.rps_lote), 10) || 1 : 1,
+    rpsNumero: row.rps_numero != null ? Number.parseInt(String(row.rps_numero), 10) || 1 : 1,
+    rpsSerie: row.rps_serie != null && String(row.rps_serie).trim() !== ''
+      ? String(row.rps_serie).trim()
+      : '1'
   };
   const cd = row.cert_document;
   if (cd != null && String(cd).trim() !== '') {
@@ -325,7 +350,10 @@ export const getEmitenteNfseSnapshot = async (userId) => {
       ibge_municipio,
       cidade,
       uf,
-      optante_simples_nacional
+      optante_simples_nacional,
+      rps_lote,
+      rps_numero,
+      rps_serie
     `)
     .eq('user_id', userId)
     .maybeSingle();

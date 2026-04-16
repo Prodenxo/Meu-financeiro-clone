@@ -24,6 +24,9 @@ const baseSnap = (): NfseEmitenteSnapshot => ({
   descricaoCidade: 'São Paulo',
   estado: 'SP',
   inscricaoMunicipal: '',
+  rpsLote: 1,
+  rpsNumero: 1,
+  rpsSerie: '1',
   certDocument: '11222333000181'
 });
 

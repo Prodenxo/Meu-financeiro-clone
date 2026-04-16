@@ -35,6 +35,7 @@ import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.
 import { isPlugnotasIbgeTableRejectMessage } from '../../utils/plugnotasIbgeTableRejectMessage.js';
 import {
   applyEmpresaPlugnotasRpsInicialForPost,
+  sanitizeEmpresaPlugnotasRpsPayload,
   stripRpsFromEmpresaPayload
 } from './plugnotas-empresa-rps-inicial.js';
 import { applyNfseConfigPrefeituraDeriveIbge } from './nfsePrefeituraPayload.js';
@@ -821,7 +822,9 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
 
-  stripRpsFromEmpresaPayload(payload);
+  if (Object.prototype.hasOwnProperty.call(payload, 'rps')) {
+    sanitizeEmpresaPlugnotasRpsPayload(payload);
+  }
 
   const credState = extractPrefeituraPortalCredentialState(payload);
   const attemptNfseMode = resolveAttemptNfseModeFromPayload(payload);

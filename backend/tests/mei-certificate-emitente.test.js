@@ -41,6 +41,21 @@ test('emitenteRowToApiShape — defaults', () => {
   assert.equal(api.simplesNacional, false);
   assert.equal(api.codigoCidade, '4106902');
   assert.equal(api.tipoLogradouro, 'Rua');
+  assert.equal(api.rpsLote, 1);
+  assert.equal(api.rpsNumero, 1);
+  assert.equal(api.rpsSerie, '1');
+});
+
+test('emitenteRowToApiShape — persiste rps_lote / rps_numero / rps_serie', () => {
+  const api = emitenteRowToApiShape({
+    razao_social: 'X',
+    rps_lote: 7,
+    rps_numero: 42,
+    rps_serie: ' A '
+  });
+  assert.equal(api.rpsLote, 7);
+  assert.equal(api.rpsNumero, 42);
+  assert.equal(api.rpsSerie, 'A');
 });
 
 test('emitenteRowToApiShape — persiste tipo_logradouro', () => {
