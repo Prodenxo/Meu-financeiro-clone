@@ -267,7 +267,7 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
       );
     });
     expect(container.textContent).toContain('cadastro municipal');
-    expect(container.textContent).toContain('painel Plugnotas');
+    expect(container.textContent).toContain('painel do emissor');
     expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
   });
 
@@ -280,7 +280,7 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     });
     expect(container.textContent).toContain('configuração da prefeitura no NFS-e');
     expect(container.textContent).toContain('inscrição municipal opcional');
-    expect(container.textContent).toContain('painel Plugnotas');
+    expect(container.textContent).toContain('painel do emissor');
     expect(container.querySelector('[role="region"][aria-label="Configuração de prefeitura no NFS-e"]')).toBeTruthy();
     expect(container.querySelector('a[href^="/guia-mei-nfse-nacional.html#emissor-nfse-nacional-spike-nat01"]')).toBeTruthy();
     expect(container.textContent).not.toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
@@ -296,7 +296,7 @@ describe('GuiaMeiEmpresaCadastroErrorPanel', () => {
     expect(container.textContent).toContain(MEI_IBGE_CIDADE_ALERT_SECONDARY_HINT);
   });
 
-  it('FR-TIBGE-UX-01: painel cadastro mostra hint IBGE com codigoIBGECidade (mensagem Plugnotas)', async () => {
+  it('FR-TIBGE-UX-01: painel cadastro mostra hint IBGE com codigoIBGECidade (mensagem do emissor)', async () => {
     const root = createRoot(container);
     await act(async () => {
       root.render(

@@ -153,7 +153,7 @@ describe('mapMeiFiscalErrorToCopy', () => {
 
   it('POSQA / NF-e: mensagem agregada legível do provedor preserva detalhe (não só fallback global)', () => {
     const raw =
-      'Validação Plugnotas NF-e: itens[0].ncm — NCM deve ter 8 dígitos numéricos; itens[0].cfop incompatível com operação.';
+      'Validação NF-e no emissor: itens[0].ncm — NCM deve ter 8 dígitos numéricos; itens[0].cfop incompatível com operação.';
     expect(isLikelyUserFacingFiscalValidationMessage(raw)).toBe(true);
     const copy = mapMeiFiscalErrorToCopy({ rawMessage: raw, plugnotasCode: null });
     expect(copy.title).toBe('Validação ou rejeição no provedor');

@@ -20,7 +20,7 @@ export type ApiErrorPayload = {
 
 /**
  * Monta a string lançada em `throw new Error(...)` para respostas JSON de erro.
- * Inclui método/path Plugnotas e tentativas quando presentes em `errors`.
+ * Inclui método/path do emissor e tentativas quando presentes em `errors`.
  */
 export function buildApiErrorMessage(payload: ApiErrorPayload | null | undefined): string {
   const base = payload?.message || 'Erro na requisição';
