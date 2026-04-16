@@ -449,6 +449,37 @@ export async function listarCatalogoNfseProdutos(
   return await apiClient.get<NfseCatalogProduto[]>(`/mei-notas/catalogo/produtos${suffix}`);
 }
 
+/** Linha da tabela nacional `codigosservicos` (referência NFS-e). */
+export interface CodigoServicoReferencia {
+  codigo: string;
+  descricao: string;
+}
+
+export interface ListarCodigosServicoReferenciaInput {
+  q?: string;
+  limit?: number;
+}
+
+const buildCodigosServicosSuffix = (options: ListarCodigosServicoReferenciaInput = {}) => {
+  const query = new URLSearchParams({
+    ...(options.q !== undefined && options.q !== '' ? { q: options.q } : {}),
+    ...(typeof options.limit === 'number' && Number.isFinite(options.limit)
+      ? { limit: String(Math.trunc(options.limit)) }
+      : {})
+  });
+  const text = query.toString();
+  return text ? `?${text}` : '';
+};
+
+export async function listarCodigosServicosReferencia(
+  options: ListarCodigosServicoReferenciaInput = {}
+): Promise<CodigoServicoReferencia[]> {
+  const suffix = buildCodigosServicosSuffix(options);
+  return await apiClient.get<CodigoServicoReferencia[]>(
+    `/mei-notas/catalogo/codigos-servicos${suffix}`
+  );
+}
+
 export async function criarCatalogoNfseCliente(
   input: CriarCatalogoNfseClienteInput
 ): Promise<NfseCatalogCliente> {

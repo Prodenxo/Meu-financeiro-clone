@@ -13,6 +13,7 @@ import {
 } from '../copy/meiCatalogoProdutoDelete';
 import UserFacingErrorBlock from './UserFacingErrorBlock';
 import { mapMeiCatalogApiErrorToUserFacing } from '../lib/mapMeiCatalogApiErrorToUserFacing';
+import { MeiCodigoServicoCombobox } from './MeiCodigoServicoCombobox';
 
 export interface MeiCatalogoProdutoModalProps {
   open: boolean;
@@ -225,15 +226,15 @@ export default function MeiCatalogoProdutoModal({
             <label htmlFor="mei-cat-prod-cod" className="mb-2 block font-medium dark:text-gray-200">
               Código interno <span className="text-slate-400">(opcional)</span>
             </label>
-            <input
+            <MeiCodigoServicoCombobox
               ref={codigoRef}
               id="mei-cat-prod-cod"
-              className="planner-input-compact w-full"
               value={codigo}
-              onChange={(ev) => setCodigo(ev.target.value)}
+              onChange={setCodigo}
               aria-invalid={Boolean(fieldErrors.codigo)}
-              aria-describedby={fieldErrors.codigo ? 'mei-cat-prod-cod-err' : undefined}
-              autoComplete="off"
+              aria-describedby={
+                fieldErrors.codigo ? 'mei-cat-prod-cod-err' : undefined
+              }
             />
             {fieldErrors.codigo ? (
               <p id="mei-cat-prod-cod-err" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">

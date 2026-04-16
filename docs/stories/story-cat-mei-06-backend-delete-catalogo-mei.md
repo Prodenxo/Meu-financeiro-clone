@@ -75,7 +75,7 @@ Cursor (implementação assistida)
 - **Rotas:** `DELETE /catalogo/clientes/:id` e `DELETE /catalogo/produtos/:id` com `requireAuth` + `requireMeiEnabled`; resposta **204**; **404** só quando existe linha com o `id` mas `user_id` ≠ sessão; segundo DELETE idempotente → **204**; **400** se `:id` não for UUID válido.
 - **Serviço:** `eliminarCatalogoCliente`, `eliminarCatalogoProduto`; `ensureCatalogRecordId` reforçado com validação UUID; PATCH catálogo usa `recordId` normalizado.
 - **Testes:** `mei-notas-catalog-delete.test.js` (sucesso, idempotência, 404 outro dono, 400); `mei-notas-catalog-auth-http.test.js` (401 DELETE); `mei-notas-routes.test.js` (middlewares nas novas rotas).
-- **Mitigação observações QA (pós-revisão):** `mei-notas-catalog-delete-http.test.js` — **204** + corpo vazio no wire (DELETE clientes/produtos com sessão simulada + `requireMeiEnabled`); **403** com `mei=false` nos dois DELETE; fluxo **GET listagem → DELETE → GET** com mock partilhado (registo removido); segundo **DELETE** idempotente no wire com mock partilhado.
+- **Mitigação observações QA (pós-revisão):** `mei-notas-catalog-http.test.js` — **204** + corpo vazio no wire (DELETE clientes/produtos com sessão simulada + `requireMeiEnabled`); **403** com `mei=false` nos dois DELETE; fluxo **GET listagem → DELETE → GET** com mock partilhado (registo removido); segundo **DELETE** idempotente no wire com mock partilhado.
 - **Doc:** `docs/technical/catalogo-mei-persistencia-e-api-2026-03-30.md` v1.1 — §7 com DELETE, §7.5–7.6, tabela executiva §1.
 
 ### File List (implementação)
@@ -84,7 +84,7 @@ Cursor (implementação assistida)
 - `backend/src/controllers/mei-notas.controller.js`
 - `backend/src/routes/mei-notas.routes.js`
 - `backend/tests/mei-notas-catalog-delete.test.js`
-- `backend/tests/mei-notas-catalog-delete-http.test.js`
+- `backend/tests/mei-notas-catalog-http.test.js`
 - `backend/tests/mei-notas-catalog-auth-http.test.js`
 - `backend/tests/mei-notas-routes.test.js`
 - `docs/technical/catalogo-mei-persistencia-e-api-2026-03-30.md`
@@ -100,7 +100,7 @@ Cursor (implementação assistida)
 |------|------|
 | 2026-03-30 | Story criada pelo SM (River) a partir do PRD e da UX spec de exclusão. |
 | 2026-03-30 | Implementação DELETE catálogo + testes + doc técnico v1.1; Ready for Review. |
-| 2026-03-30 | Testes HTTP adicionais (`mei-notas-catalog-delete-http.test.js`) para fechar observações QA (204, 403 MEI, GET após DELETE, idempotência wire). |
+| 2026-03-30 | Testes HTTP adicionais (`mei-notas-catalog-http.test.js`; antes `mei-notas-catalog-delete-http.test.js`) para fechar observações QA (204, 403 MEI, GET após DELETE, idempotência wire). |
 
 ---
 

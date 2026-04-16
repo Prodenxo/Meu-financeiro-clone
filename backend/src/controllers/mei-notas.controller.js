@@ -230,6 +230,17 @@ export const listarCatalogoProdutos = async (req, res, next) => {
   }
 };
 
+export const listarCatalogoCodigosServicos = async (req, res, next) => {
+  try {
+    const q = String(req.query?.q || '').trim();
+    const limit = parseCatalogLimit(req.query?.limit);
+    const data = await meiNotasService.listarCodigosServicosReferencia({ q, limit });
+    return sendSuccess(res, data, 'Códigos de serviço de referência listados');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const sendCreated = (res, data, message) => res.status(201).json({
   success: true,
   data,

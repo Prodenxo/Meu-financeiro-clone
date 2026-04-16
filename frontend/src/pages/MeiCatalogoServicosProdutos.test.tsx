@@ -11,7 +11,8 @@ vi.mock('../services/meiNotasService', () => ({
   listarCatalogoNfseProdutos: (...args: unknown[]) => listarMock(...args),
   criarCatalogoNfseProduto: (...args: unknown[]) => criarMock(...args),
   atualizarCatalogoNfseProduto: vi.fn(),
-  eliminarCatalogoNfseProduto: (...args: unknown[]) => eliminarMock(...args)
+  eliminarCatalogoNfseProduto: (...args: unknown[]) => eliminarMock(...args),
+  listarCodigosServicosReferencia: vi.fn().mockResolvedValue([])
 }));
 
 const toastSuccess = vi.fn();

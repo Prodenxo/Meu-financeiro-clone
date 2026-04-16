@@ -15,7 +15,58 @@ process.env.SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'anon-key';
 
 const CLIENTS_TABLE = 'mei_nfse_clientes';
 const PRODUCTS_TABLE = 'mei_nfse_produtos';
+const CODIGOS_SERVICOS_TABLE = 'codigosservicos';
 const USER_ID = 'http-cat-delete-user';
+
+const matchesCodigoServicoIlike = (text, pctPattern) => {
+  const inner = String(pctPattern || '')
+    .replace(/^%/, '')
+    .replace(/%$/, '')
+    .toLowerCase();
+  return String(text || '').toLowerCase().includes(inner);
+};
+
+/** Mock `codigosservicos` para wire HTTP (paridade com `mei-notas-codigos-servicos.test.js`). */
+function createCodigosServicosRefWireMock({ rows }) {
+  const sorted = [...rows].sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'pt-BR'));
+  return {
+    from(table) {
+      assert.equal(table, CODIGOS_SERVICOS_TABLE);
+      return {
+        select() {
+          return {
+            order(col, opts) {
+              assert.equal(col, 'codigo');
+              assert.equal(opts?.ascending, true);
+              return {
+                limit(n) {
+                  const tail = {
+                    or(filterStr) {
+                      const parts = String(filterStr).split(',');
+                      const likeRaw = parts[0]?.split('.ilike.')[1] ?? '';
+                      const filtered = sorted.filter(
+                        (r) => matchesCodigoServicoIlike(r.codigo, likeRaw)
+                          || matchesCodigoServicoIlike(r.descricao, likeRaw)
+                      );
+                      return Promise.resolve({ data: filtered.slice(0, n), error: null });
+                    },
+                    then(onFulfilled, onRejected) {
+                      return Promise.resolve({ data: sorted.slice(0, n), error: null }).then(
+                        onFulfilled,
+                        onRejected
+                      );
+                    }
+                  };
+                  return tail;
+                }
+              };
+            }
+          };
+        }
+      };
+    }
+  };
+}
 
 const listenApp = (app) =>
   new Promise((resolve) => {
@@ -169,7 +220,7 @@ function createProdutosCatalogStateMock(initialRows) {
   };
 }
 
-function buildDeleteApp(routes) {
+function buildCatalogWireApp(routes) {
   const app = express();
   app.use(injectSession);
   routes(app);
@@ -204,7 +255,7 @@ test('HTTP DELETE /catalogo/clientes/:id — 204 e corpo vazio (mitigação QA)'
   );
   __setGetRequesterContextForTests(async () => ({ role: 'user', mei: true }));
 
-  const app = buildDeleteApp((a) => {
+  const app = buildCatalogWireApp((a) => {
     a.delete(
       '/api/mei-notas/catalogo/clientes/:id',
       requireMeiEnabled,
@@ -249,7 +300,7 @@ test('HTTP DELETE /catalogo/produtos/:id — 204 e corpo vazio (mitigação QA)'
   );
   __setGetRequesterContextForTests(async () => ({ role: 'user', mei: true }));
 
-  const app = buildDeleteApp((a) => {
+  const app = buildCatalogWireApp((a) => {
     a.delete(
       '/api/mei-notas/catalogo/produtos/:id',
       requireMeiEnabled,
@@ -270,10 +321,42 @@ test('HTTP DELETE /catalogo/produtos/:id — 204 e corpo vazio (mitigação QA)'
   }
 });
 
+test('HTTP GET /catalogo/codigos-servicos — 200 com mock (wire, mitigação QA)', async () => {
+  const rows = [
+    { codigo: '01.01', descricao: 'Serviço A' },
+    { codigo: '02.02', descricao: 'Serviço B' }
+  ];
+  const mod = await import('../src/services/mei-notas.service.js');
+  mod.__setGetDbForTests(() => createCodigosServicosRefWireMock({ rows }));
+  __setGetRequesterContextForTests(async () => ({ role: 'user', mei: true }));
+
+  const app = buildCatalogWireApp((a) => {
+    a.get(
+      '/api/mei-notas/catalogo/codigos-servicos',
+      requireMeiEnabled,
+      controller.listarCatalogoCodigosServicos
+    );
+  });
+  const server = await listenApp(app);
+  const port = /** @type {import('node:net').AddressInfo} */ (server.address()).port;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/mei-notas/catalogo/codigos-servicos`);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.success, true);
+    assert.ok(Array.isArray(json.data));
+    assert.equal(json.data.length, 2);
+    assert.equal(json.data[0].codigo, '01.01');
+    assert.equal(json.data[1].codigo, '02.02');
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
+});
+
 test('HTTP DELETE catálogo — 403 quando MEI desabilitado (mitigação QA)', async () => {
   __setGetRequesterContextForTests(async () => ({ role: 'user', mei: false }));
 
-  const app = buildDeleteApp((a) => {
+  const app = buildCatalogWireApp((a) => {
     a.delete(
       '/api/mei-notas/catalogo/clientes/:id',
       requireMeiEnabled,
@@ -284,17 +367,23 @@ test('HTTP DELETE catálogo — 403 quando MEI desabilitado (mitigação QA)', a
       requireMeiEnabled,
       controller.eliminarCatalogoProduto
     );
+    a.get(
+      '/api/mei-notas/catalogo/codigos-servicos',
+      requireMeiEnabled,
+      controller.listarCatalogoCodigosServicos
+    );
   });
   const server = await listenApp(app);
   const port = /** @type {import('node:net').AddressInfo} */ (server.address()).port;
   try {
     const cid = '550e8400-e29b-41d4-a716-446655440000';
     const pid = '660e8400-e29b-41d4-a716-446655440001';
-    for (const url of [
-      `http://127.0.0.1:${port}/api/mei-notas/catalogo/clientes/${cid}`,
-      `http://127.0.0.1:${port}/api/mei-notas/catalogo/produtos/${pid}`
+    for (const { url, method } of [
+      { url: `http://127.0.0.1:${port}/api/mei-notas/catalogo/clientes/${cid}`, method: 'DELETE' },
+      { url: `http://127.0.0.1:${port}/api/mei-notas/catalogo/produtos/${pid}`, method: 'DELETE' },
+      { url: `http://127.0.0.1:${port}/api/mei-notas/catalogo/codigos-servicos`, method: 'GET' }
     ]) {
-      const res = await fetch(url, { method: 'DELETE' });
+      const res = await fetch(url, { method });
       assert.equal(res.status, 403);
       const json = await res.json();
       assert.equal(json.success, false);
@@ -327,7 +416,7 @@ test('HTTP GET /catalogo/clientes após DELETE — registo removido da listagem 
   mod.__setGetDbForTests(() => sharedClientesMock);
   __setGetRequesterContextForTests(async () => ({ role: 'user', mei: true }));
 
-  const app = buildDeleteApp((a) => {
+  const app = buildCatalogWireApp((a) => {
     a.get(
       '/api/mei-notas/catalogo/clientes',
       requireMeiEnabled,
@@ -383,7 +472,7 @@ test('HTTP segundo DELETE no mesmo id — 204 idempotente (wire)', async () => {
   mod.__setGetDbForTests(() => idempotentMock);
   __setGetRequesterContextForTests(async () => ({ role: 'user', mei: true }));
 
-  const app = buildDeleteApp((a) => {
+  const app = buildCatalogWireApp((a) => {
     a.delete(
       '/api/mei-notas/catalogo/clientes/:id',
       requireMeiEnabled,

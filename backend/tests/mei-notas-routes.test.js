@@ -37,6 +37,7 @@ test('rotas autenticadas de mei-notas exigem requireMeiEnabled', () => {
     { method: 'patch', path: '/catalogo/clientes/:id' },
     { method: 'delete', path: '/catalogo/clientes/:id' },
     { method: 'get', path: '/catalogo/produtos' },
+    { method: 'get', path: '/catalogo/codigos-servicos' },
     { method: 'post', path: '/catalogo/produtos' },
     { method: 'patch', path: '/catalogo/produtos/:id' },
     { method: 'delete', path: '/catalogo/produtos/:id' },
