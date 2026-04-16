@@ -10,7 +10,7 @@ export const MEI_GUIDE_SERPRO_UNAVAILABLE = 'MEI_GUIDE_SERPRO_UNAVAILABLE';
 export const MEI_GUIDE_VALIDATE_CONS_C_TITLE = 'Validação do guia (Receita Federal)';
 
 export const MEI_GUIDE_VALIDATE_CONS_C_BODY =
-  'Não foi possível validar o CNPJ com a Receita Federal neste momento. Tente de novo em alguns minutos. Este passo não é o cadastro da empresa no emissor fiscal (Plugnotas).';
+  'Não foi possível validar o CNPJ com a Receita Federal neste momento. Tente de novo em alguns minutos. Este passo não é o cadastro da empresa no emissor fiscal.';
 
 /**
  * Fallback (2026-04): `POST /mei-guide/validate` ainda pode devolver 400 + mensagem genérica

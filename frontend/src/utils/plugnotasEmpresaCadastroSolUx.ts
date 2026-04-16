@@ -1,5 +1,5 @@
 /**
- * Estados UX SOL (cadastro empresa Plugnotas) — encadeamento POST falhou → GET "não encontrado".
+ * Estados UX SOL (cadastro no emissor) — encadeamento POST falhou → GET "não encontrado".
  * @see docs/specs/ux-spec-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md
  * @see docs/technical/architecture-solucao-400-prefeitura-404-get-empresa-mei-2026-04-08.md
  */
@@ -78,7 +78,7 @@ export const PLUGNOTAS_SOL_L3_BODY =
 
 /** Spec UX §7 — passos do playbook (ordem fixa). */
 export const PLUGNOTAS_SOL_PLAYBOOK_STEPS: readonly string[] = [
-  'No painel Plugnotas, confira se NFS-e Nacional está ativo para este CNPJ e se o ambiente (produção ou homologação) corresponde ao que o site usa.',
+  'No painel do emissor, confira se NFS-e Nacional está ativo para este CNPJ e se o ambiente (produção ou homologação) corresponde ao que o site usa.',
   'Se apareceu mensagem de erro ao enviar, leia o texto da mensagem — ele indica o que o emissor pediu.',
-  'Se tudo parecer correto, use o suporte Plugnotas ou o guia de operação fiscal.'
+  'Se tudo parecer correto, use o suporte do emissor ou o guia de operação fiscal.'
 ] as const;

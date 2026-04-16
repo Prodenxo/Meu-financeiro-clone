@@ -4196,7 +4196,7 @@ export default function GuidesMei() {
                       id="mei-rps-config-title"
                       className="text-sm font-semibold text-slate-900 dark:text-slate-100"
                     >
-                      Numeração RPS (PlugNotas)
+                      Numeração RPS (emissor)
                     </p>
                     <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
                       Lote, número e série iniciais enviados ao emissor no cadastro ou atualização. Ajuste só se o seu

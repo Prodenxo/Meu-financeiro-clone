@@ -12,9 +12,7 @@ export function MeiCadastroRequisitosNfeNfcePlaceholder() {
           Para NF-e e NFC-e, o painel do emissor fiscal pode exigir dados que ainda não estão neste formulário (por exemplo
           CSC, token SEFAZ ou cadastro de produtos). Complete ou valide no{' '}
           <a
-            href="https://app2.plugnotas.com.br"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/guia-mei-nfse-nacional.html"
             className="font-medium text-slate-800 underline decoration-slate-400 hover:decoration-slate-600 dark:text-slate-100 dark:decoration-slate-500"
           >
             painel web do emissor

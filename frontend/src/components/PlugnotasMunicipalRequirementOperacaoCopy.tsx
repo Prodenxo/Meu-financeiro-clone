@@ -15,9 +15,9 @@ export function PlugnotasMunicipalRequirementOperacaoBody() {
       O emissor pediu dados de <strong className="font-semibold">cadastro municipal</strong> (inscrição municipal ou
       prefeitura). Para o fluxo de <strong className="font-semibold">NFS-e Nacional</strong> isso costuma indicar que a
       conta ou o ambiente ainda espera outro tipo de configuração. Confirme no{' '}
-      <strong className="font-semibold">painel Plugnotas</strong> se &quot;NFS-e Nacional&quot; está ativo para este CNPJ
+      <strong className="font-semibold">painel do emissor</strong> se &quot;NFS-e Nacional&quot; está ativo para este CNPJ
       e se a API do servidor usa o mesmo ambiente (produção ou homologação). Se estiver tudo certo, fale com o{' '}
-      <strong className="font-semibold">suporte Plugnotas</strong>.
+      <strong className="font-semibold">suporte do emissor</strong>.
     </>
   );
 }
@@ -35,9 +35,9 @@ export function PlugnotasPrefeituraConfigNfseOperacaoBody() {
     <>
       Isto é diferente da <strong className="font-semibold">inscrição municipal opcional</strong> que você pode ter
       preenchido acima. Em muitos casos, o cadastro em modo <strong className="font-semibold">NFS-e Nacional</strong> não
-      deveria exigir esse passo — confira no <strong className="font-semibold">painel Plugnotas</strong> se
+      deveria exigir esse passo — confira no <strong className="font-semibold">painel do emissor</strong> se
       &quot;NFS-e Nacional&quot; está ativo para este CNPJ e se o ambiente (produção ou homologação) é o mesmo. Se estiver
-      tudo certo, fale com o <strong className="font-semibold">suporte Plugnotas</strong> ou siga o guia de operação
+      tudo certo, fale com o <strong className="font-semibold">suporte do emissor</strong> ou siga o guia de operação
       abaixo.
     </>
   );
