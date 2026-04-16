@@ -73,6 +73,40 @@ test('empresa service valida payload obrigatório', async () => {
   );
 });
 
+test('cadastrarEmpresaPlugNotas substitui rps do input pelo bloco canónico no POST (FR-RPS-OVR-01)', async () => {
+  const { cadastrarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/cidades/')) {
+      return createCidadePreflightResponse();
+    }
+    calls.push({ url: String(url), options });
+    return createJsonResponse(200, {
+      message: 'Cadastro efetuado com sucesso',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await cadastrarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      certificado: 'cert-1',
+      razaoSocial: 'Empresa Teste',
+      endereco: buildEmpresaEnderecoValido(),
+      rps: { lote: 99, numeracao: [{ numero: 9, serie: 'X' }] }
+    });
+    const sent = JSON.parse(calls[0].options.body);
+    assert.deepEqual(sent.rps, {
+      lote: 1,
+      numeracao: [{ numero: 1, serie: '1' }]
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('empresa service cria empresa com POST /empresa', async () => {
   const {
     cadastrarEmpresaPlugNotas,
@@ -108,6 +142,10 @@ test('empresa service cria empresa com POST /empresa', async () => {
     assert.equal(response.runtimeDecision?.scenario, 'success_nacional');
     assert.equal(inferEmpresaCadastroScenario({ operation: response.operation }), 'success_nacional');
     const sent = JSON.parse(calls[0].options.body);
+    assert.deepEqual(sent.rps, {
+      lote: 1,
+      numeracao: [{ numero: 1, serie: '1' }]
+    });
     assert.ok(sent.nfce && typeof sent.nfce === 'object');
     assert.equal(sent.nfce.ativo, false);
     assert.equal(sent.nfe.ativo, false);
@@ -839,10 +877,44 @@ test('empresa service tenta atualização quando empresa já existe', async () =
     assert.equal(response.operation, 'updated');
     assert.equal(inferEmpresaCadastroScenario({ operation: response.operation }), 'fallback_sync');
     assert.equal(response.cnpj, '17422651000172');
+    const postBody = JSON.parse(calls[0].options.body);
+    assert.deepEqual(postBody.rps, {
+      lote: 1,
+      numeracao: [{ numero: 1, serie: '1' }]
+    });
     const patchBody = JSON.parse(calls[1].options.body);
+    assert.equal(Object.prototype.hasOwnProperty.call(patchBody, 'rps'), false);
     assert.equal(patchBody.nfce.ativo, false);
     assert.equal('config' in patchBody.nfce, false);
     assertOfficialNfseContract(patchBody.nfse);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('empresa service PATCH /empresa não envia rps mesmo quando o input inclui rps', async () => {
+  const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options, body: options.body });
+    return createJsonResponse(200, {
+      message: 'Empresa atualizada',
+      data: { cnpj: '17422651000172' }
+    });
+  };
+
+  try {
+    await atualizarEmpresaPlugNotas({
+      cpfCnpj: '17422651000172',
+      razaoSocial: 'Empresa Teste',
+      rps: { lote: 9, numeracao: [{ numero: 9, serie: '9' }] },
+      nfse: { ativo: true, tipoContrato: 0, nacional: true }
+    });
+    assert.equal(calls.length, 1);
+    const sent = JSON.parse(calls[0].body);
+    assert.equal(Object.prototype.hasOwnProperty.call(sent, 'rps'), false);
   } finally {
     global.fetch = originalFetch;
   }
