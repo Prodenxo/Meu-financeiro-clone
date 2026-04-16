@@ -33,6 +33,10 @@ import {
 } from './plugnotas-empresa-documentos-ativos.js';
 import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.js';
 import { isPlugnotasIbgeTableRejectMessage } from '../../utils/plugnotasIbgeTableRejectMessage.js';
+import {
+  applyEmpresaPlugnotasRpsInicialForPost,
+  stripRpsFromEmpresaPayload
+} from './plugnotas-empresa-rps-inicial.js';
 import { applyNfseConfigPrefeituraDeriveIbge } from './nfsePrefeituraPayload.js';
 import {
   attachRuntimeDecisionToError,
@@ -817,6 +821,8 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
 
+  stripRpsFromEmpresaPayload(payload);
+
   const credState = extractPrefeituraPortalCredentialState(payload);
   const attemptNfseMode = resolveAttemptNfseModeFromPayload(payload);
   assertNoAmbiguousNationalWithPrefeituraCredentials(payload, credState);
@@ -970,6 +976,8 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
     credState
   });
 
+  applyEmpresaPlugnotasRpsInicialForPost(payload);
+
   try {
     const response = await requestJson('POST', '/empresa', payload);
     const data = toObject(response?.data);
@@ -989,6 +997,7 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
       throw createError;
     }
 
+    stripRpsFromEmpresaPayload(payload);
     const updateResult = await tryUpdateEmpresa(cnpj, payload);
     if (updateResult.response) {
       const data = toObject(updateResult.response?.data);

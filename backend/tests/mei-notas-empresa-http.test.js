@@ -443,6 +443,10 @@ test('HTTP POST: retry municipal válido + flag on → POST /empresa com nfseNac
     const postEmpresa = upstreamCalls.find((c) => c.url.includes('/empresa') && !c.url.includes('/cidades'));
     assert.ok(postEmpresa, 'deve chamar POST /empresa');
     const sent = JSON.parse(postEmpresa.init.body);
+    assert.deepEqual(sent.rps, {
+      lote: 1,
+      numeracao: [{ numero: 1, serie: '1' }]
+    });
     assert.equal(sent.nfse.config.nfseNacional, false);
     assert.equal(sent.nfse.config.consultaNfseNacional, false);
     assert.equal(sent.nfse.config.prefeitura.login, 'portal_user');

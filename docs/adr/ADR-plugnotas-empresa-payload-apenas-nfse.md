@@ -85,6 +85,12 @@ Story: [`story-fr-cons-p0-plugnotas-empresa-backend-trilho-b-nfse-prefeitura.md`
 - Implementação: `backend/src/services/plugnotas/prefeituraIbgeOnlyBlock.js`.
 - Story: [`docs/stories/story-fr-plogin-backlog-dp02-bloqueio-prefeitura-incompleta-servidor.md`](../stories/story-fr-plogin-backlog-dp02-bloqueio-prefeitura-incompleta-servidor.md).
 
+## Complemento (2026-04-16) — FR-RPS: bloco `rps` na criação de empresa (**NFR-RPS-DOC-01**)
+
+Para além da normalização **apenas NFS-e** e de **`documentosAtivos`** já descritas neste ADR, o BFF aplica política ao bloco **`rps`** (numeração inicial de RPS no emissor Plugnotas). No **`POST /empresa`**, o servidor garante valores **canónicos** (`lote: 1`, `numeracao` com `numero: 1` e `serie: "1"`), **substituindo** qualquer `rps` divergente enviado pelo cliente (**fonte de verdade no BFF**). No **`PATCH /empresa/:cnpj`**, o **`rps` não é enviado** nesta entrega — decisão intencional para não repor numeração já consumida no provedor, **incluindo** o fallback **POST → PATCH** quando o POST sinaliza empresa já existente.
+
+Documentação de requisitos e desenho: PRD [`PRD-plugnotas-empresa-rps-lote-numero-serie-inicial-1-2026-04-16.md`](../prd/PRD-plugnotas-empresa-rps-lote-numero-serie-inicial-1-2026-04-16.md); arquitetura [`architecture-plugnotas-empresa-rps-inicial-2026-04-16.md`](../technical/architecture-plugnotas-empresa-rps-inicial-2026-04-16.md). Código: `backend/src/services/plugnotas/plugnotas-empresa-rps-inicial.js` e `empresa.service.js`. Story de implementação: [`story-fr-rps-p0-backend-empresa-rps-inicial-plugnotas.md`](../stories/story-fr-rps-p0-backend-empresa-rps-inicial-plugnotas.md).
+
 ## Consequências
 
 - Positivo: menos falhas de cadastro por validação de NFC-e inativa.
