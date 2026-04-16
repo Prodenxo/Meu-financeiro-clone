@@ -56,6 +56,7 @@ const TABLE = 'mei_nfse';
 const MEI_LIMITE_AGG_QUERY_LIMIT = 5000;
 const CLIENTS_TABLE = 'mei_nfse_clientes';
 const PRODUCTS_TABLE = 'mei_nfse_produtos';
+const CODIGOS_SERVICOS_TABLE = 'codigosservicos';
 const DOCUMENT_TYPE_NFSE = 'NFSE';
 const DOCUMENT_TYPE_NFE = 'NFE';
 const DOCUMENT_TYPE_NFCE = 'NFCE';
@@ -1175,6 +1176,23 @@ export const listarCatalogoProdutos = async (
     .limit(safeLimit);
 
   query = applyCatalogSearch(query, q, ['codigo', 'cnae', 'discriminacao']);
+
+  const { data, error } = await query;
+  if (error) throw badRequest(error.message);
+  return data || [];
+};
+
+/** Catálogo nacional de códigos de serviço (referência NFS-e); sem `user_id`. */
+export const listarCodigosServicosReferencia = async ({ q = '', limit = 20 } = {}) => {
+  const safeLimit = toCatalogLimit(limit);
+  const dbClient = getDb();
+  let query = dbClient
+    .from(CODIGOS_SERVICOS_TABLE)
+    .select('codigo, descricao')
+    .order('codigo', { ascending: true })
+    .limit(safeLimit);
+
+  query = applyCatalogSearch(query, q, ['codigo', 'descricao']);
 
   const { data, error } = await query;
   if (error) throw badRequest(error.message);

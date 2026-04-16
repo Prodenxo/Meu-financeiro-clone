@@ -22,6 +22,7 @@ import {
   criarCatalogoNfseProduto,
   atualizarCatalogoNfseProduto,
   eliminarCatalogoNfseProduto,
+  listarCodigosServicosReferencia,
   fetchLimiteFaturamentoMei,
   listarNotas,
   listarNfse,
@@ -240,6 +241,17 @@ describe('meiNotasService', () => {
     expect(mockedApiClient.get).toHaveBeenNthCalledWith(2, '/mei-notas/catalogo/produtos?q=1.02&limit=10&documentType=NFSE');
     expect(clientes).toEqual([{ id: 'cliente-1', nome: 'Cliente Teste' }]);
     expect(produtos).toEqual([{ id: 'produto-1', codigo: '1.02' }]);
+  });
+
+  it('lista códigos de serviço de referência com q e limit', async () => {
+    mockedApiClient.get.mockResolvedValueOnce([{ codigo: '01.01', descricao: 'Consultoria' }]);
+
+    const rows = await listarCodigosServicosReferencia({ q: '01', limit: 50 });
+
+    expect(mockedApiClient.get).toHaveBeenCalledWith(
+      '/mei-notas/catalogo/codigos-servicos?q=01&limit=50'
+    );
+    expect(rows).toEqual([{ codigo: '01.01', descricao: 'Consultoria' }]);
   });
 
   it('cria cliente no catálogo NFS-e com documento normalizado', async () => {

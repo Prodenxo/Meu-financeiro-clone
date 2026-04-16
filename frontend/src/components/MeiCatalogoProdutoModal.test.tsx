@@ -4,10 +4,12 @@ import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-li
 
 const criarMock = vi.fn();
 const atualizarMock = vi.fn();
+const listarCodigosServicosMock = vi.fn();
 
 vi.mock('../services/meiNotasService', () => ({
   criarCatalogoNfseProduto: (...args: unknown[]) => criarMock(...args),
-  atualizarCatalogoNfseProduto: (...args: unknown[]) => atualizarMock(...args)
+  atualizarCatalogoNfseProduto: (...args: unknown[]) => atualizarMock(...args),
+  listarCodigosServicosReferencia: (...args: unknown[]) => listarCodigosServicosMock(...args)
 }));
 
 import MeiCatalogoProdutoModal from './MeiCatalogoProdutoModal';
@@ -17,6 +19,8 @@ describe('MeiCatalogoProdutoModal', () => {
     vi.clearAllMocks();
     criarMock.mockReset();
     atualizarMock.mockReset();
+    listarCodigosServicosMock.mockReset();
+    listarCodigosServicosMock.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -60,6 +64,36 @@ describe('MeiCatalogoProdutoModal', () => {
     });
     await waitFor(() => {
       expect(onSaved).toHaveBeenCalledWith('create');
+    });
+  });
+
+  it('criar: seleção no combobox de código interno envia codigo no POST', async () => {
+    listarCodigosServicosMock.mockResolvedValue([{ codigo: '1.01', descricao: 'Serviço ref' }]);
+    criarMock.mockResolvedValue({ id: 'new-id', discriminacao: 'X', codigo: '1.01' });
+    const onSaved = vi.fn();
+
+    render(<MeiCatalogoProdutoModal open editing={null} onClose={vi.fn()} onSaved={onSaved} />);
+
+    const dialog = screen.getAllByRole('dialog')[0]!;
+    fireEvent.change(within(dialog).getByLabelText(/^Discriminação/i), {
+      target: { value: 'Serviço com código' }
+    });
+
+    const codInput = within(dialog).getByPlaceholderText(/Pesquisar código ou descrição/i);
+    fireEvent.focus(codInput);
+    const opt = await within(dialog).findByRole('option', { name: /1\.01/i });
+    fireEvent.mouseDown(opt);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Guardar$/i }));
+
+    await waitFor(() => {
+      expect(criarMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          discriminacao: 'Serviço com código',
+          codigo: '1.01',
+          documentType: 'NFSE'
+        })
+      );
     });
   });
 
