@@ -616,7 +616,7 @@ function MeiNfseEmitCollapsible(props: {
   const panelId = `mei-nfse-emit-panel-${props.section}`;
   const headingId = `mei-nfse-emit-heading-${props.section}`;
   return (
-    <div className="rounded-lg border border-slate-200/80 p-3 dark:border-slate-700/80">
+    <div className="rounded-lg border ui-border-section p-3">
       <button
         type="button"
         className="flex w-full items-center justify-between gap-2 rounded-md py-1 text-left text-sm font-semibold text-slate-700 dark:text-gray-200"
@@ -652,7 +652,7 @@ function MeiNfseAjudaFiscalCollapsible(props: {
   const panelId = 'mei-nfse-ajuda-fiscal-panel';
   const headingId = 'mei-nfse-ajuda-fiscal-heading';
   return (
-    <div className="mb-3 rounded-lg border border-slate-200/80 p-3 dark:border-slate-700/80">
+    <div className="mb-3 rounded-lg border ui-border-section p-3">
       <button
         type="button"
         className="flex w-full items-center justify-between gap-2 rounded-md py-1 text-left text-sm font-semibold text-slate-700 dark:text-gray-200"
@@ -3832,7 +3832,7 @@ export default function GuidesMei() {
               {canViewNfse ? (
                 <div className="space-y-3">
                   <fieldset
-                    className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30"
+                    className="rounded-xl border ui-border-section bg-white/70 p-3 dark:bg-slate-950/30"
                     aria-busy={documentosAtivosHydrating}
                     aria-describedby={
                       [
@@ -3966,7 +3966,7 @@ export default function GuidesMei() {
 
                   <div
                     id="mei-emitente-dados-minimos"
-                    className="rounded-xl border border-slate-300/80 bg-white/70 p-3 dark:border-slate-700/80 dark:bg-slate-950/30"
+                    className="rounded-xl border ui-border-section bg-white/70 p-3 dark:bg-slate-950/30"
                   >
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     {dadosMinimosEmitenteTitle}
@@ -4003,7 +4003,7 @@ export default function GuidesMei() {
                     <div
                       role="region"
                       aria-labelledby={prefeituraPortalCredentialsTitleId}
-                      className="mb-3 rounded-lg border border-slate-300/85 bg-white/90 p-3 dark:border-slate-600/80 dark:bg-slate-950/40"
+                      className="mb-3 rounded-lg border ui-border-section bg-white/90 p-3 dark:bg-slate-950/40"
                     >
                       <p
                         id={prefeituraPortalCredentialsTitleId}
@@ -4188,7 +4188,7 @@ export default function GuidesMei() {
                     </label>
                   </div>
                   <div
-                    className="mt-3 rounded-lg border border-slate-200/90 bg-slate-50/80 p-3 dark:border-slate-600/70 dark:bg-slate-900/40"
+                    className="mt-3 rounded-lg border ui-border-section bg-slate-50/80 p-3 dark:bg-slate-900/40"
                     role="group"
                     aria-labelledby="mei-rps-config-title"
                   >
@@ -4257,7 +4257,7 @@ export default function GuidesMei() {
                       </div>
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-col gap-2 border-t border-slate-200/80 pt-3 dark:border-slate-700/80">
+                  <div className="mt-3 flex flex-col gap-2 border-t ui-border-section pt-3">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Se o certificado já está cadastrado no emissor fiscal, você pode consultar o cadastro ou atualizar só os dados
                       fiscais (endereço, regime, etc.) sem reenviar o arquivo .pfx.
@@ -4519,7 +4519,7 @@ export default function GuidesMei() {
           </div>
 
           {canViewNfse && (
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50/70 px-3 py-2 dark:border-slate-700/70 dark:bg-slate-900/50">
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border ui-border-section bg-slate-50/70 px-3 py-2 dark:bg-slate-900/50">
               <p className="flex-1 text-xs text-slate-500 dark:text-slate-400">
                 {nfEmissionCompanyForm.razaoSocial
                   ? <>Emitente configurado: <span className="font-medium text-slate-700 dark:text-slate-200">{nfEmissionCompanyForm.razaoSocial}</span></>
@@ -4643,7 +4643,7 @@ export default function GuidesMei() {
                   {meiFiscalEmissionHelpLine(emissionDocumentType)}
                 </p>
               </div>
-              <div className="mt-3 border-t border-slate-200/80 pt-3 dark:border-slate-700/80" role="status" aria-live="polite">
+              <div className="mt-3 border-t ui-border-section pt-3" role="status" aria-live="polite">
                 {emissionDocumentType === 'NFSE' ? (
                   nfseWorkspaceGuidance
                 ) : (
@@ -4967,7 +4967,7 @@ export default function GuidesMei() {
               />
             </div>
             <div
-              className="rounded-md border border-slate-200/70 bg-slate-50/80 px-3 py-2 text-xs text-slate-600 dark:border-slate-700/70 dark:bg-slate-900/40 dark:text-slate-300"
+              className="rounded-md border ui-border-section bg-slate-50/80 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900/40 dark:text-slate-300"
               aria-live="polite"
             >
               <p className="font-semibold text-slate-700 dark:text-slate-200">Resumo</p>
@@ -5222,7 +5222,7 @@ export default function GuidesMei() {
               </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-              <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200/70 bg-slate-50/70 px-3 py-2 text-xs text-slate-600 dark:border-slate-700/70 dark:bg-slate-900/50 dark:text-slate-400" htmlFor="nfse-filter-arquivadas">
+              <label className="inline-flex items-center gap-2 rounded-lg border ui-border-section bg-slate-50/70 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900/50 dark:text-slate-400" htmlFor="nfse-filter-arquivadas">
                 <input
                   id="nfse-filter-arquivadas"
                   type="checkbox"
