@@ -172,7 +172,7 @@ export default function MeiCatalogoClienteModal({
         <button
           type="button"
           aria-label="Fechar"
-          className="absolute right-3 top-3 text-slate-400 dark:text-slate-300"
+          className="ui-modal-icon-dismiss absolute right-3 top-3"
           onClick={onClose}
         >
           ×

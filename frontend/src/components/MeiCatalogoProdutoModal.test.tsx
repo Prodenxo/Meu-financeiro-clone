@@ -27,6 +27,14 @@ describe('MeiCatalogoProdutoModal', () => {
     cleanup();
   });
 
+  it('fecho: aria-label e classe ui-modal-icon-dismiss (STORY-VIS-THEME-01)', () => {
+    render(<MeiCatalogoProdutoModal open editing={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    const dialog = screen.getAllByRole('dialog')[0]!;
+    const closeBtn = within(dialog).getByRole('button', { name: /^Fechar$/i });
+    expect(closeBtn.getAttribute('aria-label')).toBe('Fechar');
+    expect(closeBtn.className).toMatch(/ui-modal-icon-dismiss/);
+  });
+
   it('validação: discriminação vazia não chama API', async () => {
     const onSaved = vi.fn();
 

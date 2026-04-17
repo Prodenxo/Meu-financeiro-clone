@@ -1287,7 +1287,7 @@ export default function AdminUserData() {
                       disabled={meiSending || !selectedUser?.phone}
                       className="planner-button-secondary-compact w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {meiSending ? 'Enviando...' : 'Enviar por zap'}
+                      {meiSending ? 'Enviando...' : 'Enviar por Whatsapp'}
                     </button>
                   </div>
                 </div>

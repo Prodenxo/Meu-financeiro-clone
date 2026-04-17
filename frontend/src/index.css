@@ -7,7 +7,7 @@
   --color-primary: 59 130 246; /* blue-500 */
   --color-primary-hover: 96 165 250; /* blue-400 */
   --color-surface: 248 250 252; /* slate-50 */
-  --color-surface-border: 226 232 240; /* slate-200 */
+  --color-surface-border: 203 213 225; /* slate-300 — bordas mais legíveis no tema claro */
   --color-surface-muted: 241 245 249; /* slate-100 */
   --color-text: 15 23 42; /* slate-900 */
   --color-text-muted: 100 116 139; /* slate-500 */
@@ -19,7 +19,7 @@
   --color-primary: 96 165 250; /* blue-400 */
   --color-primary-hover: 147 197 253; /* blue-300 */
   --color-surface: 15 23 42; /* slate-950 */
-  --color-surface-border: 51 65 85; /* slate-700 */
+  --color-surface-border: 71 85 105; /* slate-600 — divisórias visíveis sobre slate-950 */
   --color-surface-muted: 30 41 59; /* slate-800 */
   --color-text: 241 245 249; /* slate-100 */
   --color-text-muted: 148 163 184; /* slate-400 */
@@ -57,7 +57,7 @@
 
 @layer components {
   .planner-surface {
-    @apply bg-white/80 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800/70 backdrop-blur;
+    @apply bg-white/80 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700 backdrop-blur;
   }
 
   .planner-card {
@@ -65,11 +65,11 @@
   }
 
   .planner-card-muted {
-    @apply bg-slate-50/80 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/50 rounded-2xl;
+    @apply bg-slate-50/80 dark:bg-slate-900/40 border border-slate-200/90 dark:border-slate-700/90 rounded-2xl;
   }
 
   .planner-input {
-    @apply w-full rounded-xl border border-slate-200/70 bg-white/80 px-4 py-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-200/40 dark:border-slate-800/80 dark:bg-slate-950/40 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-500/20;
+    @apply w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-500 focus:border-blue-500 focus:ring-4 focus:ring-blue-200/40 dark:border-slate-600 dark:bg-slate-950/40 dark:text-slate-100 dark:placeholder:text-slate-400 dark:focus:border-blue-400 dark:focus:ring-blue-500/20;
   }
 
   .planner-input-compact {
@@ -85,7 +85,7 @@
   }
 
   .planner-button-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-800/70 dark:bg-slate-900/60 dark:text-slate-100 dark:hover:bg-slate-800/70;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-100 dark:hover:bg-slate-800/80;
   }
 
   .planner-button-secondary-compact {
@@ -144,7 +144,7 @@
   }
 
   .admin-stat-card {
-    @apply rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/60 p-2.5 sm:p-3;
+    @apply rounded-xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 p-2.5 sm:p-3;
   }
 
   .admin-stat-label {
@@ -176,11 +176,11 @@
   }
 
   .admin-toolbar {
-    @apply rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-slate-50/70 dark:bg-slate-900/40 p-2.5 md:p-4 backdrop-blur-sm;
+    @apply rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 p-2.5 md:p-4 backdrop-blur-sm;
   }
 
   .admin-table-shell {
-    @apply overflow-hidden rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-white/80 dark:bg-slate-950/40;
+    @apply overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-950/40;
   }
 
   .admin-table-wrap {
@@ -196,7 +196,7 @@
   }
 
   .admin-table-row {
-    @apply border-t border-slate-200/70 dark:border-slate-800/70 transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-900/45;
+    @apply border-t border-slate-200 dark:border-slate-700 transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-900/45;
   }
 
   .admin-table-cell {
@@ -268,11 +268,11 @@
   }
 
   .admin-icon-button {
-    @apply inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200;
+    @apply inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-slate-50;
   }
 
   .admin-dropdown-panel {
-    @apply absolute z-50 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200/70 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-soft backdrop-blur;
+    @apply absolute z-50 mt-2 w-full max-h-60 overflow-auto rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-soft backdrop-blur;
   }
 
   .admin-dropdown-option {
@@ -284,7 +284,17 @@
   }
 
   .admin-user-card {
-    @apply rounded-2xl border border-slate-200/70 bg-gradient-to-br from-white/90 via-white/70 to-slate-50/60 p-4 md:p-5 dark:border-slate-800/70 dark:from-slate-900/70 dark:via-slate-900/60 dark:to-slate-950/50 transition duration-200 hover:shadow-soft;
+    @apply rounded-2xl border border-slate-200 bg-gradient-to-br from-white/90 via-white/70 to-slate-50/60 p-4 md:p-5 dark:border-slate-700 dark:from-slate-900/70 dark:via-slate-900/60 dark:to-slate-950/50 transition duration-200 hover:shadow-soft;
+  }
+
+  /** Divisórias / contornos neutros — FR-VIS-THEME-01 / UX spec §5.1 (par canónico slate) */
+  .ui-border-section {
+    @apply border-slate-200 dark:border-slate-700;
+  }
+
+  /** Fecho de modal — FR-VIS-THEME-02 / UX spec §5.3 (contraste + área tocável ≥ 44×44) */
+  .ui-modal-icon-dismiss {
+    @apply inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-xl leading-none text-slate-500 transition-colors hover:text-slate-800 dark:text-slate-300 dark:hover:text-slate-50;
   }
 
   /** Bloco limite MEI (LIM-MEI-02) — trilho da barra; preenchimento usa utilitários Tailwind no TSX */

@@ -39,6 +39,10 @@ Thumbs.db
 !.cursor/rules/**
 !.cursor/mem/
 !.cursor/mem/**
+!.cursor/workflows/
+!.cursor/workflows/**
+!.cursor/commands/
+!.cursor/commands/**
 .gemini
 .github
 .aiox-core

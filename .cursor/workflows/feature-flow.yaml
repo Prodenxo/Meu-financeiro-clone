@@ -1,0 +1,209 @@
+workflow:
+  id: feature-flow
+  name: Feature Flow
+  version: "1.0"
+  description: >-
+    Fluxo orquestrado para novas funcionalidades: análise → escopo e critérios (PO)
+    → implementação → QA → correções iterativas quando necessário.
+  type: development
+  project_types:
+    - brownfield
+    - feature-development
+    - enhancement
+
+  metadata:
+    elicit: true
+    confirmation_required: true
+
+  execution_modes:
+    - mode: interactive
+      description: Checkpoints por fase (analyst → po → dev → qa)
+      default: true
+    - mode: yolo
+      description: Menos interação; ainda respeita GO do PO antes do dev
+
+  phases:
+    - phase_1: Análise e descoberta
+    - phase_2: Escopo e critérios de aceitação
+    - phase_3: Implementação
+    - phase_4: QA gate
+    - phase_5: Fixes do QA (iterativo)
+
+  sequence:
+    - step: analyst_discovery
+      id: analyze
+      phase: 1
+      agent: analyst
+      action: Análise e descoberta da feature
+      notes: |
+        Objetivo: entender o que fazer, onde e como, antes de código.
+
+        O analyst deve:
+        1. Mapear onde a feature se encaixa na arquitetura existente
+        2. Identificar componentes/serviços/APIs afetados ou reutilizáveis
+        3. Verificar REUSE > ADAPT > CREATE
+        4. Identificar dependências externas (APIs, Supabase, etc.)
+        5. Estimar complexidade e riscos
+        6. Propor abordagem de implementação
+
+        Entrega: mapa de arquivos, abordagem, riscos, componentes reaproveitáveis.
+
+        Handoff: ativar @po.
+      outputs:
+        - affected_files_map
+        - proposed_approach
+        - risks_and_dependencies
+      next: scope
+
+    - step: po_scope
+      id: scope
+      phase: 2
+      agent: po
+      action: Definir escopo e critérios de aceitação
+      requires: analyze
+      notes: |
+        Objetivo: transformar a análise em critérios testáveis e escopo fechado.
+
+        O PO deve:
+        1. Revisar a análise do analyst
+        2. Definir IN e OUT de escopo
+        3. Escrever critérios de aceitação testáveis (Given/When/Then quando possível)
+        4. Validar a abordagem para o produto
+        5. GO ou pedir ajustes ao analyst
+
+        Decisão:
+        - GO → @dev com escopo e critérios
+        - NO-GO → retorno ao @analyst
+
+        O @dev não implementa sem GO do @po.
+      outputs:
+        - acceptance_criteria
+        - scope_in_out
+        - go_no_go
+      next: implement
+      on_failure: analyze
+
+    - step: dev_implement
+      id: implement
+      phase: 3
+      agent: dev
+      action: Implementar a feature
+      requires: scope
+      notes: |
+        Objetivo: implementar conforme escopo e critérios do PO.
+
+        O dev deve:
+        1. Ler arquivos indicados pelo analyst
+        2. Verificar padrões existentes antes de criar algo novo
+        3. Seguir convenções do projeto (imports, UI, etc.)
+        4. Na raiz do monorepo: `npm run typecheck` e `npm run lint`
+        5. Não expandir escopo sem consultar o PO
+
+        Preferir editar arquivos existentes; evitar abstrações prematuras.
+
+        Handoff: ativar @qa.
+      outputs:
+        - implementation_files
+        - quality_commands_status
+      next: qa_review
+
+    - step: qa_review
+      id: qa_review
+      phase: 4
+      agent: qa
+      action: Revisão de qualidade e gate
+      requires: implement
+      notes: |
+        Objetivo: validar critérios do PO e padrões do projeto.
+
+        O QA deve:
+        1. Verificar cada critério de aceitação
+        2. Revisar código: padrões, multi-tenancy (owner_type/owner_id), imports
+        3. Regressões em fluxos adjacentes
+        4. `npm run typecheck` e `npm run lint` passando
+        5. Documentar tech debt (sem bloquear por isso)
+
+        Checklist típico (ajustar ao projeto):
+        - Props e interfaces consistentes
+        - Queries com owner_id + owner_type quando aplicável
+        - Imports absolutos conforme convenção (@/ ou equivalente)
+        - Comportamento para diferentes tipos de owner quando existir
+
+        Decisão: PASS | CONCERNS | FAIL
+        - FAIL → retorno ao @dev com feedback específico (máx. 3 iterações dev/qa)
+      outputs:
+        - qa_verdict
+        - qa_notes
+      next: complete
+      on_failure: fix_qa
+
+    - step: dev_fix_qa
+      id: fix_qa
+      phase: 5
+      agent: dev
+      action: Aplicar correções indicadas pelo QA
+      notes: |
+        Aplicar apenas o que o QA pediu; repetir ciclo QA até PASS ou CONCERNS.
+      outputs:
+        - fix_commits
+      next: qa_review
+
+    - workflow_end:
+      id: complete
+      action: feature_complete
+      notes: |
+        Encerramento:
+        - Análise de impacto (analyst)
+        - Escopo e critérios (PO)
+        - REUSE > ADAPT > CREATE verificado
+        - typecheck e lint OK
+        - QA: PASS ou CONCERNS com observações
+        - Tech debts documentados
+
+  flow_diagram: |
+    ```mermaid
+    graph TD
+        A[Start: Feature Flow] --> B[analyst: Análise]
+        B --> C[po: Escopo + critérios]
+        C --> D{GO?}
+        D -->|Não| B
+        D -->|Sim| E[dev: Implementação]
+        E --> F[qa: Gate]
+        F --> G{PASS / CONCERNS / FAIL?}
+        G -->|FAIL| H[dev: Fixes]
+        H --> F
+        G -->|PASS ou CONCERNS| I[Fim]
+    ```
+
+  decision_guidance:
+    when_to_use:
+      - Nova funcionalidade com necessidade de alinhamento produto antes do código
+      - Equipa que usa analyst + PO antes do dev
+    when_not_to_use:
+      - Hotfix urgente (usar fluxo mínimo)
+      - Spike sem critérios fechados
+
+  handoff_prompts:
+    analysis_done: |
+      Análise concluída. Próximo: @po para escopo e critérios de aceitação.
+
+    scope_go: |
+      GO do PO. @dev pode implementar com os critérios acordados.
+
+    qa_pass: |
+      QA: PASS ou CONCERNS. Feature flow encerrado.
+
+    qa_fail: |
+      QA: FAIL. @dev aplica correções indicadas e reenvia para QA.
+
+metadata:
+  author: AIOX (Meu Financeiro — .cursor/workflows)
+  created_date: 2026-04-15
+  version: 1.0.0
+  source_md: .cursor/workflows/feature-flow.md
+  tags:
+    - feature
+    - analyst
+    - po
+    - dev
+    - qa
