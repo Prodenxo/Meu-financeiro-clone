@@ -5,9 +5,11 @@ import FetchErrorBanner from '../FetchErrorBanner';
 import LoadingOverlay from '../LoadingOverlay';
 import { useMediaQueryMinLg } from '../../hooks/useMediaQueryMinLg';
 import { useDreMatrix } from '../../hooks/useDreMatrix';
+import { useDreTableDensity, type DreTableDensity } from '../../hooks/useDreTableDensity';
 import {
   buildDreMatrixViewModel,
   toggleMonthInSelection,
+  unionEligibleCategoryIds,
   type DreUiSelection
 } from '../../utils/dreMatrix';
 import DreMatrixTable from './DreMatrixTable';
@@ -53,7 +55,9 @@ export default function DreBudgetPanel({
     months: [defaultMonthForYear(year)]
   }));
   const [statusMessage, setStatusMessage] = useState('');
+  const [densityAnnMessage, setDensityAnnMessage] = useState('');
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const densityClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevIsLgRef = useRef<boolean | null>(null);
 
   const isLg = useMediaQueryMinLg();
@@ -63,6 +67,13 @@ export default function DreBudgetPanel({
     setStatusMessage(msg);
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
     clearTimerRef.current = setTimeout(() => setStatusMessage(''), 8000);
+  }, []);
+
+  /** Anúncios de densidade (região `aria-live` separada do período — NFR-DRE-CMP-01 / revisão QA). */
+  const announceDensity = useCallback((msg: string) => {
+    setDensityAnnMessage(msg);
+    if (densityClearTimerRef.current) clearTimeout(densityClearTimerRef.current);
+    densityClearTimerRef.current = setTimeout(() => setDensityAnnMessage(''), 8000);
   }, []);
 
   useEffect(() => {
@@ -121,6 +132,21 @@ export default function DreBudgetPanel({
     matrixDataRevision
   );
 
+  const { density, setDensity } = useDreTableDensity();
+
+  const handleDensityChange = useCallback(
+    (next: DreTableDensity) => {
+      if (next === density) return;
+      setDensity(next);
+      const msg =
+        next === 'simples'
+          ? 'DRE em modo Simples. Uma coluna numérica por período (realizado).'
+          : 'DRE em modo Completo. Três colunas numéricas por período (realizado, atingimento e % sobre a receita).';
+      announceDensity(msg);
+    },
+    [density, setDensity, announceDensity]
+  );
+
   const { tableVariant, models, compareMonths, tableTitle, descriptionId } = useMemo(() => {
     if (dreSelection.mode === 'annual') {
       const m = buildDreMatrixViewModel(categories, cells, year, { kind: 'annual' }, MESES);
@@ -150,8 +176,17 @@ export default function DreBudgetPanel({
       };
     }
     const sorted = [...months].sort((a, b) => a - b);
+    const unionIds = unionEligibleCategoryIds(sorted, categories, cells);
+    const compareOpts = { categoryIdsAllowlist: unionIds };
     const ms = sorted.map((month) =>
-      buildDreMatrixViewModel(categories, cells, year, { kind: 'month', month }, MESES)
+      buildDreMatrixViewModel(
+        categories,
+        cells,
+        year,
+        { kind: 'month', month },
+        MESES,
+        compareOpts
+      )
     );
     const list = sorted.map((m) => MESES[m - 1]).join(', ');
     const title = `Comparando ${sorted.length} meses: ${list}.`;
@@ -180,8 +215,23 @@ export default function DreBudgetPanel({
         demonstrações contabilísticas ou obrigações fiscais.
       </p>
 
-      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+      <p
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+        aria-label="Mensagens sobre período e comparação de meses"
+      >
         {statusMessage}
+      </p>
+      <p
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+        aria-label="Mensagem ao alterar vista Simples ou Completa"
+      >
+        {densityAnnMessage}
       </p>
 
       {error ? <FetchErrorBanner message={error} onRetry={() => void refetch()} /> : null}
@@ -252,24 +302,66 @@ export default function DreBudgetPanel({
               <span className="text-sm text-slate-600 dark:text-slate-300">A atualizar…</span>
             </div>
           ) : null}
-          <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-            <DrePeriodSidebar
-              selection={dreSelection}
-              maxMonths={maxMonths}
-              onToggleMonth={handleToggleMonth}
-              onSelectAnnual={handleSelectAnnual}
-              onMonthFromAnnual={handleMonthFromAnnual}
-            />
-            <DreMatrixTable
-              variant={tableVariant}
-              models={models}
-              tableTitle={tableTitle}
-              tableDescriptionId={descriptionId}
-              tooltips={TOOLTIPS}
-              monthNames={MESES}
-              year={year}
-              compareMonths={compareMonths}
-            />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div
+                role="radiogroup"
+                aria-label="Densidade da tabela DRE"
+                className="inline-flex rounded-lg border border-slate-200/90 dark:border-slate-700/80 p-0.5 bg-slate-100/90 dark:bg-slate-900/50 self-start"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={density === 'simples'}
+                  className={`px-3 py-2 text-sm font-medium rounded-md min-h-[44px] min-w-[44px] transition-colors ${
+                    density === 'simples'
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                  onClick={() => handleDensityChange('simples')}
+                >
+                  Simples
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={density === 'completo'}
+                  className={`px-3 py-2 text-sm font-medium rounded-md min-h-[44px] min-w-[44px] transition-colors ${
+                    density === 'completo'
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                  onClick={() => handleDensityChange('completo')}
+                >
+                  Completo
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md leading-relaxed">
+                {density === 'simples'
+                  ? 'Mostra só o realizado. Active Completo para atingimento e % sobre a receita.'
+                  : 'Inclui percentagens. Passe a Simples para uma leitura mais rápida.'}
+              </p>
+            </div>
+            <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+              <DrePeriodSidebar
+                selection={dreSelection}
+                maxMonths={maxMonths}
+                onToggleMonth={handleToggleMonth}
+                onSelectAnnual={handleSelectAnnual}
+                onMonthFromAnnual={handleMonthFromAnnual}
+              />
+              <DreMatrixTable
+                variant={tableVariant}
+                models={models}
+                tableTitle={tableTitle}
+                tableDescriptionId={descriptionId}
+                tooltips={TOOLTIPS}
+                monthNames={MESES}
+                year={year}
+                compareMonths={compareMonths}
+                density={density}
+              />
+            </div>
           </div>
         </div>
       ) : null}

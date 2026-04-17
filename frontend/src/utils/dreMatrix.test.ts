@@ -7,9 +7,11 @@ import {
   computePctReceitaLine,
   formatAtingimento,
   formatPctReceita,
+  isCategoryEligibleInPeriod,
   isCategoryEligibleInYear,
   normalizeDreMonths,
-  toggleMonthInSelection
+  toggleMonthInSelection,
+  unionEligibleCategoryIds
 } from './dreMatrix';
 
 const MESES = [
@@ -73,6 +75,95 @@ describe('dreMatrix — subtotais e resultado', () => {
     const vm = buildDreMatrixViewModel(categories, cells, 2026, { kind: 'annual' }, MESES);
     expect(vm.receitas.subtotal.planejado).toBe(200);
     expect(vm.receitas.subtotal.realizado).toBe(110);
+  });
+});
+
+describe('isCategoryEligibleInPeriod (FR-DRE-PER)', () => {
+  it('mês isolado: exclui categoria só com actividade doutro mês', () => {
+    const cells: DreMatrixCell[] = [
+      { categorias_id: 1, month: 3, valor_orcado: 100, valor_gasto: 50, valor_recebido: 0 }
+    ];
+    expect(isCategoryEligibleInPeriod(1, 'saida', { kind: 'month', month: 1 }, cells)).toBe(false);
+    expect(isCategoryEligibleInPeriod(1, 'saida', { kind: 'month', month: 3 }, cells)).toBe(true);
+  });
+
+  it('total anual: usa agregado dos 12 meses', () => {
+    const cells: DreMatrixCell[] = [
+      { categorias_id: 1, month: 2, valor_orcado: 50, valor_gasto: 0, valor_recebido: 0 },
+      { categorias_id: 1, month: 4, valor_orcado: 50, valor_gasto: 0, valor_recebido: 0 }
+    ];
+    expect(isCategoryEligibleInPeriod(1, 'saida', { kind: 'annual' }, cells)).toBe(true);
+  });
+
+  it('linhas receitas ordenadas por nome pt-BR', () => {
+    const categories: Category[] = [
+      { id: 2, nome: 'Banana', tipo: 'entrada', user_id: 'u' },
+      { id: 1, nome: 'Abacate', tipo: 'entrada', user_id: 'u' }
+    ];
+    const cells: DreMatrixCell[] = [
+      { categorias_id: 1, month: 1, valor_orcado: 1, valor_gasto: 0, valor_recebido: 1 },
+      { categorias_id: 2, month: 1, valor_orcado: 1, valor_gasto: 0, valor_recebido: 1 }
+    ];
+    const vm = buildDreMatrixViewModel(categories, cells, 2026, { kind: 'month', month: 1 }, MESES);
+    expect(vm.receitas.rows.map((r) => r.nome)).toEqual(['Abacate', 'Banana']);
+  });
+
+  it('linhas despesas ordenadas por nome pt-BR (paridade com receitas / arquitetura §3.3)', () => {
+    const categories: Category[] = [
+      { id: 20, nome: 'Zinco', tipo: 'saida', user_id: 'u' },
+      { id: 10, nome: 'Água', tipo: 'saida', user_id: 'u' }
+    ];
+    const cells: DreMatrixCell[] = [
+      { categorias_id: 10, month: 1, valor_orcado: 1, valor_gasto: 1, valor_recebido: 0 },
+      { categorias_id: 20, month: 1, valor_orcado: 1, valor_gasto: 1, valor_recebido: 0 }
+    ];
+    const vm = buildDreMatrixViewModel(categories, cells, 2026, { kind: 'month', month: 1 }, MESES);
+    expect(vm.despesas.rows.map((r) => r.nome)).toEqual(['Água', 'Zinco']);
+  });
+
+  it('compare: união vazia — allowlist vazio implica isEmpty em cada build (empty state coerente)', () => {
+    const categories: Category[] = [{ id: 1, nome: 'Só outro mês', tipo: 'entrada', user_id: 'u' }];
+    const cells: DreMatrixCell[] = [
+      { categorias_id: 1, month: 6, valor_orcado: 10, valor_gasto: 0, valor_recebido: 5 }
+    ];
+    const union = unionEligibleCategoryIds([1, 2], categories, cells);
+    expect(union.size).toBe(0);
+    const col = buildDreMatrixViewModel(categories, cells, 2026, { kind: 'month', month: 1 }, MESES, {
+      categoryIdsAllowlist: union
+    });
+    expect(col.isEmpty).toBe(true);
+  });
+
+  it('compare: união de dois meses — categoria só num mês; allowlist mantém paridade com mês único', () => {
+    const categories: Category[] = [{ id: 1, nome: 'Extra', tipo: 'entrada', user_id: 'u' }];
+    const cells: DreMatrixCell[] = [
+      { categorias_id: 1, month: 1, valor_orcado: 100, valor_gasto: 0, valor_recebido: 80 }
+    ];
+    const union = unionEligibleCategoryIds([1, 2], categories, cells);
+    expect(union.has(1)).toBe(true);
+    const solo = buildDreMatrixViewModel(categories, cells, 2026, { kind: 'month', month: 1 }, MESES);
+    const col1 = buildDreMatrixViewModel(
+      categories,
+      cells,
+      2026,
+      { kind: 'month', month: 1 },
+      MESES,
+      { categoryIdsAllowlist: union }
+    );
+    const col2 = buildDreMatrixViewModel(
+      categories,
+      cells,
+      2026,
+      { kind: 'month', month: 2 },
+      MESES,
+      { categoryIdsAllowlist: union }
+    );
+    expect(col1.receitas.rows[0]?.realizado).toBe(solo.receitas.rows[0]?.realizado);
+    expect(col1.receitas.rows[0]?.planejado).toBe(solo.receitas.rows[0]?.planejado);
+    expect(col2.receitas.rows[0]?.planejado).toBe(0);
+    expect(col2.receitas.rows[0]?.realizado).toBe(0);
+    expect(col2.receitas.rows[0]?.atingimentoLabel).toBe('—');
+    expect(col2.receitas.rows[0]?.pctReceitaLabel).toBe('—');
   });
 });
 

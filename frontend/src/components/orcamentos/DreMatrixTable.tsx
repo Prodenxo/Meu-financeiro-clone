@@ -1,5 +1,6 @@
 import { Fragment, useId, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import type { DreTableDensity } from '../../hooks/useDreTableDensity';
 import type { DreHighlight, DreMatrixViewModel, DreRowViewModel, DreSubtotalViewModel } from '../../utils/dreMatrix';
 import { formatDreCurrency } from '../../utils/dreMatrix';
 
@@ -21,17 +22,19 @@ function MetricCell({
   children,
   highlight,
   align = 'right',
-  title
+  title,
+  className = ''
 }: {
   children: ReactNode;
   highlight: DreHighlight;
   align?: 'left' | 'right';
   title?: string;
+  className?: string;
 }) {
   const h = highlightClass(highlight);
   return (
     <td
-      className={`py-2 px-2 min-w-[88px] ${align === 'right' ? 'text-right tabular-nums' : ''} ${h || 'text-slate-700 dark:text-slate-200'}`}
+      className={`py-2 px-2 min-w-[88px] ${align === 'right' ? 'text-right tabular-nums' : ''} ${h || 'text-slate-700 dark:text-slate-200'} ${className}`}
       title={title}
     >
       {children}
@@ -58,36 +61,43 @@ function emptyRow(id: number, nome: string): DreRowViewModel {
 
 function SubtotalRow({
   sub,
-  tooltips
+  tooltips,
+  showExtraMetrics
 }: {
   sub: DreSubtotalViewModel;
   tooltips: { atingimento: string; pctReceita: string };
+  showExtraMetrics: boolean;
 }) {
   return (
     <tr className="border-t border-slate-200/80 dark:border-slate-700/60 font-semibold bg-slate-50/50 dark:bg-slate-900/30">
       <th scope="row" className="py-2 px-2 text-left text-slate-800 dark:text-slate-100">
         Subtotal
       </th>
-      <td className="py-2 px-2 text-right tabular-nums min-w-[100px] text-slate-700 dark:text-slate-200">
-        {formatDreCurrency(sub.planejado)}
-      </td>
-      <MetricCell highlight={sub.highlightRealizado}>{formatDreCurrency(sub.realizado)}</MetricCell>
-      <MetricCell highlight={sub.highlightAtingimento} title={tooltips.atingimento}>
-        {sub.atingimentoLabel}
+      <MetricCell highlight={sub.highlightRealizado} className="min-w-[100px]">
+        {formatDreCurrency(sub.realizado)}
       </MetricCell>
-      <MetricCell highlight="none" title={tooltips.pctReceita}>
-        {sub.pctReceitaLabel}
-      </MetricCell>
+      {showExtraMetrics ? (
+        <>
+          <MetricCell highlight={sub.highlightAtingimento} title={tooltips.atingimento}>
+            {sub.atingimentoLabel}
+          </MetricCell>
+          <MetricCell highlight="none" title={tooltips.pctReceita}>
+            {sub.pctReceitaLabel}
+          </MetricCell>
+        </>
+      ) : null}
     </tr>
   );
 }
 
 function SubtotalRowCompare({
   subs,
-  tooltips
+  tooltips,
+  showExtraMetrics
 }: {
   subs: DreSubtotalViewModel[];
   tooltips: { atingimento: string; pctReceita: string };
+  showExtraMetrics: boolean;
 }) {
   return (
     <tr className="border-t border-slate-200/80 dark:border-slate-700/60 font-semibold bg-slate-50/50 dark:bg-slate-900/30">
@@ -98,21 +108,27 @@ function SubtotalRowCompare({
         Subtotal
       </th>
       {subs.flatMap((sub, mi) => [
-        <td
-          key={`${mi}-p`}
-          className={`py-2 px-2 text-right tabular-nums min-w-[100px] text-slate-700 dark:text-slate-200 ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
+        <MetricCell
+          key={`${mi}-r`}
+          highlight={sub.highlightRealizado}
+          className={`min-w-[100px] ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
         >
-          {formatDreCurrency(sub.planejado)}
-        </td>,
-        <MetricCell key={`${mi}-r`} highlight={sub.highlightRealizado}>
           {formatDreCurrency(sub.realizado)}
         </MetricCell>,
-        <MetricCell key={`${mi}-a`} highlight={sub.highlightAtingimento} title={tooltips.atingimento}>
-          {sub.atingimentoLabel}
-        </MetricCell>,
-        <MetricCell key={`${mi}-pct`} highlight="none" title={tooltips.pctReceita}>
-          {sub.pctReceitaLabel}
-        </MetricCell>
+        ...(showExtraMetrics
+          ? [
+              <MetricCell
+                key={`${mi}-a`}
+                highlight={sub.highlightAtingimento}
+                title={tooltips.atingimento}
+              >
+                {sub.atingimentoLabel}
+              </MetricCell>,
+              <MetricCell key={`${mi}-pct`} highlight="none" title={tooltips.pctReceita}>
+                {sub.pctReceitaLabel}
+              </MetricCell>
+            ]
+          : [])
       ])}
     </tr>
   );
@@ -120,10 +136,12 @@ function SubtotalRowCompare({
 
 function DataRows({
   rows,
-  tooltips
+  tooltips,
+  showExtraMetrics
 }: {
   rows: DreRowViewModel[];
   tooltips: { atingimento: string; pctReceita: string };
+  showExtraMetrics: boolean;
 }) {
   return (
     <>
@@ -138,16 +156,19 @@ function DataRows({
           >
             {row.nome}
           </th>
-          <td className="py-2 px-2 text-right tabular-nums text-slate-700 dark:text-slate-200 min-w-[100px]">
-            {formatDreCurrency(row.planejado)}
-          </td>
-          <MetricCell highlight={row.highlightRealizado}>{formatDreCurrency(row.realizado)}</MetricCell>
-          <MetricCell highlight={row.highlightAtingimento} title={tooltips.atingimento}>
-            {row.atingimentoLabel}
+          <MetricCell highlight={row.highlightRealizado} className="min-w-[100px]">
+            {formatDreCurrency(row.realizado)}
           </MetricCell>
-          <MetricCell highlight="none" title={tooltips.pctReceita}>
-            {row.pctReceitaLabel}
-          </MetricCell>
+          {showExtraMetrics ? (
+            <>
+              <MetricCell highlight={row.highlightAtingimento} title={tooltips.atingimento}>
+                {row.atingimentoLabel}
+              </MetricCell>
+              <MetricCell highlight="none" title={tooltips.pctReceita}>
+                {row.pctReceitaLabel}
+              </MetricCell>
+            </>
+          ) : null}
         </tr>
       ))}
     </>
@@ -157,11 +178,13 @@ function DataRows({
 function DataRowsCompare({
   models,
   section,
-  tooltips
+  tooltips,
+  showExtraMetrics
 }: {
   models: DreMatrixViewModel[];
   section: 'receitas' | 'despesas';
   tooltips: { atingimento: string; pctReceita: string };
+  showExtraMetrics: boolean;
 }) {
   const baseRows = models[0][section].rows;
   return (
@@ -181,21 +204,27 @@ function DataRowsCompare({
             const row =
               rowByCategoryId(model[section].rows, base.categorias_id) ?? emptyRow(base.categorias_id, base.nome);
             return [
-              <td
-                key={`${mi}-p`}
-                className={`py-2 px-2 text-right tabular-nums text-slate-700 dark:text-slate-200 min-w-[100px] ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
+              <MetricCell
+                key={`${mi}-r`}
+                highlight={row.highlightRealizado}
+                className={`min-w-[100px] ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
               >
-                {formatDreCurrency(row.planejado)}
-              </td>,
-              <MetricCell key={`${mi}-r`} highlight={row.highlightRealizado}>
                 {formatDreCurrency(row.realizado)}
               </MetricCell>,
-              <MetricCell key={`${mi}-a`} highlight={row.highlightAtingimento} title={tooltips.atingimento}>
-                {row.atingimentoLabel}
-              </MetricCell>,
-              <MetricCell key={`${mi}-pct`} highlight="none" title={tooltips.pctReceita}>
-                {row.pctReceitaLabel}
-              </MetricCell>
+              ...(showExtraMetrics
+                ? [
+                    <MetricCell
+                      key={`${mi}-a`}
+                      highlight={row.highlightAtingimento}
+                      title={tooltips.atingimento}
+                    >
+                      {row.atingimentoLabel}
+                    </MetricCell>,
+                    <MetricCell key={`${mi}-pct`} highlight="none" title={tooltips.pctReceita}>
+                      {row.pctReceitaLabel}
+                    </MetricCell>
+                  ]
+                : [])
             ];
           })}
         </tr>
@@ -214,6 +243,7 @@ export interface DreMatrixTableProps {
   year: number;
   /** Índices 1–12 na ordem das colunas (modo compare). */
   compareMonths: number[];
+  density: DreTableDensity;
 }
 
 export default function DreMatrixTable({
@@ -224,7 +254,8 @@ export default function DreMatrixTable({
   tooltips,
   monthNames,
   year,
-  compareMonths
+  compareMonths,
+  density
 }: DreMatrixTableProps) {
   const [openReceitas, setOpenReceitas] = useState(true);
   const [openDespesas, setOpenDespesas] = useState(true);
@@ -233,9 +264,18 @@ export default function DreMatrixTable({
   const bodyReceitas = `dre-data-rec-${rid}`;
   const bodyDespesas = `dre-data-desp-${did}`;
 
+  const showExtraMetrics = density === 'completo';
   const n = models.length;
-  const compareColSpan = 1 + 4 * n;
-  const minTableWidth = variant === 'compare' ? Math.max(520, 200 + n * 376) : 520;
+  /** Por mês: Realizado (+ Atingimento + % Receita no modo Completo). Sem coluna Planejado. */
+  const metricsPerMonth = showExtraMetrics ? 3 : 1;
+  const compareColSpan = 1 + metricsPerMonth * n;
+  const minTableWidth =
+    variant === 'compare'
+      ? Math.max(400, 200 + n * (showExtraMetrics ? 280 : 120))
+      : showExtraMetrics
+        ? 440
+        : 280;
+  const singleColSpan = showExtraMetrics ? 4 : 2;
 
   const GroupHeader = ({
     label,
@@ -280,24 +320,33 @@ export default function DreMatrixTable({
       <div className="min-w-0 flex-1">
         <h3 className="text-base font-semibold text-slate-800 dark:text-white mb-3">{tableTitle}</h3>
         <div className="overflow-x-auto rounded-lg border border-slate-200/70 dark:border-slate-800/60">
-          <table className="w-full text-sm min-w-[520px]">
+          <table className={`w-full text-sm ${showExtraMetrics ? 'min-w-[440px]' : 'min-w-[280px]'}`}>
             <thead>
               <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200/70 dark:border-slate-800/60">
                 <th scope="col" className="py-3 px-2 font-medium sticky left-0 bg-white dark:bg-slate-950 z-[2]">
                   Categoria
                 </th>
                 <th scope="col" className="py-3 px-2 font-medium text-right min-w-[100px]">
-                  Planejado
-                </th>
-                <th scope="col" className="py-3 px-2 font-medium text-right min-w-[100px]">
                   Realizado
                 </th>
-                <th scope="col" className="py-3 px-2 font-medium text-right min-w-[88px]" title={tooltips.atingimento}>
-                  Atingimento
-                </th>
-                <th scope="col" className="py-3 px-2 font-medium text-right min-w-[88px]" title={tooltips.pctReceita}>
-                  % Receita
-                </th>
+                {showExtraMetrics ? (
+                  <>
+                    <th
+                      scope="col"
+                      className="py-3 px-2 font-medium text-right min-w-[88px]"
+                      title={tooltips.atingimento}
+                    >
+                      Atingimento
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-3 px-2 font-medium text-right min-w-[88px]"
+                      title={tooltips.pctReceita}
+                    >
+                      % Receita
+                    </th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -307,14 +356,14 @@ export default function DreMatrixTable({
                 onToggle={() => setOpenReceitas((x) => !x)}
                 variant="receitas"
                 controlsId={bodyReceitas}
-                colSpan={5}
+                colSpan={singleColSpan}
               />
             </tbody>
             <tbody id={bodyReceitas} hidden={!openReceitas}>
-              <DataRows rows={model.receitas.rows} tooltips={tooltips} />
+              <DataRows rows={model.receitas.rows} tooltips={tooltips} showExtraMetrics={showExtraMetrics} />
             </tbody>
             <tbody>
-              <SubtotalRow sub={model.receitas.subtotal} tooltips={tooltips} />
+              <SubtotalRow sub={model.receitas.subtotal} tooltips={tooltips} showExtraMetrics={showExtraMetrics} />
             </tbody>
             <tbody>
               <GroupHeader
@@ -323,21 +372,20 @@ export default function DreMatrixTable({
                 onToggle={() => setOpenDespesas((x) => !x)}
                 variant="despesas"
                 controlsId={bodyDespesas}
-                colSpan={5}
+                colSpan={singleColSpan}
               />
             </tbody>
             <tbody id={bodyDespesas} hidden={!openDespesas}>
-              <DataRows rows={model.despesas.rows} tooltips={tooltips} />
+              <DataRows rows={model.despesas.rows} tooltips={tooltips} showExtraMetrics={showExtraMetrics} />
             </tbody>
             <tbody>
-              <SubtotalRow sub={model.despesas.subtotal} tooltips={tooltips} />
+              <SubtotalRow sub={model.despesas.subtotal} tooltips={tooltips} showExtraMetrics={showExtraMetrics} />
             </tbody>
             <tbody>
               <tr className="border-t-2 border-emerald-500/40 bg-slate-50/90 dark:bg-slate-900/50 font-semibold">
                 <th scope="row" className="py-3 px-2 text-left text-slate-900 dark:text-white">
                   Resultado (realizado)
                 </th>
-                <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
                 <td
                   className={resultadoRealizadoCellClass(model.resultadoRealizado)}
                   title={
@@ -348,8 +396,12 @@ export default function DreMatrixTable({
                 >
                   {formatDreCurrency(model.resultadoRealizado)}
                 </td>
-                <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
-                <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
+                {showExtraMetrics ? (
+                  <>
+                    <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
+                    <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
+                  </>
+                ) : null}
               </tr>
             </tbody>
           </table>
@@ -387,7 +439,7 @@ export default function DreMatrixTable({
                 <th
                   key={i}
                   scope="colgroup"
-                  colSpan={4}
+                  colSpan={metricsPerMonth}
                   className={`py-3 px-2 font-medium text-center ${i > 0 ? 'border-l border-slate-200/70 dark:border-slate-800/60' : ''}`}
                 >
                   {label}
@@ -401,25 +453,26 @@ export default function DreMatrixTable({
                     scope="col"
                     className={`py-2 px-2 font-medium text-right min-w-[100px] ${mi > 0 ? 'border-l border-slate-200/70 dark:border-slate-800/40' : ''}`}
                   >
-                    Planejado
-                  </th>
-                  <th scope="col" className="py-2 px-2 font-medium text-right min-w-[100px]">
                     Realizado
                   </th>
-                  <th
-                    scope="col"
-                    className="py-2 px-2 font-medium text-right min-w-[88px]"
-                    title={tooltips.atingimento}
-                  >
-                    Atingimento
-                  </th>
-                  <th
-                    scope="col"
-                    className="py-2 px-2 font-medium text-right min-w-[88px]"
-                    title={tooltips.pctReceita}
-                  >
-                    % Receita
-                  </th>
+                  {showExtraMetrics ? (
+                    <>
+                      <th
+                        scope="col"
+                        className="py-2 px-2 font-medium text-right min-w-[88px]"
+                        title={tooltips.atingimento}
+                      >
+                        Atingimento
+                      </th>
+                      <th
+                        scope="col"
+                        className="py-2 px-2 font-medium text-right min-w-[88px]"
+                        title={tooltips.pctReceita}
+                      >
+                        % Receita
+                      </th>
+                    </>
+                  ) : null}
                 </Fragment>
               ))}
             </tr>
@@ -435,12 +488,18 @@ export default function DreMatrixTable({
             />
           </tbody>
           <tbody id={bodyReceitas} hidden={!openReceitas}>
-            <DataRowsCompare models={models} section="receitas" tooltips={tooltips} />
+            <DataRowsCompare
+              models={models}
+              section="receitas"
+              tooltips={tooltips}
+              showExtraMetrics={showExtraMetrics}
+            />
           </tbody>
           <tbody>
             <SubtotalRowCompare
               subs={models.map((m) => m.receitas.subtotal)}
               tooltips={tooltips}
+              showExtraMetrics={showExtraMetrics}
             />
           </tbody>
           <tbody>
@@ -454,12 +513,18 @@ export default function DreMatrixTable({
             />
           </tbody>
           <tbody id={bodyDespesas} hidden={!openDespesas}>
-            <DataRowsCompare models={models} section="despesas" tooltips={tooltips} />
+            <DataRowsCompare
+              models={models}
+              section="despesas"
+              tooltips={tooltips}
+              showExtraMetrics={showExtraMetrics}
+            />
           </tbody>
           <tbody>
             <SubtotalRowCompare
               subs={models.map((m) => m.despesas.subtotal)}
               tooltips={tooltips}
+              showExtraMetrics={showExtraMetrics}
             />
           </tbody>
           <tbody>
@@ -470,31 +535,32 @@ export default function DreMatrixTable({
               >
                 Resultado (realizado)
               </th>
-              {models.flatMap((model, mi) => [
-                <td
-                  key={`${mi}-rp`}
-                  className={`py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400 ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
-                >
-                  —
-                </td>,
-                <td
-                  key={`${mi}-rr`}
-                  className={resultadoRealizadoCellClass(model.resultadoRealizado)}
-                  title={
-                    model.resultadoRealizado < 0
-                      ? 'Saldo negativo: despesas realizadas superam receitas neste período.'
-                      : undefined
-                  }
-                >
-                  {formatDreCurrency(model.resultadoRealizado)}
-                </td>,
-                <td key={`${mi}-ra`} className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
-                  —
-                </td>,
-                <td key={`${mi}-rpc`} className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
-                  —
-                </td>
-              ])}
+              {models.flatMap((model, mi) => {
+                const cells = [
+                  <td
+                    key={`${mi}-rr`}
+                    className={`${resultadoRealizadoCellClass(model.resultadoRealizado)} ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
+                    title={
+                      model.resultadoRealizado < 0
+                        ? 'Saldo negativo: despesas realizadas superam receitas neste período.'
+                        : undefined
+                    }
+                  >
+                    {formatDreCurrency(model.resultadoRealizado)}
+                  </td>
+                ];
+                if (showExtraMetrics) {
+                  cells.push(
+                    <td key={`${mi}-ra`} className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                      —
+                    </td>,
+                    <td key={`${mi}-rpc`} className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                      —
+                    </td>
+                  );
+                }
+                return cells;
+              })}
             </tr>
           </tbody>
         </table>
