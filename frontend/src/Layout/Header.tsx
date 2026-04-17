@@ -14,8 +14,8 @@ export default function Header({ userName, sidebarExpanded, onToggleSidebar }: H
     <header 
       className={`w-full py-3 px-4 md:px-6 flex flex-col md:flex-row items-start md:items-center justify-between fixed top-0 left-0 z-50 border-b backdrop-blur ${
         isDarkMode
-          ? 'bg-slate-950/80 border-slate-800/70 text-slate-100'
-          : 'bg-white/80 border-slate-200/70 text-slate-900'
+          ? 'bg-slate-950/90 border-slate-700 text-slate-100'
+          : 'bg-white/90 border-slate-200 text-slate-900'
       } shadow-soft ${sidebarExpanded ? 'md:pl-52' : 'md:pl-12'}`}
       style={{
         minHeight: 64, 
@@ -44,8 +44,8 @@ export default function Header({ userName, sidebarExpanded, onToggleSidebar }: H
             onClick={onToggleSidebar}
             className={`h-9 w-9 rounded-full border ${
               isDarkMode
-                ? 'border-slate-800 text-slate-200 hover:bg-slate-800/80'
-                : 'border-slate-200 text-slate-700 hover:bg-slate-100/80'
+                ? 'border-slate-600 text-slate-100 hover:bg-slate-800/90'
+                : 'border-slate-300 text-slate-800 hover:bg-slate-100/90'
             } flex items-center justify-center transition`}
             aria-label={sidebarExpanded ? 'Recolher menu lateral' : 'Expandir menu lateral'}
             title={sidebarExpanded ? 'Recolher menu lateral' : 'Expandir menu lateral'}

@@ -180,6 +180,8 @@ type EmissaoFiscalErrorAlertProps = {
   plugnotasCode?: string | null;
   httpStatus?: number | null;
   plugnotasRequest?: PlugnotasRequestMeta | null;
+  /** FR-GUIA-FISC-13: novo POST (novo `idIntegracao` no servidor) — só para erros classificados como transitórios. */
+  onRetry?: () => void;
 };
 
 type NfseNacionalDocHintLinkTone = Extract<LongFiscalErrorTone, 'danger' | 'rose'>;
@@ -271,7 +273,8 @@ export function EmissaoFiscalErrorAlert({
   message,
   plugnotasCode = null,
   httpStatus = null,
-  plugnotasRequest = null
+  plugnotasRequest = null,
+  onRetry
 }: EmissaoFiscalErrorAlertProps) {
   const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode, httpStatus, plugnotasRequest });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
@@ -289,6 +292,11 @@ export function EmissaoFiscalErrorAlert({
       <UserFacingErrorBlock {...facing} />
       <PlugnotasIbgeCidadeOperacaoHint message={message} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} /> : null}
+      {onRetry ? (
+        <button type="button" className="planner-button-secondary-compact mt-1" onClick={onRetry}>
+          Tentar novamente
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -334,7 +342,8 @@ export function EmissaoFiscalErrorAlertModal({
   message,
   plugnotasCode = null,
   httpStatus = null,
-  plugnotasRequest = null
+  plugnotasRequest = null,
+  onRetry
 }: EmissaoFiscalErrorAlertProps) {
   const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode, httpStatus, plugnotasRequest });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
@@ -352,6 +361,11 @@ export function EmissaoFiscalErrorAlertModal({
       <UserFacingErrorBlock {...facing} />
       <PlugnotasIbgeCidadeOperacaoHint message={message} />
       {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} linkTone="rose" /> : null}
+      {onRetry ? (
+        <button type="button" className="planner-button-secondary-compact mt-2" onClick={onRetry}>
+          Tentar novamente
+        </button>
+      ) : null}
     </div>
   );
 }

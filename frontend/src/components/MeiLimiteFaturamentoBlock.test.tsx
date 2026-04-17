@@ -87,11 +87,11 @@ describe('MeiLimiteFaturamentoBlock', () => {
     expect(within(alert).getByText(/Não foi possível carregar/i)).toBeTruthy();
   });
 
-  it('detalhe da base: botão expande painel', () => {
+  it('Como calculamos: botão expande painel (UX §9.3)', () => {
     render(
       <MeiLimiteFaturamentoBlock anoCivil={2026} progresso={progressoBase()} vigenciaLabel={null} />
     );
-    const btn = screen.getByRole('button', { name: /detalhe da base de cálculo/i });
+    const btn = screen.getByRole('button', { name: /como calculamos/i });
     expect(btn.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(btn);
     expect(btn.getAttribute('aria-expanded')).toBe('true');

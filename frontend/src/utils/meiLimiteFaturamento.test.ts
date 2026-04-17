@@ -6,6 +6,7 @@ import {
   extrairValorLimiteMeiDaNota,
   extrairValorServicoTotalDoPayload,
   extrairValorTotalServicosDeObjeto,
+  isDocumentTypeMeiLimiteRelevante,
   isNfseDocumento,
   nfseDeveEntrarNoSomatórioLimite,
   nfsePeriodoChaveBrFromCreatedAt,
@@ -86,6 +87,13 @@ describe('meiLimiteFaturamento', () => {
     expect(r.notasConsideradas).toBe(0);
   });
 
+  it('isDocumentTypeMeiLimiteRelevante: só NFSE (FR-GUIA-FISC-17)', () => {
+    expect(isDocumentTypeMeiLimiteRelevante('NFSE')).toBe(true);
+    expect(isDocumentTypeMeiLimiteRelevante('NFE')).toBe(false);
+    expect(isDocumentTypeMeiLimiteRelevante('NFCE')).toBe(false);
+    expect(isDocumentTypeMeiLimiteRelevante(undefined)).toBe(false);
+  });
+
   it('exclui document_type diferente de NFSE (ex.: NFE)', () => {
     const list = [
       nfseBase({
@@ -100,6 +108,54 @@ describe('meiLimiteFaturamento', () => {
     const r = somarNfseAutorizadasNoAnoCivil(list, { anoCivil: 2026 });
     expect(r.total).toBe(0);
     expect(r.notasConsideradas).toBe(0);
+  });
+
+  it('exclui document_type NFCE (FR-GUIA-FISC-17)', () => {
+    const list = [
+      nfseBase({
+        id: 'nfce',
+        user_id: 'u',
+        document_type: 'NFCE',
+        status: 'concluido',
+        created_at: '2026-01-01T10:00:00.000Z',
+        payload_json: { servico: [{ valor: { servico: 20_000 } }] }
+      })
+    ];
+    const r = somarNfseAutorizadasNoAnoCivil(list, { anoCivil: 2026 });
+    expect(r.total).toBe(0);
+    expect(r.notasConsideradas).toBe(0);
+  });
+
+  it('lista mista: só soma NFSE concluída (NFE/NFCE ignoradas)', () => {
+    const list = [
+      nfseBase({
+        id: 'ok',
+        user_id: 'u',
+        document_type: 'NFSE',
+        status: 'Concluída',
+        created_at: '2026-04-01T10:00:00.000Z',
+        payload_json: { servico: [{ valor: { servico: 200 } }] }
+      }),
+      nfseBase({
+        id: 'nfe',
+        user_id: 'u',
+        document_type: 'NFE',
+        status: 'concluido',
+        created_at: '2026-04-02T10:00:00.000Z',
+        payload_json: { servico: [{ valor: { servico: 99_999 } }] }
+      }),
+      nfseBase({
+        id: 'nfce',
+        user_id: 'u',
+        document_type: 'NFCE',
+        status: 'concluido',
+        created_at: '2026-04-03T10:00:00.000Z',
+        payload_json: { servico: [{ valor: { servico: 88_888 } }] }
+      })
+    ];
+    const r = somarNfseAutorizadasNoAnoCivil(list, { anoCivil: 2026 });
+    expect(r.total).toBe(200);
+    expect(r.notasConsideradas).toBe(1);
   });
 
   it('exclui cancelada e não concluída', () => {

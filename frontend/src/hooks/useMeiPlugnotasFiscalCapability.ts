@@ -28,8 +28,10 @@ export function useMeiPlugnotasFiscalCapability(options: {
   cnpjDigits: string;
   emissionDocumentType: MeiFiscalEmissionDocumentType;
   fetchEnabled: boolean;
+  /** Incrementado pelo pai após mutações (ex.: save empresa) para forçar nova consulta sem F5 (FR-GUIA-FISC-11). */
+  capabilityRefetchKey?: number;
 }): UseMeiPlugnotasFiscalCapabilityResult {
-  const { cnpjDigits, emissionDocumentType, fetchEnabled } = options;
+  const { cnpjDigits, emissionDocumentType, fetchEnabled, capabilityRefetchKey = 0 } = options;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<ParsedPlugnotasEmpresaCapabilities | null>(null);
@@ -74,7 +76,7 @@ export function useMeiPlugnotasFiscalCapability(options: {
     return () => {
       cancelled = true;
     };
-  }, [cnpjDigits, emissionDocumentType, fetchEnabled]);
+  }, [cnpjDigits, emissionDocumentType, fetchEnabled, capabilityRefetchKey]);
 
   return { loading, error, capabilities };
 }

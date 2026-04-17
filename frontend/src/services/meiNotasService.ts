@@ -150,6 +150,20 @@ export interface NfseRecord {
   updated_at?: string;
 }
 
+/**
+ * Indica se o backend pode consultar o emissor para actualizar estado (`GET /mei-notas/:id?sync=true`),
+ * alinhado a `refreshWithPlugNotas` (NFSE/NFE/NFCE).
+ */
+export function notaFiscalPodeSincronizarEstadoEmissor(record: NfseRecord): boolean {
+  if (record.plugnotas_id) return true;
+  if (record.protocol) return true;
+  if (record.id_integracao && record.cnpj_prestador) {
+    const digits = String(record.cnpj_prestador).replace(/\D/g, '');
+    return digits.length >= 11;
+  }
+  return false;
+}
+
 export interface AtualizarNfseInput {
   descricaoInterna?: string;
   tags?: string[];

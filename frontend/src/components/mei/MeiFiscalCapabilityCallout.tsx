@@ -3,6 +3,10 @@ export type MeiFiscalCapabilityCalloutProps = {
   mode: 'loading' | 'fetch_error' | 'blocked';
   errorMessage?: string;
   onRevisarConfiguracao?: () => void;
+  /** UX §3 — nova tentativa de consulta ao emissor (sem F5). */
+  onTentarNovamente?: () => void;
+  /** FR-GUIA-FISC-14 D2 — UX §6.1: abre *wizard* de activação no emissor (quando flag D2 ligada). */
+  onConfigurarEmissao?: () => void;
 };
 
 /**
@@ -12,7 +16,9 @@ export function MeiFiscalCapabilityCallout({
   documentLabel,
   mode,
   errorMessage,
-  onRevisarConfiguracao
+  onRevisarConfiguracao,
+  onTentarNovamente,
+  onConfigurarEmissao
 }: MeiFiscalCapabilityCalloutProps) {
   if (mode === 'loading') {
     return (
@@ -20,6 +26,7 @@ export function MeiFiscalCapabilityCallout({
         className="rounded-lg border border-slate-200/90 bg-slate-50/90 px-4 py-3 text-sm text-slate-700 dark:border-slate-600/90 dark:bg-slate-900/50 dark:text-slate-200"
         role="status"
         aria-live="polite"
+        aria-busy="true"
         data-mei-fiscal-capability="loading"
       >
         <p className="flex items-center gap-2">
@@ -45,15 +52,26 @@ export function MeiFiscalCapabilityCallout({
           {errorMessage?.trim() ||
             'Tente novamente mais tarde ou confirme os dados na aba Certificado e DAS. Se o problema continuar, contacte o suporte.'}
         </p>
-        {onRevisarConfiguracao ? (
-          <button
-            type="button"
-            className="mt-3 text-xs font-medium text-amber-900 underline hover:no-underline dark:text-amber-200"
-            onClick={onRevisarConfiguracao}
-          >
-            Rever configuração
-          </button>
-        ) : null}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {onTentarNovamente ? (
+            <button
+              type="button"
+              className="text-xs font-medium text-amber-900 underline hover:no-underline dark:text-amber-200"
+              onClick={onTentarNovamente}
+            >
+              Tentar de novo
+            </button>
+          ) : null}
+          {onRevisarConfiguracao ? (
+            <button
+              type="button"
+              className="text-xs font-medium text-amber-900 underline hover:no-underline dark:text-amber-200"
+              onClick={onRevisarConfiguracao}
+            >
+              Rever configuração
+            </button>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -73,15 +91,26 @@ export function MeiFiscalCapabilityCallout({
         <li>Dados da empresa actualizados na aba Certificado e DAS</li>
         <li>Para NFC-e: CSC e token junto à SEFAZ (quando aplicável)</li>
       </ul>
-      {onRevisarConfiguracao ? (
-        <button
-          type="button"
-          className="mt-3 text-xs font-medium text-amber-900 underline hover:no-underline dark:text-amber-200"
-          onClick={onRevisarConfiguracao}
-        >
-          Rever configuração
-        </button>
-      ) : null}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {onConfigurarEmissao ? (
+          <button
+            type="button"
+            className="rounded-md border border-amber-800/30 bg-amber-100/90 px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-200/90 dark:border-amber-500/40 dark:bg-amber-900/50 dark:text-amber-50 dark:hover:bg-amber-800/50"
+            onClick={onConfigurarEmissao}
+          >
+            Configurar emissão de {documentLabel}
+          </button>
+        ) : null}
+        {onRevisarConfiguracao ? (
+          <button
+            type="button"
+            className="text-xs font-medium text-amber-900 underline hover:no-underline dark:text-amber-200"
+            onClick={onRevisarConfiguracao}
+          >
+            Rever configuração
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

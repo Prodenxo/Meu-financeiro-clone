@@ -4,7 +4,8 @@ import type {
   RefObject,
   SetStateAction
 } from 'react';
-import type { NfseRecord } from '../services/meiNotasService';
+import { RefreshCw } from 'lucide-react';
+import { notaFiscalPodeSincronizarEstadoEmissor, type NfseRecord } from '../services/meiNotasService';
 
 export type MeiNfseListRowActionsProps = {
   item: NfseRecord;
@@ -28,7 +29,7 @@ export type MeiNfseListRowActionsProps = {
 };
 
 /**
- * Ações da linha NFS-e (P1/P2): paridade entre vista cartão e tabela — mesmos handlers.
+ * Ações da linha na lista de notas (NFSE / NFE / NFCE): paridade cartão e tabela — mesmos handlers.
  */
 export function MeiNfseListRowActions({
   item,
@@ -62,18 +63,35 @@ export function MeiNfseListRowActions({
       ? 'planner-button-secondary-compact whitespace-nowrap px-2 py-1 text-xs'
       : 'planner-button-secondary-compact w-full sm:w-auto';
 
+  const podeSyncEmissor = notaFiscalPodeSincronizarEstadoEmissor(item);
+  const syncLoading = isNfseActionLoading(`${item.id}:sync`);
+  const syncDisabled = rowBusy || !podeSyncEmissor;
+  const syncLabel = 'Actualizar estado';
+  const syncAriaLabel = `${syncLabel} da nota fiscal (${item.document_type || 'NFSE'})`;
+
   return (
     <div className={wrap}>
       <button
         type="button"
-        className={btn}
+        className={`${btn} inline-flex items-center justify-center gap-1.5`}
         onClick={() => {
           setMoreMenuOpenId(null);
           onSync();
         }}
-        disabled={rowBusy}
+        disabled={syncDisabled}
+        aria-busy={syncLoading || undefined}
+        aria-label={syncAriaLabel}
+        title={
+          !podeSyncEmissor
+            ? 'Não é possível actualizar: falta identificador no emissor (ID, protocolo ou integração com CNPJ do prestador).'
+            : undefined
+        }
       >
-        {isNfseActionLoading(`${item.id}:sync`) ? 'Atualizando...' : 'Atualizar status'}
+        <RefreshCw
+          className={`h-3.5 w-3.5 shrink-0 ${syncLoading ? 'animate-spin' : ''}`}
+          aria-hidden
+        />
+        <span>{syncLoading ? 'A actualizar estado…' : syncLabel}</span>
       </button>
       <button
         type="button"

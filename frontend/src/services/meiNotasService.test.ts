@@ -26,6 +26,7 @@ import {
   fetchLimiteFaturamentoMei,
   listarNotas,
   listarNfse,
+  notaFiscalPodeSincronizarEstadoEmissor,
   obterNota,
   obterNfse,
   baixarNotaPdf,
@@ -56,6 +57,32 @@ const mockedApiClient = apiClient as unknown as {
   postForm: Mock;
   requestBlob: Mock;
 };
+
+describe('notaFiscalPodeSincronizarEstadoEmissor', () => {
+  const base = { id: '1', user_id: 'u1' } as NfseRecord;
+
+  it('permite com plugnotas_id', () => {
+    expect(notaFiscalPodeSincronizarEstadoEmissor({ ...base, plugnotas_id: 'pn-1' })).toBe(true);
+  });
+
+  it('permite com protocol', () => {
+    expect(notaFiscalPodeSincronizarEstadoEmissor({ ...base, protocol: 'P-9' })).toBe(true);
+  });
+
+  it('permite com id_integracao e CNPJ prestador válido', () => {
+    expect(
+      notaFiscalPodeSincronizarEstadoEmissor({
+        ...base,
+        id_integracao: 'int-1',
+        cnpj_prestador: '11.222.333/0001-81'
+      })
+    ).toBe(true);
+  });
+
+  it('rejeita sem identificadores consultáveis', () => {
+    expect(notaFiscalPodeSincronizarEstadoEmissor({ ...base, id_integracao: 'x' })).toBe(false);
+  });
+});
 
 describe('meiNotasService', () => {
   beforeEach(() => {

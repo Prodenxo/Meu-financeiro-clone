@@ -69,8 +69,8 @@ export default function BottomNavigation() {
       aria-label="Navegação principal (mobile)"
       className={`fixed bottom-0 left-0 right-0 z-50 border-t backdrop-blur shadow-soft ${
         isDarkMode
-          ? 'bg-slate-950/80 border-slate-800/70'
-          : 'bg-white/80 border-slate-200/70'
+          ? 'bg-slate-950/90 border-slate-600'
+          : 'bg-white/90 border-slate-200'
       } md:hidden`}
     >
       <div
@@ -96,10 +96,10 @@ export default function BottomNavigation() {
                 : {})}
               className={`flex min-w-0 flex-col items-center justify-center h-12 rounded-2xl px-0.5 transition-colors ${
                 active
-                  ? 'text-blue-700 dark:text-blue-200 bg-blue-600/10 dark:bg-blue-500/15'
+                  ? 'text-blue-700 dark:text-blue-100 bg-blue-600/10 dark:bg-blue-500/20'
                   : isDarkMode
-                  ? 'text-slate-400'
-                  : 'text-slate-500'
+                  ? 'text-slate-200'
+                  : 'text-slate-600'
               }`}
             >
               <Icon size={iconSize} className="mb-0.5 shrink-0" aria-hidden />

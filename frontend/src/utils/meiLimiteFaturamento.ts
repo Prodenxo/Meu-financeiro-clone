@@ -151,11 +151,20 @@ function hasServicoArrayInObj(obj: Record<string, unknown>): boolean {
   return s != null;
 }
 
+/**
+ * FR-GUIA-FISC-17 — apenas **NFSE** entra no somatório do limite MEI (paridade com `meiLimitePayloadSum.js`).
+ */
+export function isDocumentTypeMeiLimiteRelevante(documentType: string | null | undefined): boolean {
+  const dt = String(documentType ?? '').trim().toUpperCase();
+  return dt === 'NFSE';
+}
+
 /** Apenas NFS-e; NF-e/NFC-e partilham `NfseRecord` mas não entram no KPI de limite MEI. */
 export function isNfseDocumento(record: NfseRecord): boolean {
   const dt = String(record.document_type ?? '').trim().toUpperCase();
-  if (dt === 'NFSE') return true;
-  if (dt !== '') return false;
+  if (dt !== '') {
+    return isDocumentTypeMeiLimiteRelevante(record.document_type);
+  }
   const p = resolverPayloadJsonDaNota(record);
   if (p && hasServicoArrayInObj(p)) return true;
   const resp = resolverResponseJsonDaNota(record);
