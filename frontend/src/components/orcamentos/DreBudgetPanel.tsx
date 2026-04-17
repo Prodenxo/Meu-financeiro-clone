@@ -140,8 +140,8 @@ export default function DreBudgetPanel({
       setDensity(next);
       const msg =
         next === 'simples'
-          ? 'DRE em modo Simples. Duas colunas numéricas por período.'
-          : 'DRE em modo Completo. Quatro colunas numéricas por período.';
+          ? 'DRE em modo Simples. Uma coluna numérica por período (realizado).'
+          : 'DRE em modo Completo. Três colunas numéricas por período (realizado, atingimento e % sobre a receita).';
       announceDensity(msg);
     },
     [density, setDensity, announceDensity]
@@ -338,7 +338,7 @@ export default function DreBudgetPanel({
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md leading-relaxed">
                 {density === 'simples'
-                  ? 'Mostra só planejado e realizado. Active Completo para atingimento e % sobre a receita.'
+                  ? 'Mostra só o realizado. Active Completo para atingimento e % sobre a receita.'
                   : 'Inclui percentagens. Passe a Simples para uma leitura mais rápida.'}
               </p>
             </div>

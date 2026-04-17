@@ -87,7 +87,7 @@ describe('DreMatrixTable — modo compare (QA: thead / colSpan / resultado)', ()
     expect(table?.getAttribute('aria-describedby')).toBe('dre-compare-desc');
   });
 
-  it('thead: grupos por mês com scope colgroup e colSpan 4; segunda linha com 8 colunas de métricas', () => {
+  it('thead: grupos por mês com scope colgroup e colSpan 3; segunda linha com 6 colunas de métricas', () => {
     const { container } = render(
       <DreMatrixTable
         variant="compare"
@@ -106,17 +106,17 @@ describe('DreMatrixTable — modo compare (QA: thead / colSpan / resultado)', ()
     const colgroups = thead!.querySelectorAll('tr:first-child th[scope="colgroup"]');
     expect(colgroups.length).toBe(2);
     colgroups.forEach((th) => {
-      expect(th.getAttribute('colspan')).toBe('4');
+      expect(th.getAttribute('colspan')).toBe('3');
     });
     expect(colgroups[0].textContent).toContain('Janeiro');
     expect(colgroups[0].textContent).toContain('2026');
     expect(colgroups[1].textContent).toContain('Março');
 
     const metricHeaders = thead!.querySelectorAll('tr:nth-child(2) th[scope="col"]');
-    expect(metricHeaders.length).toBe(8);
+    expect(metricHeaders.length).toBe(6);
   });
 
-  it('cabeçalhos de secção Receitas/Despesas usam colSpan 1+4N (N=2 → 9)', () => {
+  it('cabeçalhos de secção Receitas/Despesas usam colSpan 1+3N (N=2 → 7)', () => {
     render(
       <DreMatrixTable
         variant="compare"
@@ -131,10 +131,10 @@ describe('DreMatrixTable — modo compare (QA: thead / colSpan / resultado)', ()
     );
     const receitasToggle = screen.getByRole('button', { name: /Receitas/i });
     const receitasTh = receitasToggle.closest('th');
-    expect(receitasTh?.getAttribute('colspan')).toBe('9');
+    expect(receitasTh?.getAttribute('colspan')).toBe('7');
     const despesasToggle = screen.getByRole('button', { name: /Despesas/i });
     const despesasTh = despesasToggle.closest('th');
-    expect(despesasTh?.getAttribute('colspan')).toBe('9');
+    expect(despesasTh?.getAttribute('colspan')).toBe('7');
   });
 
   it('linha Resultado: monetário por mês só em Realizado; restantes "—"', () => {
@@ -156,15 +156,13 @@ describe('DreMatrixTable — modo compare (QA: thead / colSpan / resultado)', ()
     const row = resultadoLabel.closest('tr');
     expect(row).not.toBeNull();
     const tds = within(row!).queryAllByRole('cell');
-    expect(tds.length).toBe(8);
-    expect(tds[0].textContent?.trim()).toBe('—');
-    expect(tds[1].textContent?.trim()).toBe(formatDreCurrency(r1));
+    expect(tds.length).toBe(6);
+    expect(tds[0].textContent?.trim()).toBe(formatDreCurrency(r1));
+    expect(tds[1].textContent?.trim()).toBe('—');
     expect(tds[2].textContent?.trim()).toBe('—');
-    expect(tds[3].textContent?.trim()).toBe('—');
+    expect(tds[3].textContent?.trim()).toBe(formatDreCurrency(r2));
     expect(tds[4].textContent?.trim()).toBe('—');
-    expect(tds[5].textContent?.trim()).toBe(formatDreCurrency(r2));
-    expect(tds[6].textContent?.trim()).toBe('—');
-    expect(tds[7].textContent?.trim()).toBe('—');
+    expect(tds[5].textContent?.trim()).toBe('—');
   });
 
   it('FR-DRE-MUL-08: realces diferentes por mês na mesma linha (despesa acima do plano só na coluna certa)', () => {
@@ -193,8 +191,8 @@ describe('DreMatrixTable — modo compare (QA: thead / colSpan / resultado)', ()
     const row = screen.getByText('Luz').closest('tr');
     expect(row).not.toBeNull();
     const tds = row!.querySelectorAll('td');
-    expect(tds[1].className).toContain('text-rose-600');
-    expect(tds[5].className).not.toContain('text-rose-600');
+    expect(tds[0].className).toContain('text-rose-600');
+    expect(tds[3].className).not.toContain('text-rose-600');
   });
 });
 
@@ -203,7 +201,7 @@ describe('DreMatrixTable — modo single', () => {
     cleanup();
   });
 
-  it('uma única linha de cabeçalho de métricas (5 colunas)', () => {
+  it('uma única linha de cabeçalho de métricas (4 colunas)', () => {
     const { container } = render(
       <DreMatrixTable
         variant="single"
@@ -219,7 +217,7 @@ describe('DreMatrixTable — modo single', () => {
     const theadRows = container.querySelectorAll('thead tr');
     expect(theadRows.length).toBe(1);
     const headers = theadRows[0].querySelectorAll('th[scope="col"]');
-    expect(headers.length).toBe(5);
+    expect(headers.length).toBe(4);
   });
 
   it('resultado negativo: célula Realizado com estilo rose (P1 UX)', () => {
@@ -238,8 +236,8 @@ describe('DreMatrixTable — modo single', () => {
     const tr = screen.getByText('Resultado (realizado)').closest('tr');
     expect(tr).not.toBeNull();
     const tds = tr!.querySelectorAll('td');
-    expect(tds[1].className).toContain('text-rose-600');
-    expect(tds[1].getAttribute('title')).toContain('negativo');
+    expect(tds[0].className).toContain('text-rose-600');
+    expect(tds[0].getAttribute('title')).toContain('negativo');
   });
 });
 
@@ -248,7 +246,7 @@ describe('DreMatrixTable — densidade Simples (FR-DRE-CMP)', () => {
     cleanup();
   });
 
-  it('modo single Simples: três colunas (Categoria, Planejado, Realizado)', () => {
+  it('modo single Simples: duas colunas (Categoria, Realizado)', () => {
     const { container } = render(
       <DreMatrixTable
         variant="single"
@@ -262,11 +260,11 @@ describe('DreMatrixTable — densidade Simples (FR-DRE-CMP)', () => {
       />
     );
     const headers = container.querySelectorAll('thead tr th[scope="col"]');
-    expect(headers.length).toBe(3);
+    expect(headers.length).toBe(2);
     expect(screen.queryByRole('columnheader', { name: /Atingimento/i })).toBeNull();
   });
 
-  it('modo compare Simples: colSpan 2 por mês; subtotal Receitas com colSpan 5 (1+2N)', () => {
+  it('modo compare Simples: colSpan 1 por mês; subtotal Receitas com colSpan 3 (1+N)', () => {
     const { container } = render(
       <DreMatrixTable
         variant="compare"
@@ -284,16 +282,16 @@ describe('DreMatrixTable — densidade Simples (FR-DRE-CMP)', () => {
     const colgroups = thead!.querySelectorAll('tr:first-child th[scope="colgroup"]');
     expect(colgroups.length).toBe(2);
     colgroups.forEach((th) => {
-      expect(th.getAttribute('colspan')).toBe('2');
+      expect(th.getAttribute('colspan')).toBe('1');
     });
     const metricHeaders = thead!.querySelectorAll('tr:nth-child(2) th[scope="col"]');
-    expect(metricHeaders.length).toBe(4);
+    expect(metricHeaders.length).toBe(2);
 
     const receitasToggle = screen.getByRole('button', { name: /Receitas/i });
-    expect(receitasToggle.closest('th')?.getAttribute('colspan')).toBe('5');
+    expect(receitasToggle.closest('th')?.getAttribute('colspan')).toBe('3');
   });
 
-  it('modo compare Simples: linha Resultado com 4 células (2 por mês)', () => {
+  it('modo compare Simples: linha Resultado com 2 células (realizado por mês)', () => {
     const r1 = 100;
     const r2 = 200;
     render(
@@ -312,10 +310,8 @@ describe('DreMatrixTable — densidade Simples (FR-DRE-CMP)', () => {
     const row = resultadoLabel.closest('tr');
     expect(row).not.toBeNull();
     const tds = within(row!).queryAllByRole('cell');
-    expect(tds.length).toBe(4);
-    expect(tds[0].textContent?.trim()).toBe('—');
-    expect(tds[1].textContent?.trim()).toBe(formatDreCurrency(r1));
-    expect(tds[2].textContent?.trim()).toBe('—');
-    expect(tds[3].textContent?.trim()).toBe(formatDreCurrency(r2));
+    expect(tds.length).toBe(2);
+    expect(tds[0].textContent?.trim()).toBe(formatDreCurrency(r1));
+    expect(tds[1].textContent?.trim()).toBe(formatDreCurrency(r2));
   });
 });

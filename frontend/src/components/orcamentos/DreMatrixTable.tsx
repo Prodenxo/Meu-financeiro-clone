@@ -22,17 +22,19 @@ function MetricCell({
   children,
   highlight,
   align = 'right',
-  title
+  title,
+  className = ''
 }: {
   children: ReactNode;
   highlight: DreHighlight;
   align?: 'left' | 'right';
   title?: string;
+  className?: string;
 }) {
   const h = highlightClass(highlight);
   return (
     <td
-      className={`py-2 px-2 min-w-[88px] ${align === 'right' ? 'text-right tabular-nums' : ''} ${h || 'text-slate-700 dark:text-slate-200'}`}
+      className={`py-2 px-2 min-w-[88px] ${align === 'right' ? 'text-right tabular-nums' : ''} ${h || 'text-slate-700 dark:text-slate-200'} ${className}`}
       title={title}
     >
       {children}
@@ -71,10 +73,9 @@ function SubtotalRow({
       <th scope="row" className="py-2 px-2 text-left text-slate-800 dark:text-slate-100">
         Subtotal
       </th>
-      <td className="py-2 px-2 text-right tabular-nums min-w-[100px] text-slate-700 dark:text-slate-200">
-        {formatDreCurrency(sub.planejado)}
-      </td>
-      <MetricCell highlight={sub.highlightRealizado}>{formatDreCurrency(sub.realizado)}</MetricCell>
+      <MetricCell highlight={sub.highlightRealizado} className="min-w-[100px]">
+        {formatDreCurrency(sub.realizado)}
+      </MetricCell>
       {showExtraMetrics ? (
         <>
           <MetricCell highlight={sub.highlightAtingimento} title={tooltips.atingimento}>
@@ -107,13 +108,11 @@ function SubtotalRowCompare({
         Subtotal
       </th>
       {subs.flatMap((sub, mi) => [
-        <td
-          key={`${mi}-p`}
-          className={`py-2 px-2 text-right tabular-nums min-w-[100px] text-slate-700 dark:text-slate-200 ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
+        <MetricCell
+          key={`${mi}-r`}
+          highlight={sub.highlightRealizado}
+          className={`min-w-[100px] ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
         >
-          {formatDreCurrency(sub.planejado)}
-        </td>,
-        <MetricCell key={`${mi}-r`} highlight={sub.highlightRealizado}>
           {formatDreCurrency(sub.realizado)}
         </MetricCell>,
         ...(showExtraMetrics
@@ -157,10 +156,9 @@ function DataRows({
           >
             {row.nome}
           </th>
-          <td className="py-2 px-2 text-right tabular-nums text-slate-700 dark:text-slate-200 min-w-[100px]">
-            {formatDreCurrency(row.planejado)}
-          </td>
-          <MetricCell highlight={row.highlightRealizado}>{formatDreCurrency(row.realizado)}</MetricCell>
+          <MetricCell highlight={row.highlightRealizado} className="min-w-[100px]">
+            {formatDreCurrency(row.realizado)}
+          </MetricCell>
           {showExtraMetrics ? (
             <>
               <MetricCell highlight={row.highlightAtingimento} title={tooltips.atingimento}>
@@ -206,13 +204,11 @@ function DataRowsCompare({
             const row =
               rowByCategoryId(model[section].rows, base.categorias_id) ?? emptyRow(base.categorias_id, base.nome);
             return [
-              <td
-                key={`${mi}-p`}
-                className={`py-2 px-2 text-right tabular-nums text-slate-700 dark:text-slate-200 min-w-[100px] ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
+              <MetricCell
+                key={`${mi}-r`}
+                highlight={row.highlightRealizado}
+                className={`min-w-[100px] ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
               >
-                {formatDreCurrency(row.planejado)}
-              </td>,
-              <MetricCell key={`${mi}-r`} highlight={row.highlightRealizado}>
                 {formatDreCurrency(row.realizado)}
               </MetricCell>,
               ...(showExtraMetrics
@@ -270,15 +266,16 @@ export default function DreMatrixTable({
 
   const showExtraMetrics = density === 'completo';
   const n = models.length;
-  const metricsPerMonth = showExtraMetrics ? 4 : 2;
+  /** Por mês: Realizado (+ Atingimento + % Receita no modo Completo). Sem coluna Planejado. */
+  const metricsPerMonth = showExtraMetrics ? 3 : 1;
   const compareColSpan = 1 + metricsPerMonth * n;
   const minTableWidth =
     variant === 'compare'
-      ? Math.max(400, 200 + n * (showExtraMetrics ? 376 : 200))
+      ? Math.max(400, 200 + n * (showExtraMetrics ? 280 : 120))
       : showExtraMetrics
-        ? 520
-        : 360;
-  const singleColSpan = showExtraMetrics ? 5 : 3;
+        ? 440
+        : 280;
+  const singleColSpan = showExtraMetrics ? 4 : 2;
 
   const GroupHeader = ({
     label,
@@ -323,14 +320,11 @@ export default function DreMatrixTable({
       <div className="min-w-0 flex-1">
         <h3 className="text-base font-semibold text-slate-800 dark:text-white mb-3">{tableTitle}</h3>
         <div className="overflow-x-auto rounded-lg border border-slate-200/70 dark:border-slate-800/60">
-          <table className={`w-full text-sm ${showExtraMetrics ? 'min-w-[520px]' : 'min-w-[360px]'}`}>
+          <table className={`w-full text-sm ${showExtraMetrics ? 'min-w-[440px]' : 'min-w-[280px]'}`}>
             <thead>
               <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200/70 dark:border-slate-800/60">
                 <th scope="col" className="py-3 px-2 font-medium sticky left-0 bg-white dark:bg-slate-950 z-[2]">
                   Categoria
-                </th>
-                <th scope="col" className="py-3 px-2 font-medium text-right min-w-[100px]">
-                  Planejado
                 </th>
                 <th scope="col" className="py-3 px-2 font-medium text-right min-w-[100px]">
                   Realizado
@@ -392,7 +386,6 @@ export default function DreMatrixTable({
                 <th scope="row" className="py-3 px-2 text-left text-slate-900 dark:text-white">
                   Resultado (realizado)
                 </th>
-                <td className="py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400">—</td>
                 <td
                   className={resultadoRealizadoCellClass(model.resultadoRealizado)}
                   title={
@@ -460,9 +453,6 @@ export default function DreMatrixTable({
                     scope="col"
                     className={`py-2 px-2 font-medium text-right min-w-[100px] ${mi > 0 ? 'border-l border-slate-200/70 dark:border-slate-800/40' : ''}`}
                   >
-                    Planejado
-                  </th>
-                  <th scope="col" className="py-2 px-2 font-medium text-right min-w-[100px]">
                     Realizado
                   </th>
                   {showExtraMetrics ? (
@@ -548,14 +538,8 @@ export default function DreMatrixTable({
               {models.flatMap((model, mi) => {
                 const cells = [
                   <td
-                    key={`${mi}-rp`}
-                    className={`py-3 px-2 text-right tabular-nums text-slate-500 dark:text-slate-400 ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
-                  >
-                    —
-                  </td>,
-                  <td
                     key={`${mi}-rr`}
-                    className={resultadoRealizadoCellClass(model.resultadoRealizado)}
+                    className={`${resultadoRealizadoCellClass(model.resultadoRealizado)} ${mi > 0 ? 'border-l border-slate-200/50 dark:border-slate-800/40' : ''}`}
                     title={
                       model.resultadoRealizado < 0
                         ? 'Saldo negativo: despesas realizadas superam receitas neste período.'
