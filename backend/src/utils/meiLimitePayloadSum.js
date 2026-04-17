@@ -8,6 +8,15 @@ export const MEI_LIMITE_ANO_CIVIL_TZ = 'America/Sao_Paulo';
 
 const NFSE = 'NFSE';
 
+/**
+ * Somatório do limite MEI (FR-GUIA-FISC-17): apenas **NFSE** entra no agregado; NFE/NFCE ficam de fora até PRD futuro.
+ * Paridade com `isDocumentTypeMeiLimiteRelevante` no frontend.
+ */
+export function isDocumentTypeMeiLimiteRelevante(documentType) {
+  const dt = String(documentType ?? '').trim().toUpperCase();
+  return dt === NFSE;
+}
+
 function nfseStatusAsciiLower(status) {
   return String(status || '')
     .normalize('NFD')
@@ -99,8 +108,9 @@ function hasServicoInObj(obj) {
 
 export function isNfseDocumentoRow(record) {
   const dt = String(record?.document_type ?? '').trim().toUpperCase();
-  if (dt === NFSE) return true;
-  if (dt !== '') return false;
+  if (dt !== '') {
+    return isDocumentTypeMeiLimiteRelevante(record?.document_type);
+  }
   const p = resolverPayloadJsonDaNota(record);
   if (p && hasServicoInObj(p)) return true;
   const r = resolverResponseJsonDaNota(record);

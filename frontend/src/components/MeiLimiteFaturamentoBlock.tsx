@@ -229,7 +229,7 @@ export function MeiLimiteFaturamentoBlock({
                 aria-controls={`${baseDetailId}-panel`}
                 onClick={() => setBaseOpen((o) => !o)}
               >
-                {baseOpen ? 'Ocultar detalhe da base' : 'Detalhe da base de cálculo'}
+                {baseOpen ? 'Fechar explicação' : 'Como calculamos'}
               </button>
               {baseOpen ? (
                 <div

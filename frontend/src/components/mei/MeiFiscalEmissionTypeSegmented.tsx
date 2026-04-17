@@ -11,6 +11,8 @@ export type MeiFiscalEmissionTypeSegmentedProps = {
   onChange: (next: MeiFiscalEmissionDocumentType) => void;
   disabled?: boolean;
   idPrefix?: string;
+  /** FR-GUIA-FISC-16 — `false`: apenas NFS-e (sem buracos no layout). Defeito: triplo. */
+  nfeNfceEmitEnabled?: boolean;
 };
 
 /**
@@ -20,16 +22,19 @@ export function MeiFiscalEmissionTypeSegmented({
   value,
   onChange,
   disabled = false,
-  idPrefix = 'mei-fiscal-emission-type'
+  idPrefix = 'mei-fiscal-emission-type',
+  nfeNfceEmitEnabled = true
 }: MeiFiscalEmissionTypeSegmentedProps) {
   const groupName = `${idPrefix}-group`;
+  const visibleOptions = nfeNfceEmitEnabled ? OPTIONS : OPTIONS.filter((o) => o.value === 'NFSE');
+  const displayValue = visibleOptions.some((o) => o.value === value) ? value : 'NFSE';
 
   return (
     <fieldset className="min-w-0 border-0 p-0">
       <legend className="sr-only">Tipo de nota fiscal a emitir</legend>
       <div className="flex w-full rounded-lg border border-slate-200/90 bg-slate-100/90 p-1 dark:border-slate-700/90 dark:bg-slate-900/60">
-        {OPTIONS.map((opt) => {
-          const checked = value === opt.value;
+        {visibleOptions.map((opt) => {
+          const checked = displayValue === opt.value;
           const inputId = `${idPrefix}-${opt.value}`;
           return (
             <label

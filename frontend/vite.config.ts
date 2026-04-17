@@ -17,6 +17,12 @@ const isVitest = process.env.VITEST === 'true';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: isVitest
+    ? {
+        /** FR-GUIA-FISC-16 — testes RTL assumem seletor triplo (paridade POST-0); produção usa env real do build. */
+        'import.meta.env.VITE_MEI_NFE_NFCE_EMIT_ENABLED': JSON.stringify('true'),
+      }
+    : undefined,
   plugins: [
     react(),
     {

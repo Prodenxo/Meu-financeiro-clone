@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildDocumentosAtivosSolicitacaoModalidade,
   DEFAULT_DOCUMENTOS_ATIVOS,
   documentosAtivosDivergem,
   extractDocumentosAtivosFromEmpresaResponse,
@@ -102,5 +103,49 @@ describe('plugnotasEmpresaDocumentosAtivos', () => {
     expect(
       getDocumentosAtivosValidationMessage({ ...DEFAULT_DOCUMENTOS_ATIVOS })
     ).toBeNull();
+  });
+
+  describe('buildDocumentosAtivosSolicitacaoModalidade (FR-GUIA-FISC-14 D2)', () => {
+    it('activa NFE mantendo nfce do GET', () => {
+      const raw = {
+        data: {
+          empresa: {
+            nfse: { ativo: true },
+            nfe: { ativo: false },
+            nfce: { ativo: false }
+          }
+        }
+      };
+      expect(buildDocumentosAtivosSolicitacaoModalidade(raw, 'NFE')).toEqual({
+        nfse: true,
+        nfe: true,
+        nfce: false
+      });
+    });
+
+    it('activa NFCE mantendo nfe do GET', () => {
+      const raw = {
+        data: {
+          empresa: {
+            nfse: { ativo: true },
+            nfe: { ativo: true },
+            nfce: { ativo: false }
+          }
+        }
+      };
+      expect(buildDocumentosAtivosSolicitacaoModalidade(raw, 'NFCE')).toEqual({
+        nfse: true,
+        nfe: true,
+        nfce: true
+      });
+    });
+
+    it('sem parse usa default e activa NFE', () => {
+      expect(buildDocumentosAtivosSolicitacaoModalidade({}, 'NFE')).toEqual({
+        nfse: true,
+        nfe: true,
+        nfce: false
+      });
+    });
   });
 });

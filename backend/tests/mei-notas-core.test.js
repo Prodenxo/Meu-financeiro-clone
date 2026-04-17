@@ -373,3 +373,25 @@ test('mei-notas valida coerência de modelo por documentType', async () => {
     /Modelo inválido para NFC-e. Informe 65/
   );
 });
+
+test('mei-notas: emissao NFE bloqueada quando MEI_NFE_NFCE_EMIT_ENABLED=false (FR-GUIA-FISC-16)', async () => {
+  const prev = process.env.MEI_NFE_NFCE_EMIT_ENABLED;
+  process.env.MEI_NFE_NFCE_EMIT_ENABLED = 'false';
+  try {
+    const { emitirNota } = await import('../src/services/mei-notas.service.js');
+    await assert.rejects(
+      () =>
+        emitirNota('user-1', {
+          documentType: 'NFE',
+          payload: {}
+        }),
+      (err) => err.status === 403 && /indispon/i.test(String(err.message))
+    );
+  } finally {
+    if (prev === undefined) {
+      delete process.env.MEI_NFE_NFCE_EMIT_ENABLED;
+    } else {
+      process.env.MEI_NFE_NFCE_EMIT_ENABLED = prev;
+    }
+  }
+});

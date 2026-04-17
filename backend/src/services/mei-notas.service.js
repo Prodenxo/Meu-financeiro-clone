@@ -1,5 +1,5 @@
 import { createSupabaseClient } from '../config/supabase.js';
-import { badRequest, notFound } from '../utils/errors.js';
+import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import {
   cancelarNfse,
   consultarNfse,
@@ -36,6 +36,13 @@ import {
 } from './plugnotas/nfce.service.js';
 import { isPlugnotasDebugExplicitlyEnabled } from './plugnotas/plugnotas-debug-env.js';
 import { agregarLimiteMeiDasLinhas } from '../utils/meiLimitePayloadSum.js';
+import {
+  logMeiEmitOutcome,
+  extractMeiEmitHttpMeta,
+  fallbackDocumentTypeLabelFromInput,
+  sanitizePlugnotasStatusForLog,
+  MEI_EMIT_ROUTE_EMITIR_NOTA
+} from '../utils/logMeiEmitOutcome.js';
 
 /**
  * Intervalo [início, fim) em ISO UTC para o ano civil Y em America/Sao_Paulo.
@@ -60,6 +67,10 @@ const CODIGOS_SERVICOS_TABLE = 'codigosservicos';
 const DOCUMENT_TYPE_NFSE = 'NFSE';
 const DOCUMENT_TYPE_NFE = 'NFE';
 const DOCUMENT_TYPE_NFCE = 'NFCE';
+
+/** FR-GUIA-FISC-16 — alinhado ao frontend: só `MEI_NFE_NFCE_EMIT_ENABLED=false` desactiva; omitir = comportamento actual. */
+const isMeiNfeNfceEmitDisabledByServerPolicy = () =>
+  String(process.env.MEI_NFE_NFCE_EMIT_ENABLED || '').toLowerCase() === 'false';
 
 /**
  * Tamanho mínimo do código de serviço NFSe após normalização "sem máscara" (Plugnotas).
@@ -974,62 +985,104 @@ const refreshWithPlugNotas = async (record) => {
 };
 
 export const emitirNota = async (userId, input) => {
-  const documentType = resolveInputDocumentType(input);
-  const adapter = getAdapterByDocumentType(documentType);
-  const { payload, prestadorDoc, tomadorDoc } = buildPayloadByDocumentType(input, userId, documentType);
-  const metadata = sanitizeMetadata(input?.metadata);
-
-  if (!payload?.idIntegracao) {
-    payload.idIntegracao = `mei-${userId}-${Date.now()}`;
-  }
-
-  validatePayloadByDocumentType(payload, documentType);
-
-  const response = await adapter.emitir(payload);
-  const plugnotasId = extractPlugNotasId(response);
-  const idIntegracao = extractIntegracaoId(response) || payload.idIntegracao;
-  const status = extractPlugNotasStatus(response);
-  const protocol = extractProtocol(response);
-
-  if (isPlugnotasDebugExplicitlyEnabled()) {
-    const hasData = response && typeof response === 'object' && 'data' in response;
-    const dataIsArray = hasData && Array.isArray(response.data);
-    console.log('[mei-notas] emissão resposta', {
-      responseIsArray: Array.isArray(response),
-      hasData,
-      dataIsArray,
-      plugnotasId: plugnotasId ? 'presente' : 'ausente',
-      idIntegracao: idIntegracao ? 'presente' : 'ausente'
-    });
-  }
-
-  const created = await insertRecord(userId, {
-    plugnotas_id: plugnotasId,
-    protocol,
-    id_integracao: idIntegracao,
-    status,
-    document_type: documentType,
-    provider: PROVIDER_PLUGNOTAS,
-    cnpj_prestador: prestadorDoc
-      || normalizeDoc(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || ''),
-    cnpj_tomador: tomadorDoc
-      || normalizeDoc(payload?.tomador?.cpfCnpj || payload?.destinatario?.cpfCnpj || ''),
-    payload_json: payload,
-    response_json: response,
-    metadata_json: Object.keys(metadata).length ? metadata : null
-  });
+  const startedAt = Date.now();
+  let documentType = fallbackDocumentTypeLabelFromInput(input);
+  /** @type {'resolve'|'adapter'|'build'|'validate'|'plugnotas_emit'|'insert_record'} */
+  let phase = 'resolve';
 
   try {
-    await upsertClienteCatalogo(userId, payload, { documentType });
-    await upsertProdutosCatalogo(userId, payload, { documentType });
-  } catch (error) {
-    console.warn(
-      `[mei-notas] Falha ao atualizar catalogo ${documentType}`,
-      error instanceof Error ? error.message : error
-    );
-  }
+    documentType = resolveInputDocumentType(input);
+    if (
+      isMeiNfeNfceEmitDisabledByServerPolicy() &&
+      (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE)
+    ) {
+      throw forbidden('Emissão de NF-e ou NFC-e indisponível neste ambiente.');
+    }
+    phase = 'adapter';
+    const adapter = getAdapterByDocumentType(documentType);
+    phase = 'build';
+    const { payload, prestadorDoc, tomadorDoc } = buildPayloadByDocumentType(input, userId, documentType);
+    const metadata = sanitizeMetadata(input?.metadata);
 
-  return created;
+    if (!payload?.idIntegracao) {
+      payload.idIntegracao = `mei-${userId}-${Date.now()}`;
+    }
+
+    phase = 'validate';
+    validatePayloadByDocumentType(payload, documentType);
+
+    phase = 'plugnotas_emit';
+    const response = await adapter.emitir(payload);
+    const plugnotasId = extractPlugNotasId(response);
+    const idIntegracao = extractIntegracaoId(response) || payload.idIntegracao;
+    const status = extractPlugNotasStatus(response);
+    const protocol = extractProtocol(response);
+
+    if (isPlugnotasDebugExplicitlyEnabled()) {
+      const hasData = response && typeof response === 'object' && 'data' in response;
+      const dataIsArray = hasData && Array.isArray(response.data);
+      console.log('[mei-notas] emissão resposta', {
+        responseIsArray: Array.isArray(response),
+        hasData,
+        dataIsArray,
+        plugnotasId: plugnotasId ? 'presente' : 'ausente',
+        idIntegracao: idIntegracao ? 'presente' : 'ausente'
+      });
+    }
+
+    phase = 'insert_record';
+    const created = await insertRecord(userId, {
+      plugnotas_id: plugnotasId,
+      protocol,
+      id_integracao: idIntegracao,
+      status,
+      document_type: documentType,
+      provider: PROVIDER_PLUGNOTAS,
+      cnpj_prestador: prestadorDoc
+        || normalizeDoc(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || ''),
+      cnpj_tomador: tomadorDoc
+        || normalizeDoc(payload?.tomador?.cpfCnpj || payload?.destinatario?.cpfCnpj || ''),
+      payload_json: payload,
+      response_json: response,
+      metadata_json: Object.keys(metadata).length ? metadata : null
+    });
+
+    try {
+      await upsertClienteCatalogo(userId, payload, { documentType });
+      await upsertProdutosCatalogo(userId, payload, { documentType });
+    } catch (error) {
+      console.warn(
+        `[mei-notas] Falha ao atualizar catalogo ${documentType}`,
+        error instanceof Error ? error.message : error
+      );
+    }
+
+    const duration_ms = Date.now() - startedAt;
+    const plugnotas_status = sanitizePlugnotasStatusForLog(status);
+    logMeiEmitOutcome({
+      document_type: documentType,
+      duration_ms,
+      outcome: 'success',
+      route: MEI_EMIT_ROUTE_EMITIR_NOTA,
+      ...(plugnotas_status ? { plugnotas_status } : {})
+    });
+
+    return created;
+  } catch (error) {
+    const duration_ms = Date.now() - startedAt;
+    const plugnotasPhase = phase === 'plugnotas_emit' || phase === 'insert_record';
+    const outcome = plugnotasPhase ? 'plugnotas_error' : 'validation_error';
+    const meta = extractMeiEmitHttpMeta(error);
+    logMeiEmitOutcome({
+      document_type: documentType,
+      duration_ms,
+      outcome,
+      route: MEI_EMIT_ROUTE_EMITIR_NOTA,
+      failure_phase: phase,
+      ...meta
+    });
+    throw error;
+  }
 };
 
 const clampListarNotasLimit = (value) => {
@@ -1072,6 +1125,7 @@ const clampAnoCivilLimite = (value) => {
 /**
  * Agrega faturamento MEI no ano civil a partir de `payload_json` na tabela `mei_nfse`
  * (paridade com o cliente em `meiLimiteFaturamento.ts`).
+ * FR-GUIA-FISC-17: consulta só linhas `document_type` NFSE ou legado `null`; NFE/NFCE não entram no somatório.
  * @param {string} userId
  * @param {number} anoCivil
  * @returns {Promise<{ anoCivil: number, totalUtilizadoReais: number, notasConsideradas: number }>}

@@ -50,6 +50,7 @@ import {
 } from '../utils/meiNfeLikeFormState';
 import { validateMeiNfeLikeForm } from '../utils/meiNfeLikeClientValidation';
 import { buildNfeLikePayloadFromMeiForm } from '../utils/meiNfeLikePayloadBuilder';
+import { isMeiNfeNfceEmitEnabled } from '../config/meiFiscalFeatureFlags';
 
 const formatCurrency = (value: number) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -277,6 +278,14 @@ export default function AdminUserData() {
   });
   const autoDownloadKeysRef = useRef<Set<string>>(new Set());
   const autoDownloadingRef = useRef(false);
+
+  const nfeNfceEmitEnabled = useMemo(() => isMeiNfeNfceEmitEnabled(), []);
+
+  useEffect(() => {
+    if (!nfeNfceEmitEnabled && (adminEmitDocumentType === 'NFE' || adminEmitDocumentType === 'NFCE')) {
+      setAdminEmitDocumentType('NFSE');
+    }
+  }, [nfeNfceEmitEnabled, adminEmitDocumentType]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -1570,6 +1579,7 @@ export default function AdminUserData() {
                         idPrefix="admin-user-emit-fiscal"
                         value={adminEmitDocumentType}
                         onChange={handleAdminEmitDocumentTypeChange}
+                        nfeNfceEmitEnabled={nfeNfceEmitEnabled}
                       />
                       <p className="text-xs text-slate-600 dark:text-slate-400">
                         {meiFiscalEmissionHelpLine(adminEmitDocumentType)}
@@ -1765,6 +1775,11 @@ export default function AdminUserData() {
                           errors={adminNfeLikeErrors}
                           flashOpenSection={adminNfeLikeFlashSection}
                           onFlashOpenConsumed={() => setAdminNfeLikeFlashSection(null)}
+                          nfLikeCatalogDocumentType={
+                            adminEmitDocumentType === 'NFE' || adminEmitDocumentType === 'NFCE'
+                              ? adminEmitDocumentType
+                              : undefined
+                          }
                         />
                       )}
                     </div>

@@ -75,6 +75,7 @@ vi.mock('../services/meiNotasService', () => ({
   listarCatalogoNfseClientes: vi.fn(async () => []),
   listarCatalogoNfseProdutos: vi.fn(async () => []),
   listarNfse: (...args: unknown[]) => listarNfseMock(...args),
+  notaFiscalPodeSincronizarEstadoEmissor: () => true,
   obterNfse: vi.fn(async () => ({}))
 }));
 

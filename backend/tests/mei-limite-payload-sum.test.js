@@ -7,6 +7,7 @@ import {
   extrairValorLimiteMeiDaNota,
   extrairValorServicoTotalDoPayload,
   extrairValorTotalServicosDeObjeto,
+  isDocumentTypeMeiLimiteRelevante,
   nfseDeveEntrarNoSomatorioLimite
 } from '../src/utils/meiLimitePayloadSum.js';
 
@@ -63,6 +64,39 @@ test('agregarLimiteMeiDasLinhas: NFSE concluída só com response_json (liquido)
   ];
   const r = agregarLimiteMeiDasLinhas(rows, 2026);
   assert.equal(r.total, 7);
+  assert.equal(r.notasConsideradas, 1);
+});
+
+test('isDocumentTypeMeiLimiteRelevante: só NFSE', () => {
+  assert.equal(isDocumentTypeMeiLimiteRelevante('NFSE'), true);
+  assert.equal(isDocumentTypeMeiLimiteRelevante('NFE'), false);
+  assert.equal(isDocumentTypeMeiLimiteRelevante('NFCE'), false);
+  assert.equal(isDocumentTypeMeiLimiteRelevante(null), false);
+});
+
+test('agregarLimiteMeiDasLinhas: ignora NFE e NFCE mesmo com valor alto (FR-GUIA-FISC-17)', () => {
+  const rows = [
+    {
+      document_type: 'NFSE',
+      status: 'Concluída',
+      created_at: '2026-06-01T10:00:00.000Z',
+      payload_json: { servico: [{ valor: { servico: 100 } }] }
+    },
+    {
+      document_type: 'NFE',
+      status: 'concluido',
+      created_at: '2026-06-02T10:00:00.000Z',
+      payload_json: { servico: [{ valor: { servico: 50_000 } }] }
+    },
+    {
+      document_type: 'NFCE',
+      status: 'concluido',
+      created_at: '2026-06-03T10:00:00.000Z',
+      payload_json: { servico: [{ valor: { servico: 40_000 } }] }
+    }
+  ];
+  const r = agregarLimiteMeiDasLinhas(rows, 2026);
+  assert.equal(r.total, 100);
   assert.equal(r.notasConsideradas, 1);
 });
 

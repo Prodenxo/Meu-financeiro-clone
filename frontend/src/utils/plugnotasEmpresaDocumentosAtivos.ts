@@ -132,3 +132,19 @@ export function getDocumentosAtivosValidationMessage(
 export function countDocumentosAtivosTrue(selection: DocumentosAtivosState): number {
   return (selection.nfse ? 1 : 0) + (selection.nfe ? 1 : 0) + (selection.nfce ? 1 : 0);
 }
+
+/**
+ * FR-GUIA-FISC-14 D2 — monta `documentosAtivos` para PATCH após GET empresa (mantém modalidades actuais e activa o alvo).
+ * @see `PATCH /mei-notas/setup/emissao-fiscal/empresa` com `documentosAtivos` (ADR-plugnotas-empresa + complemento documentos activos)
+ */
+export function buildDocumentosAtivosSolicitacaoModalidade(
+  consultarEmpresaApiResponse: unknown,
+  target: 'NFE' | 'NFCE'
+): DocumentosAtivosState {
+  const parsed = extractDocumentosAtivosFromEmpresaResponse(consultarEmpresaApiResponse);
+  const base = parsed ?? DEFAULT_DOCUMENTOS_ATIVOS;
+  if (target === 'NFE') {
+    return { nfse: base.nfse, nfe: true, nfce: base.nfce };
+  }
+  return { nfse: base.nfse, nfe: base.nfe, nfce: true };
+}

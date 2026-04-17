@@ -1,10 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatCpfCnpjPtBr } from '../../lib/formatCpfCnpjPtBr';
 import {
   createEmptyMeiNfeLikeItem,
   type MeiNfeLikeFormState,
   type MeiNfeLikeItemFormState
 } from '../../utils/meiNfeLikeFormState';
+import { mapCatalogProdutoToNfeItemRow } from '../../utils/mapCatalogProdutoToNfeItem';
+import { MeiNfeLikeCatalogProdutoPickerModal } from './MeiNfeLikeCatalogProdutoPickerModal';
 
 function NfeLikeCollapsible(props: {
   section: string;
@@ -56,6 +58,8 @@ export type MeiNfeLikeEmitFormProps = {
   onFlashOpenConsumed?: () => void;
   /** FR-GUIA-FISC-07: bloqueio de capacidade no emissor integrado. */
   fieldsDisabled?: boolean;
+  /** FR-GUIA-FISC-12: catálogo → linha (só NF-e / NFC-e). */
+  nfLikeCatalogDocumentType?: 'NFE' | 'NFCE';
 };
 
 export function MeiNfeLikeEmitForm({
@@ -65,8 +69,11 @@ export function MeiNfeLikeEmitForm({
   errors,
   flashOpenSection,
   onFlashOpenConsumed,
-  fieldsDisabled = false
+  fieldsDisabled = false,
+  nfLikeCatalogDocumentType
 }: MeiNfeLikeEmitFormProps) {
+  const catalogAddBtnRef = useRef<HTMLButtonElement>(null);
+  const [catalogPickerOpen, setCatalogPickerOpen] = useState(false);
   const [open, setOpen] = useState({
     emitente: true,
     destinatario: true,
@@ -95,6 +102,15 @@ export function MeiNfeLikeEmitForm({
 
   const addItem = () => {
     onChange({ ...value, itens: [...value.itens, createEmptyMeiNfeLikeItem()] });
+  };
+
+  const closeCatalogPicker = () => {
+    setCatalogPickerOpen(false);
+    requestAnimationFrame(() => catalogAddBtnRef.current?.focus());
+  };
+
+  const appendItemFromCatalog = (row: MeiNfeLikeItemFormState) => {
+    onChange({ ...value, itens: [...value.itens, row] });
   };
 
   const removeItem = (index: number) => {
@@ -238,9 +254,27 @@ export function MeiNfeLikeEmitForm({
         {value.itens.length === 0 ? (
           <div className="rounded-md border border-dashed border-slate-300/80 p-4 text-center dark:border-slate-600/80">
             <p className="text-sm text-slate-600 dark:text-slate-300">Adicione pelo menos um item à nota.</p>
-            <button type="button" className="planner-button-secondary-compact mt-3" onClick={addItem}>
-              Adicionar item
-            </button>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                className="planner-button-secondary-compact"
+                disabled={fieldsDisabled}
+                onClick={addItem}
+              >
+                Adicionar item
+              </button>
+              {nfLikeCatalogDocumentType ? (
+                <button
+                  ref={catalogAddBtnRef}
+                  type="button"
+                  className="planner-button-secondary-compact"
+                  disabled={fieldsDisabled}
+                  onClick={() => setCatalogPickerOpen(true)}
+                >
+                  Adicionar do catálogo
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -518,12 +552,40 @@ export function MeiNfeLikeEmitForm({
                 </div>
               </div>
             ))}
-            <button type="button" className="planner-button-secondary-compact" onClick={addItem}>
-              Adicionar item
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="planner-button-secondary-compact"
+                disabled={fieldsDisabled}
+                onClick={addItem}
+              >
+                Adicionar item
+              </button>
+              {nfLikeCatalogDocumentType ? (
+                <button
+                  ref={catalogAddBtnRef}
+                  type="button"
+                  className="planner-button-secondary-compact"
+                  disabled={fieldsDisabled}
+                  onClick={() => setCatalogPickerOpen(true)}
+                >
+                  Adicionar do catálogo
+                </button>
+              ) : null}
+            </div>
           </div>
         )}
       </NfeLikeCollapsible>
+
+      {nfLikeCatalogDocumentType ? (
+        <MeiNfeLikeCatalogProdutoPickerModal
+          open={catalogPickerOpen}
+          onClose={closeCatalogPicker}
+          documentType={nfLikeCatalogDocumentType}
+          documentLabel={documentLabel}
+          onSelectProduct={(p) => appendItemFromCatalog(mapCatalogProdutoToNfeItemRow(p))}
+        />
+      ) : null}
 
       <div>
         <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="mei-nfe-info-comp">

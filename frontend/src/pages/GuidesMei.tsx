@@ -83,6 +83,7 @@ import {
   getPlugnotasRequestFromUnknownError as getFiscalRequestMeta,
   getRuntimeDecisionFromUnknownError
 } from '../utils/apiClientError';
+import { isMeiEmissionErrorRetryable } from '../utils/meiEmissionRetryable';
 import {
   mapMeiGuideValidateErrorToUserMessage,
   type MeiGuideValidateMappedError
@@ -176,9 +177,11 @@ import {
   type MeiFiscalEmissionDocumentType
 } from '../components/mei/MeiFiscalEmissionTypeSegmented';
 import { MeiFiscalCapabilityCallout } from '../components/mei/MeiFiscalCapabilityCallout';
+import { MeiFiscalModalidadesActivationWizard } from '../components/mei/MeiFiscalModalidadesActivationWizard';
 import { MeiCadastroNfeNfceInfoBanner } from '../components/mei/MeiCadastroNfeNfceInfoBanner';
 import { MeiCadastroRequisitosNfeNfcePlaceholder } from '../components/mei/MeiCadastroRequisitosNfeNfcePlaceholder';
 import { MeiNfeLikeEmitForm } from '../components/mei/MeiNfeLikeEmitForm';
+import { isMeiFiscalD2ModalidadesEnabled, isMeiNfeNfceEmitEnabled } from '../config/meiFiscalFeatureFlags';
 import { useMeiPlugnotasFiscalCapability } from '../hooks/useMeiPlugnotasFiscalCapability';
 import { isNfeLikeEmissionBlockedByCapabilities } from '../utils/plugnotasEmpresaCapabilities';
 import type { EmpresaCadastroRuntimeDecision } from '../types/empresaCadastroRuntimeDecision';
@@ -756,6 +759,10 @@ export default function GuidesMei() {
 
   const nfseFormBaselineRef = useRef(JSON.stringify(createInitialEmitirNfseInput()));
   const nfeLikeBaselineRef = useRef(serializeMeiNfeLikeFormForDirty(createEmptyMeiNfeLikeFormState()));
+  /** FR-GUIA-FISC-11 — incrementado após save empresa com sucesso para refetch sem F5. */
+  const [fiscalCapabilityRefetchKey, setFiscalCapabilityRefetchKey] = useState(0);
+  /** FR-GUIA-FISC-14 D2 — *wizard* de activação NF-e/NFC-e (flag `VITE_MEI_FISCAL_D2_MODALIDADES_ENABLED`). */
+  const [d2ModalidadesWizardOpen, setD2ModalidadesWizardOpen] = useState(false);
 
   const cnpjParaFiscalCapability = useMemo(() => {
     const fromEmit = normalizeDoc(nfeLikeForm.emitenteCnpj || '');
@@ -768,11 +775,18 @@ export default function GuidesMei() {
   }, [nfeLikeForm.emitenteCnpj, contribuinteDoc, nfseForm.prestadorCpfCnpj]);
 
   const fiscalCapabilityFetchEnabled = Boolean(canViewNfse && activeWorkspace === 'nfse');
+  const bumpFiscalCapabilityRefetchIfApplicable = useCallback(() => {
+    if (!fiscalCapabilityFetchEnabled) return;
+    if (emissionDocumentType !== 'NFE' && emissionDocumentType !== 'NFCE') return;
+    if (cnpjParaFiscalCapability.length !== 14) return;
+    setFiscalCapabilityRefetchKey((k) => k + 1);
+  }, [fiscalCapabilityFetchEnabled, emissionDocumentType, cnpjParaFiscalCapability]);
   const { loading: fiscalCapabilityLoading, error: fiscalCapabilityError, capabilities: fiscalCapabilities } =
     useMeiPlugnotasFiscalCapability({
       cnpjDigits: cnpjParaFiscalCapability,
       emissionDocumentType,
-      fetchEnabled: fiscalCapabilityFetchEnabled
+      fetchEnabled: fiscalCapabilityFetchEnabled,
+      capabilityRefetchKey: fiscalCapabilityRefetchKey
     });
 
   const nfeLikeEmitterBlockedByProvider = useMemo(() => {
@@ -809,6 +823,8 @@ export default function GuidesMei() {
     plugnotasCode: string | null;
     httpStatus: number | null;
     plugnotasRequest: ReturnType<typeof getFiscalRequestMeta>;
+    /** FR-GUIA-FISC-13 — só em falhas de emissão (`emission`). */
+    emissionRetryable?: boolean;
   } | null>(null);
   const [nfseErrorKind, setNfseErrorKind] = useState<'emission' | 'operation' | null>(null);
   const [nfseSuccess, setNfseSuccess] = useState<string | null>(null);
@@ -820,6 +836,11 @@ export default function GuidesMei() {
   const [meiLimiteServidorReady, setMeiLimiteServidorReady] = useState(false);
   const [meiLimiteServidorLoading, setMeiLimiteServidorLoading] = useState(false);
 
+  /** FR-GUIA-FISC-13: barreira síncrona contra duplo clique antes do re-render de `*Submitting`. */
+  const meiEmitInFlightRef = useRef(false);
+  /** Próximo POST NFS-e sem `idIntegracao` manual — servidor gera novo id (retry). */
+  const omitClientIdIntegracaoOnNextEmitRef = useRef(false);
+
   const clearNfseErrorState = useCallback(() => {
     setNfseError(null);
     setNfseErrorKind(null);
@@ -827,25 +848,40 @@ export default function GuidesMei() {
 
   const setEmissionNfseError = useCallback((error: unknown, fallback: string) => {
     const raw = error instanceof Error ? error.message : fallback;
+    const retryable = isMeiEmissionErrorRetryable(error);
+    const httpSt = getFiscalHttpStatus(error);
+    console.warn('[mei-emission]', {
+      phase: 'emission_failed',
+      retryable,
+      httpStatus: httpSt ?? undefined
+    });
     setNfseError({
       rawMessage: (raw || fallback).trim(),
       plugnotasCode: getFiscalErrorCode(error),
-      httpStatus: getFiscalHttpStatus(error),
-      plugnotasRequest: getFiscalRequestMeta(error)
+      httpStatus: httpSt,
+      plugnotasRequest: getFiscalRequestMeta(error),
+      emissionRetryable: retryable
     });
     setNfseErrorKind('emission');
   }, []);
 
-  const setOperationNfseError = useCallback((error: unknown, fallback: string) => {
-    const raw = error instanceof Error ? error.message : fallback;
-    setNfseError({
-      rawMessage: (raw || fallback).trim(),
-      plugnotasCode: getFiscalErrorCode(error),
-      httpStatus: getFiscalHttpStatus(error),
-      plugnotasRequest: getFiscalRequestMeta(error)
-    });
-    setNfseErrorKind('operation');
-  }, []);
+  const setOperationNfseError = useCallback(
+    (error: unknown, fallback: string, opts?: { userFacingMessageOnly?: boolean }) => {
+      const raw = opts?.userFacingMessageOnly
+        ? fallback
+        : error instanceof Error
+          ? error.message
+          : fallback;
+      setNfseError({
+        rawMessage: (raw || fallback).trim(),
+        plugnotasCode: getFiscalErrorCode(error),
+        httpStatus: getFiscalHttpStatus(error),
+        plugnotasRequest: getFiscalRequestMeta(error)
+      });
+      setNfseErrorKind('operation');
+    },
+    []
+  );
   const [nfseCatalogLoading, setNfseCatalogLoading] = useState(false);
   const [nfseCatalogError, setNfseCatalogError] = useState<string | null>(null);
   const [nfseCatalogClientes, setNfseCatalogClientes] = useState<NfseCatalogCliente[]>([]);
@@ -1450,7 +1486,8 @@ export default function GuidesMei() {
       primary,
       secondary: canViewNfse ? MSG_SUCESSO_PATCH_DOCUMENTOS_ATIVOS_EMISSOR : undefined
     });
-  }, [userId, nfEmissionCompanyForm, updateNfseForm, canViewNfse, clearNfEmissionCompanySyncErrorState]);
+    bumpFiscalCapabilityRefetchIfApplicable();
+  }, [userId, nfEmissionCompanyForm, updateNfseForm, canViewNfse, clearNfEmissionCompanySyncErrorState, bumpFiscalCapabilityRefetchIfApplicable]);
 
   const handleRetryPlugnotasEmpresaRegistro = useCallback(async () => {
     if (!plugnotasPendingRetry || !plugnotasRetryActionAvailable) return;
@@ -2187,6 +2224,7 @@ export default function GuidesMei() {
       documentosAtivosUserEditedRef.current = false;
       setDocumentosAtivosSubmitError(null);
       invalidateMeiEmpresaGetCache(userId, cnpj);
+      bumpFiscalCapabilityRefetchIfApplicable();
       try {
         await loadCertificateStatus();
       } catch {
@@ -2434,6 +2472,7 @@ export default function GuidesMei() {
   };
 
   const handleEmitNfse = async () => {
+    if (meiEmitInFlightRef.current) return;
     if (nfseSubmitting) return;
     clearNfseErrorState();
     setNfseSuccess(null);
@@ -2450,6 +2489,7 @@ export default function GuidesMei() {
       return;
     }
 
+    meiEmitInFlightRef.current = true;
     setNfseSubmitting(true);
     try {
       const prestadorCpfCnpj = normalizeDoc(nfseForm.prestadorCpfCnpj);
@@ -2507,7 +2547,9 @@ export default function GuidesMei() {
         if (nfseForm.tomadorEmail?.trim()) {
           payload.tomadorEmail = nfseForm.tomadorEmail.trim();
         }
-        if (nfseForm.idIntegracao?.trim()) {
+        const skipClientIntegracao = omitClientIdIntegracaoOnNextEmitRef.current;
+        omitClientIdIntegracaoOnNextEmitRef.current = false;
+        if (nfseForm.idIntegracao?.trim() && !skipClientIntegracao) {
           payload.idIntegracao = nfseForm.idIntegracao.trim();
         }
         if (nfseForm.descricao?.trim()) {
@@ -2539,9 +2581,12 @@ export default function GuidesMei() {
     } catch (error) {
       setEmissionNfseError(error, 'Erro ao emitir nota fiscal.');
     } finally {
+      meiEmitInFlightRef.current = false;
       setNfseSubmitting(false);
     }
   };
+
+  const nfeNfceEmitEnabled = useMemo(() => isMeiNfeNfceEmitEnabled(), []);
 
   const performEmissionTypeSwitch = useCallback(
     (newType: MeiFiscalEmissionDocumentType) => {
@@ -2578,6 +2623,12 @@ export default function GuidesMei() {
     [emissionDocumentType, nfseForm, nfeLikeForm, nfEmissionCompanyForm.razaoSocial, clearNfseErrorState]
   );
 
+  useEffect(() => {
+    if (!nfeNfceEmitEnabled && (emissionDocumentType === 'NFE' || emissionDocumentType === 'NFCE')) {
+      performEmissionTypeSwitch('NFSE');
+    }
+  }, [nfeNfceEmitEnabled, emissionDocumentType, performEmissionTypeSwitch]);
+
   const requestEmissionDocumentTypeChange = useCallback(
     (newType: MeiFiscalEmissionDocumentType) => {
       if (newType === emissionDocumentType) return;
@@ -2609,6 +2660,7 @@ export default function GuidesMei() {
   }, [pendingEmissionDocumentType, performEmissionTypeSwitch]);
 
   const handleEmitNfeLike = useCallback(async () => {
+    if (meiEmitInFlightRef.current) return;
     if (nfeLikeSubmitting) return;
     if (emissionDocumentType !== 'NFE' && emissionDocumentType !== 'NFCE') return;
     if (nfeLikeEmissionLocked) return;
@@ -2625,6 +2677,7 @@ export default function GuidesMei() {
     }
     setNfeLikeFieldErrors({});
     setNfeLikeFlashOpenSection(null);
+    meiEmitInFlightRef.current = true;
     setNfeLikeSubmitting(true);
     try {
       const payload = buildNfeLikePayloadFromMeiForm(nfeLikeForm);
@@ -2642,6 +2695,7 @@ export default function GuidesMei() {
     } catch (error) {
       setEmissionNfseError(error, `Erro ao emitir ${docShort}.`);
     } finally {
+      meiEmitInFlightRef.current = false;
       setNfeLikeSubmitting(false);
     }
   }, [
@@ -2667,9 +2721,11 @@ export default function GuidesMei() {
     try {
       const updated = await obterNfse(id, true);
       setNfseList((current) => current.map((item) => (item.id === id ? updated : item)));
-      setNfseSuccess('Status da NFSe atualizado com sucesso.');
+      setNfseSuccess('Estado da nota actualizado com sucesso.');
     } catch (error) {
-      setOperationNfseError(error, 'Erro ao atualizar NFSe.');
+      setOperationNfseError(error, 'Erro ao actualizar o estado da nota.', {
+        userFacingMessageOnly: true
+      });
     } finally {
       finishNfseAction(actionKey);
     }
@@ -3248,6 +3304,16 @@ export default function GuidesMei() {
         open={emissionTypeChangeDialogOpen}
         onCancel={handleCancelEmissionTypeDialog}
         onConfirm={handleConfirmEmissionTypeChange}
+      />
+      <MeiFiscalModalidadesActivationWizard
+        open={d2ModalidadesWizardOpen}
+        onClose={() => setD2ModalidadesWizardOpen(false)}
+        cnpjDigits={cnpjParaFiscalCapability}
+        target={emissionDocumentType === 'NFCE' ? 'NFCE' : 'NFE'}
+        onSuccess={() => {
+          invalidateMeiEmpresaGetCache(userId, cnpjParaFiscalCapability);
+          bumpFiscalCapabilityRefetchIfApplicable();
+        }}
       />
       <div className="admin-page-shell">
         <section className="admin-hero">
@@ -4638,6 +4704,7 @@ export default function GuidesMei() {
                   value={emissionDocumentType}
                   onChange={requestEmissionDocumentTypeChange}
                   disabled={nfseSubmitting || nfeLikeSubmitting}
+                  nfeNfceEmitEnabled={nfeNfceEmitEnabled}
                 />
                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                   {meiFiscalEmissionHelpLine(emissionDocumentType)}
@@ -4666,6 +4733,7 @@ export default function GuidesMei() {
                       documentLabel={emissionDocumentType === 'NFE' ? 'NF-e' : 'NFC-e'}
                       mode="fetch_error"
                       errorMessage={fiscalCapabilityError}
+                      onTentarNovamente={bumpFiscalCapabilityRefetchIfApplicable}
                       onRevisarConfiguracao={() => setActiveWorkspace('das')}
                     />
                   ) : null}
@@ -4677,6 +4745,11 @@ export default function GuidesMei() {
                       documentLabel={emissionDocumentType === 'NFE' ? 'NF-e' : 'NFC-e'}
                       mode="blocked"
                       onRevisarConfiguracao={() => setActiveWorkspace('das')}
+                      onConfigurarEmissao={
+                        isMeiFiscalD2ModalidadesEnabled()
+                          ? () => setD2ModalidadesWizardOpen(true)
+                          : undefined
+                      }
                     />
                   ) : null}
                 </div>
@@ -5060,6 +5133,11 @@ export default function GuidesMei() {
               flashOpenSection={nfeLikeFlashOpenSection}
               onFlashOpenConsumed={() => setNfeLikeFlashOpenSection(null)}
               fieldsDisabled={nfeLikeEmissionLocked}
+              nfLikeCatalogDocumentType={
+                emissionDocumentType === 'NFE' || emissionDocumentType === 'NFCE'
+                  ? emissionDocumentType
+                  : undefined
+              }
             />
           )}
 
@@ -5132,6 +5210,22 @@ export default function GuidesMei() {
                   plugnotasCode={nfseError.plugnotasCode}
                   httpStatus={nfseError.httpStatus}
                   plugnotasRequest={nfseError.plugnotasRequest}
+                  onRetry={
+                    nfseError.emissionRetryable
+                      ? () => {
+                          console.warn('[mei-emission]', {
+                            phase: 'user_retry',
+                            documentType: emissionDocumentType
+                          });
+                          omitClientIdIntegracaoOnNextEmitRef.current = true;
+                          if (emissionDocumentType === 'NFSE') {
+                            void handleEmitNfse();
+                          } else {
+                            void handleEmitNfeLike();
+                          }
+                        }
+                      : undefined
+                  }
                 />
               </div>
             ) : null}
@@ -5305,7 +5399,7 @@ export default function GuidesMei() {
                   const reviewRequested = Boolean(metadata.reviewRequested);
                   const isArchived = Boolean(item.archived_at);
                   return (
-                    <div key={item.id} className="admin-user-card">
+                    <div key={item.id} className="admin-user-card" aria-busy={rowBusy || undefined}>
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                         <div>
                           <p className="text-sm font-semibold text-slate-700 dark:text-gray-200">
@@ -5371,7 +5465,7 @@ export default function GuidesMei() {
                           const reviewRequested = Boolean(metadata.reviewRequested);
                           const isArchived = Boolean(item.archived_at);
                           return (
-                            <tr key={item.id} className="admin-table-row">
+                            <tr key={item.id} className="admin-table-row" aria-busy={rowBusy || undefined}>
                               <td className="admin-table-cell align-top">
                                 <div className="font-semibold text-slate-700 dark:text-gray-200">
                                   {item.id_integracao || item.plugnotas_id || item.id}
