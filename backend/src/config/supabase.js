@@ -11,9 +11,26 @@ export const createSupabaseClient = ({
 
   const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 
+  const authOptions = useServiceRole
+    ? { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+    : {};
+
   return createClient(env.SUPABASE_URL, key, {
-    global: {
-      headers
-    }
+    auth: authOptions,
+    global: { headers }
   });
+};
+
+let _serviceRoleClient = null;
+
+export const getServiceRoleClient = () => {
+  if (!_serviceRoleClient) {
+    if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurado');
+    }
+    _serviceRoleClient = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+    });
+  }
+  return _serviceRoleClient;
 };

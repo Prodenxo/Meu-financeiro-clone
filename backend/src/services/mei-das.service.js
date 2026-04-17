@@ -1,4 +1,5 @@
-import { createSupabaseClient } from '../config/supabase.js';
+import { createSupabaseClient, getServiceRoleClient } from '../config/supabase.js';
+import { withRetry } from '../utils/retry.js';
 import { badRequest, forbidden } from '../utils/errors.js';
 import { env } from '../config/env.js';
 import * as usersService from './users.service.js';
@@ -96,7 +97,7 @@ const ensureStorageBucket = async () => {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
     throw badRequest('Supabase não configurado para armazenamento do DAS');
   }
-  const supabase = createSupabaseClient({ useServiceRole: true });
+  const supabase = getServiceRoleClient();
   const { error } = await supabase.storage.createBucket(DAS_BUCKET, {
     public: false,
     fileSizeLimit: 10 * 1024 * 1024,
@@ -110,7 +111,7 @@ const ensureStorageBucket = async () => {
 
 const uploadDasPdf = async ({ userId, competencia, pdfBuffer }) => {
   await ensureStorageBucket();
-  const supabase = createSupabaseClient({ useServiceRole: true });
+  const supabase = getServiceRoleClient();
   const path = `${userId}/${competencia}.pdf`;
   const { error } = await supabase.storage
     .from(DAS_BUCKET)
@@ -135,7 +136,7 @@ const upsertDasRecord = async ({
   source,
   errorMessage
 }) => {
-  const supabase = createSupabaseClient({ useServiceRole: true });
+  const supabase = getServiceRoleClient();
   const { data, error } = await supabase
     .from(DAS_TABLE)
     .upsert({
@@ -247,7 +248,7 @@ export const generateAndStoreDasForUser = async ({
 };
 
 const listActiveUsersWithEmpresa = async () => {
-  const supabase = createSupabaseClient({ useServiceRole: true });
+  const supabase = getServiceRoleClient();
 
   const { data: certRows, error: certError } = await supabase
     .from('user_mei_certificates')
@@ -286,7 +287,7 @@ const listActiveUsersWithEmpresa = async () => {
 
 export const runMonthlyAutomaticDasDownload = async (referenceDate = new Date()) => {
   const competencia = getPreviousCompetencia(referenceDate);
-  const users = await listActiveUsersWithEmpresa();
+  const users = await withRetry(() => listActiveUsersWithEmpresa(), { maxAttempts: 3, delayMs: 1000 });
   const results = [];
   const startedAt = new Date().toISOString();
 
@@ -373,7 +374,7 @@ const runSchedulerTick = async () => {
 };
 
 const acquireMonthlyRunLock = async (runKey) => {
-  const supabase = createSupabaseClient({ useServiceRole: true });
+  const supabase = getServiceRoleClient();
   const { error } = await supabase
     .from(DAS_JOB_RUNS_TABLE)
     .insert({
@@ -465,7 +466,7 @@ export const listAdminCompanyDasStatus = async (accessToken, filters = {}) => {
   }
 
   const userIds = activeUsers.map((user) => user.id);
-  const supabase = createSupabaseClient({ useServiceRole: true });
+  const supabase = getServiceRoleClient();
 
   const [{ data: certRows, error: certError }, { data: dasRows, error: dasError }] = await Promise.all([
     supabase
