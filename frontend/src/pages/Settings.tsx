@@ -246,16 +246,31 @@ export default function Settings() {
               <p className="text-sm text-gray-500 dark:text-gray-400">Alternar entre tema claro e escuro</p>
             </div>
             <button
+              type="button"
+              role="switch"
+              aria-checked={isDarkMode}
+              aria-label={
+                isDarkMode
+                  ? 'Modo escuro ativado. Prima para mudar para o tema claro.'
+                  : 'Modo escuro desativado. Prima para mudar para o tema escuro.'
+              }
               onClick={toggleTheme}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                isDarkMode ? 'bg-blue-600' : 'bg-gray-300'
-              }`}
+              className="relative inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg"
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  isDarkMode ? 'translate-x-6' : 'translate-x-1'
+                aria-hidden
+                className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+                  isDarkMode
+                    ? 'border-blue-500/80 bg-blue-600 dark:border-blue-400/50'
+                    : 'border-[color:rgb(var(--color-surface-border))] bg-slate-300 dark:border-slate-500 dark:bg-slate-600'
                 }`}
-              />
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    isDarkMode ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </span>
             </button>
           </div>
         </div>
