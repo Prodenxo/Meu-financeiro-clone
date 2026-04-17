@@ -139,19 +139,50 @@ export function aggregateCategoryPeriod(
   return { planejado, realizado };
 }
 
-/** UX §3.3: pelo menos um mês com planejado > 0 ou realizado ≠ 0 */
+/**
+ * Elegibilidade no período (PRD §5.1): `realizado ≠ 0` ou `planejado > 0` no agregado do `DrePeriod`
+ * (mês isolado ou total anual).
+ */
+export function isCategoryEligibleInPeriod(
+  categoriasId: number,
+  tipo: string,
+  period: DrePeriod,
+  cells: DreMatrixCell[]
+): boolean {
+  const { planejado, realizado } = aggregateCategoryPeriod(categoriasId, tipo, period, cells);
+  return realizado !== 0 || planejado > 0;
+}
+
+/** União das categorias elegíveis em pelo menos um dos meses (modo compare). */
+export function unionEligibleCategoryIds(
+  months: number[],
+  categories: Category[],
+  cells: DreMatrixCell[]
+): Set<number> {
+  const u = new Set<number>();
+  for (const month of months) {
+    const period: DrePeriod = { kind: 'month', month };
+    for (const c of categories) {
+      if (!isEntradaTipo(c.tipo) && !isSaidaTipo(c.tipo)) continue;
+      if (isCategoryEligibleInPeriod(c.id, c.tipo, period, cells)) {
+        u.add(c.id);
+      }
+    }
+  }
+  return u;
+}
+
+/**
+ * @deprecated Preferir `isCategoryEligibleInPeriod` com `{ kind: 'annual' }`.
+ * Semântica actual: **agregado dos 12 meses** (PRD §5.1 sobre somas), não “há actividade em algum mês isolado”.
+ * Mantida para testes e chamadas legadas ao identificador.
+ */
 export function isCategoryEligibleInYear(
   categoriasId: number,
   tipo: string,
   cells: DreMatrixCell[]
 ): boolean {
-  const catCells = cells.filter((c) => c.categorias_id === categoriasId);
-  for (const c of catCells) {
-    const plan = c.valor_orcado != null ? Number(c.valor_orcado) : 0;
-    const real = getRealizadoCell(c, tipo);
-    if (plan > 0 || real !== 0) return true;
-  }
-  return false;
+  return isCategoryEligibleInPeriod(categoriasId, tipo, { kind: 'annual' }, cells);
 }
 
 export function rowHighlights(
@@ -215,6 +246,11 @@ function periodTitle(period: DrePeriod, year: number, monthNames: string[]): str
   return `${monthNames[period.month - 1]} ${year}`;
 }
 
+export type BuildDreMatrixViewModelOptions = {
+  /** No modo compare: mesma união de IDs para todas as colunas (valores 0 onde não há actividade no mês). */
+  categoryIdsAllowlist?: Set<number>;
+};
+
 /**
  * Agrega categorias elegíveis, subtotais e resultado (realizado) para o período.
  */
@@ -223,13 +259,15 @@ export function buildDreMatrixViewModel(
   cells: DreMatrixCell[],
   year: number,
   period: DrePeriod,
-  monthNames: string[]
+  monthNames: string[],
+  options?: BuildDreMatrixViewModelOptions
 ): DreMatrixViewModel {
-  const eligible = categories.filter(
-    (c) =>
-      (isEntradaTipo(c.tipo) || isSaidaTipo(c.tipo)) &&
-      isCategoryEligibleInYear(c.id, c.tipo, cells)
-  );
+  const allow = options?.categoryIdsAllowlist;
+  const eligible = categories.filter((c) => {
+    if (!isEntradaTipo(c.tipo) && !isSaidaTipo(c.tipo)) return false;
+    if (allow) return allow.has(c.id);
+    return isCategoryEligibleInPeriod(c.id, c.tipo, period, cells);
+  });
 
   const entradas = eligible.filter((c) => isEntradaTipo(c.tipo));
   const saidas = eligible.filter((c) => isSaidaTipo(c.tipo));

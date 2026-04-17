@@ -77,6 +77,7 @@ describe('DreMatrixTable — modo compare (QA: thead / colSpan / resultado)', ()
         monthNames={MESES}
         year={2026}
         compareMonths={[1, 3]}
+        density="completo"
       />
     );
     const heading = container.querySelector('#dre-compare-desc');
@@ -97,6 +98,7 @@ describe('DreMatrixTable — modo compare (QA: thead / colSpan / resultado)', ()
         monthNames={MESES}
         year={2026}
         compareMonths={[1, 3]}
+        density="completo"
       />
     );
     const thead = container.querySelector('thead');
@@ -124,6 +126,7 @@ describe('DreMatrixTable — modo compare (QA: thead / colSpan / resultado)', ()
         monthNames={MESES}
         year={2026}
         compareMonths={[1, 2]}
+        density="completo"
       />
     );
     const receitasToggle = screen.getByRole('button', { name: /Receitas/i });
@@ -146,6 +149,7 @@ describe('DreMatrixTable — modo compare (QA: thead / colSpan / resultado)', ()
         monthNames={MESES}
         year={2026}
         compareMonths={[4, 5]}
+        density="completo"
       />
     );
     const resultadoLabel = screen.getByText('Resultado (realizado)');
@@ -183,6 +187,7 @@ describe('DreMatrixTable — modo compare (QA: thead / colSpan / resultado)', ()
         monthNames={MESES}
         year={2026}
         compareMonths={[1, 2]}
+        density="completo"
       />
     );
     const row = screen.getByText('Luz').closest('tr');
@@ -208,6 +213,7 @@ describe('DreMatrixTable — modo single', () => {
         monthNames={MESES}
         year={2026}
         compareMonths={[3]}
+        density="completo"
       />
     );
     const theadRows = container.querySelectorAll('thead tr');
@@ -226,6 +232,7 @@ describe('DreMatrixTable — modo single', () => {
         monthNames={MESES}
         year={2026}
         compareMonths={[1]}
+        density="completo"
       />
     );
     const tr = screen.getByText('Resultado (realizado)').closest('tr');
@@ -233,5 +240,82 @@ describe('DreMatrixTable — modo single', () => {
     const tds = tr!.querySelectorAll('td');
     expect(tds[1].className).toContain('text-rose-600');
     expect(tds[1].getAttribute('title')).toContain('negativo');
+  });
+});
+
+describe('DreMatrixTable — densidade Simples (FR-DRE-CMP)', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('modo single Simples: três colunas (Categoria, Planejado, Realizado)', () => {
+    const { container } = render(
+      <DreMatrixTable
+        variant="single"
+        density="simples"
+        models={[vm(99)]}
+        tableTitle="Março 2026"
+        tooltips={TOOLTIPS}
+        monthNames={MESES}
+        year={2026}
+        compareMonths={[3]}
+      />
+    );
+    const headers = container.querySelectorAll('thead tr th[scope="col"]');
+    expect(headers.length).toBe(3);
+    expect(screen.queryByRole('columnheader', { name: /Atingimento/i })).toBeNull();
+  });
+
+  it('modo compare Simples: colSpan 2 por mês; subtotal Receitas com colSpan 5 (1+2N)', () => {
+    const { container } = render(
+      <DreMatrixTable
+        variant="compare"
+        density="simples"
+        models={[vm(10), vm(20)]}
+        tableTitle="Comparando 2 meses."
+        tooltips={TOOLTIPS}
+        monthNames={MESES}
+        year={2026}
+        compareMonths={[1, 3]}
+      />
+    );
+    const thead = container.querySelector('thead');
+    expect(thead).not.toBeNull();
+    const colgroups = thead!.querySelectorAll('tr:first-child th[scope="colgroup"]');
+    expect(colgroups.length).toBe(2);
+    colgroups.forEach((th) => {
+      expect(th.getAttribute('colspan')).toBe('2');
+    });
+    const metricHeaders = thead!.querySelectorAll('tr:nth-child(2) th[scope="col"]');
+    expect(metricHeaders.length).toBe(4);
+
+    const receitasToggle = screen.getByRole('button', { name: /Receitas/i });
+    expect(receitasToggle.closest('th')?.getAttribute('colspan')).toBe('5');
+  });
+
+  it('modo compare Simples: linha Resultado com 4 células (2 por mês)', () => {
+    const r1 = 100;
+    const r2 = 200;
+    render(
+      <DreMatrixTable
+        variant="compare"
+        density="simples"
+        models={[vm(r1, 400), vm(r2, 50)]}
+        tableTitle="Comparando 2 meses."
+        tooltips={TOOLTIPS}
+        monthNames={MESES}
+        year={2026}
+        compareMonths={[4, 5]}
+      />
+    );
+    const resultadoLabel = screen.getByText('Resultado (realizado)');
+    const row = resultadoLabel.closest('tr');
+    expect(row).not.toBeNull();
+    const tds = within(row!).queryAllByRole('cell');
+    expect(tds.length).toBe(4);
+    expect(tds[0].textContent?.trim()).toBe('—');
+    expect(tds[1].textContent?.trim()).toBe(formatDreCurrency(r1));
+    expect(tds[2].textContent?.trim()).toBe('—');
+    expect(tds[3].textContent?.trim()).toBe(formatDreCurrency(r2));
   });
 });
