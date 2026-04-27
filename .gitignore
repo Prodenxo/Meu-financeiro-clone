@@ -53,5 +53,7 @@ Thumbs.db
 .aios/install-log.txt
 
 .vercel
+<<<<<<< HEAD
 .cursor/rules/ 
 .cursorrules
+package-lock.json
