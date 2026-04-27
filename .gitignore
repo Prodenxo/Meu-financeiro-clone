@@ -53,7 +53,6 @@ Thumbs.db
 .aios/install-log.txt
 
 .vercel
-<<<<<<< HEAD
-.cursor/rules/ 
-.cursorrules
+
+# Não versionar lock na raiz (cada dev/CI gera o seu com npm install)
 package-lock.json
