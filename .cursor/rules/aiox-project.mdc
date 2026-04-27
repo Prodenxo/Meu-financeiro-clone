@@ -12,3 +12,4 @@ alwaysApply: true
 5. Personas AIOX: use os arquivos em `.cursor/rules/agents/` (ex.: anexe a regra do agente ao chat ou peça para assumir a persona indicada no arquivo).
 6. **Roteamento LLM:** siga `.cursor/rules/llm-routing.mdc` ao escolher modelo/modo no Cursor.
 7. **Memória de projeto (claude-mem → Cursor):** leia/atualize `.cursor/mem/PROJECT_MEMORY.md` conforme `.cursor/rules/cursor-mem-protocol.mdc`.
+8. **Mensagens de commit (PT-BR, ícone+tipo, `by:`):** `.cursorrules` (raiz, ficheiro que o Cursor lê) e `.cursor/rules/commit-messages-ptbr.mdc` — manter o mesmo conteúdo.

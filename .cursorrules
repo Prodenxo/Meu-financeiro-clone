@@ -1,0 +1,89 @@
+# Mensagens de commit (PT-BR)
+
+> Paridade com `.cursor/rules/commit-messages-ptbr.mdc` — o Cursor carrega regras na raiz via **`.cursorrules`** (com ponto). Edite o nome em `by:` num dos dois sítios e alinhe o outro se alterar o texto.
+
+**Obrigatório (antes de sugerir commit):** toda sugestão de **mensagem de commit** vem com **no mínimo 2 linhas**:
+(1) linha 1 = assunto com **ícone + `tipo: ...`**; (2) **última linha = `by: ...`**.
+**É proibido** entregar **só** a linha do assunto. Se mostrar um único título, a mensagem está **incompleta** (falta a assinatura).
+
+Sempre em **português do Brasil**, com termos leigos.
+
+**Assinatura (sempre a última linha, em linha nova):** `by: <nome>`
+**Nome a usar no `by:` (edite abaixo se precisar):** `Arthur`
+
+- Quando a mensagem tiver **só** a linha de assunto, **não** está pronta. Acrescente linha em branco (opcional) e na linha seguinte `by: Arthur`.
+- Em chat/copiar, mostre a mensagem completa, **incluindo** `by:`, mesmo que o utilizador só tenha colado a primeira linha.
+
+## Conventional Commits
+
+O **assunto** começa com **ícone + tipo** (não pule o ícone):
+
+| Tipo | Ícone |
+|------|--------|
+| `fix` | 🐛 |
+| `feat` | ✨ |
+| `docs` | 📝 |
+| `refactor` | ♻️ |
+| `test` | 🧪 |
+| `chore` | 🔧 |
+| `perf` | ⚡ |
+| `build` | 📦 |
+| `ci` | 👷 |
+| `revert` | ↩️ |
+
+**Formato (linha 1 = assunto):** `<ícone> tipo: descrição em português`
+**Última linha (sempre):** `by: Arthur`
+
+### Regras do assunto (após o tipo)
+
+- curto e direto (ideal: até 50 caracteres a partir de `fix:` / `feat:` / etc., sem o ícone, ou total curto o bastante)
+- **sem ponto final** no assunto
+- **sem inglês** (exceto nomes próprios de tecnologia/biblioteca)
+- o ícone fica **no começo** da linha, antes de `fix:` (ou o tipo escolhido)
+
+### Regras do final
+
+- `by: Arthur` fica **na última linha**; sem ponto final nessa linha
+- se houver corpo (1–3 linhas entre assunto e `by:`), linhas de corpo podem terminar com ponto, se fizer sentido, mas o assunto continua sem ponto
+
+### Escolher o tipo (ícone da tabela acima)
+
+- `fix` corrigiu bug/erro em runtime
+- `feat` adicionou funcionalidade nova
+- `docs` documentação
+- `refactor` reorganização sem mudar comportamento
+- `perf` melhoria de performance
+- `test` testes
+- `chore` manutenção/config/deps sem mudar o produto
+- `build` toolchain de build
+- `ci` pipeline de CI/CD
+- `revert` reversão de commit
+
+## Exemplos
+
+**Com corpo:**
+
+```text
+🐛 fix: corrige validação de email no cadastro
+
+O erro acontecia quando o campo vinha vazio
+
+by: Arthur
+```
+
+**Mínimo (só título + assinatura):**
+
+```text
+🔧 chore: atualiza regras de mensagens de commit
+
+by: Arthur
+```
+
+## Quando o utilizador pedir "mensagem de commit" ou "crie um commit"
+
+1) olhe o diff e identifique o objetivo
+2) escolha o tipo correto e o **ícone** correspondente
+3) escreva a linha 1: `<ícone> tipo: assunto` em PT-BR, em termos leigos
+4) se necessário, adicione corpo curto **antes** da linha `by:`
+5) **Obrigatório:** a **última** linha tem que ser `by: Arthur` (ou o nome no topo desta regra) — nunca omitir
+6) não invente mudanças; baseie-se só no diff
