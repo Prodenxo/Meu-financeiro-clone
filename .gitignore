@@ -53,7 +53,6 @@ Thumbs.db
 .aios/install-log.txt
 
 .vercel
-.cursorrules
 
 # Node / npm — gerado localmente (em qualquer pasta com package.json)
 package-lock.json
