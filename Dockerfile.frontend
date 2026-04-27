@@ -1,17 +1,26 @@
 # Estágio de Build
 FROM node:20-slim AS build
 WORKDIR /app
+
+# Argumentos de build (O Easypanel injeta as variáveis aqui se configurado)
+ARG VITE_API_URL
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+
+# Transforma os argumentos em variáveis de ambiente para o build do Vite
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+
 COPY package*.json ./
 COPY frontend/package*.json ./frontend/
 RUN npm install
 COPY . .
 RUN npm run build
 
-# Estágio de Produção
+# Estágio de Produção (Nginx)
 FROM nginx:stable-alpine
-# Copia o build do estágio anterior
 COPY --from=build /app/dist /usr/share/nginx/html
-# Configuração para rotas do React (SPA)
 RUN echo 'server { \
     listen 80; \
     location / { \

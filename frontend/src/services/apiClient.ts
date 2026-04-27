@@ -23,8 +23,8 @@ const ensureAbsoluteApiUrl = (value: string | undefined, fallback: string): stri
 
 const configuredApiUrl = import.meta.env.VITE_API_URL;
 const DEFAULT_DEV_API_URL = 'http://localhost:3333';
-const DEFAULT_PROD_API_URL = 'https://meu-financeiro-backend.vercel.app';
-const fallbackUrl = import.meta.env.DEV ? DEFAULT_DEV_API_URL : DEFAULT_PROD_API_URL;
+// Removido fallback fixo da Vercel para evitar erros de deploy em novos ambientes
+const fallbackUrl = import.meta.env.DEV ? DEFAULT_DEV_API_URL : '';
 const API_URL = ensureAbsoluteApiUrl(configuredApiUrl, fallbackUrl);
 const TOKEN_STORAGE_KEY = 'financas-pessoais-auth-token';
 
