@@ -1,40 +1,73 @@
 import React, { useEffect, useState } from 'react';
 import { APP_UPDATES } from '../config/updates';
 import { useAuthStore } from '../store/authStore';
+import { apiClient } from '../services/apiClient';
 
 const STORAGE_KEY_PREFIX = 'app_updates_last_seen_';
 
+function getLocalKey(userId: string | null): string {
+  return userId ? `${STORAGE_KEY_PREFIX}${userId}` : STORAGE_KEY_PREFIX;
+}
+
 export default function UpdatesPanel() {
-  const { userId } = useAuthStore();
+  const userId = useAuthStore((s) => s.userId);
   const [visible, setVisible] = useState(false);
+  const [checked, setChecked] = useState(false);
 
   const latestUpdate = APP_UPDATES[0];
 
   useEffect(() => {
-    if (!userId || !latestUpdate) return;
+    if (!latestUpdate || checked) return;
 
-    try {
-      const key = `${STORAGE_KEY_PREFIX}${userId}`;
-      const lastSeenId = window.localStorage.getItem(key);
-
-      if (lastSeenId !== latestUpdate.id) {
-        setVisible(true);
+    const checkSeen = async () => {
+      setChecked(true);
+      try {
+        if (userId) {
+          const result = await apiClient.get<{ lastSeenUpdateId: string | null }>('/auth/last-seen-update');
+          if (result.lastSeenUpdateId !== latestUpdate.id) {
+            setVisible(true);
+          }
+          return;
+        }
+      } catch {
+        // fallback para localStorage se backend falhar
       }
-    } catch (error) {
-      console.warn('[UpdatesPanel] Não foi possível acessar o localStorage:', error);
-    }
-  }, [userId, latestUpdate?.id]);
 
-  if (!visible || !userId || !latestUpdate) return null;
+      try {
+        const key = getLocalKey(userId);
+        const lastSeenId = window.localStorage.getItem(key);
+        if (lastSeenId !== latestUpdate.id) {
+          setVisible(true);
+        }
+      } catch {
+        // sem localStorage, não mostra
+      }
+    };
 
-  const handleClose = () => {
-    try {
-      const key = `${STORAGE_KEY_PREFIX}${userId}`;
-      window.localStorage.setItem(key, latestUpdate.id);
-    } catch (error) {
-      console.warn('[UpdatesPanel] Não foi possível salvar no localStorage:', error);
-    }
+    void checkSeen();
+  }, [userId, latestUpdate?.id, checked]);
+
+  if (!visible || !latestUpdate) return null;
+
+  const handleClose = async () => {
     setVisible(false);
+
+    const currentUserId = useAuthStore.getState().userId;
+
+    try {
+      if (currentUserId) {
+        await apiClient.post('/auth/last-seen-update', { updateId: latestUpdate.id });
+      }
+    } catch {
+      // fallback localStorage
+    }
+
+    try {
+      const key = getLocalKey(currentUserId);
+      window.localStorage.setItem(key, latestUpdate.id);
+    } catch {
+      // ignora erro de localStorage
+    }
   };
 
   return (
@@ -105,4 +138,3 @@ export default function UpdatesPanel() {
     </div>
   );
 }
-

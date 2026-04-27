@@ -103,3 +103,21 @@ export const updateRole = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const getLastSeenUpdate = async (req, res, next) => {
+  try {
+    const result = await authService.getLastSeenUpdate(req.accessToken);
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const updateLastSeenUpdate = async (req, res, next) => {
+  try {
+    const result = await authService.updateLastSeenUpdate(req.accessToken, req.body.updateId);
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+};

@@ -491,6 +491,39 @@ export const updateDisplayName = async (accessToken, displayName) => {
   if (error) throw badRequest(error.message);
 };
 
+export const getLastSeenUpdate = async (accessToken) => {
+  if (!accessToken) throw unauthorized();
+  const supabase = createSupabaseClient({ accessToken });
+  const { data: { user } = {}, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw unauthorized();
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('last_seen_update_id')
+    .eq('id', user.id)
+    .single();
+
+  if (error) throw badRequest(error.message);
+  return { lastSeenUpdateId: data?.last_seen_update_id ?? null };
+};
+
+export const updateLastSeenUpdate = async (accessToken, updateId) => {
+  if (!accessToken) throw unauthorized();
+  if (!updateId || typeof updateId !== 'string') throw badRequest('updateId é obrigatório');
+
+  const supabase = createSupabaseClient({ accessToken });
+  const { data: { user } = {}, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw unauthorized();
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ last_seen_update_id: updateId })
+    .eq('id', user.id);
+
+  if (error) throw badRequest(error.message);
+  return { success: true };
+};
+
 export const updateRole = async (accessToken, userId, role) => {
   if (!accessToken) throw unauthorized();
   if (!userId || !role) throw badRequest('userId e role são obrigatórios');
