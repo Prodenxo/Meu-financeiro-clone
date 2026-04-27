@@ -54,5 +54,12 @@ Thumbs.db
 
 .vercel
 
-# Não versionar lock na raiz (cada dev/CI gera o seu com npm install)
+# Node / npm — gerado localmente (em qualquer pasta com package.json)
 package-lock.json
+npm-shrinkwrap.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+coverage/
+*.tsbuildinfo
+.eslintcache
