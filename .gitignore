@@ -63,3 +63,4 @@ bun.lockb
 coverage/
 *.tsbuildinfo
 .eslintcache
+.cursorrules
