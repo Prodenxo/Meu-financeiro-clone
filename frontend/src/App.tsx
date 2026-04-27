@@ -17,6 +17,7 @@ import Recorrencias from './pages/Recorrencias';
 import Settings from './pages/Settings';
 import ManageUsers from './pages/ManageUsers';
 import AdminUserData from './pages/AdminUserData';
+import QuickOnboarding from './pages/QuickOnboarding';
 import GuidesMei from './pages/GuidesMei';
 import MeiCatalogoClientes from './pages/MeiCatalogoClientes';
 import MeiCatalogoServicosProdutos from './pages/MeiCatalogoServicosProdutos';
@@ -175,6 +176,20 @@ export function AppRoutes() {
                     element={
                       hasRole(role, ['admin']) ? (
                         <ManageUsers />
+                      ) : (
+                        <Navigate
+                          to="/settings"
+                          replace
+                          state={{ accessBlock: 'admin-settings-restricted' as const }}
+                        />
+                      )
+                    }
+                  />
+                  <Route
+                    path="/settings/quick-onboarding"
+                    element={
+                      hasRole(role, ['admin']) ? (
+                        <QuickOnboarding />
                       ) : (
                         <Navigate
                           to="/settings"

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Fuse from 'fuse.js';
 import LoadingOverlay from '../components/LoadingOverlay';
 import PhoneInput from 'react-phone-input-2';
@@ -15,6 +16,7 @@ import {
 import { banUser, createEmpresaLimits, createUser, deleteUser, listEmpresas, listUsers, resetUserPassword, unbanUser, updateEmpresaLimits, updateUser, type EmpresaOption, type ManagedUser } from '../services/usersService';
 
 export default function ManageUsers() {
+  const navigate = useNavigate();
   const { role } = useAuthStore();
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,9 +30,6 @@ export default function ManageUsers() {
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
   const [showCreatePassword, setShowCreatePassword] = useState(false);
-  const [empresaNome, setEmpresaNome] = useState('');
-  const [empresaMaxMei, setEmpresaMaxMei] = useState('');
-  const [empresaMaxNaoMei, setEmpresaMaxNaoMei] = useState('');
   const [empresaEditQuery, setEmpresaEditQuery] = useState('');
   const [empresaEditOpen, setEmpresaEditOpen] = useState(false);
   const [empresaEditSelectedId, setEmpresaEditSelectedId] = useState('');
@@ -359,38 +358,6 @@ export default function ManageUsers() {
     }
   };
 
-  const handleCreateEmpresa = async () => {
-    setLoading(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      const nome = empresaNome.trim();
-      if (!nome) {
-        throw new Error('Empresa é obrigatória');
-      }
-
-      const payload = {
-        empresa: nome,
-        max_mei: parseLimitValue(empresaMaxMei, 'Max MEI'),
-        max_usuarios_nao_mei: parseLimitValue(empresaMaxNaoMei, 'Max não MEI')
-      };
-
-      await createEmpresaLimits(payload);
-      setSuccess('Empresa criada com sucesso.');
-      toast.success('Empresa criada com sucesso.');
-      setEmpresaNome('');
-      setEmpresaMaxMei('');
-      setEmpresaMaxNaoMei('');
-      await fetchEmpresas();
-    } catch (err: unknown) {
-      const message = getErrorMessage(err, 'Erro ao criar empresa');
-      setError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const selectEmpresaForEdit = (empresa: EmpresaOption) => {
     setEmpresaEditSelectedId(empresa.id);
@@ -615,6 +582,15 @@ export default function ManageUsers() {
               </p>
             </div>
             <div className="admin-actions">
+              <button
+                onClick={() => navigate('/settings/quick-onboarding')}
+                className="planner-button flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Cadastro Rápido
+              </button>
               <span className="admin-badge-primary">
                 {role === 'superadmin' ? 'Escopo global' : 'Escopo da empresa'}
               </span>
@@ -662,60 +638,7 @@ export default function ManageUsers() {
               />
               Empresas
             </h2>
-            <div className="admin-split-grid">
-            <div className="admin-section-card">
-              <div className="admin-section-header">
-                <div>
-                  <h2 className="admin-section-title">Criar empresa</h2>
-                  <p className="admin-section-subtitle">Cadastre empresas e limites iniciais de capacidade.</p>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div>
-                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Nome da empresa</label>
-                    <input
-                      type="text"
-                      value={empresaNome}
-                      onChange={(e) => setEmpresaNome(e.target.value)}
-                      className="planner-input-compact"
-                      placeholder="Nome da empresa"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Max MEI</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={empresaMaxMei}
-                      onChange={(e) => setEmpresaMaxMei(e.target.value)}
-                      className="planner-input-compact"
-                      placeholder="0 = sem limite"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Max não MEI</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={empresaMaxNaoMei}
-                      onChange={(e) => setEmpresaMaxNaoMei(e.target.value)}
-                      className="planner-input-compact"
-                      placeholder="0 = sem limite"
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={handleCreateEmpresa}
-                  disabled={loading || !empresaNome.trim()}
-                  className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loading ? 'Salvando...' : 'Criar empresa'}
-                </button>
-              </div>
-            </div>
+            <div className="admin-split-grid xl:grid-cols-1">
 
             <div className="admin-section-card">
               <div className="admin-section-header">
