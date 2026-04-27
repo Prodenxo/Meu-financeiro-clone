@@ -175,8 +175,79 @@
     @apply grid gap-4 xl:grid-cols-2;
   }
 
+  /** Regiões da página Gerenciar utilizadores — contraste visual vs. cartões soltos (FR-ADM-UX) */
+  .admin-region {
+    @apply rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/95 via-white/80 to-white/60 p-4 md:p-6 shadow-[0_8px_30px_rgb(15,23,42,0.07)] dark:border-slate-700/90 dark:from-slate-900/55 dark:via-slate-900/40 dark:to-slate-950/50 dark:shadow-[0_8px_30px_rgb(0,0,0,0.22)];
+  }
+
+  .admin-region--empresas {
+    @apply border-l-[5px] border-l-emerald-500;
+  }
+
+  .admin-region--pessoas {
+    @apply border-l-[5px] border-l-blue-600;
+  }
+
+  .admin-region--convites {
+    @apply border-l-[5px] border-l-violet-500;
+  }
+
+  .admin-region-heading {
+    @apply flex items-center gap-2.5 text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100;
+  }
+
+  .admin-region-heading-dot {
+    @apply h-2.5 w-2.5 shrink-0 rounded-full ring-4;
+  }
+
+  .admin-form-step {
+    @apply rounded-xl border border-slate-200/85 bg-white/85 p-3 shadow-sm md:p-4 dark:border-slate-600/55 dark:bg-slate-900/45;
+  }
+
+  /** Cartão principal “Criar utilizador / Adicionar membro” — destaque face aos outros admin-section-card */
+  .admin-section-card-create-user {
+    @apply rounded-2xl border border-blue-200/90 bg-gradient-to-br from-white via-blue-50/40 to-white p-4 shadow-[0_12px_40px_rgb(37,99,235,0.12)] space-y-3 md:space-y-4 md:p-6 dark:border-blue-900/50 dark:from-slate-900/90 dark:via-blue-950/25 dark:to-slate-950/80 dark:shadow-[0_12px_40px_rgb(0,0,0,0.28)];
+  }
+
   .admin-toolbar {
     @apply rounded-xl border border-[color:rgb(var(--color-surface-border))] dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 p-2.5 md:p-4 backdrop-blur-sm;
+  }
+
+  /** Telefone (react-phone-input-2) alinhado ao planner-input — evita “bloco escuro” solto no admin */
+  .admin-phone-input.react-tel-input {
+    @apply w-full font-sans text-sm;
+  }
+
+  .admin-phone-input.react-tel-input .form-control {
+    width: 100% !important;
+    height: auto !important;
+    box-sizing: border-box !important;
+    border-radius: 0.5rem !important;
+    font-size: 0.875rem !important;
+    line-height: 1.25rem !important;
+    /* Espaço para o selector de país (+55) — alinhado ao react-phone-input-2 */
+    padding-left: 3rem !important;
+    @apply border border-slate-200 bg-white/80 py-2 pr-3 text-slate-900 shadow-sm placeholder:text-slate-500;
+  }
+
+  .admin-phone-input.react-tel-input .form-control:focus {
+    @apply border-blue-500 ring-4 ring-blue-200/40 outline-none;
+  }
+
+  .dark .admin-phone-input.react-tel-input .form-control {
+    @apply border-slate-600 bg-slate-950/40 text-slate-100 placeholder:text-slate-400;
+  }
+
+  .dark .admin-phone-input.react-tel-input .form-control:focus {
+    @apply border-blue-400 ring-blue-500/20;
+  }
+
+  .admin-phone-input.react-tel-input .flag-dropdown {
+    @apply rounded-l-lg border-0 border-r border-slate-200/90 bg-slate-50/90 dark:border-slate-600 dark:bg-slate-900/70;
+  }
+
+  .admin-phone-input.react-tel-input .selected-flag {
+    @apply rounded-l-lg hover:bg-slate-100/90 dark:hover:bg-slate-800/80;
   }
 
   .admin-table-shell {

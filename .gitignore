@@ -54,3 +54,13 @@ Thumbs.db
 
 .vercel
 .cursorrules
+
+# Node / npm — gerado localmente (em qualquer pasta com package.json)
+package-lock.json
+npm-shrinkwrap.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+coverage/
+*.tsbuildinfo
+.eslintcache

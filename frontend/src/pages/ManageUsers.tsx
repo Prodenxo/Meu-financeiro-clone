@@ -604,11 +604,15 @@ export default function ManageUsers() {
   return (
     <>
       <div className="admin-page-shell">
-        <section className="admin-hero">
+        <section className="admin-hero ring-1 ring-blue-500/15 shadow-[0_12px_40px_rgb(37,99,235,0.08)] dark:ring-blue-400/20 dark:shadow-[0_12px_40px_rgb(0,0,0,0.2)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h1 className="admin-hero-title">Gerenciar usuários</h1>
-              <p className="admin-hero-subtitle">Administre usuários por empresa e permissões.</p>
+              <p className="admin-hero-subtitle">
+                {role === 'superadmin'
+                  ? 'Empresas, pessoas e convites em escopo global.'
+                  : 'Membros, convites e lista da sua empresa.'}
+              </p>
             </div>
             <div className="admin-actions">
               <span className="admin-badge-primary">
@@ -649,7 +653,16 @@ export default function ManageUsers() {
         )}
 
         {role === 'superadmin' ? (
-          <section className="admin-split-grid">
+          <section aria-labelledby="admin-heading-empresas">
+            <div className="admin-region admin-region--empresas space-y-4 md:space-y-5">
+            <h2 id="admin-heading-empresas" className="admin-region-heading">
+              <span
+                className="admin-region-heading-dot bg-emerald-500 ring-emerald-500/30"
+                aria-hidden
+              />
+              Empresas
+            </h2>
+            <div className="admin-split-grid">
             <div className="admin-section-card">
               <div className="admin-section-header">
                 <div>
@@ -861,18 +874,37 @@ export default function ManageUsers() {
                 </div>
               )}
             </div>
+            </div>
+            </div>
           </section>
         ) : null}
 
-        <section className="admin-section-card">
+        <section aria-labelledby="admin-heading-pessoas">
+          <div className="admin-region admin-region--pessoas space-y-4 md:space-y-6">
+          <h2 id="admin-heading-pessoas" className="admin-region-heading">
+            <span className="admin-region-heading-dot bg-blue-500 ring-blue-500/30" aria-hidden />
+            Pessoas
+          </h2>
+
+        <section className="admin-section-card-create-user">
           <div className="admin-section-header">
             <div>
-              <h2 className="admin-section-title">Criar usuário</h2>
-              <p className="admin-section-subtitle">Cadastre novos acessos e configure permissões.</p>
+              <h2 className="admin-section-title">
+                {role === 'superadmin' ? 'Criar usuário' : 'Adicionar membro'}
+              </h2>
+              <p className="admin-section-subtitle">
+                {role === 'superadmin'
+                  ? 'Conta e identificação; em seguida defina perfil e empresa de destino.'
+                  : 'Novo acesso entra como usuário da sua empresa. Opcional: senha, nome e telefone.'}
+              </p>
             </div>
           </div>
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-6">
+            <div className="admin-form-step space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                Conta
+              </p>
+              <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Email</label>
                 <input
@@ -911,6 +943,18 @@ export default function ManageUsers() {
                   )}
                 </button>
               </div>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Se a senha ficar em branco, o sistema gera uma senha automática (pode copiar após criar, quando
+                disponível).
+              </p>
+            </div>
+
+            <div className="admin-form-step space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                Nome e contato
+              </p>
+              <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Nome de exibição</label>
                 <input
@@ -921,35 +965,34 @@ export default function ManageUsers() {
                   placeholder="Nome de exibição"
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Telefone</label>
+              <div className="relative z-10">
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="admin-create-phone">
+                  Telefone
+                </label>
                 <PhoneInput
                   country={'br'}
                   value={phone}
                   onChange={(value) => setPhone(value)}
+                  inputProps={{ id: 'admin-create-phone', 'aria-label': 'Telefone com código do país' }}
+                  containerClass="admin-phone-input w-full"
                   inputStyle={{
                     width: '100%',
-                    paddingTop: '10px',
-                    paddingBottom: '10px',
-                    paddingLeft: '48px',
-                    paddingRight: '12px',
-                    borderRadius: '0.5rem',
-                    border: '1px solid #4B5563',
-                    fontSize: '0.875rem',
-                    backgroundColor: '#374151',
-                    color: '#F9FAFB',
-                    boxSizing: 'border-box',
-                    outline: 'none'
+                    boxSizing: 'border-box'
                   }}
-                  buttonStyle={{ border: 'none', background: 'none', paddingLeft: 8 }}
+                  buttonStyle={{ border: 'none', background: 'transparent', paddingLeft: 8 }}
                   placeholder="(11) 99999-9999"
                   enableSearch
                 />
               </div>
+              </div>
             </div>
 
             {role === 'superadmin' ? (
-              <div className="admin-toolbar">
+              <div className="admin-form-step space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  Perfil e empresa
+                </p>
+                <div className="admin-toolbar relative z-20">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Perfil</label>
@@ -1025,6 +1068,7 @@ export default function ManageUsers() {
                     )}
                   </div>
                 </div>
+                </div>
               </div>
             ) : null}
 
@@ -1033,7 +1077,7 @@ export default function ManageUsers() {
               disabled={loading || !email}
               className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? 'Salvando...' : 'Criar usuário'}
+              {loading ? 'Salvando...' : role === 'superadmin' ? 'Criar usuário' : 'Adicionar membro'}
             </button>
           </div>
         </section>
@@ -1041,188 +1085,12 @@ export default function ManageUsers() {
         <section className="admin-section-card">
           <div className="admin-section-header">
             <div>
-              <h2 className="admin-section-title">Convites por link</h2>
-              <p className="admin-section-subtitle">
-                Gere um link de cadastro (URL fornecida pela API), copie e envie ao convidado. Convites pendentes
-                aparecem na lista.
-              </p>
-            </div>
-          </div>
-          <div className="space-y-4">
-            {role === 'superadmin' ? (
-              <div className="relative">
-                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
-                  Empresa para o convite (apenas para gerar o link)
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={inviteEmpresaQuery}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setInviteEmpresaQuery(value);
-                      setInviteEmpresaOpen(true);
-                      const match = empresas.find(
-                        (empresa) => empresa.empresa.toLowerCase() === value.toLowerCase()
-                      );
-                      setInviteEmpresaId(match?.id || '');
-                    }}
-                    onFocus={() => setInviteEmpresaOpen(true)}
-                    onBlur={() => {
-                      window.setTimeout(() => setInviteEmpresaOpen(false), 150);
-                    }}
-                    className="planner-input-compact"
-                    placeholder="Selecione a empresa"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setInviteEmpresaOpen((open) => !open)}
-                    className="planner-button-secondary-compact"
-                    aria-label="Listar empresas para convite"
-                  >
-                    ▾
-                  </button>
-                </div>
-                {inviteEmpresaOpen && (
-                  <div className="admin-dropdown-panel">
-                    {(empresas || [])
-                      .filter((empresa) =>
-                        empresa.empresa.toLowerCase().includes(inviteEmpresaQuery.toLowerCase())
-                      )
-                      .map((empresa) => (
-                        <button
-                          key={empresa.id}
-                          type="button"
-                          onMouseDown={(event) => {
-                            event.preventDefault();
-                            setInviteEmpresaQuery(empresa.empresa);
-                            setInviteEmpresaId(empresa.id);
-                            setInviteEmpresaOpen(false);
-                          }}
-                          className="admin-dropdown-option"
-                        >
-                          {empresa.empresa}
-                        </button>
-                      ))}
-                    {empresas.length === 0 && (
-                      <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
-                        Nenhuma empresa encontrada.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void handleGenerateInvite()}
-                disabled={
-                  inviteActionLoading || (role === 'superadmin' && !inviteEmpresaId)
-                }
-                aria-busy={inviteActionLoading}
-                className="planner-button disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {inviteActionLoading ? 'Processando...' : 'Gerar link'}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleCopyInviteLink()}
-                disabled={!lastInviteUrl}
-                aria-label="Copiar link de convite"
-                className="planner-button-secondary-compact disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Copiar link
-              </button>
-              <button
-                type="button"
-                onClick={() => void loadInvites()}
-                disabled={invitesLoading}
-                className="planner-button-secondary-compact disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {invitesLoading ? 'Atualizando...' : 'Atualizar lista'}
-              </button>
-            </div>
-
-            {lastInviteUrl ? (
-              <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                Link gerado nesta sessão — use <strong>Copiar link</strong> para colar em outro canal (e-mail,
-                mensagem).
-              </p>
-            ) : null}
-
-            {invitesError ? (
-              <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
-                {invitesError}
-              </div>
-            ) : null}
-
-            {invitesLoading ? (
-              <LoadingOverlay message="Carregando convites..." />
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-200/80 dark:border-slate-700/80">
-                <table className="w-full border-collapse text-left text-sm text-slate-700 dark:text-slate-200">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/90 dark:border-slate-700 dark:bg-slate-900/50">
-                      {role === 'superadmin' ? (
-                        <th className="px-4 py-3 font-semibold">Empresa</th>
-                      ) : null}
-                      <th className="px-4 py-3 font-semibold">Criado em</th>
-                      <th className="px-4 py-3 font-semibold">Expira em</th>
-                      <th className="px-4 py-3 font-semibold">Criador</th>
-                      <th className="px-4 py-3 font-semibold">E-mail convidado</th>
-                      <th className="px-4 py-3 font-semibold text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invites.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={role === 'superadmin' ? 6 : 5}
-                          className="px-4 py-6 text-center text-slate-500 dark:text-slate-400"
-                        >
-                          Nenhum convite pendente.
-                        </td>
-                      </tr>
-                    ) : (
-                      invites.map((inv) => (
-                        <tr
-                          key={inv.id}
-                          className="border-b border-slate-100 dark:border-slate-800/80 last:border-0"
-                        >
-                          {role === 'superadmin' ? (
-                            <td className="px-4 py-3">{getEmpresaNameForInvite(inv.empresas_id)}</td>
-                          ) : null}
-                          <td className="px-4 py-3 whitespace-nowrap">{formatInviteDate(inv.created_at)}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{formatInviteDate(inv.expires_at)}</td>
-                          <td className="px-4 py-3">{getInviteCreatorLabel(inv.created_by)}</td>
-                          <td className="px-4 py-3">{inv.invited_email || '—'}</td>
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => void handleRevokeInvite(inv.id)}
-                              disabled={inviteActionLoading}
-                              className="planner-button-secondary-compact text-rose-700 dark:text-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              Revogar
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="admin-section-card">
-          <div className="admin-section-header">
-            <div>
               <h2 className="admin-section-title">Usuários</h2>
-              <p className="admin-section-subtitle">Pesquise, edite permissões e gerencie acesso rapidamente.</p>
+              <p className="admin-section-subtitle">
+                {role === 'superadmin'
+                  ? 'Pesquise, edite vínculos e gerencie acesso em todas as empresas visíveis.'
+                  : 'Pesquise e gerencie membros da sua empresa.'}
+              </p>
             </div>
           </div>
           {loading ? (
@@ -1462,21 +1330,16 @@ export default function ManageUsers() {
                             country={'br'}
                             value={editPhone}
                             onChange={(value) => setEditPhone(value)}
+                            inputProps={{
+                              id: `admin-edit-phone-${user.id}`,
+                              'aria-label': 'Telefone com código do país'
+                            }}
+                            containerClass="admin-phone-input w-full"
                             inputStyle={{
                               width: '100%',
-                              paddingTop: '10px',
-                              paddingBottom: '10px',
-                              paddingLeft: '48px',
-                              paddingRight: '12px',
-                              borderRadius: '0.5rem',
-                              border: '1px solid #4B5563',
-                              fontSize: '0.875rem',
-                              backgroundColor: '#374151',
-                              color: '#F9FAFB',
-                              boxSizing: 'border-box',
-                              outline: 'none'
+                              boxSizing: 'border-box'
                             }}
-                            buttonStyle={{ border: 'none', background: 'none', paddingLeft: 8 }}
+                            buttonStyle={{ border: 'none', background: 'transparent', paddingLeft: 8 }}
                             placeholder="(11) 999999999"
                             enableSearch
                           />
@@ -1674,6 +1537,197 @@ export default function ManageUsers() {
               </div>
             </div>
           )}
+        </section>
+          </div>
+        </section>
+
+        <section aria-labelledby="admin-heading-convites">
+          <div className="admin-region admin-region--convites space-y-4 md:space-y-5">
+          <h2 id="admin-heading-convites" className="admin-region-heading">
+            <span className="admin-region-heading-dot bg-violet-500 ring-violet-500/30" aria-hidden />
+            Convites
+          </h2>
+          <section className="admin-section-card">
+            <div className="admin-section-header">
+              <div>
+                <h2 className="admin-section-title">Convites por link</h2>
+                <p className="admin-section-subtitle">
+                  {role === 'superadmin'
+                    ? 'Gere um link de cadastro (URL da API), copie e envie ao convidado. Convites pendentes aparecem na lista.'
+                    : 'Gere um link de cadastro para a sua empresa, copie e envie. Convites pendentes aparecem abaixo.'}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              {role === 'superadmin' ? (
+                <div className="relative">
+                  <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Empresa para o convite (apenas para gerar o link)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={inviteEmpresaQuery}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setInviteEmpresaQuery(value);
+                        setInviteEmpresaOpen(true);
+                        const match = empresas.find(
+                          (empresa) => empresa.empresa.toLowerCase() === value.toLowerCase()
+                        );
+                        setInviteEmpresaId(match?.id || '');
+                      }}
+                      onFocus={() => setInviteEmpresaOpen(true)}
+                      onBlur={() => {
+                        window.setTimeout(() => setInviteEmpresaOpen(false), 150);
+                      }}
+                      className="planner-input-compact"
+                      placeholder="Selecione a empresa"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setInviteEmpresaOpen((open) => !open)}
+                      className="planner-button-secondary-compact"
+                      aria-label="Listar empresas para convite"
+                    >
+                      ▾
+                    </button>
+                  </div>
+                  {inviteEmpresaOpen && (
+                    <div className="admin-dropdown-panel">
+                      {(empresas || [])
+                        .filter((empresa) =>
+                          empresa.empresa.toLowerCase().includes(inviteEmpresaQuery.toLowerCase())
+                        )
+                        .map((empresa) => (
+                          <button
+                            key={empresa.id}
+                            type="button"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              setInviteEmpresaQuery(empresa.empresa);
+                              setInviteEmpresaId(empresa.id);
+                              setInviteEmpresaOpen(false);
+                            }}
+                            className="admin-dropdown-option"
+                          >
+                            {empresa.empresa}
+                          </button>
+                        ))}
+                      {empresas.length === 0 && (
+                        <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400">
+                          Nenhuma empresa encontrada.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleGenerateInvite()}
+                  disabled={
+                    inviteActionLoading || (role === 'superadmin' && !inviteEmpresaId)
+                  }
+                  aria-busy={inviteActionLoading}
+                  className="planner-button disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {inviteActionLoading ? 'Processando...' : 'Gerar link'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyInviteLink()}
+                  disabled={!lastInviteUrl}
+                  aria-label="Copiar link de convite"
+                  className="planner-button-secondary-compact disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Copiar link
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void loadInvites()}
+                  disabled={invitesLoading}
+                  className="planner-button-secondary-compact disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {invitesLoading ? 'Atualizando...' : 'Atualizar lista'}
+                </button>
+              </div>
+
+              {lastInviteUrl ? (
+                <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                  Link gerado nesta sessão — use <strong>Copiar link</strong> para colar em outro canal (e-mail,
+                  mensagem).
+                </p>
+              ) : null}
+
+              {invitesError ? (
+                <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
+                  {invitesError}
+                </div>
+              ) : null}
+
+              {invitesLoading ? (
+                <LoadingOverlay message="Carregando convites..." />
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-slate-200/80 dark:border-slate-700/80">
+                  <table className="w-full border-collapse text-left text-sm text-slate-700 dark:text-slate-200">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/90 dark:border-slate-700 dark:bg-slate-900/50">
+                        {role === 'superadmin' ? (
+                          <th className="px-4 py-3 font-semibold">Empresa</th>
+                        ) : null}
+                        <th className="px-4 py-3 font-semibold">Criado em</th>
+                        <th className="px-4 py-3 font-semibold">Expira em</th>
+                        <th className="px-4 py-3 font-semibold">Criador</th>
+                        <th className="px-4 py-3 font-semibold">E-mail convidado</th>
+                        <th className="px-4 py-3 font-semibold text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invites.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={role === 'superadmin' ? 6 : 5}
+                            className="px-4 py-6 text-center text-slate-500 dark:text-slate-400"
+                          >
+                            Nenhum convite pendente.
+                          </td>
+                        </tr>
+                      ) : (
+                        invites.map((inv) => (
+                          <tr
+                            key={inv.id}
+                            className="border-b border-slate-100 dark:border-slate-800/80 last:border-0"
+                          >
+                            {role === 'superadmin' ? (
+                              <td className="px-4 py-3">{getEmpresaNameForInvite(inv.empresas_id)}</td>
+                            ) : null}
+                            <td className="px-4 py-3 whitespace-nowrap">{formatInviteDate(inv.created_at)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{formatInviteDate(inv.expires_at)}</td>
+                            <td className="px-4 py-3">{getInviteCreatorLabel(inv.created_by)}</td>
+                            <td className="px-4 py-3">{inv.invited_email || '—'}</td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => void handleRevokeInvite(inv.id)}
+                                disabled={inviteActionLoading}
+                                className="planner-button-secondary-compact text-rose-700 dark:text-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Revogar
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+          </div>
         </section>
       </div>
     </>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronDown, Users } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
@@ -829,6 +830,16 @@ export default function AdminUserData() {
             </div>
           </div>
         </section>
+
+        <div className="admin-alert-info">
+          <span className="font-semibold text-blue-800 dark:text-blue-100">Gestão de acessos:</span>{' '}
+          criar empresas, utilizadores e convites por link está na página{' '}
+          <Link to="/settings/users" className="font-semibold underline underline-offset-2 hover:no-underline">
+            Gerenciar utilizadores
+          </Link>{' '}
+          (<span className="whitespace-nowrap">/settings/users</span>). Este ecrã é só para dados operacionais
+          (transações, DAS, etc.) do utilizador escolhido.
+        </div>
 
         {error && (
           <div className="rounded-xl border border-rose-300/90 bg-rose-50/90 px-4 py-3 text-rose-700 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300">
