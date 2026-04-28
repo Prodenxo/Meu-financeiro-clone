@@ -1017,6 +1017,33 @@ export const deleteUser = async (accessToken, userId) => {
   return { userId };
 };
 
+export const deleteEmpresa = async (accessToken, empresaId) => {
+  if (!empresaId) throw badRequest('empresaId é obrigatório');
+
+  const requester = await getRequesterContext(accessToken);
+  if (requester.role !== 'superadmin') throw forbidden();
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+
+  // 1. Remover todos os vínculos de usuários com esta empresa
+  const { error: linksError } = await adminClient
+    .from('role_x_user_x_empresa')
+    .delete()
+    .eq('empresas_id', empresaId);
+  
+  if (linksError) throw badRequest(`Erro ao remover vínculos: ${linksError.message}`);
+
+  // 2. Remover a empresa propriamente dita
+  const { error: empresaError } = await adminClient
+    .from('empresas')
+    .delete()
+    .eq('id', empresaId);
+
+  if (empresaError) throw badRequest(`Erro ao remover empresa: ${empresaError.message}`);
+
+  return { empresaId };
+};
+
 export const resetUserPassword = async (accessToken, userId, input) => {
   if (!userId) throw badRequest('userId é obrigatório');
 

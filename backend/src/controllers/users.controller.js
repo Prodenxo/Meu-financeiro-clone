@@ -122,3 +122,12 @@ export const getEmpresaById = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const deleteEmpresa = async (req, res, next) => {
+  try {
+    const result = await usersService.deleteEmpresa(req.accessToken, req.params.empresaId);
+    return sendSuccess(res, result, 'Empresa excluída');
+  } catch (error) {
+    return next(error);
+  }
+};

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { toast } from '../../../lib/toast';
-import { updateEmpresaLimits } from '../../../services/usersService';
+import { updateEmpresaLimits, createEmpresaLimits, deleteEmpresa } from '../../../services/usersService';
 
 interface ManagedUser {
   id: string;
@@ -27,7 +27,9 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
   const [loading, setLoading] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
+  const [empresaToDelete, setEmpresaToDelete] = useState<Empresa | null>(null);
 
   // Estados para formulário (reutilizados para edit/create)
   const [formData, setFormData] = useState({
@@ -119,6 +121,27 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
       setIsCreateModalOpen(false);
     } catch (err: any) {
       toast.error(err.message || 'Erro ao processar empresa');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteClick = (empresa: Empresa) => {
+    setEmpresaToDelete(empresa);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!empresaToDelete) return;
+
+    setLoading(true);
+    try {
+      await deleteEmpresa(empresaToDelete.id);
+      toast.success('Empresa excluída com sucesso!');
+      await fetchEmpresas();
+      setIsDeleteModalOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao excluir empresa');
     } finally {
       setLoading(false);
     }
@@ -293,12 +316,27 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                       </td>
 
                       <td className="py-6 text-right">
-                        <button
-                          onClick={() => handleEditClick(empresa)}
-                          className="inline-flex items-center justify-center px-4 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm"
-                        >
-                          Editar
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleEditClick(empresa)}
+                            title="Editar empresa"
+                            className="inline-flex items-center justify-center p-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all shadow-sm"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(empresa)}
+                            title="Excluir empresa"
+                            disabled={loading}
+                            className="inline-flex items-center justify-center p-2 text-sm font-medium text-rose-600 dark:text-rose-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all shadow-sm disabled:opacity-50"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -431,6 +469,45 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                 }`}
               >
                 {loading ? 'Salvando...' : (isCreateModalOpen ? 'Cadastrar Empresa' : 'Salvar Alterações')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Exclusão */}
+      {isDeleteModalOpen && empresaToDelete && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="planner-card w-full max-w-sm p-6 shadow-2xl border-rose-100 dark:border-rose-900/30 animate-in zoom-in-95 duration-200 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center border-4 border-white dark:border-slate-900 shadow-sm">
+                <svg className="h-8 w-8 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+            </div>
+
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Excluir Empresa?</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+              Você está prestes a excluir <strong>{empresaToDelete.empresa}</strong>. 
+              <br /><br />
+              <span className="text-rose-500 font-medium">Atenção:</span> Todos os vínculos de acesso dos usuários com esta empresa serão permanentemente removidos.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={confirmDelete}
+                disabled={loading}
+                className="planner-button w-full bg-rose-500 hover:bg-rose-600 text-white py-3 shadow-lg shadow-rose-500/20"
+              >
+                {loading ? 'Excluindo...' : 'Sim, Excluir Empresa'}
+              </button>
+              <button 
+                onClick={() => setIsDeleteModalOpen(false)}
+                disabled={loading}
+                className="planner-button-secondary w-full py-3"
+              >
+                Cancelar
               </button>
             </div>
           </div>

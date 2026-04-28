@@ -66,6 +66,10 @@ export async function updateEmpresaLimits(empresaId: string, input: EmpresaUpdat
   return apiClient.put<{ empresa: EmpresaOption }>(`/users/empresas/${empresaId}`, input);
 }
 
+export async function deleteEmpresa(empresaId: string) {
+  return apiClient.delete<{ success: boolean }>(`/users/empresas/${empresaId}`);
+}
+
 export async function updateUser(
   userId: string,
   input: {

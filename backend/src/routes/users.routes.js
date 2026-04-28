@@ -10,6 +10,7 @@ router.get('/empresas/current', requireAuth, controller.getEmpresa);
 router.get('/empresas/:empresaId', requireAuth, controller.getEmpresaById);
 router.post('/empresas', requireAuth, controller.createEmpresa);
 router.put('/empresas/:empresaId', requireAuth, controller.updateEmpresa);
+router.delete('/empresas/:empresaId', requireAuth, controller.deleteEmpresa);
 router.post('/sync-phone', requireAuth, controller.syncPhone);
 router.post('/:userId/ban', requireAuth, controller.banUser);
 router.post('/:userId/unban', requireAuth, controller.unbanUser);
