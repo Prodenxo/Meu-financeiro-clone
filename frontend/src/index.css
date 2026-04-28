@@ -46,6 +46,24 @@
     @apply bg-slate-950 text-slate-100;
   }
 
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-100 dark:bg-slate-900;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 dark:bg-slate-700 rounded-full border-2 border-transparent bg-clip-content;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400 dark:bg-slate-600;
+  }
+
   /* 5A: Anel de foco visível para acessibilidade */
   .focus-ring:focus-visible,
   button:focus-visible,
@@ -69,7 +87,19 @@
   }
 
   .planner-input {
-    @apply w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-500 focus:border-blue-500 focus:ring-4 focus:ring-blue-200/40 dark:border-slate-600 dark:bg-slate-950/40 dark:text-slate-100 dark:placeholder:text-slate-400 dark:focus:border-blue-400 dark:focus:ring-blue-500/20;
+    @apply w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-500 focus:border-blue-500 focus:ring-4 focus:ring-blue-200/40 dark:border-slate-600 dark:bg-slate-950/40 dark:text-slate-100 dark:placeholder:text-slate-400 dark:focus:border-blue-400 dark:focus:ring-blue-500/20 appearance-none;
+  }
+
+  select.planner-input {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+  }
+
+  .dark select.planner-input {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
   }
 
   .planner-input-compact {
@@ -210,7 +240,7 @@
   }
 
   .admin-toolbar {
-    @apply rounded-xl border border-[color:rgb(var(--color-surface-border))] dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 p-2.5 md:p-4 backdrop-blur-sm;
+    @apply flex flex-col gap-4 md:flex-row md:items-center md:justify-between py-2;
   }
 
   /** Telefone (react-phone-input-2) alinhado ao planner-input — evita “bloco escuro” solto no admin */
@@ -251,7 +281,7 @@
   }
 
   .admin-table-shell {
-    @apply overflow-hidden rounded-xl border border-[color:rgb(var(--color-surface-border))] dark:border-slate-700 bg-white/80 dark:bg-slate-950/40;
+    @apply overflow-hidden rounded-xl bg-white/40 dark:bg-slate-950/20;
   }
 
   .admin-table-wrap {

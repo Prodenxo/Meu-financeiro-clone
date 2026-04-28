@@ -124,7 +124,6 @@ const normalizeLimitInput = (value, fieldName) => {
   if (numeric < 0) {
     throw badRequest(`${fieldName} deve ser maior ou igual a 0`);
   }
-  if (numeric === 0) return null;
   return numeric;
 };
 
@@ -175,7 +174,7 @@ const resolveMeiValue = (value, defaultValue = true) => (
   typeof value === 'boolean' ? value : defaultValue
 );
 
-const isUnlimitedLimit = (value) => value === null || value === 0;
+const isUnlimitedLimit = (value) => value === null;
 
 const getEmpresaLimits = async (adminClient, empresaId) => {
   if (!empresaId) throw badRequest('Empresa e obrigatoria');
