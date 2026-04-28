@@ -1,6 +1,9 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { badRequest, forbidden, unauthorized, serviceUnavailable } from '../utils/errors.js';
+import crypto from 'crypto';
+
+const hashInviteToken = (rawToken) => crypto.createHash('sha256').update(String(rawToken).trim(), 'utf8').digest('hex');
 
 const ROLE_DEFAULT = 'usuario';
 const ROLE_ALLOWED = new Set(['superadmin', 'admin', 'usuario', 'outsider']);
@@ -19,7 +22,7 @@ const getRoleCandidates = (role) => {
   return [normalized];
 };
 
-const ensureSignupRoleLink = async (adminClient, userId) => {
+const ensureSignupRoleLink = async (adminClient, userId, empresaId = null) => {
   const { data: activeLink, error: activeLinkError } = await adminClient
     .from('role_x_user_x_empresa')
     .select('id')
@@ -30,38 +33,20 @@ const ensureSignupRoleLink = async (adminClient, userId) => {
     .maybeSingle();
 
   if (activeLinkError) {
-    throw badRequest(activeLinkError.message);
+    console.error('[AuthService] ensureSignupRoleLink: falha ao buscar link ativo', activeLinkError);
   }
 
-  if (activeLink?.id) {
-    const { error: updateError } = await adminClient
-      .from('role_x_user_x_empresa')
-      .update({ mei: false })
-      .eq('id', activeLink.id);
-
-    if (updateError) {
-      throw badRequest(updateError.message);
-    }
-    return;
-  }
-
-  const roleFilters = getRoleCandidates(ROLE_DEFAULT)
-    .map((candidate) => `roles.ilike.${candidate}`)
-    .join(',');
+  if (activeLink) return activeLink;
 
   const { data: roleData, error: roleError } = await adminClient
     .from('roles')
     .select('id')
-    .or(roleFilters)
-    .limit(1)
-    .maybeSingle();
+    .eq('roles', 'User')
+    .single();
 
-  if (roleError) {
-    throw badRequest(roleError.message);
-  }
-
-  if (!roleData?.id) {
-    throw badRequest('Role não encontrada');
+  if (roleError || !roleData) {
+    console.error('[AuthService] ensureSignupRoleLink: falha ao buscar role User', roleError);
+    return null;
   }
 
   const { error: linkError } = await adminClient
@@ -69,14 +54,16 @@ const ensureSignupRoleLink = async (adminClient, userId) => {
     .insert({
       user_id: userId,
       roles_id: roleData.id,
-      empresas_id: null,
+      empresas_id: empresaId,
       status: true,
       mei: false
     });
 
   if (linkError) {
-    throw badRequest(linkError.message);
+    console.error('[AuthService] ensureSignupRoleLink: falha ao criar link inicial', linkError);
   }
+
+  return null;
 };
 
 const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
@@ -183,7 +170,7 @@ const getResolvedRoleAndCompany = async ({ accessToken, userId }) => {
   return { role: profileRole, empresaId: linkResult.empresaId || null, mei };
 };
 
-export const signUp = async ({ email, password, phone, displayName }, deps = {}) => {
+export const signUp = async ({ email, password, phone, displayName, inviteToken }, deps = {}) => {
   if (!email || !password) {
     throw badRequest('Email e senha são obrigatórios');
   }
@@ -210,13 +197,60 @@ export const signUp = async ({ email, password, phone, displayName }, deps = {})
 
   if (userId && env.SUPABASE_SERVICE_ROLE_KEY) {
     const adminClient = createSupabaseClientFn({ useServiceRole: true });
+    
+    let empresaId = null;
+    const tokenToUse = inviteToken || deps.inviteToken;
+    console.log('[AuthService] Tentando processar convite no signUp. Token:', tokenToUse);
+    
+    if (tokenToUse) {
+      const tokenHash = hashInviteToken(tokenToUse);
+      console.log('[AuthService] Hash gerado:', tokenHash);
+      
+      const { data: inviteData, error: inviteErr } = await adminClient
+        .from('empresa_invites')
+        .select('id, empresas_id, expires_at, used_at, revoked_at')
+        .eq('token_hash', tokenHash)
+        .maybeSingle();
+      
+      if (inviteErr) {
+        console.error('[AuthService] Erro DB ao buscar convite:', inviteErr);
+      }
+      
+      const now = new Date();
+      const expires = inviteData?.expires_at ? new Date(inviteData.expires_at) : null;
+      const isExpired = expires && expires <= now;
+
+      const isPending = inviteData && 
+                        !inviteData.used_at && 
+                        !inviteData.revoked_at && 
+                        !isExpired;
+
+      if (isPending) {
+        empresaId = inviteData.empresas_id;
+        // Marcar convite como usado
+        const { error: upErr } = await adminClient
+          .from('empresa_invites')
+          .update({ used_at: new Date().toISOString() })
+          .eq('id', inviteData.id);
+        
+        if (upErr) console.error('[AuthService] Erro ao atualizar convite:', upErr);
+      } else {
+        console.warn('[AuthService] Convite inválido, expirado ou já usado.');
+      }
+    }
+
     await adminClient
       .from('profiles')
-      .insert({ id: userId, role: ROLE_DEFAULT })
+      .insert({ 
+        id: userId, 
+        role: ROLE_DEFAULT,
+        display_name: displayName || null,
+        phone: cleanedPhone || null
+      })
       .select('role')
       .single();
 
-    await ensureSignupRoleLink(adminClient, userId);
+    await ensureSignupRoleLink(adminClient, userId, empresaId);
   }
 
   if (userId && cleanedPhone) {
@@ -256,91 +290,50 @@ export const signIn = async ({ email, password }) => {
     throw badRequest('Email e senha são obrigatórios');
   }
 
-  try {
-    const supabase = createSupabaseClient();
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+  const { data, error } = await createSupabaseClient().auth.signInWithPassword({
+    email,
+    password
+  });
 
-    if (error) {
-      const rawMessage = String(error.message || '');
-      const normalized = rawMessage.toLowerCase();
-
-      if (env.NODE_ENV !== 'production') {
-        console.warn('[Auth] signIn error', {
-          message: rawMessage,
-          status: error.status,
-          name: error.name
-        });
-      }
-
-      if (
-        normalized.includes('invalid login credentials')
-        || normalized.includes('invalid credentials')
-        || normalized.includes('invalid email or password')
-      ) {
-        throw unauthorized('Email ou senha inválidos');
-      }
-
-      if (normalized.includes('email not confirmed') || normalized.includes('email not verified')) {
-        throw forbidden('Email não confirmado. Verifique sua caixa de entrada.');
-      }
-
-      if (normalized.includes('user not found')) {
-        throw unauthorized('Usuário não encontrado');
-      }
-
-      if (
-        normalized.includes('fetch failed')
-        || normalized.includes('network')
-        || normalized.includes('enotfound')
-        || normalized.includes('timeout')
-      ) {
-        throw serviceUnavailable('Falha de comunicação com o Supabase Auth. Tente novamente mais tarde.');
-      }
-
-      if (error.status === 429) {
-        throw badRequest('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
-      }
-
-      throw unauthorized(rawMessage || 'Falha ao autenticar');
+  if (error) {
+    const rawMessage = error.message || '';
+    if (rawMessage.toLowerCase().includes('invalid login credentials')) {
+      throw unauthorized('Email ou senha incorretos');
     }
-
-    await ensureUserNotBlocked({
-      accessToken: data.session?.access_token ?? null,
-      userId: data.user?.id ?? ''
-    });
-
-    const { role, empresaId, mei } = await getResolvedRoleAndCompany({
-      accessToken: data.session?.access_token ?? null,
-      userId: data.user?.id ?? ''
-    });
-
-    return {
-      user: data.user,
-      userId: data.user?.id || null,
-      phone: data.user?.user_metadata?.phone || null,
-      displayName: data.user?.user_metadata?.display_name || null,
-      role,
-      empresaId,
-      mei,
-      session: data.session
-    };
-  } catch (err) {
-    if (isHttpError(err)) throw err;
-    if (env.NODE_ENV !== 'production') {
-      console.error('[Auth] signIn unexpected error', err);
+    if (error.status === 429) {
+      throw badRequest('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
     }
-    throw serviceUnavailable('Falha ao conectar com o serviço de autenticação. Tente novamente.');
+    throw unauthorized(rawMessage || 'Falha ao autenticar');
   }
+
+  await ensureUserNotBlocked({
+    accessToken: data.session?.access_token ?? null,
+    userId: data.user?.id ?? ''
+  });
+
+  const { role, empresaId, mei } = await getResolvedRoleAndCompany({
+    accessToken: data.session?.access_token ?? null,
+    userId: data.user?.id ?? ''
+  });
+
+  return {
+    user: data.user,
+    userId: data.user?.id || null,
+    phone: data.user?.user_metadata?.phone || null,
+    displayName: data.user?.user_metadata?.display_name || null,
+    role,
+    empresaId,
+    mei,
+    session: data.session
+  };
 };
 
 export const signOut = async (accessToken) => {
   if (!accessToken) return;
-
-  const supabase = createSupabaseClient({ accessToken });
-  await supabase.auth.signOut();
+  const { error } = await createSupabaseClient({ accessToken }).auth.signOut();
+  if (error) {
+    throw badRequest(error.message);
+  }
 };
 
 export const getSession = async (accessToken) => {
@@ -349,14 +342,21 @@ export const getSession = async (accessToken) => {
   const supabase = createSupabaseClient({ accessToken });
   const { data: { user } = {}, error } = await supabase.auth.getUser();
 
-  if (error || !user) return null;
+  if (error || !user) {
+    return null;
+  }
 
   await ensureUserNotBlocked({ accessToken, userId: user.id });
 
   const { role, empresaId, mei } = await getResolvedRoleAndCompany({ accessToken, userId: user.id });
 
   return {
-    user,
+    user: {
+      id: user.id,
+      email: user.email,
+      phone: user.user_metadata?.phone || null,
+      displayName: user.user_metadata?.display_name || null
+    },
     access_token: accessToken,
     role,
     empresaId,
@@ -556,4 +556,15 @@ export const updateRole = async (accessToken, userId, role) => {
   if (error) throw badRequest(error.message);
 
   return { success: true };
+};
+
+export const resolveRequesterContext = async (accessToken) => {
+  const session = await getSession(accessToken);
+  if (!session) throw unauthorized('Sessão expirada ou inválida');
+
+  return {
+    userId: session.user.id,
+    role: session.role,
+    empresaId: session.empresaId
+  };
 };

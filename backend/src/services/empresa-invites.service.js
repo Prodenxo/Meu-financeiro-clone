@@ -311,19 +311,48 @@ export const acceptInvite = async (accessToken, rawToken, deps = {}) => {
     const { roleId } = await ensureRoleId(admin, 'usuario');
     if (!roleId) throw badRequest('Role não encontrada');
 
-    const { data: linkRow, error: linkErr } = await admin
+    // Tentar encontrar um vínculo existente (ex: criado no signup sem empresa)
+    const { data: existingLink } = await admin
       .from('role_x_user_x_empresa')
-      .insert({
-        user_id: userId,
-        roles_id: roleId,
-        empresas_id: claimed.empresas_id,
-        status: true,
-        mei: targetMei
-      })
       .select('id')
+      .eq('user_id', userId)
+      .is('empresas_id', null)
+      .eq('status', true)
       .maybeSingle();
 
-    if (linkErr) throw badRequest(linkErr.message);
+    let linkRow;
+    if (existingLink?.id) {
+      const { data: updated, error: upErr } = await admin
+        .from('role_x_user_x_empresa')
+        .update({
+          roles_id: roleId,
+          empresas_id: claimed.empresas_id,
+          status: true,
+          mei: targetMei
+        })
+        .eq('id', existingLink.id)
+        .select('id')
+        .maybeSingle();
+      
+      if (upErr) throw badRequest(upErr.message);
+      linkRow = updated;
+    } else {
+      const { data: inserted, error: linkErr } = await admin
+        .from('role_x_user_x_empresa')
+        .insert({
+          user_id: userId,
+          roles_id: roleId,
+          empresas_id: claimed.empresas_id,
+          status: true,
+          mei: targetMei
+        })
+        .select('id')
+        .maybeSingle();
+
+      if (linkErr) throw badRequest(linkErr.message);
+      linkRow = inserted;
+    }
+
     if (!linkRow?.id) throw badRequest('Falha ao vincular usuário à empresa');
     insertedLinkId = linkRow.id;
 

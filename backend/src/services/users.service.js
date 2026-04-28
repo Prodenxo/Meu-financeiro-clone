@@ -255,14 +255,16 @@ export const assertUserEligibleForEmpresaInvite = async (adminClient, userId) =>
 
   const { data: activeLink, error: linkErr } = await adminClient
     .from('role_x_user_x_empresa')
-    .select('id')
+    .select('id, empresas_id')
     .eq('user_id', userId)
     .eq('status', true)
     .limit(1)
     .maybeSingle();
 
   if (linkErr) throw badRequest(linkErr.message);
-  if (activeLink?.id) {
+  
+  // Se já tem empresa vinculada, bloqueia. Se tem vínculo mas empresas_id é null, permite (foi criado no signup).
+  if (activeLink?.id && activeLink.empresas_id != null) {
     throw badRequest('Esta conta já está vinculada a uma empresa');
   }
 };

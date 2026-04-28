@@ -5,6 +5,7 @@ export interface SignUpInput {
   password: string;
   phone?: string;
   displayName?: string;
+  inviteToken?: string;
 }
 
 /**

@@ -34,7 +34,7 @@ interface AuthState {
   sessionRestored: boolean;
   setUser: (user: AuthUser | null) => void;
   setPhone: (phone: string) => void;
-  signUp: (email: string, password: string, phone?: string, displayName?: string) => Promise<void>;
+  signUp: (email: string, password: string, phone?: string, displayName?: string, inviteToken?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   initAuth: () => Promise<void>;
@@ -64,8 +64,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   })),
   setPhone: (phone) => set({ phone }),
 
-  signUp: async (email, password, phone?, displayName?) => {
-    const result = await signUpService({ email, password, phone, displayName });
+  signUp: async (email, password, phone?, displayName?, inviteToken?) => {
+    const result = await signUpService({ email, password, phone, displayName, inviteToken });
     if (result.hadSession) {
       const session = await getSession();
       if (session?.user) {

@@ -202,21 +202,17 @@ export default function Register() {
     setError('');
     setLoading(true);
     try {
-      await signUp(email, password, phone || undefined, displayName || undefined);
+      // Capturar o token diretamente da URL
+      const tokenFromUrl = getConviteTokenFromSearch(location.search);
+      
+      // Realizar o cadastro já enviando o token de convite
+      await signUp(email, password, phone || undefined, displayName || undefined, tokenFromUrl || undefined);
 
-      if (hasInviteQuery && invitePhase === 'valid' && inviteRaw) {
-        let sess = await getSession();
-        if (!sess) {
-          await signIn(email, password);
-          sess = await getSession();
-        }
-        if (!sess) {
-          throw new Error(
-            'Conta criada, mas não foi possível iniciar sessão automaticamente. Se o e-mail de confirmação for exigido, confirme e faça login; depois o vínculo com a empresa pode ser concluído.'
-          );
-        }
-        await acceptInviteRequest({ token: inviteRaw, mei: true });
+      // Se havia um convite, as permissões já foram vinculadas no backend.
+      // Apenas inicializamos o auth localmente para garantir que o estado reflita a nova empresa.
+      if (tokenFromUrl) {
         await initAuth();
+        toast.success('Conta criada e vinculada com sucesso!');
       }
 
       navigate('/');
