@@ -31,6 +31,7 @@ export default function ManageUsers() {
   const [fetchError, setFetchError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [activeTab, setActiveTab] = useState<'membros' | 'convites' | 'empresas'>('membros');
@@ -44,19 +45,35 @@ export default function ManageUsers() {
 
   const canManage = hasRole(role, ['admin']);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (search?: string) => {
     setLoading(true);
     setFetchError('');
     try {
-      const data = await listUsers();
+      const data = await listUsers(search);
       setUsers(data);
-      setFetchError(''); // Garantir que erro de tentativas anteriores seja limpo
+      setFetchError('');
     } catch (err: unknown) {
       setFetchError(err instanceof Error ? err.message : 'Erro ao listar usuários');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!canManage) return;
+
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+    }
+
+    fetchTimeoutRef.current = setTimeout(() => {
+      void fetchUsers(searchTerm);
+    }, 500); // 500ms debounce
+
+    return () => {
+      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+    };
+  }, [searchTerm, canManage]);
 
   const fetchEmpresas = async () => {
     try {
@@ -357,6 +374,8 @@ export default function ManageUsers() {
                 onDelete={handleDeleteUser}
                 onImpersonate={handleImpersonate}
                 onCreateClick={handleStartCreate}
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
               />
             </div>
           </section>

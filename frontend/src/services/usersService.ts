@@ -41,8 +41,9 @@ export interface EmpresaUpdatePayload {
   max_usuarios_nao_mei?: number | null;
 }
 
-export async function listUsers() {
-  const result = await apiClient.get<{ users: ManagedUser[] }>('/users');
+export async function listUsers(search?: string) {
+  const q = search ? `?search=${encodeURIComponent(search)}` : '';
+  const result = await apiClient.get<{ users: ManagedUser[] }>(`/users${q}`);
   return (result.users || []).map((user) => ({
     ...user,
     role: normalizeRole(user.role) || user.role,

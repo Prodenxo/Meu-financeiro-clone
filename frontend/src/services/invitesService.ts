@@ -8,7 +8,10 @@ export async function validateInviteTokenPublic(rawToken: string) {
   if (!t) {
     return { status: 'invalid' as const };
   }
-  return apiClient.get<{ status: InviteValidationStatus }>(
+  return apiClient.get<{ 
+    status: InviteValidationStatus;
+    empresaName?: string | null;
+  }>(
     `/invites/validate?token=${encodeURIComponent(t)}`
   );
 }

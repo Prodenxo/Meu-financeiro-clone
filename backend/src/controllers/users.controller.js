@@ -3,7 +3,7 @@ import { sendSuccess } from '../utils/response.js';
 
 export const listUsers = async (req, res, next) => {
   try {
-    const result = await usersService.listUsers(req.accessToken);
+    const result = await usersService.listUsers(req.accessToken, req.query);
     return sendSuccess(res, result, 'Usuários listados');
   } catch (error) {
     return next(error);

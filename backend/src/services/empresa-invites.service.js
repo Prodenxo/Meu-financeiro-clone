@@ -228,7 +228,10 @@ export const validateInviteToken = async (rawToken) => {
   const admin = createClient({ useServiceRole: true });
   const { data, error } = await admin
     .from('empresa_invites')
-    .select(SELECT_PUBLIC_ROW)
+    .select(`
+      id, expires_at, used_at, revoked_at, is_reusable,
+      empresas ( empresa )
+    `)
     .eq('token_hash', tokenHash)
     .maybeSingle();
 
@@ -241,7 +244,11 @@ export const validateInviteToken = async (rawToken) => {
   if (!data.is_reusable && data.used_at) return { status: 'used' };
   
   if (new Date(data.expires_at) <= new Date()) return { status: 'expired' };
-  return { status: 'valid' };
+  
+  return { 
+    status: 'valid',
+    empresaName: data.empresas?.empresa || null
+  };
 };
 
 const SELECT_INVITE_FOR_ACCEPT = 'id, empresas_id, expires_at, used_at, revoked_at';

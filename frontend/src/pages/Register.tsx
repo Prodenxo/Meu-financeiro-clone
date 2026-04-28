@@ -170,6 +170,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
+  const [invitedByEmpresa, setInvitedByEmpresa] = useState<string | null>(null);
 
   const [invitePhase, setInvitePhase] = useState<
     'idle' | 'loading' | InviteValidationStatus | 'network_error' | 'no_invite'
@@ -196,7 +197,12 @@ export default function Register() {
     setInvitePhase('loading');
     void validateInviteTokenPublic(inviteRaw).then(
       (r) => {
-        if (!cancelled) setInvitePhase(r.status);
+        if (!cancelled) {
+          setInvitePhase(r.status);
+          if (r.status === 'valid' && r.empresaName) {
+            setInvitedByEmpresa(r.empresaName);
+          }
+        }
       },
       () => {
         if (!cancelled) setInvitePhase('network_error');
@@ -307,11 +313,21 @@ export default function Register() {
 
       {showForm ? (
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
-          {inviteBanner ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-              {inviteBanner}
+          {showForm && invitedByEmpresa && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 px-5 py-4 text-sm text-emerald-900 shadow-sm dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-200 animate-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+                  <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                </div>
+                <p className="font-medium leading-relaxed">
+                  Você foi convidado pela empresa <span className="font-bold underline decoration-emerald-500/30 underline-offset-2">{invitedByEmpresa}</span> para o sistema.
+                </p>
+              </div>
             </div>
-          ) : null}
+          )}
           <RegisterFormFields
             email={email}
             setEmail={setEmail}

@@ -26,13 +26,16 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
 
-  // Estados para edição
-  const [editNome, setEditNome] = useState('');
-  const [editMaxMei, setEditMaxMei] = useState('');
-  const [editMaxNaoMei, setEditMaxNaoMei] = useState('');
-  const [isMeiEnabled, setIsMeiEnabled] = useState(false);
+  // Estados para formulário (reutilizados para edit/create)
+  const [formData, setFormData] = useState({
+    nome: '',
+    maxMei: '1',
+    maxNaoMei: '0',
+    meiEnabled: false
+  });
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -68,34 +71,54 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
 
   const handleEditClick = (empresa: Empresa) => {
     setSelectedEmpresa(empresa);
-    setEditNome(empresa.empresa);
-    
     const meiVal = empresa.max_mei || 0;
-    setIsMeiEnabled(meiVal > 0);
-    setEditMaxMei(meiVal > 0 ? meiVal.toString() : '1');
-    
-    setEditMaxNaoMei(empresa.max_usuarios_nao_mei?.toString() || '0');
+    setFormData({
+      nome: empresa.empresa,
+      meiEnabled: meiVal > 0,
+      maxMei: meiVal > 0 ? meiVal.toString() : '1',
+      maxNaoMei: empresa.max_usuarios_nao_mei?.toString() || '0'
+    });
     setIsEditModalOpen(true);
   };
 
-  const handleUpdate = async () => {
-    if (!selectedEmpresa || !editNome.trim()) {
+  const handleStartCreate = () => {
+    setSelectedEmpresa(null);
+    setFormData({
+      nome: '',
+      meiEnabled: true,
+      maxMei: '5',
+      maxNaoMei: '0'
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const handleSave = async (mode: 'create' | 'edit') => {
+    if (!formData.nome.trim()) {
       toast.error('O nome da empresa é obrigatório.');
       return;
     }
 
     setLoading(true);
     try {
-      await updateEmpresaLimits(selectedEmpresa.id, {
-        empresa: editNome,
-        max_mei: isMeiEnabled ? (Number(editMaxMei) || 1) : 0,
-        max_usuarios_nao_mei: Number(editMaxNaoMei) || 0,
-      });
-      toast.success('Empresa atualizada com sucesso!');
+      const payload = {
+        empresa: formData.nome,
+        max_mei: formData.meiEnabled ? (Number(formData.maxMei) || 1) : 0,
+        max_usuarios_nao_mei: Number(formData.maxNaoMei) || 0,
+      };
+
+      if (mode === 'edit' && selectedEmpresa) {
+        await updateEmpresaLimits(selectedEmpresa.id, payload);
+        toast.success('Empresa atualizada com sucesso!');
+      } else {
+        await createEmpresaLimits(payload);
+        toast.success('Empresa cadastrada com sucesso!');
+      }
+
       await fetchEmpresas();
       setIsEditModalOpen(false);
+      setIsCreateModalOpen(false);
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao atualizar empresa');
+      toast.error(err.message || 'Erro ao processar empresa');
     } finally {
       setLoading(false);
     }
@@ -109,6 +132,15 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
           <h2 className="admin-section-title">Empresas Cadastradas</h2>
           <p className="admin-section-subtitle">Gerencie os limites e dados das empresas da plataforma.</p>
         </div>
+        <button
+          onClick={handleStartCreate}
+          className="planner-button flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 shadow-lg shadow-emerald-500/20"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Nova Empresa
+        </button>
       </div>
 
       {/* Toolbar */}
@@ -304,13 +336,18 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
         )}
       </div>
 
-      {/* Modal de Edição */}
-      {isEditModalOpen && (
+      {/* Modal de Cadastro/Edição */}
+      {(isEditModalOpen || isCreateModalOpen) && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="planner-card w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Editar Empresa</h3>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                {isCreateModalOpen ? 'Nova Empresa' : 'Editar Empresa'}
+              </h3>
+              <button 
+                onClick={() => { setIsEditModalOpen(false); setIsCreateModalOpen(false); }} 
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -320,8 +357,8 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Nome da Empresa</label>
                 <input
                   type="text"
-                  value={editNome}
-                  onChange={(e) => setEditNome(e.target.value)}
+                  value={formData.nome}
+                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                   className="planner-input w-full"
                   placeholder="Ex: Contabilidade Central"
                 />
@@ -336,27 +373,27 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsMeiEnabled(!isMeiEnabled)}
+                    onClick={() => setFormData({ ...formData, meiEnabled: !formData.meiEnabled })}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                      isMeiEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                      formData.meiEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
                     }`}
                   >
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        isMeiEnabled ? 'translate-x-6' : 'translate-x-1'
+                        formData.meiEnabled ? 'translate-x-6' : 'translate-x-1'
                       }`}
                     />
                   </button>
                 </div>
 
-                {isMeiEnabled && (
+                {formData.meiEnabled && (
                   <div className="animate-in slide-in-from-top-2 duration-200">
                     <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Limite de usuários MEI</label>
                     <input
                       type="number"
                       min={1}
-                      value={editMaxMei}
-                      onChange={(e) => setEditMaxMei(e.target.value)}
+                      value={formData.maxMei}
+                      onChange={(e) => setFormData({ ...formData, maxMei: e.target.value })}
                       className="planner-input w-full"
                       placeholder="Quantidade permitida"
                     />
@@ -369,8 +406,8 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                 <input
                   type="number"
                   min={0}
-                  value={editMaxNaoMei}
-                  onChange={(e) => setEditMaxNaoMei(e.target.value)}
+                  value={formData.maxNaoMei}
+                  onChange={(e) => setFormData({ ...formData, maxNaoMei: e.target.value })}
                   className="planner-input w-full"
                   placeholder="0 = sem limite"
                 />
@@ -378,15 +415,22 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
             </div>
 
             <div className="flex items-center justify-end gap-3 mt-8">
-              <button onClick={() => setIsEditModalOpen(false)} className="planner-button-secondary px-6">
+              <button 
+                onClick={() => { setIsEditModalOpen(false); setIsCreateModalOpen(false); }} 
+                className="planner-button-secondary px-6"
+              >
                 Cancelar
               </button>
               <button 
-                onClick={handleUpdate} 
+                onClick={() => handleSave(isCreateModalOpen ? 'create' : 'edit')} 
                 disabled={loading}
-                className="planner-button bg-blue-600 hover:bg-blue-700 text-white px-8 shadow-lg shadow-blue-500/20"
+                className={`planner-button text-white px-8 shadow-lg ${
+                  isCreateModalOpen 
+                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' 
+                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
+                }`}
               >
-                {loading ? 'Salvando...' : 'Salvar Alterações'}
+                {loading ? 'Salvando...' : (isCreateModalOpen ? 'Cadastrar Empresa' : 'Salvar Alterações')}
               </button>
             </div>
           </div>
