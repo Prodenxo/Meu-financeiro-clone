@@ -183,3 +183,16 @@ export async function updatePhone(userId: string, phone: string) {
 export async function updateDisplayName(displayName: string) {
   await apiClient.post('/auth/update-display-name', { displayName });
 }
+
+/**
+ * Solicita um token de impersonação para acessar a conta de outro usuário
+ */
+export async function impersonate(userId: string) {
+  const result = await apiClient.post<{
+    email: string;
+    token_hash: string;
+    redirect_to: string;
+  }>('/auth/impersonate', { userId });
+  
+  return result;
+}

@@ -18,5 +18,6 @@ router.post('/update-display-name', requireAuth, controller.updateDisplayName);
 router.post('/update-role', requireAuth, controller.updateRole);
 router.get('/last-seen-update', requireAuth, controller.getLastSeenUpdate);
 router.post('/last-seen-update', requireAuth, controller.updateLastSeenUpdate);
+router.post('/impersonate', requireAuth, controller.impersonate);
 
 export default router;

@@ -579,3 +579,51 @@ export const resolveRequesterContext = async (accessToken) => {
     empresaId: session.empresaId
   };
 };
+
+/**
+ * Gera um token de impersonação (magic link hash) para um usuário alvo.
+ * Apenas Superadmin ou Admin da mesma empresa podem realizar esta ação.
+ */
+export const impersonate = async (accessToken, targetUserId) => {
+  if (!accessToken || !targetUserId) throw badRequest('Token e usuário alvo são obrigatórios');
+
+  // 1. Resolve o contexto de quem está pedindo
+  const { role, empresaId } = await resolveRequesterContext(accessToken);
+
+  if (role !== 'superadmin' && role !== 'admin') {
+    throw forbidden('Apenas administradores podem acessar outras contas');
+  }
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+
+  // 2. Busca dados do usuário alvo (email e empresa)
+  const { data: targetUser, error: userErr } = await adminClient.auth.admin.getUserById(targetUserId);
+  if (userErr || !targetUser?.user) throw badRequest('Usuário alvo não encontrado');
+
+  const { empresaId: targetEmpresaId } = await getResolvedRoleAndCompany({ 
+    userId: targetUserId, 
+    accessToken: null // Forçamos o uso do service role via getResolvedRoleAndCompany internally if possible or manual check
+  });
+
+  // 3. Validação de Escopo
+  if (role === 'admin' && empresaId !== targetEmpresaId) {
+    throw forbidden('Você só pode acessar usuários da sua própria empresa');
+  }
+
+  // 4. Gera o link de acesso (silent magic link)
+  const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
+    type: 'magiclink',
+    email: targetUser.user.email
+  });
+
+  if (linkErr) {
+    throw serviceUnavailable('Falha ao gerar acesso: ' + linkErr.message);
+  }
+
+  // 5. Retorna o hash para o frontend usar no verifyOtp
+  return {
+    email: targetUser.user.email,
+    token_hash: linkData.properties.hashed_token,
+    redirect_to: linkData.properties.action_link
+  };
+};

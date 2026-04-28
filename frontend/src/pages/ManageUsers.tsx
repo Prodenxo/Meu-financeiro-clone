@@ -24,7 +24,7 @@ import { UserModal } from '../components/admin/manage-users/UserModal';
 
 export default function ManageUsers() {
   const navigate = useNavigate();
-  const { role } = useAuthStore();
+  const { role, impersonate } = useAuthStore();
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState('');
@@ -208,6 +208,20 @@ export default function ManageUsers() {
     }
   };
 
+  const handleImpersonate = async (user: ManagedUser) => {
+    try {
+      setLoading(true);
+      await impersonate(user.id);
+      toast.success(`Acessando como ${user.displayName || user.email}`);
+      navigate('/'); // Redireciona para o dashboard
+    } catch (err: any) {
+      console.error('Erro ao impersonar:', err);
+      toast.error(err.message || 'Erro ao acessar conta');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!canManage) {
     return (
       <>
@@ -336,6 +350,7 @@ export default function ManageUsers() {
                 onUnban={handleUnbanUser}
                 onResetPassword={handleResetPassword}
                 onDelete={handleDeleteUser}
+                onImpersonate={handleImpersonate}
                 onCreateClick={handleStartCreate}
               />
             </div>

@@ -14,6 +14,7 @@ interface UserListTabProps {
   onUnban: (user: ManagedUser) => void;
   onResetPassword: (user: ManagedUser) => void;
   onDelete: (user: ManagedUser) => void;
+  onImpersonate: (user: ManagedUser) => void;
   onCreateClick: () => void;
 }
 
@@ -28,6 +29,7 @@ export function UserListTab({
   onUnban,
   onResetPassword,
   onDelete,
+  onImpersonate,
   onCreateClick,
 }: UserListTabProps) {
   const [userQuery, setUserQuery] = useState('');
@@ -256,16 +258,29 @@ export function UserListTab({
                               </span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-right">
-                            {canEdit && (
-                              <button
-                                onClick={() => onStartEdit(user)}
-                                className="planner-button-secondary-compact text-blue-600 dark:text-blue-400"
-                              >
-                                Editar
-                              </button>
-                            )}
-                          </td>
+                           <td className="px-4 py-3 text-right">
+                             <div className="flex items-center justify-end gap-2">
+                               {canEdit && (
+                                 <>
+                                   <button
+                                     onClick={() => onImpersonate(user)}
+                                     title="Acessar como este usuário"
+                                     className="planner-button-secondary-compact text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                   >
+                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                                     </svg>
+                                   </button>
+                                   <button
+                                     onClick={() => onStartEdit(user)}
+                                     className="planner-button-secondary-compact text-blue-600 dark:text-blue-400"
+                                   >
+                                     Editar
+                                   </button>
+                                 </>
+                               )}
+                             </div>
+                           </td>
                         </tr>
                       );
                     })}

@@ -121,3 +121,12 @@ export const updateLastSeenUpdate = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const impersonate = async (req, res, next) => {
+  try {
+    const result = await authService.impersonate(req.accessToken, req.body.userId);
+    return sendSuccess(res, result, 'Link de impersonação gerado');
+  } catch (error) {
+    return next(error);
+  }
+};

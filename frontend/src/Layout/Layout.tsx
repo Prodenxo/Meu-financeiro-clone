@@ -10,7 +10,7 @@ import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { displayName, mei, role } = useAuthStore();
+  const { displayName, mei, role, isImpersonating, stopImpersonating } = useAuthStore();
   const { isDarkMode } = useThemeStore();
   const location = useLocation();
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
@@ -18,6 +18,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const canAccessMeiArea = role === 'superadmin'
     || role === 'admin'
     || (role === 'usuario' && mei !== false);
+
+  const handleStopImpersonating = async () => {
+    try {
+      await stopImpersonating();
+    } catch (err: any) {
+      console.error('Erro ao encerrar impersonação:', err);
+    }
+  };
 
   useEffect(() => {
     setQuickLinksOpen(false);
@@ -31,6 +39,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           : 'bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 text-slate-900'
       }`}
     >
+      {isImpersonating && (
+        <div className="sticky top-0 z-[60] flex h-10 w-full items-center justify-center gap-4 bg-amber-500 px-4 py-2 text-xs font-bold text-slate-900 shadow-lg animate-in slide-in-from-top duration-300">
+          <div className="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span>MODO DE ACESSO ADMINISTRATIVO: LOGADO COMO {displayName?.toUpperCase()}</span>
+          </div>
+          <button
+            onClick={handleStopImpersonating}
+            className="rounded bg-slate-900 px-3 py-1 text-[10px] uppercase tracking-wider text-white hover:bg-slate-800 transition-colors"
+          >
+            Sair do modo usuário
+          </button>
+        </div>
+      )}
       <Header
         userName={displayName}
         sidebarExpanded={sidebarExpanded}
