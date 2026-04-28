@@ -21,6 +21,7 @@ import { InvitesTab } from '../components/admin/manage-users/InvitesTab';
 import { EmpresasTab } from '../components/admin/manage-users/EmpresasTab';
 import { UserListTab } from '../components/admin/manage-users/UserListTab';
 import { UserModal } from '../components/admin/manage-users/UserModal';
+import { DeleteUserModal } from '../components/admin/manage-users/DeleteUserModal';
 
 export default function ManageUsers() {
   const navigate = useNavigate();
@@ -35,6 +36,7 @@ export default function ManageUsers() {
   const [activeTab, setActiveTab] = useState<'membros' | 'convites' | 'empresas'>('membros');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
   const [empresas, setEmpresas] = useState<EmpresaOption[]>([]);
@@ -167,23 +169,26 @@ export default function ManageUsers() {
     }
   };
 
-  const handleDeleteUser = async (user: ManagedUser) => {
-    const confirmed = window.confirm(
-      'Excluir usuário é um processo irreversível. Tem certeza que deseja continuar?'
-    );
-    if (!confirmed) return;
+  const handleDeleteUser = (user: ManagedUser) => {
+    setSelectedUser(user);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedUser) return;
+    
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      await deleteUser(user.id);
+      await deleteUser(selectedUser.id);
       setSuccess('Usuário excluído com sucesso.');
       toast.success('Usuário excluído com sucesso.');
-      await fetchUsers();
+      setIsDeleteModalOpen(false);
       await fetchUsers();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao excluir usuário');
-      toast.error(err.message || 'Erro ao excluir usuário');
+      toast.error(err instanceof Error ? err.message : 'Erro ao excluir usuário');
     } finally {
       setLoading(false);
     }
@@ -377,6 +382,13 @@ export default function ManageUsers() {
           empresas={empresas}
           users={baseUsers}
           role={role}
+        />
+        <DeleteUserModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          onConfirm={handleConfirmDelete}
+          user={selectedUser}
+          loading={loading}
         />
       </div>
     </>
