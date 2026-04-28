@@ -86,7 +86,6 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
     if (!phone.trim()) missingFields.push('Telefone');
     if (!targetEmpresaId) missingFields.push('Empresa');
     if (!selectedRole) missingFields.push('Perfil');
-    if (!expiresAt) missingFields.push('Data de Expiração');
 
     if (missingFields.length > 0) {
       toast.error(`Campos obrigatórios: ${missingFields.join(', ')}`);
@@ -374,13 +373,13 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
 
               <div className="space-y-1.5">
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  Data de Expiração <span className="text-rose-500">*</span>
+                  Data de Expiração
                 </label>
                 <input
                   type="date"
                   value={expiresAt}
                   onChange={(e) => setExpiresAt(e.target.value)}
-                  className={`planner-input w-full ${showErrors && !expiresAt ? 'border-rose-500 bg-rose-50/5' : ''}`}
+                  className="planner-input w-full"
                 />
               </div>
             </div>
