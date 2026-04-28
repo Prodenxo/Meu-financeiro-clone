@@ -235,15 +235,17 @@ export default function ManageUsers() {
               </p>
             </div>
             <div className="admin-actions">
-              <button
-                onClick={() => navigate('/settings/quick-onboarding')}
-                className="planner-button flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Cadastro Rápido
-              </button>
+              {role === 'superadmin' && (
+                <button
+                  onClick={() => navigate('/settings/quick-onboarding')}
+                  className="planner-button flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Cadastro Rápido
+                </button>
+              )}
               <span className="admin-badge-primary">
                 {role === 'superadmin' ? 'Escopo global' : 'Escopo da empresa'}
               </span>

@@ -1,13 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { createEmpresaLimits, createUser } from '../services/usersService';
+import { useAuthStore } from '../store/authStore';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 
 export default function QuickOnboarding() {
   const navigate = useNavigate();
+  const { role } = useAuthStore();
   const [loading, setLoading] = useState(false);
+
+  // Segurança: Apenas Superadmin pode acessar esta página
+  useEffect(() => {
+    if (role && role !== 'superadmin') {
+      toast.error('Acesso negado. Apenas administradores globais podem realizar o cadastro rápido.');
+      navigate('/settings/users');
+    }
+  }, [role, navigate]);
   
   // User state
   const [email, setEmail] = useState('');
@@ -52,6 +62,9 @@ export default function QuickOnboarding() {
       setLoading(false);
     }
   };
+
+  // Se não for superadmin, não renderiza nada enquanto o redirecionamento acontece
+  if (role !== 'superadmin') return null;
 
   return (
     <div className="admin-page-shell max-w-4xl">
