@@ -208,7 +208,7 @@ export const signUp = async ({ email, password, phone, displayName, inviteToken 
       
       const { data: inviteData, error: inviteErr } = await adminClient
         .from('empresa_invites')
-        .select('id, empresas_id, expires_at, used_at, revoked_at')
+        .select('id, empresas_id, expires_at, used_at, revoked_at, is_reusable, uses_count')
         .eq('token_hash', tokenHash)
         .maybeSingle();
       
@@ -220,21 +220,32 @@ export const signUp = async ({ email, password, phone, displayName, inviteToken 
       const expires = inviteData?.expires_at ? new Date(inviteData.expires_at) : null;
       const isExpired = expires && expires <= now;
 
+      // Se for reutilizável, ignoramos used_at
       const isPending = inviteData && 
-                        !inviteData.used_at && 
+                        (inviteData.is_reusable || !inviteData.used_at) && 
                         !inviteData.revoked_at && 
                         !isExpired;
 
       if (isPending) {
         empresaId = inviteData.empresas_id;
-        // Marcar convite como usado
-        const { error: upErr } = await adminClient
-          .from('empresa_invites')
-          .update({ used_at: new Date().toISOString() })
-          .eq('id', inviteData.id);
         
-        if (upErr) console.error('[AuthService] Erro ao atualizar convite:', upErr);
-      } else {
+        if (inviteData.is_reusable) {
+          // Apenas incrementa o contador
+          await adminClient.rpc('increment_invite_uses', { invite_id: inviteData.id });
+          // Fallback caso a RPC não exista:
+          await adminClient
+            .from('empresa_invites')
+            .update({ uses_count: (inviteData.uses_count || 0) + 1 })
+            .eq('id', inviteData.id);
+        } else {
+          // Comportamento clássico: marca como usado
+          await adminClient
+            .from('empresa_invites')
+            .update({ used_at: new Date().toISOString(), uses_count: 1 })
+            .eq('id', inviteData.id);
+        }
+      }
+ else {
         console.warn('[AuthService] Convite inválido, expirado ou já usado.');
       }
     }

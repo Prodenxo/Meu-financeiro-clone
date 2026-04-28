@@ -43,8 +43,8 @@ export const __setResolveUserIdFromAccessTokenForInvitesTests = (fn) => {
 
 const DEFAULT_TTL_DAYS = 7;
 const INVITE_TOKEN_MIN_LENGTH = 16;
-const SELECT_PUBLIC_ROW = 'id, expires_at, used_at, revoked_at';
-const SELECT_LIST_ROW = 'id, empresas_id, created_at, expires_at, created_by, invited_email';
+const SELECT_PUBLIC_ROW = 'id, expires_at, used_at, revoked_at, is_reusable';
+const SELECT_LIST_ROW = 'id, empresas_id, created_at, expires_at, created_by, invited_email, is_reusable, uses_count, raw_token';
 
 export const hashInviteToken = (rawToken) => (
   crypto.createHash('sha256').update(String(rawToken).trim(), 'utf8').digest('hex')
@@ -121,6 +121,8 @@ export const createInvite = async (accessToken, body = {}, req) => {
     ? String(body.invited_email).trim()
     : null;
 
+  const isReusable = !!body?.is_reusable;
+
   const { data: row, error: insErr } = await admin
     .from('empresa_invites')
     .insert({
@@ -128,9 +130,12 @@ export const createInvite = async (accessToken, body = {}, req) => {
       token_hash: tokenHash,
       created_by: ctx.userId,
       expires_at: expiresAt.toISOString(),
-      invited_email: invitedEmail
+      invited_email: invitedEmail,
+      is_reusable: isReusable,
+      uses_count: 0,
+      raw_token: isReusable ? rawToken : null
     })
-    .select('id, empresas_id, expires_at, created_at, invited_email')
+    .select('id, empresas_id, expires_at, created_at, invited_email, is_reusable, uses_count, raw_token')
     .maybeSingle();
 
   if (insErr) throw badRequest(insErr.message);
@@ -231,7 +236,10 @@ export const validateInviteToken = async (rawToken) => {
   if (!data?.id) return { status: 'invalid' };
 
   if (data.revoked_at) return { status: 'revoked' };
-  if (data.used_at) return { status: 'used' };
+  
+  // Se for reutilizável, ignoramos used_at
+  if (!data.is_reusable && data.used_at) return { status: 'used' };
+  
   if (new Date(data.expires_at) <= new Date()) return { status: 'expired' };
   return { status: 'valid' };
 };

@@ -25,6 +25,9 @@ export interface EmpresaInviteRow {
   expires_at: string;
   created_by: string;
   invited_email?: string | null;
+  is_reusable?: boolean;
+  uses_count?: number;
+  raw_token?: string | null;
 }
 
 export interface CreateInviteResponse {
@@ -33,7 +36,11 @@ export interface CreateInviteResponse {
 }
 
 /** Admin: corpo vazio. Superadmin: `{ empresas_id }` obrigatório. */
-export async function createInvite(body: { empresas_id?: string; invited_email?: string | null } = {}) {
+export async function createInvite(body: { 
+  empresas_id?: string; 
+  invited_email?: string | null;
+  is_reusable?: boolean;
+} = {}) {
   return apiClient.post<CreateInviteResponse>('/invites', body);
 }
 
