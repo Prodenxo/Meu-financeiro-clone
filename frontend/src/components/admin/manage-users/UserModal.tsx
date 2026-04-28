@@ -247,16 +247,29 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
                   WhatsApp / Celular <span className="text-rose-500">*</span>
                 </label>
-                <div className={showErrors && !phone ? 'phone-input-error' : ''}>
-                  <PhoneInput
-                    country={'br'}
-                    value={phone}
-                    onChange={val => setPhone(val)}
-                    inputClass="planner-input !w-full !pl-12"
-                    containerClass="!w-full"
-                    buttonClass="!bg-transparent !border-none !pl-2"
-                  />
-                </div>
+                <PhoneInput
+                  country={'br'}
+                  value={phone}
+                  onChange={val => setPhone(val)}
+                  inputStyle={{
+                    width: '100%',
+                    paddingTop: '10px',
+                    paddingBottom: '10px',
+                    paddingLeft: '48px',
+                    borderRadius: '0.75rem',
+                    border: showErrors && !phone.trim() 
+                      ? '1px solid #f43f5e' 
+                      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? '1px solid #334155' : '1px solid #cbd5e1'),
+                    fontSize: '1rem',
+                    backgroundColor: showErrors && !phone.trim() 
+                      ? '#fff1f2' 
+                      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? '#0f172a' : 'white'),
+                    color: window.matchMedia('(prefers-color-scheme: dark)').matches ? '#f8fafc' : '#0f172a',
+                    height: '42px',
+                  }}
+                  containerClass="!w-full"
+                  buttonClass="!bg-transparent !border-none !pl-2"
+                />
               </div>
             </div>
           </section>

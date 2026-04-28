@@ -26,6 +26,7 @@ function RegisterFormFields(props: {
   showPassword: boolean;
   setShowPassword: (v: boolean) => void;
   isDarkMode: boolean;
+  showErrors: boolean;
 }) {
   const {
     email,
@@ -38,19 +39,22 @@ function RegisterFormFields(props: {
     setPassword,
     showPassword,
     setShowPassword,
-    isDarkMode
+    isDarkMode,
+    showErrors
   } = props;
 
   return (
     <>
       <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">E-mail</label>
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
+          E-mail <span className="text-rose-500">*</span>
+        </label>
         <div className="relative">
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="planner-input pr-10"
+            className={`planner-input pr-10 ${showErrors && !email.trim() ? 'border-rose-500 bg-rose-50/5' : ''}`}
             required
           />
           <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400">
@@ -59,14 +63,17 @@ function RegisterFormFields(props: {
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Nome (opcional)</label>
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
+          Nome Completo <span className="text-rose-500">*</span>
+        </label>
         <div className="relative">
           <input
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className="planner-input pr-10"
-            placeholder="Seu nome"
+            className={`planner-input pr-10 ${showErrors && !displayName.trim() ? 'border-rose-500 bg-rose-50/5' : ''}`}
+            placeholder="Seu nome completo"
+            required
           />
           <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400">
             <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-user"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -74,45 +81,55 @@ function RegisterFormFields(props: {
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Telefone</label>
-        <PhoneInput
-          country={'br'}
-          value={phone}
-          onChange={setPhone}
-          inputStyle={{
-            width: '100%',
-            paddingTop: '12px',
-            paddingBottom: '12px',
-            paddingLeft: '48px',
-            paddingRight: '40px',
-            borderRadius: '0.5rem',
-            border: isDarkMode ? '1px solid #334155' : '1px solid #D1D5DB',
-            fontSize: '1rem',
-            backgroundColor: isDarkMode ? '#0f172a' : 'white',
-            color: isDarkMode ? '#f8fafc' : '#0f172a',
-            boxSizing: 'border-box',
-            outline: 'none',
-            lineHeight: '1.5',
-            height: '48px',
-          }}
-          buttonStyle={{
-            border: 'none',
-            background: 'transparent',
-            paddingLeft: 8,
-            color: isDarkMode ? '#cbd5f5' : '#64748b',
-          }}
-          placeholder="(11) 999999999"
-          enableSearch
-        />
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
+          Telefone <span className="text-rose-500">*</span>
+        </label>
+        <div className={showErrors && !phone.trim() ? 'phone-input-error' : ''}>
+          <PhoneInput
+            country={'br'}
+            value={phone}
+            onChange={setPhone}
+            inputStyle={{
+              width: '100%',
+              paddingTop: '12px',
+              paddingBottom: '12px',
+              paddingLeft: '48px',
+              paddingRight: '40px',
+              borderRadius: '0.5rem',
+              border: showErrors && !phone.trim() 
+                ? '1px solid #f43f5e' 
+                : (isDarkMode ? '1px solid #334155' : '1px solid #D1D5DB'),
+              fontSize: '1rem',
+              backgroundColor: showErrors && !phone.trim() 
+                ? (isDarkMode ? '#1e1b1c' : '#fff1f2') 
+                : (isDarkMode ? '#0f172a' : 'white'),
+              color: isDarkMode ? '#f8fafc' : '#0f172a',
+              boxSizing: 'border-box',
+              outline: 'none',
+              lineHeight: '1.5',
+              height: '48px',
+            }}
+            buttonStyle={{
+              border: 'none',
+              background: 'transparent',
+              paddingLeft: 8,
+              color: isDarkMode ? '#cbd5f5' : '#64748b',
+            }}
+            placeholder="(11) 999999999"
+            enableSearch
+          />
+        </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Senha</label>
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
+          Senha <span className="text-rose-500">*</span>
+        </label>
         <div className="relative">
           <input
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="planner-input pr-10"
+            className={`planner-input pr-10 ${showErrors && !password.trim() ? 'border-rose-500 bg-rose-50/5' : ''}`}
             required
           />
           <button
@@ -152,10 +169,14 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
 
   const [invitePhase, setInvitePhase] = useState<
-    'idle' | 'loading' | InviteValidationStatus | 'network_error'
-  >(() => (hasInviteQuery ? 'loading' : 'idle'));
+    'idle' | 'loading' | InviteValidationStatus | 'network_error' | 'no_invite'
+  >(() => {
+    if (!hasInviteQuery) return 'no_invite';
+    return 'loading';
+  });
 
   const signUp = useAuthStore((state) => state.signUp);
   const signIn = useAuthStore((state) => state.signIn);
@@ -164,8 +185,12 @@ export default function Register() {
 
   useEffect(() => {
     if (!hasInviteQuery) {
-      setInvitePhase('idle');
-      return;
+      setInvitePhase('no_invite');
+      // Redirecionar para login após um breve delay ou imediatamente
+      const timer = setTimeout(() => {
+        navigate('/login');
+      }, 2000);
+      return () => clearTimeout(timer);
     }
     let cancelled = false;
     setInvitePhase('loading');
@@ -193,20 +218,25 @@ export default function Register() {
     };
   }, [hasInviteQuery]);
 
-  const showForm = !hasInviteQuery || invitePhase === 'valid';
+  const showForm = invitePhase === 'valid';
   const inviteBanner =
     hasInviteQuery && invitePhase === 'valid' ? inviteStatusUserMessage('valid') : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setShowErrors(true);
     setLoading(true);
     try {
+      if (!email.trim() || !password.trim() || !displayName.trim() || !phone.trim()) {
+        throw new Error('Todos os campos são obrigatórios. Por favor, preencha Nome, E-mail, Telefone e Senha.');
+      }
+
       // Capturar o token diretamente da URL
       const tokenFromUrl = getConviteTokenFromSearch(location.search);
       
       // Realizar o cadastro já enviando o token de convite
-      await signUp(email, password, phone || undefined, displayName || undefined, tokenFromUrl || undefined);
+      await signUp(email, password, phone, displayName, tokenFromUrl || undefined);
 
       // Se havia um convite, as permissões já foram vinculadas no backend.
       // Apenas inicializamos o auth localmente para garantir que o estado reflita a nova empresa.
@@ -227,11 +257,11 @@ export default function Register() {
 
   return (
     <AuthLayout
-      title={hasInviteQuery ? 'Criar conta com convite' : 'Criar conta'}
+      title={hasInviteQuery ? 'Criar conta com convite' : 'Acesso Restrito'}
       subtitle={
         hasInviteQuery
           ? 'Use o link enviado pelo administrador da empresa'
-          : 'Preencha os dados para se cadastrar'
+          : 'Esta plataforma é exclusiva para convidados'
       }
       showIllustration
       footer={
@@ -259,12 +289,21 @@ export default function Register() {
         <div className="space-y-4">
           <div className="admin-alert admin-alert-danger px-4 py-3 rounded">{inviteStatusUserMessage(invitePhase)}</div>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            <Link to="/register" className="text-blue-600 hover:underline dark:text-blue-400 font-medium">
-              Cadastro sem convite
-            </Link>
+            Esta plataforma é exclusiva para convidados. Por favor, solicite um link ao seu administrador.
           </p>
         </div>
       ) : null}
+
+      {invitePhase === 'no_invite' && (
+        <div className="space-y-4 text-center">
+          <div className="admin-alert admin-alert-warning px-4 py-3 rounded">
+            Nenhum convite detectado.
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Você precisa de um link de convite válido para criar uma conta nesta plataforma.
+          </p>
+        </div>
+      )}
 
       {showForm ? (
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
@@ -285,13 +324,14 @@ export default function Register() {
             showPassword={showPassword}
             setShowPassword={setShowPassword}
             isDarkMode={isDarkMode}
+            showErrors={showErrors}
           />
           {error && (
             <div className="admin-alert admin-alert-danger px-4 py-3 rounded">{error}</div>
           )}
           <button
             type="submit"
-            disabled={loading || (hasInviteQuery && invitePhase !== 'valid')}
+            disabled={loading}
             className="w-full planner-button mt-2 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
           >
             {loading ? (

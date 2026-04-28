@@ -24,6 +24,7 @@ export default function QuickOnboarding() {
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [showErrors, setShowErrors] = useState(false);
   
   // Company state
   const [companyName, setCompanyName] = useState('');
@@ -32,6 +33,7 @@ export default function QuickOnboarding() {
 
   const handleOnboarding = async (e: React.FormEvent) => {
     e.preventDefault();
+    setShowErrors(true);
     setLoading(true);
     
     try {
@@ -49,7 +51,7 @@ export default function QuickOnboarding() {
         email,
         displayName,
         phone,
-        password: password || undefined,
+        password,
         role: 'admin', // Default to admin for the new company
         empresaId
       });
@@ -90,11 +92,13 @@ export default function QuickOnboarding() {
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome Completo</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Nome Completo <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  className="planner-input"
+                  className={`planner-input ${showErrors && !displayName.trim() ? 'border-rose-500 bg-rose-50/5' : ''}`}
                   placeholder="Ex: João Silva"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
@@ -102,11 +106,13 @@ export default function QuickOnboarding() {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">E-mail Profissional</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  E-mail Profissional <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="email"
                   required
-                  className="planner-input"
+                  className={`planner-input ${showErrors && !email.trim() ? 'border-rose-500 bg-rose-50/5' : ''}`}
                   placeholder="joao@exemplo.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -114,23 +120,43 @@ export default function QuickOnboarding() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telefone</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Telefone <span className="text-rose-500">*</span>
+                </label>
                 <div className="admin-phone-input">
                   <PhoneInput
                     country={'br'}
                     value={phone}
                     onChange={(val) => setPhone(val)}
-                    inputClass="planner-input"
+                    inputStyle={{
+                      width: '100%',
+                      paddingTop: '10px',
+                      paddingBottom: '10px',
+                      paddingLeft: '48px',
+                      borderRadius: '0.5rem',
+                      border: showErrors && !phone.trim() 
+                        ? '1px solid #f43f5e' 
+                        : (window.matchMedia('(prefers-color-scheme: dark)').matches ? '1px solid #334155' : '1px solid #D1D5DB'),
+                      fontSize: '1rem',
+                      backgroundColor: showErrors && !phone.trim() 
+                        ? '#fff1f2' 
+                        : (window.matchMedia('(prefers-color-scheme: dark)').matches ? '#0f172a' : 'white'),
+                      color: window.matchMedia('(prefers-color-scheme: dark)').matches ? '#f8fafc' : '#0f172a',
+                      height: '42px',
+                    }}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Senha (opcional)</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Senha de Acesso <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="password"
-                  className="planner-input"
-                  placeholder="Deixe em branco para gerar"
+                  required
+                  className={`planner-input ${showErrors && !password.trim() ? 'border-rose-500 bg-rose-50/5' : ''}`}
+                  placeholder="Defina uma senha forte"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -151,11 +177,13 @@ export default function QuickOnboarding() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome da Empresa / Escritório</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Nome da Empresa / Escritório <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  className="planner-input"
+                  className={`planner-input ${showErrors && !companyName.trim() ? 'border-rose-500 bg-rose-50/5' : ''}`}
                   placeholder="Ex: Contabilidade Central"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}

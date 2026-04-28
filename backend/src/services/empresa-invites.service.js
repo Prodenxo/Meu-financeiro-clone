@@ -42,7 +42,7 @@ export const __setResolveUserIdFromAccessTokenForInvitesTests = (fn) => {
 };
 
 const DEFAULT_TTL_DAYS = 7;
-const INVITE_TOKEN_MIN_LENGTH = 16;
+const INVITE_TOKEN_MIN_LENGTH = 10;
 const SELECT_PUBLIC_ROW = 'id, expires_at, used_at, revoked_at, is_reusable';
 const SELECT_LIST_ROW = 'id, empresas_id, created_at, expires_at, created_by, invited_email, is_reusable, uses_count, raw_token';
 

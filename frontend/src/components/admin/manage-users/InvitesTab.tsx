@@ -25,6 +25,7 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
   const [inviteEmpresaQuery, setInviteEmpresaQuery] = useState('');
   const [inviteEmpresaOpen, setInviteEmpresaOpen] = useState(false);
   const [isReusable, setIsReusable] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
 
   const getErrorMessage = (err: unknown, fallback: string) => {
     if (err instanceof Error && err.message) return err.message;
@@ -72,8 +73,10 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
   const handleGenerateInvite = async () => {
     if (role === 'superadmin' && !inviteEmpresaId) {
       toast.error('Selecione a empresa para gerar o convite.');
+      setShowErrors(true);
       return;
     }
+    setShowErrors(false);
     setInviteActionLoading(true);
     try {
       const body = {
@@ -144,7 +147,7 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
           {role === 'superadmin' ? (
             <div className="relative">
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
-                Empresa para o convite (apenas para gerar o link)
+                Empresa para o convite <span className="text-rose-500">*</span> (apenas para gerar o link)
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -163,7 +166,7 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
                   onBlur={() => {
                     window.setTimeout(() => setInviteEmpresaOpen(false), 150);
                   }}
-                  className="planner-input-compact"
+                  className={`planner-input-compact ${showErrors && !inviteEmpresaId ? 'border-rose-500 bg-rose-50/5' : ''}`}
                   placeholder="Selecione a empresa"
                 />
                 <button
