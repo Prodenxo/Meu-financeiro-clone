@@ -468,11 +468,23 @@ export const updatePhone = async (accessToken, phone) => {
 
   const cleanedPhone = phone.startsWith('+') ? phone.substring(1) : phone;
   const adminClient = createSupabaseClient({ useServiceRole: true });
-  const { error } = await adminClient.auth.admin.updateUserById(user.id, {
-    user_metadata: { phone: cleanedPhone }
-  });
-  if (error) throw badRequest(error.message);
 
+  // 1. Atualiza no Auth (Metadata) - FUNDAMENTAL: manter metadados existentes
+  const { error: authError } = await adminClient.auth.admin.updateUserById(user.id, {
+    user_metadata: { 
+      ...user.user_metadata, 
+      phone: cleanedPhone 
+    }
+  });
+  if (authError) throw badRequest(authError.message);
+
+  // 2. Sincroniza com a tabela profiles (opcional mas recomendado para redundância)
+  await adminClient
+    .from('profiles')
+    .update({ phone: cleanedPhone })
+    .eq('id', user.id);
+
+  // 3. Sincroniza com n8n_link
   await adminClient
     .from('n8n_link')
     .upsert(
@@ -496,10 +508,21 @@ export const updateDisplayName = async (accessToken, displayName) => {
   }
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
-  const { error } = await adminClient.auth.admin.updateUserById(user.id, {
-    user_metadata: { display_name: displayName }
+
+  // 1. Atualiza no Auth (Metadata) - FUNDAMENTAL: manter metadados existentes
+  const { error: authError } = await adminClient.auth.admin.updateUserById(user.id, {
+    user_metadata: { 
+      ...user.user_metadata, 
+      display_name: displayName 
+    }
   });
-  if (error) throw badRequest(error.message);
+  if (authError) throw badRequest(authError.message);
+
+  // 2. Sincroniza com a tabela profiles
+  await adminClient
+    .from('profiles')
+    .update({ display_name: displayName })
+    .eq('id', user.id);
 };
 
 export const getLastSeenUpdate = async (accessToken) => {
@@ -588,7 +611,7 @@ export const impersonate = async (accessToken, targetUserId) => {
   if (!accessToken || !targetUserId) throw badRequest('Token e usuário alvo são obrigatórios');
 
   // 1. Resolve o contexto de quem está pedindo
-  const { role, empresaId } = await resolveRequesterContext(accessToken);
+  const { userId, role, empresaId } = await resolveRequesterContext(accessToken);
 
   if (role !== 'superadmin' && role !== 'admin') {
     throw forbidden('Apenas administradores podem acessar outras contas');
@@ -606,8 +629,39 @@ export const impersonate = async (accessToken, targetUserId) => {
   });
 
   // 3. Validação de Escopo
-  if (role === 'admin' && empresaId !== targetEmpresaId) {
-    throw forbidden('Você só pode acessar usuários da sua própria empresa');
+  if (role === 'admin') {
+    // Garantir que temos o ID da empresa do alvo via service role
+    let finalTargetEmpresaId = targetEmpresaId;
+    if (!finalTargetEmpresaId) {
+      const { data: link } = await adminClient
+        .from('role_x_user_x_empresa')
+        .select('empresas_id')
+        .eq('user_id', targetUserId)
+        .eq('status', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      finalTargetEmpresaId = link?.empresas_id;
+    }
+
+    console.log('[Impersonate] Admin check:', { 
+      requesterId: userId,
+      requesterEmpresaId: empresaId, 
+      targetUserId,
+      targetEmpresaId: finalTargetEmpresaId 
+    });
+
+    if (!empresaId || empresaId !== finalTargetEmpresaId) {
+      // Mensagem detalhada para depuração (pode ser simplificada depois)
+      const msg = `Você só pode acessar usuários da sua própria empresa. (Sua: ${empresaId || 'null'}, Alvo: ${finalTargetEmpresaId || 'null'})`;
+      throw forbidden(msg);
+    }
+
+    // Segurança adicional: Admin não pode impersonar Superadmin
+    const { role: targetRole } = await getResolvedRoleAndCompany({ userId: targetUserId, accessToken: null });
+    if (targetRole === 'superadmin') {
+      throw forbidden('Administradores não podem acessar contas de Superadmin');
+    }
   }
 
   // 4. Gera o link de acesso (silent magic link)

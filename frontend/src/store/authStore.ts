@@ -81,8 +81,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({
           user: session.user,
           userId: session.user.id,
-          phone: session.user.user_metadata?.phone || result.phone || null,
-          displayName: session.user.user_metadata?.display_name || result.displayName || null,
+          phone: session.user.phone || session.user.user_metadata?.phone || result.phone || null,
+          displayName: session.user.displayName || session.user.user_metadata?.display_name || result.displayName || null,
           role: normalizeRole(session.role || null),
           empresaId: session.empresaId || session.user.user_metadata?.empresa_id || null,
           mei: session.mei ?? true
@@ -134,8 +134,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('Sessão atual:', session, 'Impersonating:', isImpersonating);
     if (session?.user) {
       const userId = session.user.id;
-      const phone = session.user.user_metadata?.phone || null;
-      const displayName = session.user.user_metadata?.display_name || null;
+      const phone = session.user.phone || session.user.user_metadata?.phone || null;
+      const displayName = session.user.displayName || session.user.user_metadata?.display_name || null;
       const role = normalizeRole(session.role || null);
       console.log('[AuthStore] initAuth session.role:', session.role, 'normalized:', role);
       const empresaId = session.empresaId || session.user.user_metadata?.empresa_id || null;

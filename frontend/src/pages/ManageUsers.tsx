@@ -103,7 +103,7 @@ export default function ManageUsers() {
 
 
   useEffect(() => {
-    if (!canManage || role !== 'superadmin') return;
+    if (!canManage) return;
     void fetchEmpresas();
   }, [canManage, role]);
 
