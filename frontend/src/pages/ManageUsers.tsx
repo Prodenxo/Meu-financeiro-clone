@@ -45,34 +45,43 @@ export default function ManageUsers() {
 
   const canManage = hasRole(role, ['admin']);
 
-  const fetchUsers = async (search?: string) => {
-    setLoading(true);
+  const fetchUsers = async (search?: string, silent = false) => {
+    if (!silent) setLoading(true);
     setFetchError('');
     try {
       const data = await listUsers(search);
-      setUsers(data);
+      
+      setUsers((prev) => {
+        if (!search) return data; // Se for carga inicial, substitui tudo
+        
+        // Se for busca, mesclamos os resultados para não perder o que já temos (fuzzy search local)
+        const merged = [...prev];
+        data.forEach((newUser) => {
+          const index = merged.findIndex((u) => u.id === newUser.id);
+          if (index > -1) {
+            merged[index] = newUser; // Atualiza se já existir
+          } else {
+            merged.push(newUser); // Adiciona se for novo
+          }
+        });
+        return merged;
+      });
+
       setFetchError('');
     } catch (err: unknown) {
       setFetchError(err instanceof Error ? err.message : 'Erro ao listar usuários');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (!canManage) return;
-
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current);
-    }
-
-    fetchTimeoutRef.current = setTimeout(() => {
-      void fetchUsers(searchTerm);
-    }, 500); // 500ms debounce
-
-    return () => {
-      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
-    };
+    
+    // Se for a primeira carga (lista vazia), mostramos o loading global.
+    // Se já houver dados, a atualização é 'silenciosa' para não interromper o usuário.
+    const isInitialLoad = users.length === 0;
+    void fetchUsers(searchTerm, !isInitialLoad);
   }, [searchTerm, canManage]);
 
   const fetchEmpresas = async () => {
@@ -90,11 +99,6 @@ export default function ManageUsers() {
     }
   };
 
-  useEffect(() => {
-    if (canManage) {
-      void fetchUsers();
-    }
-  }, [canManage]);
 
 
 

@@ -38,6 +38,18 @@ export function UserListTab({
 }: UserListTabProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [inputValue, setInputValue] = useState(searchTerm);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sincroniza valor local se o pai mudar (ex: ao limpar busca)
+  useEffect(() => {
+    setInputValue(searchTerm);
+  }, [searchTerm]);
+
+  // Reset de página ao filtrar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const baseUsers = useMemo(() => {
     if (role === 'admin') {
@@ -68,11 +80,23 @@ export function UserListTab({
 
   const filteredUsers = useMemo(
     () =>
-      searchTerm.trim()
-        ? fuseInstance.search(searchTerm.trim()).map((result) => result.item)
+      inputValue.trim()
+        ? fuseInstance.search(inputValue.trim()).map((result) => result.item)
         : sortedUsers,
-    [searchTerm, fuseInstance, sortedUsers]
+    [inputValue, fuseInstance, sortedUsers]
   );
+
+  const handleSearchChange = (value: string) => {
+    setInputValue(value);
+    
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    debounceTimerRef.current = setTimeout(() => {
+      onSearchChange(value);
+    }, 400);
+  };
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const currentPageSafe = Math.min(currentPage, totalPages);
@@ -129,8 +153,8 @@ export function UserListTab({
               <div className="relative w-full md:max-w-md">
                 <input
                   type="text"
-                  value={searchTerm}
-                  onChange={(event) => onSearchChange(event.target.value)}
+                  value={inputValue}
+                  onChange={(event) => handleSearchChange(event.target.value)}
                   className="planner-input-compact w-full pl-10"
                   placeholder="Pesquisar por nome, email ou empresa..."
                 />
@@ -145,7 +169,7 @@ export function UserListTab({
                 {searchTerm && (
                   <button
                     type="button"
-                    onClick={() => onSearchChange('')}
+                    onClick={() => handleSearchChange('')}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
                     ✕

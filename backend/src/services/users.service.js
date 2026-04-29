@@ -347,24 +347,27 @@ export const listUsers = async (accessToken, queryParams = {}) => {
 
   // 1. Obter todos os usuários do Auth que batem com a busca (ou todos se não houver busca)
   // Como temos 700+, vamos carregar em lotes se houver busca, ou focar nos vínculos se não houver.
+  // 1. Obter usuários do Auth
   let allAuthUsers = [];
-  if (searchTerm) {
-    // Busca ativa: varrer até encontrar ou carregar um bom número
-    let page = 1;
-    while (page <= 10) { // Até 1000 usuários
-      const { data: { users }, error } = await adminClient.auth.admin.listUsers({ page, perPage: 100 });
-      if (error || !users || users.length === 0) break;
-      
-      const matches = users.filter(u => 
-        u.email?.toLowerCase().includes(searchTerm) || 
+  let page = 1;
+  const MAX_AUTH_PAGES = 30; // Suporta até 3000 usuários
+
+  while (page <= MAX_AUTH_PAGES) {
+    const { data: { users }, error } = await adminClient.auth.admin.listUsers({ page, perPage: 100 });
+    if (error || !users || users.length === 0) break;
+
+    if (searchTerm) {
+      const matches = users.filter(u =>
+        u.email?.toLowerCase().includes(searchTerm) ||
         u.user_metadata?.display_name?.toLowerCase().includes(searchTerm)
       );
       allAuthUsers = allAuthUsers.concat(matches);
-      
-      // Se já achamos muitos resultados, paramos
-      if (allAuthUsers.length > 50) break;
-      page++;
+      // Se for busca, paramos se já tivermos um número razoável para não demorar demais
+      if (allAuthUsers.length > 200) break;
+    } else {
+      allAuthUsers = allAuthUsers.concat(users);
     }
+    page++;
   }
 
   // 2. Obter links de empresas
@@ -421,8 +424,8 @@ export const listUsers = async (accessToken, queryParams = {}) => {
   // Buscar faltantes (apenas se não for uma busca global que já varreu o auth)
   const missingIds = userIdsToFetch.filter(id => !userMap.has(id));
   if (missingIds.length > 0) {
-    // Para não estourar limite, buscamos um por um apenas os necessários (limitado a 100 para segurança)
-    const limitedMissing = missingIds.slice(0, 100);
+    // Para não estourar limite, buscamos um por um apenas os necessários (limitado a 500 para segurança)
+    const limitedMissing = missingIds.slice(0, 500);
     await Promise.all(limitedMissing.map(async (id) => {
       const { data } = await adminClient.auth.admin.getUserById(id);
       if (data?.user) {
