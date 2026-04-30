@@ -2,8 +2,20 @@ import { useState, useEffect } from 'react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { toast } from '../../../lib/toast';
-import { createUser, updateUser, type ManagedUser, type EmpresaOption } from '../../../services/usersService';
+import {
+  createUser,
+  resetUserPassword,
+  sendUserPasswordResetEmail,
+  updateUser,
+  type EmpresaOption,
+  type ManagedUser
+} from '../../../services/usersService';
 import LoadingOverlay from '../../LoadingOverlay';
+import {
+  STRONG_PASSWORD_MIN_LENGTH,
+  strongPasswordRequirementsSummary,
+  validateStrongPassword
+} from '../../../lib/passwordPolicy';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -42,6 +54,14 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
   // Validation feedback
   const [showErrors, setShowErrors] = useState(false);
 
+  // Editar: redefinição de senha (painel opcional)
+  const [accessPasswordPanelOpen, setAccessPasswordPanelOpen] = useState(false);
+  const [resetPasswordManual, setResetPasswordManual] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
+  const [showResetPasswordFields, setShowResetPasswordFields] = useState(false);
+  const [passwordResetBusy, setPasswordResetBusy] = useState(false);
+  const [lastGeneratedPassword, setLastGeneratedPassword] = useState<string | null>(null);
+
   useEffect(() => {
     if (isOpen) {
       setLoading(false); // Reset loading state when opening
@@ -68,8 +88,93 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
       setShowErrors(false);
       setEmpresaOpen(false);
       setRoleOpen(false);
+      setAccessPasswordPanelOpen(false);
+      setResetPasswordManual('');
+      setResetPasswordConfirm('');
+      setShowResetPasswordFields(false);
+      setPasswordResetBusy(false);
+      setLastGeneratedPassword(null);
     }
   }, [isOpen, mode, user, empresas]);
+
+  const handleCopyGeneratedPassword = async () => {
+    if (!lastGeneratedPassword) return;
+    try {
+      await navigator.clipboard.writeText(lastGeneratedPassword);
+      toast.success('Senha copiada para a área de transferência');
+    } catch {
+      toast.error('Não foi possível copiar automaticamente. Selecione o texto manualmente.');
+    }
+  };
+
+  const handleGenerateRandomPassword = async () => {
+    if (!user || passwordResetBusy) return;
+    const ok = window.confirm(
+      'Será gerada uma senha aleatória e exibida aqui. Envie ao usuário por um canal seguro. Continuar?'
+    );
+    if (!ok) return;
+    setPasswordResetBusy(true);
+    setLastGeneratedPassword(null);
+    try {
+      const result = await resetUserPassword(user.id);
+      const pwd = result?.password;
+      if (pwd) setLastGeneratedPassword(pwd);
+      toast.success('Senha gerada e aplicada na conta deste usuário');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Erro ao gerar senha';
+      toast.error(message);
+    } finally {
+      setPasswordResetBusy(false);
+    }
+  };
+
+  const handleApplyManualPasswordReset = async () => {
+    if (!user || passwordResetBusy) return;
+    const a = resetPasswordManual.trim();
+    const b = resetPasswordConfirm.trim();
+    const policy = validateStrongPassword(a);
+    if (!policy.ok) {
+      toast.error(policy.message);
+      return;
+    }
+    if (a !== b) {
+      toast.error('As senhas digitadas não coincidem');
+      return;
+    }
+    setPasswordResetBusy(true);
+    setLastGeneratedPassword(null);
+    try {
+      await resetUserPassword(user.id, a);
+      toast.success('Senha atualizada. Informe o usuário por um canal seguro.');
+      setResetPasswordManual('');
+      setResetPasswordConfirm('');
+      setShowResetPasswordFields(false);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Erro ao redefinir senha';
+      toast.error(message);
+    } finally {
+      setPasswordResetBusy(false);
+    }
+  };
+
+  const handleSendPasswordResetEmail = async () => {
+    if (!user || passwordResetBusy) return;
+    const targetEmail = (user.email || '').trim();
+    if (!targetEmail) {
+      toast.error('Este usuário não tem e-mail cadastrado para enviar o link');
+      return;
+    }
+    setPasswordResetBusy(true);
+    try {
+      await sendUserPasswordResetEmail(user.id);
+      toast.success(`E-mail de redefinição enviado para ${targetEmail}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Erro ao enviar e-mail';
+      toast.error(message);
+    } finally {
+      setPasswordResetBusy(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (loading) return;
@@ -90,6 +195,14 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
     if (missingFields.length > 0) {
       toast.error(`Campos obrigatórios: ${missingFields.join(', ')}`);
       return;
+    }
+
+    if (mode === 'create') {
+      const pwdCheck = validateStrongPassword(password);
+      if (!pwdCheck.ok) {
+        toast.error(pwdCheck.message);
+        return;
+      }
     }
 
     // Validação de Capacidade/Limite da Empresa
@@ -144,8 +257,8 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
       }
       onSuccess();
       onClose();
-    } catch (error: any) {
-      toast.error(error.message || 'Erro ao salvar usuário');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao salvar usuário');
     } finally {
       setLoading(false);
     }
@@ -220,8 +333,178 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                     )}
                   </button>
                 </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-snug">
+                  {strongPasswordRequirementsSummary()}
+                </p>
               </div>
             </div>
+          )}
+
+          {mode === 'edit' && user && (
+            <section className="space-y-4" aria-labelledby="user-modal-access-heading">
+              <div className="relative flex items-center">
+                <div className="flex-grow border-t border-slate-100 dark:border-slate-800" />
+                <span
+                  id="user-modal-access-heading"
+                  className="flex-shrink mx-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400"
+                >
+                  Acesso
+                </span>
+                <div className="flex-grow border-t border-slate-100 dark:border-slate-800" />
+              </div>
+              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    E-mail de login
+                  </p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white break-all mt-0.5">
+                    {user.email || '—'}
+                  </p>
+                </div>
+                {role === 'admin' && (
+                  <div className="space-y-2 pt-0.5">
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                      Enviamos um link seguro para o e-mail do usuário. Ele define a nova senha; você não altera a senha
+                      por aqui.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={passwordResetBusy || !(user.email || '').trim()}
+                      onClick={() => void handleSendPasswordResetEmail()}
+                      className="planner-button-secondary-compact text-blue-600 dark:text-blue-400 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {passwordResetBusy ? 'Enviando…' : 'Enviar e-mail de redefinição de senha'}
+                    </button>
+                    {!(user.email || '').trim() && (
+                      <p className="text-xs text-rose-600 dark:text-rose-400">
+                        Não há e-mail cadastrado para enviar o link.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {role === 'superadmin' && (
+                  <>
+                    {!accessPasswordPanelOpen ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccessPasswordPanelOpen(true);
+                          setLastGeneratedPassword(null);
+                        }}
+                        className="planner-button-secondary-compact text-blue-600 dark:text-blue-400 w-full sm:w-auto"
+                      >
+                        Redefinir senha
+                      </button>
+                    ) : (
+                      <div className="space-y-4 pt-1">
+                        {lastGeneratedPassword && (
+                          <div
+                            className="rounded-xl border border-amber-200/80 bg-amber-50/90 dark:border-amber-800/60 dark:bg-amber-950/30 px-3 py-2.5 text-sm text-amber-950 dark:text-amber-100"
+                            role="status"
+                          >
+                            <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1">
+                              Senha gerada — copie e envie ao usuário com segurança
+                            </p>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <code className="text-xs sm:text-sm font-mono break-all">{lastGeneratedPassword}</code>
+                              <button
+                                type="button"
+                                onClick={() => void handleCopyGeneratedPassword()}
+                                className="shrink-0 planner-button-secondary-compact text-amber-900 dark:text-amber-200"
+                              >
+                                Copiar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                          {strongPasswordRequirementsSummary()}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={passwordResetBusy}
+                            onClick={() => void handleGenerateRandomPassword()}
+                            className="planner-button-secondary-compact disabled:opacity-50"
+                          >
+                            {passwordResetBusy && !showResetPasswordFields ? 'Gerando…' : 'Gerar senha aleatória'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowResetPasswordFields((v) => !v)}
+                            className="planner-button-secondary-compact"
+                            disabled={passwordResetBusy}
+                          >
+                            {showResetPasswordFields ? 'Ocultar campos' : 'Definir senha manualmente'}
+                          </button>
+                        </div>
+                        {showResetPasswordFields && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <label
+                                htmlFor="user-modal-new-password"
+                                className="block text-sm font-semibold text-slate-700 dark:text-slate-300"
+                              >
+                                Nova senha
+                              </label>
+                              <input
+                                id="user-modal-new-password"
+                                type="password"
+                                autoComplete="new-password"
+                                value={resetPasswordManual}
+                                onChange={(e) => setResetPasswordManual(e.target.value)}
+                            className="planner-input w-full"
+                            placeholder={`Mínimo ${STRONG_PASSWORD_MIN_LENGTH} caracteres + complexidade`}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label
+                                htmlFor="user-modal-confirm-password"
+                                className="block text-sm font-semibold text-slate-700 dark:text-slate-300"
+                              >
+                                Confirmar senha
+                              </label>
+                              <input
+                                id="user-modal-confirm-password"
+                                type="password"
+                                autoComplete="new-password"
+                                value={resetPasswordConfirm}
+                                onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                                className="planner-input w-full"
+                                placeholder="Repita a nova senha"
+                              />
+                            </div>
+                            <div className="md:col-span-2 flex flex-wrap gap-2 justify-end">
+                              <button
+                                type="button"
+                                disabled={passwordResetBusy}
+                                onClick={() => void handleApplyManualPasswordReset()}
+                                className="planner-button bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl text-sm disabled:opacity-50"
+                              >
+                                {passwordResetBusy ? 'Aplicando…' : 'Aplicar nova senha'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAccessPasswordPanelOpen(false);
+                            setResetPasswordManual('');
+                            setResetPasswordConfirm('');
+                            setShowResetPasswordFields(false);
+                            setLastGeneratedPassword(null);
+                          }}
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                        >
+                          Fechar opções de senha
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </section>
           )}
 
           {/* Seção Perfil */}

@@ -105,6 +105,15 @@ export const resetUserPassword = async (req, res, next) => {
   }
 };
 
+export const sendUserPasswordResetEmail = async (req, res, next) => {
+  try {
+    const result = await usersService.sendUserPasswordResetEmail(req.accessToken, req.params.userId);
+    return sendSuccess(res, result, 'E-mail de redefinição enviado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const getEmpresa = async (req, res, next) => {
   try {
     const result = await usersService.getEmpresa(req.accessToken);

@@ -5,6 +5,11 @@ import { getSession } from '../services/authService';
 import { apiClient } from '../services/apiClient';
 import AuthLayout, { AuthLayoutBackToLogin } from '../components/AuthLayout';
 import ButtonSpinner from '../components/ButtonSpinner';
+import {
+  STRONG_PASSWORD_MIN_LENGTH,
+  strongPasswordRequirementBullets,
+  validateStrongPassword
+} from '../lib/passwordPolicy';
 
 interface RecoverySession {
   access_token: string;
@@ -141,8 +146,9 @@ export default function ResetPassword() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres');
+    const policy = validateStrongPassword(newPassword);
+    if (!policy.ok) {
+      setError(policy.message);
       return;
     }
 
@@ -210,8 +216,9 @@ export default function ResetPassword() {
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="planner-input pr-10"
                 required
-                minLength={6}
-                placeholder="Mínimo 6 caracteres"
+                minLength={STRONG_PASSWORD_MIN_LENGTH}
+                autoComplete="new-password"
+                placeholder={`Mínimo ${STRONG_PASSWORD_MIN_LENGTH} caracteres, com complexidade`}
               />
               <button
                 type="button"
@@ -232,6 +239,11 @@ export default function ResetPassword() {
                 )}
               </button>
             </div>
+            <ul className="mt-2 list-inside list-disc space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+              {strongPasswordRequirementBullets().map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
           </div>
 
           <div>
@@ -243,7 +255,8 @@ export default function ResetPassword() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="planner-input pr-10"
                 required
-                minLength={6}
+                minLength={STRONG_PASSWORD_MIN_LENGTH}
+                autoComplete="new-password"
                 placeholder="Digite a senha novamente"
               />
               <button

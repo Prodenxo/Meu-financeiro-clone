@@ -13,6 +13,7 @@ import {
 } from '../services/invitesService';
 import { getSession } from '../services/authService';
 import { getConviteTokenFromSearch, inviteStatusUserMessage } from '../utils/registerInviteQuery';
+import { strongPasswordRequirementBullets, validateStrongPassword } from '../lib/passwordPolicy';
 
 function RegisterFormFields(props: {
   email: string;
@@ -27,6 +28,7 @@ function RegisterFormFields(props: {
   setShowPassword: (v: boolean) => void;
   isDarkMode: boolean;
   showErrors: boolean;
+  passwordPolicyInvalid: boolean;
 }) {
   const {
     email,
@@ -40,7 +42,8 @@ function RegisterFormFields(props: {
     showPassword,
     setShowPassword,
     isDarkMode,
-    showErrors
+    showErrors,
+    passwordPolicyInvalid
   } = props;
 
   return (
@@ -129,7 +132,9 @@ function RegisterFormFields(props: {
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className={`planner-input pr-10 ${showErrors && !password.trim() ? 'border-rose-500 bg-rose-50/5' : ''}`}
+            className={`planner-input pr-10 ${
+              showErrors && (!password.trim() || passwordPolicyInvalid) ? 'border-rose-500 bg-rose-50/5' : ''
+            }`}
             required
           />
           <button
@@ -151,6 +156,11 @@ function RegisterFormFields(props: {
             )}
           </button>
         </div>
+        <ul className="mt-2 list-inside list-disc space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+          {strongPasswordRequirementBullets().map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
       </div>
     </>
   );
@@ -225,6 +235,7 @@ export default function Register() {
   }, [hasInviteQuery]);
 
   const showForm = invitePhase === 'valid';
+  const passwordPolicyInvalid = Boolean(password.trim()) && !validateStrongPassword(password).ok;
   const inviteBanner =
     hasInviteQuery && invitePhase === 'valid' ? inviteStatusUserMessage('valid') : null;
 
@@ -236,6 +247,11 @@ export default function Register() {
     try {
       if (!email.trim() || !password.trim() || !displayName.trim() || !phone.trim()) {
         throw new Error('Todos os campos são obrigatórios. Por favor, preencha Nome, E-mail, Telefone e Senha.');
+      }
+
+      const pwdPolicy = validateStrongPassword(password);
+      if (!pwdPolicy.ok) {
+        throw new Error(pwdPolicy.message);
       }
 
       // Capturar o token diretamente da URL
@@ -341,6 +357,7 @@ export default function Register() {
             setShowPassword={setShowPassword}
             isDarkMode={isDarkMode}
             showErrors={showErrors}
+            passwordPolicyInvalid={passwordPolicyInvalid}
           />
           {error && (
             <div className="admin-alert admin-alert-danger px-4 py-3 rounded">{error}</div>

@@ -1,6 +1,10 @@
-import crypto from 'crypto';
 import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest, forbidden, unauthorized } from '../utils/errors.js';
+import {
+  assertStrongPassword,
+  generateStrongRandomPassword
+} from '../utils/passwordPolicy.js';
+import * as authService from './auth.service.js';
 
 const ROLE_CREATE_ALLOWED = new Set(['superadmin', 'admin']);
 const ROLE_TARGET_ALLOWED = new Set(['admin', 'usuario', 'outsider']);
@@ -90,8 +94,6 @@ export const ensureRoleId = async (adminClient, role) => {
 };
 
 const cleanPhone = (phone) => (phone?.startsWith('+') ? phone.substring(1) : phone);
-
-const generatePassword = () => crypto.randomBytes(9).toString('base64').slice(0, 12);
 const normalizeEmpresaText = (value) => {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -601,6 +603,9 @@ export const createUser = async (accessToken, input, deps = {}) => {
 
   const email = input?.email?.trim();
   const password = input?.password?.trim();
+  if (password) {
+    assertStrongPassword(password);
+  }
   const displayName = input?.displayName?.trim() || null;
   const phone = cleanPhone(input?.phone?.trim());
   const requestedRole = input?.role;
@@ -638,7 +643,7 @@ export const createUser = async (accessToken, input, deps = {}) => {
     finalRole = resolvedRole;
   }
 
-  const finalPassword = password || generatePassword();
+  const finalPassword = password || generateStrongRandomPassword();
   const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
     email,
     password: finalPassword,
@@ -1047,7 +1052,8 @@ export const deleteEmpresa = async (accessToken, empresaId) => {
   return { empresaId };
 };
 
-export const resetUserPassword = async (accessToken, userId, input) => {
+/** Autorização alinhada a `resetUserPassword` / envio de e-mail de recuperação. */
+const getPasswordResetAuthorization = async (accessToken, userId) => {
   if (!userId) throw badRequest('userId é obrigatório');
 
   const requester = await getRequesterContext(accessToken);
@@ -1083,13 +1089,36 @@ export const resetUserPassword = async (accessToken, userId, input) => {
     if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
   }
 
-  const newPassword = input?.password?.trim() || generatePassword();
+  return { adminClient };
+};
+
+export const resetUserPassword = async (accessToken, userId, input) => {
+  const { adminClient } = await getPasswordResetAuthorization(accessToken, userId);
+
+  const trimmedProvided = input?.password?.trim();
+  if (trimmedProvided) {
+    assertStrongPassword(trimmedProvided);
+  }
+  const newPassword = trimmedProvided || generateStrongRandomPassword();
   const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
     password: newPassword
   });
 
   if (updateError) throw badRequest(updateError.message);
   return { userId, password: newPassword };
+};
+
+export const sendUserPasswordResetEmail = async (accessToken, userId) => {
+  const { adminClient } = await getPasswordResetAuthorization(accessToken, userId);
+
+  const { data: userData, error: getUserError } = await adminClient.auth.admin.getUserById(userId);
+  if (getUserError) throw badRequest(getUserError.message);
+
+  const email = userData?.user?.email?.trim();
+  if (!email) throw badRequest('Usuário sem e-mail cadastrado');
+
+  await authService.resetPasswordForEmail(email);
+  return { userId, sent: true };
 };
 
 export const syncPhone = async (userId, phone) => {
