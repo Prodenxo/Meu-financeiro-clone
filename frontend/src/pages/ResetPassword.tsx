@@ -149,8 +149,9 @@ export default function ResetPassword() {
     setLoading(true);
     try {
       await updatePassword(newPassword);
-      navigate('/login', { 
-        state: { message: 'Senha redefinida com sucesso! Faça login com sua nova senha.' } 
+      apiClient.clearAuthToken();
+      navigate('/login', {
+        state: { message: 'Senha redefinida com sucesso! Faça login com sua nova senha.' }
       });
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Erro ao redefinir senha'));
