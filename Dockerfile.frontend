@@ -23,6 +23,13 @@ FROM nginx:stable-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 RUN echo 'server { \
     listen 80; \
+    location /api/ { \
+        proxy_pass https://auto-back-meufinanceiro-site.4tnf3f.easypanel.host/api/; \
+        proxy_set_header Host auto-back-meufinanceiro-site.4tnf3f.easypanel.host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
+        proxy_ssl_server_name on; \
+    } \
     location / { \
         root /usr/share/nginx/html; \
         index index.html index.htm; \
