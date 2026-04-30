@@ -97,7 +97,7 @@ describe('Register — convite (US-INV-05)', () => {
     expect(validateMock).toHaveBeenCalledWith('secret-token');
     expect(container.textContent).toContain('Criar conta com convite');
     expect(container.textContent).toContain('Cadastrar');
-    expect(container.textContent).toContain('Pelo menos 12 caracteres');
+    expect(container.textContent).toContain('Pelo menos 8 caracteres');
 
     await act(async () => {
       root.unmount();

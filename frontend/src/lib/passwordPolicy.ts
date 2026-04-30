@@ -1,7 +1,7 @@
 /**
  * Política de senha forte — manter em sincronia com `backend/src/utils/passwordPolicy.js`.
  */
-export const STRONG_PASSWORD_MIN_LENGTH = 12
+export const STRONG_PASSWORD_MIN_LENGTH = 8
 export const STRONG_PASSWORD_MAX_LENGTH = 128
 
 const SPECIAL_RE = /[!@#$%^&*()_+\-=[\]{}|;:,.<>?]/
@@ -23,12 +23,6 @@ export function validateStrongPassword(password: string): { ok: true } | { ok: f
   if (!/[A-Z]/.test(p)) {
     return { ok: false, message: 'Inclua pelo menos uma letra maiúscula (A-Z)' }
   }
-  if (!/[a-z]/.test(p)) {
-    return { ok: false, message: 'Inclua pelo menos uma letra minúscula (a-z)' }
-  }
-  if (!/[0-9]/.test(p)) {
-    return { ok: false, message: 'Inclua pelo menos um número' }
-  }
   if (!SPECIAL_RE.test(p)) {
     return {
       ok: false,
@@ -40,15 +34,13 @@ export function validateStrongPassword(password: string): { ok: true } | { ok: f
 
 /** Texto curto para labels / dicas de formulário */
 export function strongPasswordRequirementsSummary(): string {
-  return `Mínimo ${STRONG_PASSWORD_MIN_LENGTH} caracteres, com maiúscula, minúscula, número e caractere especial.`
+  return `Mínimo ${STRONG_PASSWORD_MIN_LENGTH} caracteres, com pelo menos uma maiúscula e um caractere especial.`
 }
 
 export function strongPasswordRequirementBullets(): string[] {
   return [
     `Pelo menos ${STRONG_PASSWORD_MIN_LENGTH} caracteres`,
     'Pelo menos uma letra maiúscula (A-Z)',
-    'Pelo menos uma letra minúscula (a-z)',
-    'Pelo menos um número',
     'Pelo menos um caractere especial (! @ # $ % & * …)'
   ]
 }

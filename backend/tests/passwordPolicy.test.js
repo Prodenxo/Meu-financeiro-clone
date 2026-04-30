@@ -8,15 +8,14 @@ import {
 
 test('validateStrongPassword rejeita senhas fracas', () => {
   assert.equal(validateStrongPassword('').ok, false);
-  assert.equal(validateStrongPassword('short1!A').ok, false);
-  assert.equal(validateStrongPassword('alllowercase123!').ok, false);
-  assert.equal(validateStrongPassword('ALLUPPERCASE123!').ok, false);
-  assert.equal(validateStrongPassword('NoDigitsHere!Aa').ok, false);
-  assert.equal(validateStrongPassword('NoSpecialChar12Ab').ok, false);
+  assert.equal(validateStrongPassword('Aa!').ok, false);
+  assert.equal(validateStrongPassword('abcdefg!').ok, false);
+  assert.equal(validateStrongPassword('ABCDEFGH').ok, false);
+  assert.equal(validateStrongPassword('abcdefgh').ok, false);
 });
 
 test('validateStrongPassword aceita senha forte', () => {
-  const r = validateStrongPassword('Str0ng!Passphrase');
+  const r = validateStrongPassword('Abcd!efg');
   assert.equal(r.ok, true);
 });
 

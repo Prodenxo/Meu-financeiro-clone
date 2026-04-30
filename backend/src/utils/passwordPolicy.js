@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { badRequest } from './errors.js';
 
 /** Alinhado ao frontend em `frontend/src/lib/passwordPolicy.ts` — manter regras iguais. */
-export const STRONG_PASSWORD_MIN_LENGTH = 12;
+export const STRONG_PASSWORD_MIN_LENGTH = 8;
 export const STRONG_PASSWORD_MAX_LENGTH = 128;
 
 /** Caracteres especiais aceitos (evita aspas e espaço por simplicidade em formulários). */
@@ -33,12 +33,6 @@ export const validateStrongPassword = (password) => {
   }
   if (!/[A-Z]/.test(p)) {
     return { ok: false, message: 'Inclua pelo menos uma letra maiúscula (A-Z)' };
-  }
-  if (!/[a-z]/.test(p)) {
-    return { ok: false, message: 'Inclua pelo menos uma letra minúscula (a-z)' };
-  }
-  if (!/[0-9]/.test(p)) {
-    return { ok: false, message: 'Inclua pelo menos um número' };
   }
   if (!SPECIAL_RE.test(p)) {
     return {
