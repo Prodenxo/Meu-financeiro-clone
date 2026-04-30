@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '../lib/toast';
+import { strongPasswordRequirementsSummary, validateStrongPassword } from '../lib/passwordPolicy';
 import { createEmpresaLimits, createUser } from '../services/usersService';
 import { useAuthStore } from '../store/authStore';
 import PhoneInput from 'react-phone-input-2';
@@ -37,6 +38,12 @@ export default function QuickOnboarding() {
     setLoading(true);
     
     try {
+      const pwdCheck = validateStrongPassword(password);
+      if (!pwdCheck.ok) {
+        toast.error(pwdCheck.message);
+        return;
+      }
+
       // 1. Create Company
       const companyResp = await createEmpresaLimits({
         empresa: companyName,
@@ -160,6 +167,9 @@ export default function QuickOnboarding() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-snug">
+                  {strongPasswordRequirementsSummary()}
+                </p>
               </div>
             </div>
           </div>

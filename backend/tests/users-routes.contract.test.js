@@ -18,7 +18,8 @@ test('rotas de empresa e sync-phone usam requireAuth e controller correto', () =
   const expectedProtectedRoutes = [
     { method: 'get', path: '/empresas/current', handler: controller.getEmpresa },
     { method: 'get', path: '/empresas/:empresaId', handler: controller.getEmpresaById },
-    { method: 'post', path: '/sync-phone', handler: controller.syncPhone }
+    { method: 'post', path: '/sync-phone', handler: controller.syncPhone },
+    { method: 'post', path: '/:userId/send-password-reset-email', handler: controller.sendUserPasswordResetEmail }
   ];
 
   for (const route of expectedProtectedRoutes) {

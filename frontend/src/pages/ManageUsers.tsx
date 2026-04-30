@@ -5,6 +5,7 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import { toast } from '../lib/toast';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
+import { validateStrongPassword } from '../lib/passwordPolicy';
 import {
   banUser,
   createUser,
@@ -218,11 +219,16 @@ export default function ManageUsers() {
   const handleResetPassword = async (user: ManagedUser) => {
     const newPassword = window.prompt('Digite a nova senha para este usuário:');
     if (!newPassword) return;
+    const policy = validateStrongPassword(newPassword.trim());
+    if (!policy.ok) {
+      toast.error(policy.message);
+      return;
+    }
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      await resetUserPassword(user.id, newPassword);
+      await resetUserPassword(user.id, newPassword.trim());
       const message = `Senha redefinida com sucesso.`;
       setSuccess(message);
       toast.success(message);

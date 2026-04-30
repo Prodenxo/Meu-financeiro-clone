@@ -1,6 +1,7 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { badRequest, forbidden, unauthorized, serviceUnavailable } from '../utils/errors.js';
+import { assertStrongPassword } from '../utils/passwordPolicy.js';
 import crypto from 'crypto';
 
 const hashInviteToken = (rawToken) => crypto.createHash('sha256').update(String(rawToken).trim(), 'utf8').digest('hex');
@@ -174,6 +175,7 @@ export const signUp = async ({ email, password, phone, displayName, inviteToken 
   if (!email || !password) {
     throw badRequest('Email e senha são obrigatórios');
   }
+  assertStrongPassword(password);
 
   const createSupabaseClientFn = deps.createSupabaseClientFn || createSupabaseClient;
   const cleanedPhone = phone?.startsWith('+') ? phone.substring(1) : phone;
@@ -430,6 +432,7 @@ export const exchangeCodeForSession = async (code) => {
 
 export const updatePassword = async ({ accessToken, userId, newPassword }) => {
   if (!newPassword) throw badRequest('Senha inválida');
+  assertStrongPassword(newPassword);
 
   if (env.SUPABASE_SERVICE_ROLE_KEY && userId) {
     const adminClient = createSupabaseClient({ useServiceRole: true });

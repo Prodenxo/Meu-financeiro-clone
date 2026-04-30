@@ -15,6 +15,7 @@ router.post('/sync-phone', requireAuth, controller.syncPhone);
 router.post('/:userId/ban', requireAuth, controller.banUser);
 router.post('/:userId/unban', requireAuth, controller.unbanUser);
 router.post('/:userId/reset-password', requireAuth, controller.resetUserPassword);
+router.post('/:userId/send-password-reset-email', requireAuth, controller.sendUserPasswordResetEmail);
 router.put('/:userId', requireAuth, controller.updateUser);
 router.delete('/:userId', requireAuth, controller.deleteUser);
 router.post('/', requireAuth, controller.createUser);

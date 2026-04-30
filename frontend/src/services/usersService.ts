@@ -107,6 +107,13 @@ export async function resetUserPassword(userId: string, password?: string) {
   });
 }
 
+export async function sendUserPasswordResetEmail(userId: string) {
+  return apiClient.post<{ userId: string; sent: boolean }>(
+    `/users/${userId}/send-password-reset-email`,
+    {}
+  );
+}
+
 export interface EmpresaFullData {
   id?: string;
   empresa?: string;

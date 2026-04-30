@@ -70,7 +70,7 @@ describe('Register — convite (US-INV-05)', () => {
     await flushMicrotasks();
 
     expect(validateMock).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('Criar conta');
+    expect(container.textContent).toContain('Acesso Restrito');
 
     await act(async () => {
       root.unmount();
@@ -95,8 +95,9 @@ describe('Register — convite (US-INV-05)', () => {
     await flushMicrotasks();
 
     expect(validateMock).toHaveBeenCalledWith('secret-token');
-    expect(container.textContent).toContain('Convite válido');
+    expect(container.textContent).toContain('Criar conta com convite');
     expect(container.textContent).toContain('Cadastrar');
+    expect(container.textContent).toContain('Pelo menos 12 caracteres');
 
     await act(async () => {
       root.unmount();
