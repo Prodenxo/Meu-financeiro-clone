@@ -8,6 +8,7 @@ frontend/.env
 *.pem
 # Nunca commitar payloads de teste com credenciais
 body.json
+scratch/
 
 # Dependencies (AIOX)
 node_modules/

@@ -24,6 +24,8 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
   const [inviteEmpresaId, setInviteEmpresaId] = useState('');
   const [inviteEmpresaQuery, setInviteEmpresaQuery] = useState('');
   const [inviteEmpresaOpen, setInviteEmpresaOpen] = useState(false);
+  const [isReusable, setIsReusable] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
 
   const getErrorMessage = (err: unknown, fallback: string) => {
     if (err instanceof Error && err.message) return err.message;
@@ -71,14 +73,19 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
   const handleGenerateInvite = async () => {
     if (role === 'superadmin' && !inviteEmpresaId) {
       toast.error('Selecione a empresa para gerar o convite.');
+      setShowErrors(true);
       return;
     }
+    setShowErrors(false);
     setInviteActionLoading(true);
     try {
-      const body = role === 'superadmin' ? { empresas_id: inviteEmpresaId } : {};
+      const body = {
+        ...(role === 'superadmin' ? { empresas_id: inviteEmpresaId } : {}),
+        is_reusable: isReusable
+      };
       const result = await createInvite(body);
       setLastInviteUrl(result.inviteUrl);
-      toast.success('Link gerado. Use Copiar link para enviar ao convidado.');
+      toast.success(isReusable ? 'Link reutilizável gerado!' : 'Link único gerado!');
       await loadInvites();
     } catch (err: unknown) {
       const msg = getErrorMessage(err, 'Erro ao gerar convite');
@@ -88,17 +95,26 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
     }
   };
 
-  const handleCopyInviteLink = async () => {
+  const copyToClipboard = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Link copiado!');
+    } catch {
+      toast.error('Erro ao copiar link.');
+    }
+  };
+
+  const handleCopyInviteLink = () => {
     if (!lastInviteUrl) {
       toast.error('Gere um link antes de copiar.');
       return;
     }
-    try {
-      await navigator.clipboard.writeText(lastInviteUrl);
-      toast.success('Link copiado para a área de transferência.');
-    } catch {
-      toast.error('Não foi possível copiar automaticamente.');
-    }
+    void copyToClipboard(lastInviteUrl);
+  };
+
+  const getInviteUrlFromToken = (token: string) => {
+    const base = window.location.origin;
+    return `${base}/register?convite=${encodeURIComponent(token)}`;
   };
 
   const handleRevokeInvite = async (inviteId: string) => {
@@ -131,7 +147,7 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
           {role === 'superadmin' ? (
             <div className="relative">
               <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
-                Empresa para o convite (apenas para gerar o link)
+                Empresa para o convite <span className="text-rose-500">*</span> (apenas para gerar o link)
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -150,7 +166,7 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
                   onBlur={() => {
                     window.setTimeout(() => setInviteEmpresaOpen(false), 150);
                   }}
-                  className="planner-input-compact"
+                  className={`planner-input-compact ${showErrors && !inviteEmpresaId ? 'border-rose-500 bg-rose-50/5' : ''}`}
                   placeholder="Selecione a empresa"
                 />
                 <button
@@ -174,7 +190,7 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
                         type="button"
                         onMouseDown={(event) => {
                           event.preventDefault();
-                          setInviteEmpresaQuery(empresa.empresa);
+                           setInviteEmpresaQuery(empresa.empresa);
                           setInviteEmpresaId(empresa.id);
                           setInviteEmpresaOpen(false);
                         }}
@@ -192,6 +208,20 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
               )}
             </div>
           ) : null}
+
+          <div className="flex items-center gap-2 py-2">
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <input 
+                type="checkbox" 
+                checked={isReusable} 
+                onChange={(e) => setIsReusable(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200 group-hover:text-blue-600 transition-colors">
+                Link Reutilizável (múltiplos cadastros)
+              </span>
+            </label>
+          </div>
 
           <div className="flex flex-wrap gap-2">
             <button
@@ -246,9 +276,8 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
                       <th className="px-4 py-3 font-semibold">Empresa</th>
                     ) : null}
                     <th className="px-4 py-3 font-semibold">Criado em</th>
-                    <th className="px-4 py-3 font-semibold">Expira em</th>
-                    <th className="px-4 py-3 font-semibold">Criador</th>
-                    <th className="px-4 py-3 font-semibold">E-mail convidado</th>
+                    <th className="px-4 py-3 font-semibold">Tipo</th>
+                    <th className="px-4 py-3 font-semibold">Usos</th>
                     <th className="px-4 py-3 font-semibold text-right">Ações</th>
                   </tr>
                 </thead>
@@ -272,10 +301,30 @@ export function InvitesTab({ role, empresas, users }: InvitesTabProps) {
                           <td className="px-4 py-3">{getEmpresaNameForInvite(inv.empresas_id)}</td>
                         ) : null}
                         <td className="px-4 py-3 whitespace-nowrap">{formatInviteDate(inv.created_at)}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{formatInviteDate(inv.expires_at)}</td>
-                        <td className="px-4 py-3">{getInviteCreatorLabel(inv.created_by)}</td>
-                        <td className="px-4 py-3">{inv.invited_email || '—'}</td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3">
+                          {inv.is_reusable ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                              Reutilizável
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300">
+                              Único
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-medium">
+                          {inv.uses_count || 0}
+                        </td>
+                        <td className="px-4 py-3 text-right space-x-2">
+                          {inv.raw_token && (
+                            <button
+                              type="button"
+                              onClick={() => void copyToClipboard(getInviteUrlFromToken(inv.raw_token!))}
+                              className="planner-button-secondary-compact text-blue-600 dark:text-blue-400"
+                            >
+                              Copiar Link
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => void handleRevokeInvite(inv.id)}

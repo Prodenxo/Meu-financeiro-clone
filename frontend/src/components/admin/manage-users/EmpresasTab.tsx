@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { toast } from '../../../lib/toast';
-import { updateEmpresaLimits } from '../../../services/usersService';
+import { updateEmpresaLimits, createEmpresaLimits, deleteEmpresa } from '../../../services/usersService';
 
 interface ManagedUser {
   id: string;
@@ -26,13 +26,18 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
+  const [empresaToDelete, setEmpresaToDelete] = useState<Empresa | null>(null);
 
-  // Estados para edição
-  const [editNome, setEditNome] = useState('');
-  const [editMaxMei, setEditMaxMei] = useState('');
-  const [editMaxNaoMei, setEditMaxNaoMei] = useState('');
-  const [isMeiEnabled, setIsMeiEnabled] = useState(false);
+  // Estados para formulário (reutilizados para edit/create)
+  const [formData, setFormData] = useState({
+    nome: '',
+    maxMei: '1',
+    maxNaoMei: '0',
+    meiEnabled: false
+  });
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -68,34 +73,75 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
 
   const handleEditClick = (empresa: Empresa) => {
     setSelectedEmpresa(empresa);
-    setEditNome(empresa.empresa);
-    
     const meiVal = empresa.max_mei || 0;
-    setIsMeiEnabled(meiVal > 0);
-    setEditMaxMei(meiVal > 0 ? meiVal.toString() : '1');
-    
-    setEditMaxNaoMei(empresa.max_usuarios_nao_mei?.toString() || '0');
+    setFormData({
+      nome: empresa.empresa,
+      meiEnabled: meiVal > 0,
+      maxMei: meiVal > 0 ? meiVal.toString() : '1',
+      maxNaoMei: empresa.max_usuarios_nao_mei?.toString() || '0'
+    });
     setIsEditModalOpen(true);
   };
 
-  const handleUpdate = async () => {
-    if (!selectedEmpresa || !editNome.trim()) {
+  const handleStartCreate = () => {
+    setSelectedEmpresa(null);
+    setFormData({
+      nome: '',
+      meiEnabled: true,
+      maxMei: '5',
+      maxNaoMei: '0'
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const handleSave = async (mode: 'create' | 'edit') => {
+    if (!formData.nome.trim()) {
       toast.error('O nome da empresa é obrigatório.');
       return;
     }
 
     setLoading(true);
     try {
-      await updateEmpresaLimits(selectedEmpresa.id, {
-        empresa: editNome,
-        max_mei: isMeiEnabled ? (Number(editMaxMei) || 1) : 0,
-        max_usuarios_nao_mei: Number(editMaxNaoMei) || 0,
-      });
-      toast.success('Empresa atualizada com sucesso!');
+      const payload = {
+        empresa: formData.nome,
+        max_mei: formData.meiEnabled ? (Number(formData.maxMei) || 1) : 0,
+        max_usuarios_nao_mei: Number(formData.maxNaoMei) || 0,
+      };
+
+      if (mode === 'edit' && selectedEmpresa) {
+        await updateEmpresaLimits(selectedEmpresa.id, payload);
+        toast.success('Empresa atualizada com sucesso!');
+      } else {
+        await createEmpresaLimits(payload);
+        toast.success('Empresa cadastrada com sucesso!');
+      }
+
       await fetchEmpresas();
       setIsEditModalOpen(false);
+      setIsCreateModalOpen(false);
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao atualizar empresa');
+      toast.error(err.message || 'Erro ao processar empresa');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteClick = (empresa: Empresa) => {
+    setEmpresaToDelete(empresa);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!empresaToDelete) return;
+
+    setLoading(true);
+    try {
+      await deleteEmpresa(empresaToDelete.id);
+      toast.success('Empresa excluída com sucesso!');
+      await fetchEmpresas();
+      setIsDeleteModalOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao excluir empresa');
     } finally {
       setLoading(false);
     }
@@ -109,6 +155,15 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
           <h2 className="admin-section-title">Empresas Cadastradas</h2>
           <p className="admin-section-subtitle">Gerencie os limites e dados das empresas da plataforma.</p>
         </div>
+        <button
+          onClick={handleStartCreate}
+          className="planner-button flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 shadow-lg shadow-emerald-500/20"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Nova Empresa
+        </button>
       </div>
 
       {/* Toolbar */}
@@ -261,12 +316,27 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                       </td>
 
                       <td className="py-6 text-right">
-                        <button
-                          onClick={() => handleEditClick(empresa)}
-                          className="inline-flex items-center justify-center px-4 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm"
-                        >
-                          Editar
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleEditClick(empresa)}
+                            title="Editar empresa"
+                            className="inline-flex items-center justify-center p-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all shadow-sm"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(empresa)}
+                            title="Excluir empresa"
+                            disabled={loading}
+                            className="inline-flex items-center justify-center p-2 text-sm font-medium text-rose-600 dark:text-rose-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all shadow-sm disabled:opacity-50"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -304,13 +374,18 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
         )}
       </div>
 
-      {/* Modal de Edição */}
-      {isEditModalOpen && (
+      {/* Modal de Cadastro/Edição */}
+      {(isEditModalOpen || isCreateModalOpen) && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="planner-card w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Editar Empresa</h3>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                {isCreateModalOpen ? 'Nova Empresa' : 'Editar Empresa'}
+              </h3>
+              <button 
+                onClick={() => { setIsEditModalOpen(false); setIsCreateModalOpen(false); }} 
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -320,8 +395,8 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Nome da Empresa</label>
                 <input
                   type="text"
-                  value={editNome}
-                  onChange={(e) => setEditNome(e.target.value)}
+                  value={formData.nome}
+                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                   className="planner-input w-full"
                   placeholder="Ex: Contabilidade Central"
                 />
@@ -336,27 +411,27 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsMeiEnabled(!isMeiEnabled)}
+                    onClick={() => setFormData({ ...formData, meiEnabled: !formData.meiEnabled })}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                      isMeiEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                      formData.meiEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
                     }`}
                   >
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        isMeiEnabled ? 'translate-x-6' : 'translate-x-1'
+                        formData.meiEnabled ? 'translate-x-6' : 'translate-x-1'
                       }`}
                     />
                   </button>
                 </div>
 
-                {isMeiEnabled && (
+                {formData.meiEnabled && (
                   <div className="animate-in slide-in-from-top-2 duration-200">
                     <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Limite de usuários MEI</label>
                     <input
                       type="number"
                       min={1}
-                      value={editMaxMei}
-                      onChange={(e) => setEditMaxMei(e.target.value)}
+                      value={formData.maxMei}
+                      onChange={(e) => setFormData({ ...formData, maxMei: e.target.value })}
                       className="planner-input w-full"
                       placeholder="Quantidade permitida"
                     />
@@ -369,8 +444,8 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                 <input
                   type="number"
                   min={0}
-                  value={editMaxNaoMei}
-                  onChange={(e) => setEditMaxNaoMei(e.target.value)}
+                  value={formData.maxNaoMei}
+                  onChange={(e) => setFormData({ ...formData, maxNaoMei: e.target.value })}
                   className="planner-input w-full"
                   placeholder="0 = sem limite"
                 />
@@ -378,15 +453,61 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
             </div>
 
             <div className="flex items-center justify-end gap-3 mt-8">
-              <button onClick={() => setIsEditModalOpen(false)} className="planner-button-secondary px-6">
+              <button 
+                onClick={() => { setIsEditModalOpen(false); setIsCreateModalOpen(false); }} 
+                className="planner-button-secondary px-6"
+              >
                 Cancelar
               </button>
               <button 
-                onClick={handleUpdate} 
+                onClick={() => handleSave(isCreateModalOpen ? 'create' : 'edit')} 
                 disabled={loading}
-                className="planner-button bg-blue-600 hover:bg-blue-700 text-white px-8 shadow-lg shadow-blue-500/20"
+                className={`planner-button text-white px-8 shadow-lg ${
+                  isCreateModalOpen 
+                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' 
+                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
+                }`}
               >
-                {loading ? 'Salvando...' : 'Salvar Alterações'}
+                {loading ? 'Salvando...' : (isCreateModalOpen ? 'Cadastrar Empresa' : 'Salvar Alterações')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Exclusão */}
+      {isDeleteModalOpen && empresaToDelete && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="planner-card w-full max-w-sm p-6 shadow-2xl border-rose-100 dark:border-rose-900/30 animate-in zoom-in-95 duration-200 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center border-4 border-white dark:border-slate-900 shadow-sm">
+                <svg className="h-8 w-8 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+            </div>
+
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Excluir Empresa?</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+              Você está prestes a excluir <strong>{empresaToDelete.empresa}</strong>. 
+              <br /><br />
+              <span className="text-rose-500 font-medium">Atenção:</span> Todos os vínculos de acesso dos usuários com esta empresa serão permanentemente removidos.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={confirmDelete}
+                disabled={loading}
+                className="planner-button w-full bg-rose-500 hover:bg-rose-600 text-white py-3 shadow-lg shadow-rose-500/20"
+              >
+                {loading ? 'Excluindo...' : 'Sim, Excluir Empresa'}
+              </button>
+              <button 
+                onClick={() => setIsDeleteModalOpen(false)}
+                disabled={loading}
+                className="planner-button-secondary w-full py-3"
+              >
+                Cancelar
               </button>
             </div>
           </div>

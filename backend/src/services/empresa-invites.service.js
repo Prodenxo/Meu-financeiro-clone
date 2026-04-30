@@ -42,9 +42,9 @@ export const __setResolveUserIdFromAccessTokenForInvitesTests = (fn) => {
 };
 
 const DEFAULT_TTL_DAYS = 7;
-const INVITE_TOKEN_MIN_LENGTH = 16;
-const SELECT_PUBLIC_ROW = 'id, expires_at, used_at, revoked_at';
-const SELECT_LIST_ROW = 'id, empresas_id, created_at, expires_at, created_by, invited_email';
+const INVITE_TOKEN_MIN_LENGTH = 10;
+const SELECT_PUBLIC_ROW = 'id, expires_at, used_at, revoked_at, is_reusable';
+const SELECT_LIST_ROW = 'id, empresas_id, created_at, expires_at, created_by, invited_email, is_reusable, uses_count, raw_token';
 
 export const hashInviteToken = (rawToken) => (
   crypto.createHash('sha256').update(String(rawToken).trim(), 'utf8').digest('hex')
@@ -121,6 +121,8 @@ export const createInvite = async (accessToken, body = {}, req) => {
     ? String(body.invited_email).trim()
     : null;
 
+  const isReusable = !!body?.is_reusable;
+
   const { data: row, error: insErr } = await admin
     .from('empresa_invites')
     .insert({
@@ -128,9 +130,12 @@ export const createInvite = async (accessToken, body = {}, req) => {
       token_hash: tokenHash,
       created_by: ctx.userId,
       expires_at: expiresAt.toISOString(),
-      invited_email: invitedEmail
+      invited_email: invitedEmail,
+      is_reusable: isReusable,
+      uses_count: 0,
+      raw_token: isReusable ? rawToken : null
     })
-    .select('id, empresas_id, expires_at, created_at, invited_email')
+    .select('id, empresas_id, expires_at, created_at, invited_email, is_reusable, uses_count, raw_token')
     .maybeSingle();
 
   if (insErr) throw badRequest(insErr.message);
@@ -223,7 +228,10 @@ export const validateInviteToken = async (rawToken) => {
   const admin = createClient({ useServiceRole: true });
   const { data, error } = await admin
     .from('empresa_invites')
-    .select(SELECT_PUBLIC_ROW)
+    .select(`
+      id, expires_at, used_at, revoked_at, is_reusable,
+      empresas ( empresa )
+    `)
     .eq('token_hash', tokenHash)
     .maybeSingle();
 
@@ -231,9 +239,16 @@ export const validateInviteToken = async (rawToken) => {
   if (!data?.id) return { status: 'invalid' };
 
   if (data.revoked_at) return { status: 'revoked' };
-  if (data.used_at) return { status: 'used' };
+  
+  // Se for reutilizável, ignoramos used_at
+  if (!data.is_reusable && data.used_at) return { status: 'used' };
+  
   if (new Date(data.expires_at) <= new Date()) return { status: 'expired' };
-  return { status: 'valid' };
+  
+  return { 
+    status: 'valid',
+    empresaName: data.empresas?.empresa || null
+  };
 };
 
 const SELECT_INVITE_FOR_ACCEPT = 'id, empresas_id, expires_at, used_at, revoked_at';
@@ -311,19 +326,48 @@ export const acceptInvite = async (accessToken, rawToken, deps = {}) => {
     const { roleId } = await ensureRoleId(admin, 'usuario');
     if (!roleId) throw badRequest('Role não encontrada');
 
-    const { data: linkRow, error: linkErr } = await admin
+    // Tentar encontrar um vínculo existente (ex: criado no signup sem empresa)
+    const { data: existingLink } = await admin
       .from('role_x_user_x_empresa')
-      .insert({
-        user_id: userId,
-        roles_id: roleId,
-        empresas_id: claimed.empresas_id,
-        status: true,
-        mei: targetMei
-      })
       .select('id')
+      .eq('user_id', userId)
+      .is('empresas_id', null)
+      .eq('status', true)
       .maybeSingle();
 
-    if (linkErr) throw badRequest(linkErr.message);
+    let linkRow;
+    if (existingLink?.id) {
+      const { data: updated, error: upErr } = await admin
+        .from('role_x_user_x_empresa')
+        .update({
+          roles_id: roleId,
+          empresas_id: claimed.empresas_id,
+          status: true,
+          mei: targetMei
+        })
+        .eq('id', existingLink.id)
+        .select('id')
+        .maybeSingle();
+      
+      if (upErr) throw badRequest(upErr.message);
+      linkRow = updated;
+    } else {
+      const { data: inserted, error: linkErr } = await admin
+        .from('role_x_user_x_empresa')
+        .insert({
+          user_id: userId,
+          roles_id: roleId,
+          empresas_id: claimed.empresas_id,
+          status: true,
+          mei: targetMei
+        })
+        .select('id')
+        .maybeSingle();
+
+      if (linkErr) throw badRequest(linkErr.message);
+      linkRow = inserted;
+    }
+
     if (!linkRow?.id) throw badRequest('Falha ao vincular usuário à empresa');
     insertedLinkId = linkRow.id;
 

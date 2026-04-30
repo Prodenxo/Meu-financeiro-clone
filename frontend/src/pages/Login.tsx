@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import AuthLayout from '../components/AuthLayout';
 import ButtonSpinner from '../components/ButtonSpinner';
+import { getConviteTokenFromSearch } from '../utils/registerInviteQuery';
+import { acceptInviteRequest } from '../services/invitesService';
+import { toast } from '../lib/toast';
 
 export default function Login() {
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const signIn = useAuthStore((state) => state.signIn);
+  const initAuth = useAuthStore((state) => state.initAuth);
   const navigate = useNavigate();
+
+  const inviteRaw = getConviteTokenFromSearch(location.search);
+  const hasInviteQuery = inviteRaw.length > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,6 +27,21 @@ export default function Login() {
     setLoading(true);
     try {
       await signIn(email, password);
+
+      // Tentar capturar o token diretamente da URL para evitar problemas de estado
+      const tokenFromUrl = getConviteTokenFromSearch(location.search);
+      
+      if (tokenFromUrl) {
+        try {
+          await acceptInviteRequest({ token: tokenFromUrl, mei: false });
+          await initAuth(); // Recarregar permissões e empresa
+          toast.success('Convite aceito! Você foi vinculado à empresa.');
+        } catch (inviteErr: any) {
+          console.error('[Login] Erro ao aceitar convite:', inviteErr);
+          toast.warning('Você entrou, mas não foi possível concluir o vínculo do convite automaticamente.');
+        }
+      }
+
       navigate('/');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err ?? '');

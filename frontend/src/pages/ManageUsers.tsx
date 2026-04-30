@@ -21,20 +21,23 @@ import { InvitesTab } from '../components/admin/manage-users/InvitesTab';
 import { EmpresasTab } from '../components/admin/manage-users/EmpresasTab';
 import { UserListTab } from '../components/admin/manage-users/UserListTab';
 import { UserModal } from '../components/admin/manage-users/UserModal';
+import { DeleteUserModal } from '../components/admin/manage-users/DeleteUserModal';
 
 export default function ManageUsers() {
   const navigate = useNavigate();
-  const { role } = useAuthStore();
+  const { role, impersonate } = useAuthStore();
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [activeTab, setActiveTab] = useState<'membros' | 'convites' | 'empresas'>('membros');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
   const [empresas, setEmpresas] = useState<EmpresaOption[]>([]);
@@ -42,19 +45,44 @@ export default function ManageUsers() {
 
   const canManage = hasRole(role, ['admin']);
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (search?: string, silent = false) => {
+    if (!silent) setLoading(true);
     setFetchError('');
     try {
-      const data = await listUsers();
-      setUsers(data);
-      setFetchError(''); // Garantir que erro de tentativas anteriores seja limpo
+      const data = await listUsers(search);
+      
+      setUsers((prev) => {
+        if (!search) return data; // Se for carga inicial, substitui tudo
+        
+        // Se for busca, mesclamos os resultados para não perder o que já temos (fuzzy search local)
+        const merged = [...prev];
+        data.forEach((newUser) => {
+          const index = merged.findIndex((u) => u.id === newUser.id);
+          if (index > -1) {
+            merged[index] = newUser; // Atualiza se já existir
+          } else {
+            merged.push(newUser); // Adiciona se for novo
+          }
+        });
+        return merged;
+      });
+
+      setFetchError('');
     } catch (err: unknown) {
       setFetchError(err instanceof Error ? err.message : 'Erro ao listar usuários');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!canManage) return;
+    
+    // Se for a primeira carga (lista vazia), mostramos o loading global.
+    // Se já houver dados, a atualização é 'silenciosa' para não interromper o usuário.
+    const isInitialLoad = users.length === 0;
+    void fetchUsers(searchTerm, !isInitialLoad);
+  }, [searchTerm, canManage]);
 
   const fetchEmpresas = async () => {
     try {
@@ -71,16 +99,11 @@ export default function ManageUsers() {
     }
   };
 
-  useEffect(() => {
-    if (canManage) {
-      void fetchUsers();
-    }
-  }, [canManage]);
 
 
 
   useEffect(() => {
-    if (!canManage || role !== 'superadmin') return;
+    if (!canManage) return;
     void fetchEmpresas();
   }, [canManage, role]);
 
@@ -167,23 +190,26 @@ export default function ManageUsers() {
     }
   };
 
-  const handleDeleteUser = async (user: ManagedUser) => {
-    const confirmed = window.confirm(
-      'Excluir usuário é um processo irreversível. Tem certeza que deseja continuar?'
-    );
-    if (!confirmed) return;
+  const handleDeleteUser = (user: ManagedUser) => {
+    setSelectedUser(user);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedUser) return;
+    
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      await deleteUser(user.id);
+      await deleteUser(selectedUser.id);
       setSuccess('Usuário excluído com sucesso.');
       toast.success('Usuário excluído com sucesso.');
-      await fetchUsers();
+      setIsDeleteModalOpen(false);
       await fetchUsers();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao excluir usuário');
-      toast.error(err.message || 'Erro ao excluir usuário');
+      toast.error(err instanceof Error ? err.message : 'Erro ao excluir usuário');
     } finally {
       setLoading(false);
     }
@@ -203,6 +229,20 @@ export default function ManageUsers() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao redefinir senha');
       toast.error(err.message || 'Erro ao redefinir senha');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImpersonate = async (user: ManagedUser) => {
+    try {
+      setLoading(true);
+      await impersonate(user.id);
+      toast.success(`Acessando como ${user.displayName || user.email}`);
+      navigate('/'); // Redireciona para o dashboard
+    } catch (err: any) {
+      console.error('Erro ao impersonar:', err);
+      toast.error(err.message || 'Erro ao acessar conta');
     } finally {
       setLoading(false);
     }
@@ -336,7 +376,10 @@ export default function ManageUsers() {
                 onUnban={handleUnbanUser}
                 onResetPassword={handleResetPassword}
                 onDelete={handleDeleteUser}
+                onImpersonate={handleImpersonate}
                 onCreateClick={handleStartCreate}
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
               />
             </div>
           </section>
@@ -362,6 +405,13 @@ export default function ManageUsers() {
           empresas={empresas}
           users={baseUsers}
           role={role}
+        />
+        <DeleteUserModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          onConfirm={handleConfirmDelete}
+          user={selectedUser}
+          loading={loading}
         />
       </div>
     </>

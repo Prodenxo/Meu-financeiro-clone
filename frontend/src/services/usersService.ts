@@ -41,8 +41,9 @@ export interface EmpresaUpdatePayload {
   max_usuarios_nao_mei?: number | null;
 }
 
-export async function listUsers() {
-  const result = await apiClient.get<{ users: ManagedUser[] }>('/users');
+export async function listUsers(search?: string) {
+  const q = search ? `?search=${encodeURIComponent(search)}` : '';
+  const result = await apiClient.get<{ users: ManagedUser[] }>(`/users${q}`);
   return (result.users || []).map((user) => ({
     ...user,
     role: normalizeRole(user.role) || user.role,
@@ -63,6 +64,10 @@ export async function createEmpresaLimits(input: EmpresaLimitsPayload) {
 
 export async function updateEmpresaLimits(empresaId: string, input: EmpresaUpdatePayload) {
   return apiClient.put<{ empresa: EmpresaOption }>(`/users/empresas/${empresaId}`, input);
+}
+
+export async function deleteEmpresa(empresaId: string) {
+  return apiClient.delete<{ success: boolean }>(`/users/empresas/${empresaId}`);
 }
 
 export async function updateUser(

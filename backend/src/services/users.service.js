@@ -255,14 +255,16 @@ export const assertUserEligibleForEmpresaInvite = async (adminClient, userId) =>
 
   const { data: activeLink, error: linkErr } = await adminClient
     .from('role_x_user_x_empresa')
-    .select('id')
+    .select('id, empresas_id')
     .eq('user_id', userId)
     .eq('status', true)
     .limit(1)
     .maybeSingle();
 
   if (linkErr) throw badRequest(linkErr.message);
-  if (activeLink?.id) {
+  
+  // Se já tem empresa vinculada, bloqueia. Se tem vínculo mas empresas_id é null, permite (foi criado no signup).
+  if (activeLink?.id && activeLink.empresas_id != null) {
     throw badRequest('Esta conta já está vinculada a uma empresa');
   }
 };
@@ -335,78 +337,142 @@ export const getRequesterContext = async (accessToken) => {
   };
 };
 
-export const listUsers = async (accessToken) => {
+export const listUsers = async (accessToken, queryParams = {}) => {
+  const { search } = queryParams;
   const { role, empresaId } = await getRequesterContext(accessToken);
   if (!ROLE_CREATE_ALLOWED.has(role)) throw forbidden();
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
-  let query = adminClient
+  const searchTerm = search?.toLowerCase().trim();
+
+  // 1. Obter todos os usuários do Auth que batem com a busca (ou todos se não houver busca)
+  // Como temos 700+, vamos carregar em lotes se houver busca, ou focar nos vínculos se não houver.
+  // 1. Obter usuários do Auth
+  let allAuthUsers = [];
+  let page = 1;
+  const MAX_AUTH_PAGES = 30; // Suporta até 3000 usuários
+
+  while (page <= MAX_AUTH_PAGES) {
+    const { data: { users }, error } = await adminClient.auth.admin.listUsers({ page, perPage: 100 });
+    if (error || !users || users.length === 0) break;
+
+    if (searchTerm) {
+      const matches = users.filter(u =>
+        u.email?.toLowerCase().includes(searchTerm) ||
+        u.user_metadata?.display_name?.toLowerCase().includes(searchTerm)
+      );
+      allAuthUsers = allAuthUsers.concat(matches);
+      // Se for busca, paramos se já tivermos um número razoável para não demorar demais
+      if (allAuthUsers.length > 200) break;
+    } else {
+      allAuthUsers = allAuthUsers.concat(users);
+    }
+    page++;
+  }
+
+  // 2. Obter links de empresas
+  let linksQuery = adminClient
     .from('role_x_user_x_empresa')
     .select('user_id, empresas_id, roles_id, status, mei, expires_at');
 
   if (role === 'admin') {
     if (!empresaId) throw forbidden();
-    query = query.eq('empresas_id', empresaId);
+    linksQuery = linksQuery.eq('empresas_id', empresaId);
   }
 
-  const { data: links, error } = await query;
-  if (error) throw badRequest(error.message);
+  const { data: links, error: linksErr } = await linksQuery;
+  if (linksErr) throw badRequest(linksErr.message);
 
-  const userIds = (links || []).map((link) => link.user_id).filter(Boolean);
-  const roleIds = Array.from(
-    new Set((links || []).map((link) => link.roles_id).filter(Boolean))
-  );
-  const empresaIds = Array.from(
-    new Set((links || []).map((link) => link.empresas_id).filter(Boolean))
-  );
-  let roleMap = new Map();
-  if (roleIds.length > 0) {
-    const { data: rolesData } = await adminClient
-      .from('roles')
-      .select('id, roles')
-      .in('id', roleIds);
-    roleMap = new Map((rolesData || []).map((role) => [role.id, role.roles]));
+  const linkedUserIds = new Set((links || []).map(l => l.user_id));
+
+  // 3. Se houver busca e for Superadmin, incluir usuários do Auth que NÃO estão nos links (órfãos)
+  if (searchTerm && role === 'superadmin') {
+    for (const au of allAuthUsers) {
+      if (!linkedUserIds.has(au.id)) {
+        // Adicionar um link "fictício" para representar o usuário sem empresa
+        links.push({
+          user_id: au.id,
+          empresas_id: null,
+          roles_id: null,
+          status: true,
+          mei: true,
+          expires_at: null,
+          isOrphan: true
+        });
+      }
+    }
   }
-  let empresaMap = new Map();
-  if (empresaIds.length > 0) {
-    const { data: empresasData } = await adminClient
-      .from('empresas')
-      .select('id, empresa')
-      .in('id', empresaIds);
-    empresaMap = new Map((empresasData || []).map((empresa) => [empresa.id, empresa]));
+
+  // 4. Filtrar links se houver busca (caso a busca não tenha vindo do Auth primeiro)
+  // No caso de listagem normal (sem busca), precisamos carregar os dados do Auth para os links.
+  const userIdsToFetch = searchTerm 
+    ? allAuthUsers.map(u => u.id)
+    : (links || []).map(l => l.user_id).filter(Boolean);
+
+  // Otimização: carregar dados do Auth em lote para os usuários necessários
+  // (O listUsers do Supabase não permite filtrar por IDs, então usamos o cache de allAuthUsers ou buscamos)
+  const userMap = new Map();
+  
+  // Alimentar mapa com o que já temos da busca
+  allAuthUsers.forEach(u => userMap.set(u.id, {
+    id: u.id,
+    email: u.email,
+    displayName: u.user_metadata?.display_name || null,
+    phone: u.user_metadata?.phone || null
+  }));
+
+  // Buscar faltantes (apenas se não for uma busca global que já varreu o auth)
+  const missingIds = userIdsToFetch.filter(id => !userMap.has(id));
+  if (missingIds.length > 0) {
+    // Para não estourar limite, buscamos um por um apenas os necessários (limitado a 500 para segurança)
+    const limitedMissing = missingIds.slice(0, 500);
+    await Promise.all(limitedMissing.map(async (id) => {
+      const { data } = await adminClient.auth.admin.getUserById(id);
+      if (data?.user) {
+        userMap.set(id, {
+          id: data.user.id,
+          email: data.user.email,
+          displayName: data.user.user_metadata?.display_name || null,
+          phone: data.user.user_metadata?.phone || null
+        });
+      }
+    }));
   }
-  const users = await Promise.all(
-    userIds.map(async (userId) => {
-      const { data, error: userError } = await adminClient.auth.admin.getUserById(userId);
-      if (userError || !data?.user) return null;
+
+  // 5. Carregar Roles e Empresas para o mapeamento final
+  const roleIds = Array.from(new Set((links || []).map(l => l.roles_id).filter(Boolean)));
+  const empresaIds = Array.from(new Set((links || []).map(l => l.empresas_id).filter(Boolean)));
+
+  const [{ data: rolesData }, { data: empresasData }] = await Promise.all([
+    adminClient.from('roles').select('id, roles').in('id', roleIds.length ? roleIds : ['none']),
+    adminClient.from('empresas').select('id, empresa').in('id', empresaIds.length ? empresaIds : ['none'])
+  ]);
+
+  const roleMap = new Map((rolesData || []).map(r => [r.id, r.roles]));
+  const empresaMap = new Map((empresasData || []).map(e => [e.id, e]));
+
+  // 6. Montar lista final
+  const resultUsers = (links || [])
+    .map((link) => {
+      const user = userMap.get(link.user_id);
+      if (!user) return null;
+      
+      // Se estamos buscando e o usuário não bate com o termo (e não veio do allAuthUsers), removemos
+      if (searchTerm && !allAuthUsers.some(au => au.id === user.id)) return null;
+
       return {
-        id: data.user.id,
-        email: data.user.email,
-        displayName: data.user.user_metadata?.display_name || null,
-        phone: data.user.user_metadata?.phone || null
+        ...user,
+        role: normalizeRoleValue(roleMap.get(link.roles_id) || (link.isOrphan ? 'N/A' : 'usuario')),
+        empresaId: link.empresas_id || null,
+        empresaName: empresaMap.get(link.empresas_id)?.empresa || (link.isOrphan ? 'SEM VÍNCULO' : null),
+        status: link.status ?? true,
+        mei: typeof link.mei === 'boolean' ? link.mei : true,
+        expiresAt: link.expires_at ? new Date(link.expires_at).toISOString() : null
       };
     })
-  );
+    .filter(Boolean);
 
-  const userMap = new Map(users.filter(Boolean).map((item) => [item.id, item]));
-
-  return {
-    users: (links || [])
-      .map((link) => {
-        const user = userMap.get(link.user_id);
-        if (!user) return null;
-        return {
-          ...user,
-          role: normalizeRoleValue(roleMap.get(link.roles_id) || 'usuario'),
-          empresaId: link.empresas_id || null,
-          empresaName: empresaMap.get(link.empresas_id)?.empresa || null,
-          status: link.status ?? true,
-          mei: typeof link.mei === 'boolean' ? link.mei : true,
-          expiresAt: link.expires_at ? new Date(link.expires_at).toISOString() : null
-        };
-      })
-      .filter(Boolean)
-  };
+  return { users: resultUsers };
 };
 
 export const getViewableUserIds = async (accessToken) => {
@@ -952,6 +1018,33 @@ export const deleteUser = async (accessToken, userId) => {
   if (deleteAuthError) throw badRequest(deleteAuthError.message);
 
   return { userId };
+};
+
+export const deleteEmpresa = async (accessToken, empresaId) => {
+  if (!empresaId) throw badRequest('empresaId é obrigatório');
+
+  const requester = await getRequesterContext(accessToken);
+  if (requester.role !== 'superadmin') throw forbidden();
+
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+
+  // 1. Remover todos os vínculos de usuários com esta empresa
+  const { error: linksError } = await adminClient
+    .from('role_x_user_x_empresa')
+    .delete()
+    .eq('empresas_id', empresaId);
+  
+  if (linksError) throw badRequest(`Erro ao remover vínculos: ${linksError.message}`);
+
+  // 2. Remover a empresa propriamente dita
+  const { error: empresaError } = await adminClient
+    .from('empresas')
+    .delete()
+    .eq('id', empresaId);
+
+  if (empresaError) throw badRequest(`Erro ao remover empresa: ${empresaError.message}`);
+
+  return { empresaId };
 };
 
 export const resetUserPassword = async (accessToken, userId, input) => {

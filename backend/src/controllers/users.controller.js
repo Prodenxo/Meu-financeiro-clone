@@ -3,7 +3,7 @@ import { sendSuccess } from '../utils/response.js';
 
 export const listUsers = async (req, res, next) => {
   try {
-    const result = await usersService.listUsers(req.accessToken);
+    const result = await usersService.listUsers(req.accessToken, req.query);
     return sendSuccess(res, result, 'Usuários listados');
   } catch (error) {
     return next(error);
@@ -118,6 +118,15 @@ export const getEmpresaById = async (req, res, next) => {
   try {
     const result = await usersService.getEmpresaById(req.accessToken, req.params.empresaId);
     return sendSuccess(res, result, 'Empresa carregada');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const deleteEmpresa = async (req, res, next) => {
+  try {
+    const result = await usersService.deleteEmpresa(req.accessToken, req.params.empresaId);
+    return sendSuccess(res, result, 'Empresa excluída');
   } catch (error) {
     return next(error);
   }

@@ -14,7 +14,10 @@ interface UserListTabProps {
   onUnban: (user: ManagedUser) => void;
   onResetPassword: (user: ManagedUser) => void;
   onDelete: (user: ManagedUser) => void;
+  onImpersonate: (user: ManagedUser) => void;
   onCreateClick: () => void;
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
 }
 
 export function UserListTab({
@@ -28,24 +31,25 @@ export function UserListTab({
   onUnban,
   onResetPassword,
   onDelete,
+  onImpersonate,
   onCreateClick,
+  searchTerm,
+  onSearchChange,
 }: UserListTabProps) {
-  const [userQuery, setUserQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [inputValue, setInputValue] = useState(searchTerm);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Sincroniza valor local se o pai mudar (ex: ao limpar busca)
   useEffect(() => {
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = setTimeout(() => {
-      setDebouncedQuery(userQuery);
-      setCurrentPage(1);
-    }, 200);
-    return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    };
-  }, [userQuery]);
+    setInputValue(searchTerm);
+  }, [searchTerm]);
+
+  // Reset de página ao filtrar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const baseUsers = useMemo(() => {
     if (role === 'admin') {
@@ -76,11 +80,23 @@ export function UserListTab({
 
   const filteredUsers = useMemo(
     () =>
-      debouncedQuery.trim()
-        ? fuseInstance.search(debouncedQuery.trim()).map((result) => result.item)
+      inputValue.trim()
+        ? fuseInstance.search(inputValue.trim()).map((result) => result.item)
         : sortedUsers,
-    [debouncedQuery, fuseInstance, sortedUsers]
+    [inputValue, fuseInstance, sortedUsers]
   );
+
+  const handleSearchChange = (value: string) => {
+    setInputValue(value);
+    
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    debounceTimerRef.current = setTimeout(() => {
+      onSearchChange(value);
+    }, 400);
+  };
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const currentPageSafe = Math.min(currentPage, totalPages);
@@ -137,8 +153,8 @@ export function UserListTab({
               <div className="relative w-full md:max-w-md">
                 <input
                   type="text"
-                  value={userQuery}
-                  onChange={(event) => setUserQuery(event.target.value)}
+                  value={inputValue}
+                  onChange={(event) => handleSearchChange(event.target.value)}
                   className="planner-input-compact w-full pl-10"
                   placeholder="Pesquisar por nome, email ou empresa..."
                 />
@@ -150,10 +166,10 @@ export function UserListTab({
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                {userQuery && (
+                {searchTerm && (
                   <button
                     type="button"
-                    onClick={() => setUserQuery('')}
+                    onClick={() => handleSearchChange('')}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
                     ✕
@@ -179,8 +195,8 @@ export function UserListTab({
 
             {filteredUsers.length === 0 ? (
               <div className="admin-empty-state">
-                {userQuery !== ''
-                  ? `Nenhum usuário encontrado para "${userQuery}".`
+                {searchTerm !== ''
+                  ? `Nenhum usuário encontrado para "${searchTerm}".`
                   : 'Nenhum usuário cadastrado.'}
               </div>
             ) : (
@@ -256,16 +272,38 @@ export function UserListTab({
                               </span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-right">
-                            {canEdit && (
-                              <button
-                                onClick={() => onStartEdit(user)}
-                                className="planner-button-secondary-compact text-blue-600 dark:text-blue-400"
-                              >
-                                Editar
-                              </button>
-                            )}
-                          </td>
+                           <td className="px-4 py-3 text-right">
+                             <div className="flex items-center justify-end gap-2">
+                               {canEdit && (
+                                 <>
+                                   <button
+                                     onClick={() => onImpersonate(user)}
+                                     title="Acessar como este usuário"
+                                     className="planner-button-secondary-compact text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                   >
+                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                                     </svg>
+                                   </button>
+                                   <button
+                                     onClick={() => onStartEdit(user)}
+                                     className="planner-button-secondary-compact text-blue-600 dark:text-blue-400"
+                                   >
+                                     Editar
+                                   </button>
+                                   <button
+                                     onClick={() => onDelete(user)}
+                                     title="Excluir usuário"
+                                     className="planner-button-secondary-compact text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                                   >
+                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                     </svg>
+                                   </button>
+                                 </>
+                               )}
+                             </div>
+                           </td>
                         </tr>
                       );
                     })}

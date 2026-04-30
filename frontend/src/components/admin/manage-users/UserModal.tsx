@@ -84,9 +84,8 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
     
     if (!displayName.trim()) missingFields.push('Nome');
     if (!phone.trim()) missingFields.push('Telefone');
-    if (!targetEmpresaId) missingFields.push('Empresa');
+    if (role === 'superadmin' && !targetEmpresaId) missingFields.push('Empresa');
     if (!selectedRole) missingFields.push('Perfil');
-    if (!expiresAt) missingFields.push('Data de Expiração');
 
     if (missingFields.length > 0) {
       toast.error(`Campos obrigatórios: ${missingFields.join(', ')}`);
@@ -94,18 +93,21 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
     }
 
     // Validação de Capacidade/Limite da Empresa
-    const targetEmpresa = empresas.find(e => e.id === targetEmpresaId);
-    if (targetEmpresa) {
+    const validationEmpresa = role === 'superadmin' 
+      ? empresas.find(e => e.id === targetEmpresaId)
+      : (empresas.length > 0 ? empresas[0] : null);
+
+    if (validationEmpresa) {
       if (mei) {
-        const currentMeis = users.filter(u => u.empresaId === targetEmpresaId && u.mei && u.id !== user?.id).length;
-        const limit = targetEmpresa.max_mei;
+        const currentMeis = users.filter(u => u.empresaId === validationEmpresa.id && u.mei && u.id !== user?.id).length;
+        const limit = validationEmpresa.max_mei;
         if (limit !== null && currentMeis >= limit) {
           toast.error(limit === 0 ? 'Módulo MEI está desativado para esta empresa' : `Limite de MEIs atingido (${limit})`);
           return;
         }
       } else {
-        const currentRegular = users.filter(u => u.empresaId === targetEmpresaId && !u.mei && u.id !== user?.id).length;
-        const limit = targetEmpresa.max_usuarios_nao_mei;
+        const currentRegular = users.filter(u => u.empresaId === validationEmpresa.id && !u.mei && u.id !== user?.id).length;
+        const limit = validationEmpresa.max_usuarios_nao_mei;
         if (limit !== null && limit !== 0 && currentRegular >= limit) {
           toast.error(`Limite de Clientes (PF/Outros) atingido (${limit})`);
           return;
@@ -247,16 +249,29 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
                   WhatsApp / Celular <span className="text-rose-500">*</span>
                 </label>
-                <div className={showErrors && !phone ? 'phone-input-error' : ''}>
-                  <PhoneInput
-                    country={'br'}
-                    value={phone}
-                    onChange={val => setPhone(val)}
-                    inputClass="planner-input !w-full !pl-12"
-                    containerClass="!w-full"
-                    buttonClass="!bg-transparent !border-none !pl-2"
-                  />
-                </div>
+                <PhoneInput
+                  country={'br'}
+                  value={phone}
+                  onChange={val => setPhone(val)}
+                  inputStyle={{
+                    width: '100%',
+                    paddingTop: '10px',
+                    paddingBottom: '10px',
+                    paddingLeft: '48px',
+                    borderRadius: '0.75rem',
+                    border: showErrors && !phone.trim() 
+                      ? '1px solid #f43f5e' 
+                      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? '1px solid #334155' : '1px solid #cbd5e1'),
+                    fontSize: '1rem',
+                    backgroundColor: showErrors && !phone.trim() 
+                      ? '#fff1f2' 
+                      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? '#0f172a' : 'white'),
+                    color: window.matchMedia('(prefers-color-scheme: dark)').matches ? '#f8fafc' : '#0f172a',
+                    height: '42px',
+                  }}
+                  containerClass="!w-full"
+                  buttonClass="!bg-transparent !border-none !pl-2"
+                />
               </div>
             </div>
           </section>
@@ -265,48 +280,52 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
           <section className="space-y-5">
             <div className="relative flex items-center">
               <div className="flex-grow border-t border-slate-100 dark:border-slate-800"></div>
-              <span className="flex-shrink mx-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Vínculo & Regras</span>
+              <span className="flex-shrink mx-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                {role === 'superadmin' ? 'Vínculo & Regras' : 'Acesso'}
+              </span>
               <div className="flex-grow border-t border-slate-100 dark:border-slate-800"></div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1.5 relative">
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  Empresa Responsável <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    readOnly={role !== 'superadmin'}
-                    onClick={() => role === 'superadmin' && setEmpresaOpen(!empresaOpen)}
-                    value={empresaQuery}
-                    onChange={(e) => setEmpresaQuery(e.target.value)}
-                    className={`planner-input w-full text-left flex justify-between items-center pr-10 ${role !== 'superadmin' ? 'bg-slate-50 dark:bg-slate-800/50 cursor-not-allowed opacity-75' : 'cursor-pointer'} ${showErrors && !targetEmpresaId ? 'border-rose-500 bg-rose-50/5' : ''}`}
-                    placeholder="Pesquisar empresa..."
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                  </div>
-                  
-                  {empresaOpen && role === 'superadmin' && (
-                    <div className="absolute top-full left-0 right-0 z-[120] mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
-                      {filteredEmpresas.map(e => (
-                        <button
-                          key={e.id}
-                          className={`w-full text-left px-4 py-2.5 text-sm transition-colors border-b last:border-0 border-slate-50 dark:border-slate-800 ${targetEmpresaId === e.id ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
-                          onClick={() => {
-                            setTargetEmpresaId(e.id);
-                            setEmpresaQuery(e.empresa);
-                            setEmpresaOpen(false);
-                          }}
-                        >
-                          {e.empresa}
-                        </button>
-                      ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+              {role === 'superadmin' && (
+                <div className="space-y-1.5 relative">
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Empresa Responsável <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      readOnly={role !== 'superadmin'}
+                      onClick={() => role === 'superadmin' && setEmpresaOpen(!empresaOpen)}
+                      value={empresaQuery}
+                      onChange={(e) => setEmpresaQuery(e.target.value)}
+                      className={`planner-input w-full text-left flex justify-between items-center pr-10 ${role !== 'superadmin' ? 'bg-slate-50 dark:bg-slate-800/50 cursor-not-allowed opacity-75' : 'cursor-pointer'} ${showErrors && !targetEmpresaId ? 'border-rose-500 bg-rose-50/5' : ''}`}
+                      placeholder="Pesquisar empresa..."
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </div>
-                  )}
+                    
+                    {empresaOpen && role === 'superadmin' && (
+                      <div className="absolute top-full left-0 right-0 z-[120] mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
+                        {filteredEmpresas.map(e => (
+                          <button
+                            key={e.id}
+                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors border-b last:border-0 border-slate-50 dark:border-slate-800 ${targetEmpresaId === e.id ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
+                            onClick={() => {
+                              setTargetEmpresaId(e.id);
+                              setEmpresaQuery(e.empresa);
+                              setEmpresaOpen(false);
+                            }}
+                          >
+                            {e.empresa}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="space-y-1.5 relative">
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
@@ -324,7 +343,7 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                   
                   {roleOpen && (
                     <div className="absolute top-full left-0 right-0 z-[120] mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
-                      {['usuario', 'admin', 'outsider'].map(r => (
+                      {(role === 'superadmin' ? ['usuario', 'admin', 'outsider'] : ['usuario', 'admin']).map(r => (
                         <button
                           key={r}
                           className={`w-full text-left px-4 py-2.5 text-sm transition-colors border-b last:border-0 border-slate-50 dark:border-slate-800 capitalize ${selectedRole === r ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
@@ -340,37 +359,58 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                   )}
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-              <div className="bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/50 flex items-center justify-between">
-                <div className="max-w-[70%]">
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">Usuário MEI</h4>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">Habilita as funções específicas do módulo MEI.</p>
+              {/* Toggle MEI para Administradores se a empresa permitir */}
+              {role === 'admin' && empresas.some(e => e.max_mei && e.max_mei > 0) && (
+                <div className="bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/50 flex items-center justify-between">
+                  <div className="max-w-[70%]">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Usuário MEI</h4>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">Habilita as funções específicas do módulo MEI.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMei(!mei)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 focus:outline-none ${
+                      mei ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${mei ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setMei(!mei)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 focus:outline-none ${
-                    mei ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
-                  }`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${mei ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  Data de Expiração <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={expiresAt}
-                  onChange={(e) => setExpiresAt(e.target.value)}
-                  className={`planner-input w-full ${showErrors && !expiresAt ? 'border-rose-500 bg-rose-50/5' : ''}`}
-                />
-              </div>
+              )}
             </div>
+
+            {role === 'superadmin' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                <div className="bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/50 flex items-center justify-between">
+                  <div className="max-w-[70%]">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Usuário MEI</h4>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">Habilita as funções específicas do módulo MEI.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMei(!mei)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 focus:outline-none ${
+                      mei ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${mei ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Data de Expiração
+                  </label>
+                  <input
+                    type="date"
+                    value={expiresAt}
+                    onChange={(e) => setExpiresAt(e.target.value)}
+                    className="planner-input w-full"
+                  />
+                </div>
+              </div>
+            )}
           </section>
         </div>
 
