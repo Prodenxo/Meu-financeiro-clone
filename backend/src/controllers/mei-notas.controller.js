@@ -23,6 +23,7 @@ import {
   parseEmpresaJsonPayloadField,
   runPlugnotasEmitenteCompositeSetup
 } from '../services/plugnotas/plugnotas-emitente-setup.service.js';
+import { savePlugNotasCertId, getPlugNotasCertId } from '../services/mei-certificate-store.js';
 import { unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendSuccess } from '../utils/response.js';
@@ -140,6 +141,9 @@ export const cadastrarPlugNotasCertificado = async (req, res, next) => {
       ...(email ? { email } : {}),
       ...(cpfCnpj ? { cpfCnpj } : {})
     });
+    if (data?.id && req.user?.id) {
+      savePlugNotasCertId(req.user.id, data.id).catch(() => {});
+    }
     return sendSuccess(res, data, 'Certificado cadastrado no serviço de emissão fiscal');
   } catch (error) {
     return next(error);
@@ -149,6 +153,10 @@ export const cadastrarPlugNotasCertificado = async (req, res, next) => {
 export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
   try {
     const payload = getEmpresaPayloadFromRequest(req);
+    if (!payload.certificado && req.user?.id) {
+      const savedCertId = await getPlugNotasCertId(req.user.id);
+      if (savedCertId) payload.certificado = savedCertId;
+    }
     const data = await cadastrarEmpresaPlugNotas(payload);
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
     return sendSuccess(res, data, 'Empresa configurada no serviço de emissão fiscal');

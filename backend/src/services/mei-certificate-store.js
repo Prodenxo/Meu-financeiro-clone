@@ -399,6 +399,42 @@ export const saveCertificate = async (userId, {
 };
 
 /**
+ * Salva o ID do certificado retornado pelo PlugNotas após upload do .pfx.
+ * Operação silenciosa — falhas não interrompem o fluxo principal.
+ */
+export const savePlugNotasCertId = async (userId, certId) => {
+  if (!userId || !certId) return;
+  const supabase = getSupabase();
+  const { data, error: selectError } = await supabase
+    .from(TABLE)
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (selectError) return;
+  const payload = { plugnotas_cert_id: String(certId), updated_at: new Date().toISOString() };
+  if (data?.id) {
+    await supabase.from(TABLE).update(payload).eq('user_id', userId);
+  } else {
+    await supabase.from(TABLE).insert({ user_id: userId, ...payload });
+  }
+};
+
+/**
+ * Lê o ID do certificado PlugNotas salvo para o usuário.
+ * @returns {Promise<string | null>}
+ */
+export const getPlugNotasCertId = async (userId) => {
+  if (!userId) return null;
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from(TABLE)
+    .select('plugnotas_cert_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return data?.plugnotas_cert_id || null;
+};
+
+/**
  * Salva/atualiza apenas o documento (CPF/CNPJ) do usuário.
  */
 export const saveCertificateDocument = async (userId, certDocument) => {
