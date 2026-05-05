@@ -1,16 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { toast } from '../../../lib/toast';
-import { updateEmpresaLimits, createEmpresaLimits, deleteEmpresa } from '../../../services/usersService';
-
-interface ManagedUser {
-  id: string;
-  empresaId: string | null;
-  mei?: boolean | null;
-}
+import {
+  updateEmpresaLimits,
+  createEmpresaLimits,
+  deleteEmpresa,
+  type ManagedUser
+} from '../../../services/usersService';
 
 interface Empresa {
   id: string;
-  empresa; string;
+  empresa: string;
   max_mei?: number | null;
   max_usuarios_nao_mei?: number | null;
   createdAt?: string;
@@ -22,13 +21,22 @@ interface EmpresasTabProps {
   fetchEmpresas: () => Promise<void>;
 }
 
+const roleLabel: Record<ManagedUser['role'], string> = {
+  superadmin: 'Superadmin',
+  admin: 'Admin',
+  usuario: 'Usuário',
+  outsider: 'Externo'
+};
+
 export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetchEmpresas }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
+  const [empresaForMembers, setEmpresaForMembers] = useState<Empresa | null>(null);
   const [empresaToDelete, setEmpresaToDelete] = useState<Empresa | null>(null);
 
   // Estados para formulário (reutilizados para edit/create)
@@ -130,6 +138,16 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
     setEmpresaToDelete(empresa);
     setIsDeleteModalOpen(true);
   };
+
+  const handleViewMembers = (empresa: Empresa) => {
+    setEmpresaForMembers(empresa);
+    setIsMembersModalOpen(true);
+  };
+
+  const membersOfSelectedEmpresa = useMemo(() => {
+    if (!empresaForMembers) return [];
+    return users.filter((u) => u.empresaId === empresaForMembers.id);
+  }, [users, empresaForMembers]);
 
   const confirmDelete = async () => {
     if (!empresaToDelete) return;
@@ -318,6 +336,17 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                       <td className="py-6 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
+                            type="button"
+                            onClick={() => handleViewMembers(empresa)}
+                            title="Ver membros desta empresa"
+                            className="inline-flex items-center justify-center p-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all shadow-sm"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </button>
+                          <button
                             onClick={() => handleEditClick(empresa)}
                             title="Editar empresa"
                             className="inline-flex items-center justify-center p-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all shadow-sm"
@@ -373,6 +402,90 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
           </div>
         )}
       </div>
+
+      {/* Modal: membros da empresa */}
+      {isMembersModalOpen && empresaForMembers && (
+        <div
+          className="fixed inset-0 z-[105] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="empresa-members-title"
+        >
+          <div className="planner-card w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700 shrink-0">
+              <div>
+                <h3 id="empresa-members-title" className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Membros da empresa
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{empresaForMembers.empresa}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMembersModalOpen(false);
+                  setEmpresaForMembers(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors rounded-lg p-1"
+                aria-label="Fechar"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6 flex-1">
+              {membersOfSelectedEmpresa.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">
+                  Nenhum usuário vinculado a esta empresa.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {membersOfSelectedEmpresa.map((member) => (
+                    <li
+                      key={member.id}
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 px-4 py-3"
+                    >
+                      <div className="font-medium text-slate-900 dark:text-slate-100">
+                        {member.displayName || member.email || 'Sem nome'}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{member.email || '—'}</div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <span className="inline-flex items-center rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
+                          {roleLabel[member.role] ?? member.role}
+                        </span>
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          {member.mei ? 'MEI' : 'PF / Outros'}
+                        </span>
+                        {member.status === false ? (
+                          <span className="inline-flex items-center rounded-md bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                            Bloqueado
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-md bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            Ativo
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-200 dark:border-slate-700 shrink-0 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMembersModalOpen(false);
+                  setEmpresaForMembers(null);
+                }}
+                className="planner-button-secondary px-6"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Cadastro/Edição */}
       {(isEditModalOpen || isCreateModalOpen) && (
