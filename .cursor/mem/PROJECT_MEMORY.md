@@ -88,6 +88,8 @@ GitHub Actions: `.github/workflows/corr03-smoke-backend.yml` executa o mesmo smo
 
 ## Última atualização
 
+- **2026-04-30** — DAS mensal: envio WhatsApp opcional após PDF gerado (`MEI_DAS_AUTO_WHATSAPP_ENABLED`, `N8N_WHATSAPP_WEBHOOK_URL`, `source: mei_das_automatico`, telefone em `user_metadata.phone`); falha do webhook não falha o job. Ver `docs/ops/das-mensal-e-assinatura-planilha-notas-2026-04-30.md`.
+- **2026-04-30** — Cron teste unitário: `GET /api/cron/das-mensal/usuario?userId=` + Bearer `CRON_SECRET`; opcional `competencia=YYYY-MM`; JSON com `whatsappStatus`.
 - **2026-04-15** — FR-PFLNAT P2: secção PFLNAT no runbook `operacao-mei-nfse.md`; story P2 critérios doc fechados — PR + aprovação @po / @qa por equipa.
 - **2026-04-15** — FR-PFLNAT P1: revisão doc QA pós-@qa (§0–§4); story actualizada; sign-off @qa / gate P0+CI permanecem com equipa.
 - **2026-04-15** — FR-PFLNAT P0: motor `empresa-cadastro-runtime-decision.js` — precedência nacional sobre bloqueio por login municipal no modo nacional default; regressão em `empresa-cadastro-runtime-rec500-regression.test.js` + integração `plugnotas-empresa.test.js` / `mei-notas-empresa-http.test.js`.

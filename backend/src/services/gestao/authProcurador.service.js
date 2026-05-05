@@ -1,3 +1,5 @@
+import https from 'node:https';
+import { URL as NodeURL } from 'node:url';
 import { env } from '../../config/env.js';
 import { badRequest } from '../../utils/errors.js';
 import { requestWithMtls } from '../../utils/http-mtls.js';
@@ -286,6 +288,89 @@ const ensureAssinaturaConfigurada = () => {
   }
 };
 
+/**
+ * POST JSON para a URL de assinatura (PHP). Evita o connect timeout ~10s do `fetch` (Undici)
+ * quando `planilha.*` ou outro host demora a aceitar TCP.
+ */
+const postJsonToSignUrl = (urlString, payload, connectMs, responseMs) =>
+  new Promise((resolve, reject) => {
+    let url;
+    try {
+      url = new NodeURL(urlString);
+    } catch {
+      reject(badRequest('SERPRO_AUTENTICA_PROCURADOR_SIGN_URL inválida'));
+      return;
+    }
+
+    const bodyBuf = Buffer.from(JSON.stringify(payload), 'utf8');
+    let settled = false;
+    const finish = (fn, arg) => {
+      if (settled) return;
+      settled = true;
+      fn(arg);
+    };
+
+    let req;
+    const connectTimer = setTimeout(() => {
+      if (req) req.destroy(new Error(`Connect timeout (${connectMs}ms) em ${url.hostname}`));
+    }, connectMs);
+
+    req = https.request(
+      {
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: `${url.pathname}${url.search}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': bodyBuf.length
+        }
+      },
+      (res) => {
+        clearTimeout(connectTimer);
+
+        const responseTimer = setTimeout(() => {
+          res.destroy();
+          finish(reject, badRequest(`Timeout de resposta (${responseMs}ms) em ${url.hostname}`));
+        }, responseMs);
+
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => {
+          clearTimeout(responseTimer);
+          const buffer = Buffer.concat(chunks);
+          const headerMap = new Map(
+            Object.entries(res.headers).map(([k, v]) => [
+              String(k).toLowerCase(),
+              Array.isArray(v) ? v.join(', ') : String(v ?? '')
+            ])
+          );
+          finish(resolve, {
+            ok: (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300,
+            status: res.statusCode ?? 0,
+            headers: {
+              get: (name) => headerMap.get(String(name).toLowerCase()) || null
+            },
+            json: async () => JSON.parse(buffer.toString('utf8')),
+            text: async () => buffer.toString('utf8')
+          });
+        });
+        res.on('error', (e) => {
+          clearTimeout(responseTimer);
+          finish(reject, e);
+        });
+      }
+    );
+
+    req.on('error', (e) => {
+      if (connectTimer) clearTimeout(connectTimer);
+      finish(reject, e);
+    });
+
+    req.write(bodyBuf);
+    req.end();
+  });
+
 const gerarCertificadoAssinado = async (cnpjAssinante, nomeAssinante) => {
   ensureAssinaturaConfigurada();
   if (!cnpjAssinante) {
@@ -312,11 +397,18 @@ const gerarCertificadoAssinado = async (cnpjAssinante, nomeAssinante) => {
     }
   };
 
-  const response = await fetch(env.SERPRO_AUTENTICA_PROCURADOR_SIGN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+  const signTimeoutMs = Math.max(
+    5000,
+    Number(env.SERPRO_AUTENTICA_PROCURADOR_SIGN_TIMEOUT_MS || 45000)
+  );
+  const responseReadMs = Math.min(180000, Math.max(60000, signTimeoutMs * 2));
+
+  const response = await postJsonToSignUrl(
+    env.SERPRO_AUTENTICA_PROCURADOR_SIGN_URL,
+    payload,
+    signTimeoutMs,
+    responseReadMs
+  );
 
   if (!response.ok) {
     const message = await parseErrorMessage(response);

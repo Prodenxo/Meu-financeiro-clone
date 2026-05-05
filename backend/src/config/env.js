@@ -60,6 +60,9 @@ export const env = {
   SERPRO_AUTENTICA_PROCURADOR_URL: process.env.SERPRO_AUTENTICA_PROCURADOR_URL || '',
   SERPRO_AUTENTICA_PROCURADOR_PATH: process.env.SERPRO_AUTENTICA_PROCURADOR_PATH || '',
   SERPRO_AUTENTICA_PROCURADOR_SIGN_URL: process.env.SERPRO_AUTENTICA_PROCURADOR_SIGN_URL || '',
+  /** Timeout (ms) do POST para `SERPRO_AUTENTICA_PROCURADOR_SIGN_URL` (assinatura XML). Padrão 45s — undici usa ~10s de connect se não houver signal. */
+  SERPRO_AUTENTICA_PROCURADOR_SIGN_TIMEOUT_MS:
+    process.env.SERPRO_AUTENTICA_PROCURADOR_SIGN_TIMEOUT_MS || '45000',
   SERPRO_AUTENTICA_PROCURADOR_USE_MTLS: process.env.SERPRO_AUTENTICA_PROCURADOR_USE_MTLS || 'false',
   SERPRO_AUTENTICA_PROCURADOR_ROLE_TYPE: process.env.SERPRO_AUTENTICA_PROCURADOR_ROLE_TYPE || '',
   SERPRO_AUTENTICA_PROCURADOR_BODY_KEY: process.env.SERPRO_AUTENTICA_PROCURADOR_BODY_KEY || 'termoAutorizacao',
@@ -125,6 +128,11 @@ export const env = {
   PLUGNOTAS_NFCE_CANCEL_PATH: process.env.PLUGNOTAS_NFCE_CANCEL_PATH || '/nfce/:id/cancelamento',
   N8N_WHATSAPP_WEBHOOK_URL: process.env.N8N_WHATSAPP_WEBHOOK_URL || '',
   N8N_WHATSAPP_WEBHOOK_SECRET: process.env.N8N_WHATSAPP_WEBHOOK_SECRET || '',
+  /**
+   * `true`: após gerar e guardar o DAS no job mensal/cron, dispara o mesmo webhook WhatsApp (n8n)
+   * que o admin usa — mesmo payload, `source: mei_das_automatico`. Requer telefone em `user_metadata.phone`.
+   */
+  MEI_DAS_AUTO_WHATSAPP_ENABLED: process.env.MEI_DAS_AUTO_WHATSAPP_ENABLED || 'false',
   /**
    * URL pública do frontend usada em links de convite (`/register?convite=`).
    * Se vazio, usa `FRONTEND_URL` ou header `Origin` da requisição (fallback dev `http://localhost:3000`).

@@ -5,6 +5,7 @@ import { env } from '../config/env.js';
 import * as usersService from './users.service.js';
 import * as meiGuideService from './mei-guide.service.js';
 import { getCertificateDocument } from './mei-certificate-store.js';
+import { sendWhatsappMessage } from './n8n-whatsapp.service.js';
 
 const DAS_BUCKET = 'mei-das-pdfs';
 const DAS_TABLE = 'das_mensal_status';
@@ -18,6 +19,108 @@ let lastRunKey = null;
 let bucketEnsured = false;
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
+
+const isAutoWhatsappAfterDasEnabled = () =>
+  String(env.MEI_DAS_AUTO_WHATSAPP_ENABLED || '').toLowerCase() === 'true';
+
+const normalizePhoneForWhatsapp = (value) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length > 0 ? digits : null;
+};
+
+const fetchAuthUserContactForWhatsapp = async (userId) => {
+  const supabase = getServiceRoleClient();
+  const { data, error } = await supabase.auth.admin.getUserById(userId);
+  if (error || !data?.user) return null;
+  const u = data.user;
+  const meta = u.user_metadata || {};
+  const phone = normalizePhoneForWhatsapp(meta.phone);
+  const displayName = meta.display_name || meta.full_name || u.email || 'Cliente';
+  return {
+    email: u.email || null,
+    displayName: String(displayName).trim() || 'Cliente',
+    phone
+  };
+};
+
+const fetchEmpresaNome = async (empresaId) => {
+  if (!empresaId) return null;
+  const supabase = getServiceRoleClient();
+  const { data, error } = await supabase
+    .from('empresas')
+    .select('empresa')
+    .eq('id', empresaId)
+    .maybeSingle();
+  if (error) return null;
+  return data?.empresa || null;
+};
+
+/**
+ * Mesmo contrato que `sendAdminMeiWhatsapp` → n8n (ver `docs/ops/n8n-zapi-das-mei.md`).
+ * Não lança: falhas só em log para não derrubar o job mensal.
+ * @returns {Promise<string>} código para diagnóstico (ex.: `sent`, `skipped_no_phone`).
+ */
+const trySendAutomaticDasWhatsapp = async ({
+  userId,
+  empresaId,
+  competencia,
+  periodoApuracao,
+  cnpj,
+  pdfBase64
+}) => {
+  if (!isAutoWhatsappAfterDasEnabled()) return 'skipped_disabled';
+  const webhookUrl = (env.N8N_WHATSAPP_WEBHOOK_URL || '').trim();
+  if (!webhookUrl) {
+    console.warn('[mei-das] MEI_DAS_AUTO_WHATSAPP_ENABLED=true mas N8N_WHATSAPP_WEBHOOK_URL está vazio');
+    return 'skipped_no_webhook';
+  }
+  if (!pdfBase64) return 'skipped_no_pdf';
+
+  const contact = await fetchAuthUserContactForWhatsapp(userId);
+  if (!contact?.phone) {
+    console.info('[mei-das] WhatsApp automático ignorado (sem telefone em user_metadata)', { userId, competencia });
+    return 'skipped_no_phone';
+  }
+
+  const empresaName = await fetchEmpresaNome(empresaId);
+  const displayName = contact.displayName;
+  const message = `Olá ${displayName}, segue a guia DAS MEI da competência ${competencia}.`;
+  const payload = {
+    userId,
+    displayName,
+    email: contact.email,
+    phone: contact.phone,
+    empresaId: empresaId || null,
+    empresaName: empresaName || null,
+    competencia,
+    periodoApuracao,
+    cnpj: cnpj || null,
+    pdfBase64,
+    fileName: `das-mei-${periodoApuracao}.pdf`,
+    source: 'mei_das_automatico',
+    message
+  };
+
+  try {
+    await sendWhatsappMessage(payload);
+    console.info('[mei-das] WhatsApp automático solicitado (webhook)', { userId, competencia });
+    return 'sent';
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[mei-das] Falha no WhatsApp automático (webhook)', { userId, competencia, message: msg });
+    return 'failed';
+  }
+};
+
+/** Expõe `error.cause` (ex.: ECONNREFUSED) — `fetch failed` sozinho é pouco útil em diagnóstico. */
+const formatDasJobErrorMessage = (error) => {
+  if (!(error instanceof Error)) return String(error);
+  const bits = [error.message];
+  const c = error.cause;
+  if (c instanceof Error) bits.push(`cause: ${c.message}`);
+  else if (c !== undefined && c !== null) bits.push(`cause: ${String(c)}`);
+  return bits.join(' — ');
+};
 
 const competenciaToPeriodoApuracao = (competencia) => competencia.replace('-', '');
 
@@ -243,7 +346,8 @@ export const generateAndStoreDasForUser = async ({
 
   return {
     ...record,
-    cnpj
+    cnpj,
+    pdfBase64
   };
 };
 
@@ -317,8 +421,17 @@ export const runMonthlyAutomaticDasDownload = async (referenceDate = new Date())
         competencia: generated.competencia,
         status: generated.status
       });
+
+      await trySendAutomaticDasWhatsapp({
+        userId: user.userId,
+        empresaId: user.empresaId,
+        competencia: generated.competencia,
+        periodoApuracao: competenciaToPeriodoApuracao(generated.competencia),
+        cnpj: generated.cnpj,
+        pdfBase64: generated.pdfBase64
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao gerar DAS';
+      const message = error instanceof Error ? formatDasJobErrorMessage(error) : 'Falha ao gerar DAS';
       results.push({
         userId: user.userId,
         empresaId: user.empresaId,
@@ -347,6 +460,88 @@ export const runMonthlyAutomaticDasDownload = async (referenceDate = new Date())
     finishedAt
   });
   return summary;
+};
+
+/**
+ * Um único utilizador elegível (mesma regra do job mensal) — para testar DAS + WhatsApp sem processar todos.
+ * @param {string} userId
+ * @param {{ competencia?: string, referenceDate?: Date }} [options]
+ */
+export const runSingleUserAutomaticDasDownload = async (userId, options = {}) => {
+  const uid = String(userId || '').trim();
+  if (!uid) {
+    throw badRequest('userId é obrigatório');
+  }
+  const referenceDate = options.referenceDate instanceof Date ? options.referenceDate : new Date();
+  const competenciaRaw = options.competencia;
+  const competencia = competenciaRaw
+    ? normalizeCompetencia(String(competenciaRaw).trim())
+    : getPreviousCompetencia(referenceDate);
+
+  const users = await withRetry(() => listActiveUsersWithEmpresa(), { maxAttempts: 3, delayMs: 1000 });
+  const user = users.find((u) => u.userId === uid);
+  if (!user) {
+    throw badRequest(
+      'Usuário não está elegível: certificado MEI com CNPJ de 14 dígitos e vínculo ativo em role_x_user_x_empresa'
+    );
+  }
+
+  const startedAt = new Date().toISOString();
+  console.info('[mei-das] Processamento único (teste/cron)', { userId: uid, competencia, startedAt });
+
+  try {
+    const generated = await generateAndStoreDasForUser({
+      userId: user.userId,
+      empresaId: user.empresaId,
+      competencia,
+      source: 'automatico'
+    });
+    const whatsappStatus = await trySendAutomaticDasWhatsapp({
+      userId: user.userId,
+      empresaId: user.empresaId,
+      competencia: generated.competencia,
+      periodoApuracao: competenciaToPeriodoApuracao(generated.competencia),
+      cnpj: generated.cnpj,
+      pdfBase64: generated.pdfBase64
+    });
+    const finishedAt = new Date().toISOString();
+    console.info('[mei-das] Processamento único concluído', {
+      userId: uid,
+      competencia: generated.competencia,
+      dasStatus: generated.status,
+      whatsappStatus,
+      finishedAt
+    });
+    return {
+      ok: true,
+      competencia: generated.competencia,
+      userId: user.userId,
+      empresaId: user.empresaId,
+      dasStatus: generated.status,
+      whatsappStatus: whatsappStatus || 'unknown',
+      startedAt,
+      finishedAt
+    };
+  } catch (error) {
+    const message = error instanceof Error ? formatDasJobErrorMessage(error) : 'Falha ao gerar DAS';
+    const finishedAt = new Date().toISOString();
+    console.warn('[mei-das] Processamento único falhou', {
+      userId: uid,
+      competencia,
+      message,
+      finishedAt
+    });
+    return {
+      ok: false,
+      competencia,
+      userId: user.userId,
+      empresaId: user.empresaId,
+      message,
+      whatsappStatus: 'skipped_das_failed',
+      startedAt,
+      finishedAt
+    };
+  }
 };
 
 const runSchedulerTick = async () => {
