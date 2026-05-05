@@ -179,21 +179,11 @@ export default function Categorias() {
   }
 
   function handleEditCategoria(categoria: Category) {
-    // Só pode editar categorias pessoais
-    if (categoria.user_id === null) {
-      alert('Não é possível editar categorias globais. Crie uma categoria personalizada.');
-      return;
-    }
     setEditingCategoria(categoria);
     setModalOpen(true);
   }
 
   function handleDeleteClick(categoria: Category) {
-    // Só pode excluir categorias pessoais
-    if (categoria.user_id === null) {
-      alert('Não é possível excluir categorias globais.');
-      return;
-    }
     setDeletingCategoria(categoria);
     setDeleteModalOpen(true);
   }
@@ -334,36 +324,25 @@ export default function Categorias() {
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-center">
                   <div className="flex flex-wrap items-center gap-2 md:col-span-8">
                     <span className="font-semibold text-base md:text-lg dark:text-white">{cat.nome}</span>
-                    {cat.user_id === null && (
-                      <span className="planner-chip">
-                        Global
-                      </span>
-                    )}
                     <span className={`px-3 py-1 rounded-full font-semibold text-white text-xs ${cat.tipo === 'entrada' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
                       {cat.tipo === 'entrada' ? 'Entrada' : 'Saída'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 md:col-span-4 md:justify-end">
-                    {cat.user_id !== null ? (
-                      <>
-                        <button
-                          className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-gray-200 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm font-semibold"
-                          onClick={() => handleEditCategoria(cat)}
-                          title="Editar"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          className="px-3 py-2 rounded-xl bg-rose-100 dark:bg-rose-900 text-rose-600 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-800 text-sm font-semibold"
-                          onClick={() => handleDeleteClick(cat)}
-                          title="Excluir"
-                        >
-                          Excluir
-                        </button>
-                      </>
-                    ) : (
-                      <span className="text-xs text-slate-500 dark:text-gray-400">Categoria global</span>
-                    )}
+                    <button
+                      className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 dark:text-gray-200 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm font-semibold"
+                      onClick={() => handleEditCategoria(cat)}
+                      title="Editar"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      className="px-3 py-2 rounded-xl bg-rose-100 dark:bg-rose-900 text-rose-600 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-800 text-sm font-semibold"
+                      onClick={() => handleDeleteClick(cat)}
+                      title="Excluir"
+                    >
+                      Excluir
+                    </button>
                   </div>
                 </div>
               </div>

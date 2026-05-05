@@ -144,24 +144,14 @@ const ensureUserCategory = async (dbClient, userId, categoriaId) => {
 export const listCategories = async (userId, tipo) => {
   const dbClient = createSupabaseClient({ useServiceRole: true });
 
-  const { data: userCategories, error: userError } = await dbClient
+  const { data: categories, error } = await dbClient
     .from('categorias_id')
     .select('id, nome, tipo, user_id')
     .eq('user_id', userId);
 
-  if (userError) throw badRequest(userError.message);
+  if (error) throw badRequest(error.message);
 
-  const { data: globalCategories, error: globalError } = await dbClient
-    .from('categorias_id')
-    .select('id, nome, tipo, user_id')
-    .is('user_id', null);
-
-  if (globalError) throw badRequest(globalError.message);
-
-  let allCategories = [
-    ...(userCategories || []),
-    ...(globalCategories || [])
-  ];
+  let allCategories = categories || [];
 
   if (tipo) {
     const tipoNormalizado = normalizeTipo(tipo);
@@ -303,24 +293,14 @@ export const upsertCategoryBudget = async (userId, payload) => {
 export const listCategoryBudgetsSummary = async (userId, { year, month } = {}) => {
   const dbClient = getCategoriesBudgetReadClient();
 
-  const { data: userCategories, error: userError } = await dbClient
+  const { data: categories, error: catError } = await dbClient
     .from('categorias_id')
     .select('id, nome, tipo, user_id')
     .eq('user_id', userId);
 
-  if (userError) throw badRequest(userError.message);
+  if (catError) throw badRequest(catError.message);
 
-  const { data: globalCategories, error: globalError } = await dbClient
-    .from('categorias_id')
-    .select('id, nome, tipo, user_id')
-    .is('user_id', null);
-
-  if (globalError) throw badRequest(globalError.message);
-
-  const allCategories = [
-    ...(userCategories || []),
-    ...(globalCategories || [])
-  ];
+  const allCategories = categories || [];
 
   const range = getMonthRangeFromInput(year, month);
   const monthStartDate = range ? range.startDate : await ensureMonthlyBudgets(dbClient, userId);
