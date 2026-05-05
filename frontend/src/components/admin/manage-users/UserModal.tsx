@@ -236,7 +236,7 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
           password,
           displayName: displayName || undefined,
           phone: phone || undefined,
-          role: role === 'superadmin' ? selectedRole : 'usuario',
+          role: selectedRole,
           empresaId: role === 'superadmin' ? targetEmpresaId || undefined : undefined,
           mei,
           expiresAt: expiresAt || null
@@ -247,7 +247,7 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
         const payload = {
           displayName: displayName || undefined,
           phone: phone || undefined,
-          role: role === 'superadmin' ? selectedRole : undefined,
+          role: role === 'superadmin' || role === 'admin' ? selectedRole : undefined,
           empresaId: role === 'superadmin' ? targetEmpresaId || undefined : undefined,
           mei,
           expiresAt: expiresAt || null

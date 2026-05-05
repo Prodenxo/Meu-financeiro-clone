@@ -8,6 +8,8 @@ import * as authService from './auth.service.js';
 
 const ROLE_CREATE_ALLOWED = new Set(['superadmin', 'admin']);
 const ROLE_TARGET_ALLOWED = new Set(['admin', 'usuario', 'outsider']);
+/** Perfis que um admin da empresa pode criar/editar na própria empresa */
+const ROLE_ADMIN_MANAGEABLE = new Set(['usuario', 'admin']);
 const ROLE_UPDATE_ALLOWED_SUPERADMIN = new Set(['admin', 'usuario', 'outsider']);
 const ROLE_DEFAULT = 'usuario';
 const EMPRESA_SELECT_FIELDS = [
@@ -617,10 +619,12 @@ export const createUser = async (accessToken, input, deps = {}) => {
   let finalEmpresaId = requesterEmpresaId;
 
   if (requesterRole === 'admin') {
-    if (requestedRole && requestedRole !== 'usuario') {
-      throw badRequest('Admin só pode criar usuário padrão');
-    }
     if (!requesterEmpresaId) throw forbidden();
+    const normalizedRequested = normalizeRoleValue(requestedRole) || ROLE_DEFAULT;
+    if (!ROLE_ADMIN_MANAGEABLE.has(normalizedRequested)) {
+      throw badRequest('Admin só pode criar perfil usuário ou administrador');
+    }
+    finalRole = normalizedRequested;
   }
 
   if (requesterRole === 'superadmin') {
@@ -816,9 +820,9 @@ export const updateUser = async (accessToken, userId, input) => {
   const targetRole = normalizeRoleValue(roleData?.roles) || 'usuario';
 
   if (requester.role === 'admin') {
-    if (targetRole !== 'usuario') throw forbidden();
     if (!requester.empresaId || requester.empresaId !== linkRecord.empresas_id) throw forbidden();
-    if (requestedRole && requestedRole !== 'usuario') throw forbidden();
+    if (!ROLE_ADMIN_MANAGEABLE.has(targetRole)) throw forbidden();
+    if (requestedRole && !ROLE_ADMIN_MANAGEABLE.has(requestedRole)) throw forbidden();
   }
 
   if (requester.role === 'superadmin') {
