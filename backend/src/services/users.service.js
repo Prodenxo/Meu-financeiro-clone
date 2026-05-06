@@ -220,6 +220,64 @@ const countActiveUsersByMei = async (adminClient, { empresaId, mei, ignoreUserId
   return count || 0;
 };
 
+/**
+ * Sincroniza o módulo MEI para empresas que já possuem vínculos MEI ativos,
+ * mas ainda estão com `max_mei` desativado (0/null).
+ */
+const syncEmpresasMeiActivation = async (adminClient, scopedEmpresaIds = []) => {
+  let meiLinksQuery = adminClient
+    .from('role_x_user_x_empresa')
+    .select('empresas_id, mei')
+    .eq('status', true)
+    .not('empresas_id', 'is', null)
+    .or('mei.is.null,mei.eq.true');
+
+  if (scopedEmpresaIds.length > 0) {
+    meiLinksQuery = meiLinksQuery.in('empresas_id', scopedEmpresaIds);
+  }
+
+  const { data: meiLinks, error: meiLinksError } = await meiLinksQuery;
+  if (meiLinksError) throw badRequest(meiLinksError.message);
+
+  const meiCountByEmpresa = new Map();
+  for (const link of meiLinks || []) {
+    const id = link?.empresas_id;
+    if (!id) continue;
+    meiCountByEmpresa.set(id, (meiCountByEmpresa.get(id) || 0) + 1);
+  }
+
+  const empresaIds = Array.from(meiCountByEmpresa.keys());
+  if (empresaIds.length === 0) return new Map();
+
+  const { data: empresasData, error: empresasError } = await adminClient
+    .from('empresas')
+    .select('id, max_mei')
+    .in('id', empresaIds);
+
+  if (empresasError) throw badRequest(empresasError.message);
+
+  const fixedMaxMeiByEmpresa = new Map();
+  const updates = (empresasData || [])
+    .filter((empresa) => {
+      const current = normalizeLimitValue(empresa.max_mei) || 0;
+      return current <= 0 && (meiCountByEmpresa.get(empresa.id) || 0) > 0;
+    })
+    .map(async (empresa) => {
+      const meiCount = meiCountByEmpresa.get(empresa.id) || 0;
+      const newMaxMei = Math.max(1, meiCount);
+      const { error: updateError } = await adminClient
+        .from('empresas')
+        .update({ max_mei: newMaxMei })
+        .eq('id', empresa.id);
+
+      if (updateError) throw badRequest(updateError.message);
+      fixedMaxMeiByEmpresa.set(empresa.id, newMaxMei);
+    });
+
+  await Promise.all(updates);
+  return fixedMaxMeiByEmpresa;
+};
+
 export const ensureEmpresaCapacity = async (adminClient, { empresaId, mei, ignoreUserId }) => {
   const { maxMei, maxNaoMei } = await getEmpresaLimits(adminClient, empresaId);
   const limit = mei ? maxMei : maxNaoMei;
@@ -527,8 +585,16 @@ export const listEmpresas = async (accessToken) => {
   const { data, error } = await query;
   if (error) throw badRequest(error.message);
 
+  const scopedIds = (data || []).map((empresa) => empresa.id).filter(Boolean);
+  const fixedMaxMeiByEmpresa = await syncEmpresasMeiActivation(adminClient, scopedIds);
+  const empresas = (data || []).map((empresa) => {
+    const fixedMaxMei = fixedMaxMeiByEmpresa.get(empresa.id);
+    if (fixedMaxMei === undefined) return empresa;
+    return { ...empresa, max_mei: fixedMaxMei };
+  });
+
   console.log('[Users] listEmpresas role:', role, 'empresaId:', empresaId, 'count:', data?.length || 0);
-  return { empresas: data || [] };
+  return { empresas };
 };
 
 export const getEmpresa = async (accessToken) => {
