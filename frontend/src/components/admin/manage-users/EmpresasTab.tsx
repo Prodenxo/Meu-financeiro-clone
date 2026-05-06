@@ -242,6 +242,11 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                   const maxMei = empresa.max_mei || 0;
                   const maxRegular = empresa.max_usuarios_nao_mei || 0;
                   const stats = getUsageStats(empresa.id, maxMei, maxRegular);
+                  const hasMeiUsage = stats.meiUsed > 0;
+                  const meiEnabled = maxMei > 0 || hasMeiUsage;
+                  const effectiveMaxMei = Math.max(maxMei, stats.meiUsed, 1);
+                  const meiProgressRatio = stats.meiUsed / effectiveMaxMei;
+                  const meiAvailable = Math.max(0, effectiveMaxMei - stats.meiUsed);
 
                   return (
                     <tr key={empresa.id} className="border-b border-slate-100 dark:border-slate-800/50 last:border-0 hover:bg-slate-50/30 dark:hover:bg-slate-800/20 transition-colors">
@@ -254,7 +259,7 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                       
                       {/* Estatísticas MEI - Versão Humana */}
                       <td className="py-6">
-                        {maxMei > 0 ? (
+                        {meiEnabled ? (
                           <div className="flex flex-col gap-2">
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-1.5">
@@ -263,21 +268,23 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                                 </span>
                                 <span className="text-slate-300 dark:text-slate-700">|</span>
                                 <span className={`text-[11px] font-bold uppercase tracking-tight ${
-                                  stats.meiAvailable === 0 ? 'text-rose-500' : 'text-emerald-500'
+                                  meiAvailable === 0 ? 'text-rose-500' : 'text-emerald-500'
                                 }`}>
-                                  {stats.meiAvailable} disponíveis
+                                  {meiAvailable} disponíveis
                                 </span>
                               </div>
                               <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                Limite total: {maxMei} usuários
+                                {maxMei > 0
+                                  ? `Limite total: ${maxMei} usuários`
+                                  : `Sincronizado por uso atual: ${effectiveMaxMei} usuário${effectiveMaxMei > 1 ? 's' : ''}`}
                               </span>
                             </div>
                             <div className="w-40 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                               <div 
                                 className={`h-full rounded-full transition-all duration-500 ${
-                                  (stats.meiUsed / maxMei) >= 1 ? 'bg-rose-500' : (stats.meiUsed / maxMei) > 0.8 ? 'bg-amber-500' : 'bg-emerald-500'
+                                  meiProgressRatio >= 1 ? 'bg-rose-500' : meiProgressRatio > 0.8 ? 'bg-amber-500' : 'bg-emerald-500'
                                 }`}
-                                style={{ width: `${Math.min(100, (stats.meiUsed / maxMei) * 100)}%` }}
+                                style={{ width: `${Math.min(100, meiProgressRatio * 100)}%` }}
                               />
                             </div>
                           </div>

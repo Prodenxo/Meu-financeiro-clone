@@ -445,6 +445,13 @@ export const listUsers = async (accessToken, queryParams = {}) => {
   const { data: links, error: linksErr } = await linksQuery;
   if (linksErr) throw badRequest(linksErr.message);
 
+  const scopedEmpresaIds = Array.from(
+    new Set((links || []).map((link) => link.empresas_id).filter(Boolean))
+  );
+  if (scopedEmpresaIds.length > 0) {
+    await syncEmpresasMeiActivation(adminClient, scopedEmpresaIds);
+  }
+
   const linkedUserIds = new Set((links || []).map(l => l.user_id));
 
   // 3. Se houver busca e for Superadmin, incluir usuários do Auth que NÃO estão nos links (órfãos)
