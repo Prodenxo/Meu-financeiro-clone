@@ -538,7 +538,7 @@ export const getLastSeenUpdate = async (accessToken) => {
     .from('profiles')
     .select('last_seen_update_id')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   if (error) throw badRequest(error.message);
   return { lastSeenUpdateId: data?.last_seen_update_id ?? null };

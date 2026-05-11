@@ -110,6 +110,16 @@ export const runDailyRecorrenciasMaterialization = async (now = new Date()) => {
       continue;
     }
 
+    // Se a recorrência tem limite e já atingiu, auto-desativa e pula.
+    if (rec.max_ocorrencias != null && Number(rec.ocorrencias_geradas ?? 0) >= Number(rec.max_ocorrencias)) {
+      await db
+        .from(RECORRENCIAS_TABLE)
+        .update({ ativo: false })
+        .eq('id', rec.id);
+      skipped += 1;
+      continue;
+    }
+
     const { error: insertErr } = await db
       .from(LANCAMENTOS_TABLE)
       .insert([{
@@ -125,8 +135,19 @@ export const runDailyRecorrenciasMaterialization = async (now = new Date()) => {
         recorrencia_ano_mes: anoMes
       }]);
 
-    if (!insertErr) materialized += 1;
-    else if (env.NODE_ENV !== 'production') {
+    if (!insertErr) {
+      materialized += 1;
+      // Incrementa contador; se chegou ao limite, desativa.
+      const novaContagem = Number(rec.ocorrencias_geradas ?? 0) + 1;
+      const atingiuLimite = rec.max_ocorrencias != null && novaContagem >= Number(rec.max_ocorrencias);
+      await db
+        .from(RECORRENCIAS_TABLE)
+        .update({
+          ocorrencias_geradas: novaContagem,
+          ...(atingiuLimite ? { ativo: false } : {})
+        })
+        .eq('id', rec.id);
+    } else if (env.NODE_ENV !== 'production') {
       console.warn('[recorrencias] Falha ao inserir lançamento', rec.id, insertErr.message);
     }
   }
