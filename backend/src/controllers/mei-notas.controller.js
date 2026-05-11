@@ -17,7 +17,8 @@ export const __setPersistDocumentosAtivosMirrorAfterEmitenteForTests = (fn) => {
 import {
   atualizarEmpresaPlugNotas,
   cadastrarCertificadoPlugNotas,
-  cadastrarEmpresaPlugNotas
+  cadastrarEmpresaPlugNotas,
+  resolverCertificadoIdPorCnpj
 } from '../services/plugnotas/empresa.service.js';
 import {
   parseEmpresaJsonPayloadField,
@@ -155,8 +156,27 @@ export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
   try {
     const payload = getEmpresaPayloadFromRequest(req);
     if (!payload.certificado && req.user?.id) {
-      const savedCertId = await getPlugNotasCertId(req.user.id);
-      if (savedCertId) payload.certificado = savedCertId;
+      let certId = await getPlugNotasCertId(req.user.id);
+      if (!certId) {
+        const cnpj = String(payload.cpfCnpj || payload.cnpj || '').replace(/\D/g, '');
+        if (cnpj.length === 14) {
+          try {
+            certId = await resolverCertificadoIdPorCnpj(cnpj);
+            if (certId) {
+              savePlugNotasCertId(req.user.id, certId).catch(() => {});
+            }
+          } catch (resolveErr) {
+            // Recovery best-effort: registrar mas não interromper — deixar fluxo seguir e
+            // cair na mensagem clara abaixo se ainda assim não houver certificado.
+            console.warn('[cadastrarPlugNotasEmpresa] Falha ao recuperar cert_id por CNPJ', {
+              userId: req.user.id,
+              cnpj14: cnpj,
+              error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr)
+            });
+          }
+        }
+      }
+      if (certId) payload.certificado = certId;
     }
     const data = await cadastrarEmpresaPlugNotas(payload);
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);

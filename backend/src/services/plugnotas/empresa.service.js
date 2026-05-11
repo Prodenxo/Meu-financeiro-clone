@@ -628,12 +628,14 @@ const extractCertificadoIdFromEmpresaPayload = (payload) => {
 };
 
 /**
- * Após 409 no POST /certificado, obtém o ID do certificado já existente (GET empresa e/ou GET /certificado).
+ * Resolve o ID do certificado existente no PlugNotas por CNPJ.
+ * Tenta GET /empresa/{cnpj} e GET /certificado?cpfCnpj=... + GET /certificado.
+ * Usado após 409 no POST /certificado E como fallback quando o ID não está salvo localmente.
  * Logs estruturados por etapa: US-MEI-FISC-04 (`PLUGNOTAS_CERT_409_RESOLVE_LOG_LEVEL`).
  * @param {string|undefined} cpfCnpjInput
  * @returns {Promise<string|null>}
  */
-const resolverCertificadoIdAposConflito409 = async (cpfCnpjInput) => {
+export const resolverCertificadoIdPorCnpj = async (cpfCnpjInput) => {
   const cnpj = normalizeDoc(cpfCnpjInput || '');
   if (cnpj.length !== 14) return null;
 
@@ -747,7 +749,7 @@ export const cadastrarCertificadoPlugNotas = async ({
     if (!isCertificadoDuplicado409(error)) {
       throw error;
     }
-    const resolved = await resolverCertificadoIdAposConflito409(cpfCnpj);
+    const resolved = await resolverCertificadoIdPorCnpj(cpfCnpj);
     if (resolved) {
       return {
         id: resolved,
@@ -932,7 +934,10 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
     throw badRequest('CNPJ da empresa deve ter 14 dígitos');
   }
   if (!payload?.certificado) {
-    throw badRequest('Certificado é obrigatório para emitir notas no serviço de emissão fiscal');
+    throw badRequest(
+      'Certificado digital não localizado no PlugNotas. Envie o arquivo .pfx em "Certificado fiscal" antes de cadastrar a empresa.',
+      { plugnotasCode: 'certificado_nao_configurado' }
+    );
   }
 
   payload.cpfCnpj = cnpj;
