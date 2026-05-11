@@ -414,7 +414,7 @@ export const getRequesterContext = async (accessToken) => {
 
   if (linkData?.roles_id) {
     if (linkData?.status === false) {
-      throw forbidden('Seu perfil está bloqueado');
+      throw forbidden('Seu perfil está bloqueado', { code: 'PROFILE_BLOCKED' });
     }
     if (linkData?.expires_at && new Date(linkData.expires_at) < new Date()) {
       if (linkData?.id) {
@@ -423,7 +423,7 @@ export const getRequesterContext = async (accessToken) => {
           .update({ status: false })
           .eq('id', linkData.id);
       }
-      throw forbidden('Seu acesso expirou');
+      throw forbidden('Seu acesso expirou', { code: 'ACCESS_EXPIRED' });
     }
     const { data: roleData, error: roleError } = await linkClient
       .from('roles')

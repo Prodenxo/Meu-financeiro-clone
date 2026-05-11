@@ -1,4 +1,10 @@
 import { apiClient } from './apiClient';
+import {
+  flagLoginPageForAccessExpired,
+  flagLoginPageForLoginReason,
+  isAccessExpiredAuthError,
+  isProfileBlockedAuthError
+} from '../utils/authAccessExpired';
 
 export interface SignUpInput {
   email: string;
@@ -149,7 +155,11 @@ export async function getSession() {
     
     return null;
   } catch (error) {
-    // Se não houver sessão válida, limpar token local
+    if (isAccessExpiredAuthError(error)) {
+      flagLoginPageForAccessExpired();
+    } else if (isProfileBlockedAuthError(error)) {
+      flagLoginPageForLoginReason('profile_blocked');
+    }
     apiClient.clearAuthToken();
     return null;
   }
