@@ -628,11 +628,15 @@ export const getDocumentosAtivosMirror = async (userId) => {
 
 /**
  * Remove o certificado do usuário.
+ * Lança erro se o DELETE no Supabase falhar (antes era silencioso).
  */
 export const deleteCertificate = async (userId) => {
   if (!userId) return;
   const supabase = getSupabase();
-  await supabase.from(TABLE).delete().eq('user_id', userId);
+  const { error } = await supabase.from(TABLE).delete().eq('user_id', userId);
+  if (error) {
+    throw badRequest(error.message || 'Falha ao remover certificado');
+  }
 };
 
 /**

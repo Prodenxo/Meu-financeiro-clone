@@ -1217,11 +1217,7 @@ export const removeCertificate = async (userId) => {
     throw badRequest('Usuário não identificado');
   }
   if (env.MEI_CERT_ENCRYPTION_KEY) {
-    try {
-      await deleteCertificate(userId);
-    } catch {
-      // ignora erro de banco ao remover
-    }
+    await deleteCertificate(userId);
   }
   clearUserCaches(userId);
   return getCertificateStatus(userId);
