@@ -1,17 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import AuthLayout from '../components/AuthLayout';
 import ButtonSpinner from '../components/ButtonSpinner';
+import { LoginAccessExpiredCallout } from '../components/LoginAccessExpiredCallout';
+import { LoginProfileBlockedCallout } from '../components/LoginProfileBlockedCallout';
 import { getConviteTokenFromSearch } from '../utils/registerInviteQuery';
 import { acceptInviteRequest } from '../services/invitesService';
 import { toast } from '../lib/toast';
+import {
+  consumeLoginReasonFlag,
+  isAccessExpiredAuthError,
+  isProfileBlockedAuthError
+} from '../utils/authAccessExpired';
+
+type LoginFeedback =
+  | { kind: 'none' }
+  | { kind: 'accessExpired' }
+  | { kind: 'profileBlocked' }
+  | { kind: 'generic'; message: string };
 
 export default function Login() {
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [feedback, setFeedback] = useState<LoginFeedback>({ kind: 'none' });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const signIn = useAuthStore((state) => state.signIn);
@@ -21,9 +34,15 @@ export default function Login() {
   const inviteRaw = getConviteTokenFromSearch(location.search);
   const hasInviteQuery = inviteRaw.length > 0;
 
+  useEffect(() => {
+    const reason = consumeLoginReasonFlag();
+    if (reason === 'access_expired') setFeedback({ kind: 'accessExpired' });
+    else if (reason === 'profile_blocked') setFeedback({ kind: 'profileBlocked' });
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setFeedback({ kind: 'none' });
     setLoading(true);
     try {
       await signIn(email, password);
@@ -44,20 +63,31 @@ export default function Login() {
 
       navigate('/');
     } catch (err: unknown) {
+      if (isAccessExpiredAuthError(err)) {
+        setFeedback({ kind: 'accessExpired' });
+        return;
+      }
+      if (isProfileBlockedAuthError(err)) {
+        setFeedback({ kind: 'profileBlocked' });
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err ?? '');
       if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
         const isVercelPreview = typeof window !== 'undefined' && /\.vercel\.app$/.test(window.location?.hostname ?? '');
-        setError(
-          isVercelPreview
+        setFeedback({
+          kind: 'generic',
+          message: isVercelPreview
             ? 'Não foi possível conectar ao servidor. Em preview na Vercel, confira se VITE_API_URL está definida (Production e Preview) e se o backend permite a origem em CORS.'
             : 'Não foi possível conectar ao servidor. Verifique se o backend está rodando (na pasta backend: npm run dev) e se a URL da API está correta.'
-        );
+        });
       } else if (msg.includes('405') || /method not allowed/i.test(msg)) {
-        setError(
-          'O servidor recusou o login (erro 405). Em desenvolvimento, use o proxy: não defina VITE_API_URL no .env do frontend e rode o backend em http://localhost:3333.'
-        );
+        setFeedback({
+          kind: 'generic',
+          message:
+            'O servidor recusou o login (erro 405). Em desenvolvimento, use o proxy: não defina VITE_API_URL no .env do frontend e rode o backend em http://localhost:3333.'
+        });
       } else {
-        setError(msg);
+        setFeedback({ kind: 'generic', message: msg });
       }
     } finally {
       setLoading(false);
@@ -132,9 +162,14 @@ export default function Login() {
                 </Link>
               </div>
             </div>
-            {error && (
-              <div className="admin-alert admin-alert-danger px-4 py-3 rounded-xl text-sm">
-                {error}
+            {feedback.kind === 'accessExpired' && <LoginAccessExpiredCallout />}
+            {feedback.kind === 'profileBlocked' && <LoginProfileBlockedCallout />}
+            {feedback.kind === 'generic' && (
+              <div
+                role="alert"
+                className="rounded-2xl border border-rose-200/80 bg-rose-50/75 px-4 py-3 text-sm leading-relaxed text-rose-950/90 shadow-[0_4px_20px_rgb(0,0,0,0.05)] backdrop-blur-sm dark:border-rose-500/25 dark:bg-rose-950/30 dark:text-rose-50/90"
+              >
+                {feedback.message}
               </div>
             )}
             <button

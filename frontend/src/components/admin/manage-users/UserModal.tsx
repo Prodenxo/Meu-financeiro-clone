@@ -1,16 +1,21 @@
 import { useState, useEffect } from 'react';
+import { Ban, ShieldAlert } from 'lucide-react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { toast } from '../../../lib/toast';
+import { useAuthStore } from '../../../store/authStore';
 import {
+  banUser,
   createUser,
   resetUserPassword,
   sendUserPasswordResetEmail,
+  unbanUser,
   updateUser,
   type EmpresaOption,
   type ManagedUser
 } from '../../../services/usersService';
 import LoadingOverlay from '../../LoadingOverlay';
+import { UserBlockConfirmDialog, type UserBlockConfirmIntent } from './UserBlockConfirmDialog';
 import {
   STRONG_PASSWORD_MIN_LENGTH,
   strongPasswordRequirementsSummary,
@@ -29,7 +34,11 @@ interface UserModalProps {
 }
 
 export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, users, role }: UserModalProps) {
+  const currentSessionUserId = useAuthStore((s) => s.userId);
   const [loading, setLoading] = useState(false);
+  const [linkBlocked, setLinkBlocked] = useState(false);
+  const [blockBusy, setBlockBusy] = useState(false);
+  const [blockConfirmIntent, setBlockConfirmIntent] = useState<UserBlockConfirmIntent | null>(null);
   
   // Create fields
   const [email, setEmail] = useState('');
@@ -74,6 +83,7 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
         setTargetEmpresaId(user.empresaId || '');
         const matchedEmpresa = empresas.find(e => e.id === user.empresaId);
         setEmpresaQuery(matchedEmpresa?.empresa || user.empresaName || '');
+        setLinkBlocked(user.status === false);
       } else {
         setEmail('');
         setPassword('');
@@ -84,7 +94,10 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
         setExpiresAt('');
         setTargetEmpresaId('');
         setEmpresaQuery('');
+        setLinkBlocked(false);
       }
+      setBlockBusy(false);
+      setBlockConfirmIntent(null);
       setShowErrors(false);
       setEmpresaOpen(false);
       setRoleOpen(false);
@@ -96,6 +109,36 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
       setLastGeneratedPassword(null);
     }
   }, [isOpen, mode, user, empresas]);
+
+  const isEditingSelf = mode === 'edit' && !!user && user.id === currentSessionUserId;
+
+  const openBlockConfirm = () => {
+    if (!user || isEditingSelf || blockBusy) return;
+    setBlockConfirmIntent(linkBlocked ? 'unblock' : 'block');
+  };
+
+  const executeBlockToggle = async () => {
+    if (!user || !blockConfirmIntent || blockBusy) return;
+    const intent = blockConfirmIntent;
+    setBlockBusy(true);
+    try {
+      if (intent === 'unblock') {
+        await unbanUser(user.id);
+        setLinkBlocked(false);
+        toast.success('Usuário desbloqueado.');
+      } else {
+        await banUser(user.id);
+        setLinkBlocked(true);
+        toast.success('Usuário bloqueado.');
+      }
+      setBlockConfirmIntent(null);
+      await Promise.resolve(onSuccess());
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível atualizar o bloqueio.');
+    } finally {
+      setBlockBusy(false);
+    }
+  };
 
   const handleCopyGeneratedPassword = async () => {
     if (!lastGeneratedPassword) return;
@@ -270,7 +313,18 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
 
   if (!isOpen) return null;
 
+  const blockDialogUserLabel = user?.displayName?.trim() || user?.email?.trim() || '';
+
   return (
+    <>
+    <UserBlockConfirmDialog
+      open={blockConfirmIntent !== null}
+      intent={blockConfirmIntent ?? 'block'}
+      userLabel={blockDialogUserLabel}
+      loading={blockBusy}
+      onCancel={() => !blockBusy && setBlockConfirmIntent(null)}
+      onConfirm={() => void executeBlockToggle()}
+    />
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300">
       <div className="planner-card w-full max-w-xl max-h-[90vh] overflow-y-auto p-0 shadow-2xl animate-in zoom-in-95 duration-200">
         {loading && <LoadingOverlay active={true} text={mode === 'create' ? 'Criando usuário...' : 'Salvando alterações...'} />}
@@ -694,6 +748,73 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                 </div>
               </div>
             )}
+
+            {mode === 'edit' && user && (
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                  Situação do acesso
+                </p>
+                {isEditingSelf && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-800/40 px-3 py-2">
+                    Você está editando a sua própria conta. Bloquear ou desbloquear pelo painel não está disponível
+                    aqui por segurança.
+                  </p>
+                )}
+                {!isEditingSelf && (
+                  <>
+                    {linkBlocked && (
+                      <div
+                        role="alert"
+                        className="flex gap-3 rounded-2xl border border-amber-200/90 bg-amber-50/85 px-3.5 py-3 text-left dark:border-amber-500/30 dark:bg-amber-950/40"
+                      >
+                        <span
+                          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200"
+                          aria-hidden
+                        >
+                          <ShieldAlert className="h-4 w-4" strokeWidth={2.25} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-amber-950 dark:text-amber-50">
+                            Usuário bloqueado
+                          </p>
+                          <p className="text-xs leading-relaxed text-amber-900/85 dark:text-amber-100/85 mt-0.5">
+                            Esta conta não consegue entrar no Meu Financeiro até você desbloquear. Use o botão abaixo
+                            para desbloquear.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {!linkBlocked && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Bloquear impede o login na plataforma até você desbloquear de novo.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={openBlockConfirm}
+                      disabled={blockBusy}
+                      className={
+                        linkBlocked
+                          ? 'inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/90 px-4 py-2.5 text-sm font-semibold text-emerald-900 shadow-sm hover:bg-emerald-100/90 dark:border-emerald-500/30 dark:bg-emerald-950/50 dark:text-emerald-100 dark:hover:bg-emerald-900/40 disabled:opacity-50'
+                          : 'inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white/80 px-4 py-2.5 text-sm font-semibold text-rose-900 shadow-sm hover:bg-rose-50/90 dark:border-rose-500/25 dark:bg-rose-950/35 dark:text-rose-100 dark:hover:bg-rose-950/50 disabled:opacity-50'
+                      }
+                    >
+                      {linkBlocked ? (
+                        <>
+                          <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden />
+                          {blockBusy ? 'Desbloqueando…' : 'Desbloquear usuário'}
+                        </>
+                      ) : (
+                        <>
+                          <Ban className="h-4 w-4 shrink-0" aria-hidden />
+                          {blockBusy ? 'Bloqueando…' : 'Bloquear usuário'}
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </section>
         </div>
 
@@ -715,5 +836,6 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
         </div>
       </div>
     </div>
+    </>
   );
 }

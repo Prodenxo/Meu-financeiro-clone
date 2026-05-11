@@ -122,7 +122,7 @@ const ensureUserNotBlocked = async ({ accessToken, userId }) => {
     .maybeSingle();
 
   if (linkData?.status === false) {
-    throw forbidden('Seu perfil está bloqueado');
+    throw forbidden('Seu perfil está bloqueado', { code: 'PROFILE_BLOCKED' });
   }
 
   if (linkData?.expires_at && new Date(linkData.expires_at) < new Date()) {
@@ -132,7 +132,7 @@ const ensureUserNotBlocked = async ({ accessToken, userId }) => {
         .update({ status: false })
         .eq('id', linkData.id);
     }
-    throw forbidden('Seu acesso expirou');
+    throw forbidden('Seu acesso expirou', { code: 'ACCESS_EXPIRED' });
   }
 };
 

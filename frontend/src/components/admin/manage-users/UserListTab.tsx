@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import Fuse from 'fuse.js';
 import { type ManagedUser, type EmpresaOption } from '../../../services/usersService';
+import { formatIsoDateUtcCalendarPtBr } from '../../../utils/formatIsoDateUtcCalendarPtBr';
 import LoadingOverlay from '../../LoadingOverlay';
 
 interface UserListTabProps {
@@ -257,7 +258,7 @@ export function UserListTab({
                                 >
                                   {new Date(user.expiresAt) < new Date()
                                     ? 'Expirado'
-                                    : `Expira em ${new Date(user.expiresAt).toLocaleDateString('pt-BR')}`}
+                                    : `Expira em ${formatIsoDateUtcCalendarPtBr(user.expiresAt)}`}
                                 </span>
                               )}
                             </div>
