@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { CreditCard } from 'lucide-react';
 import { toast } from '../../../lib/toast';
+import { EmpresaStripeMeiBillingModal } from './EmpresaStripeMeiBillingModal';
 import {
   updateEmpresaLimits,
   createEmpresaLimits,
@@ -12,6 +14,7 @@ interface Empresa {
   empresa: string;
   max_mei?: number | null;
   max_usuarios_nao_mei?: number | null;
+  legacy_mei_slots_pix?: number | null;
   createdAt?: string;
 }
 
@@ -30,6 +33,7 @@ const roleLabel: Record<ManagedUser['role'], string> = {
 
 export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetchEmpresas }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [meiStatusFilter, setMeiStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [loading, setLoading] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -38,6 +42,36 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
   const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
   const [empresaForMembers, setEmpresaForMembers] = useState<Empresa | null>(null);
   const [empresaToDelete, setEmpresaToDelete] = useState<Empresa | null>(null);
+  const [empresaBilling, setEmpresaBilling] = useState<Empresa | null>(null);
+
+  useEffect(() => {
+    if (!empresaBilling) return;
+    const fresh = empresas.find((e) => e.id === empresaBilling.id);
+    if (
+      fresh &&
+      (fresh.max_mei !== empresaBilling.max_mei ||
+        fresh.empresa !== empresaBilling.empresa)
+    ) {
+      setEmpresaBilling(fresh);
+    }
+  }, [empresas, empresaBilling]);
+
+  /** Volta de outro separador / após pagamento: atualiza limites na tabela. */
+  useEffect(() => {
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        void fetchEmpresas();
+      }, 400);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (debounce) clearTimeout(debounce);
+    };
+  }, [fetchEmpresas]);
 
   // Estados para formulário (reutilizados para edit/create)
   const [formData, setFormData] = useState({
@@ -52,11 +86,28 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
   const [pageSize, setPageSize] = useState(10);
 
   // Filtragem
+  const totalEmpresasMeiAtivo = useMemo(() => {
+    return empresas.filter((empresa) => {
+      const maxMei = empresa.max_mei || 0;
+      const meiUsed = users.filter((u) => u.empresaId === empresa.id && u.mei).length;
+      return maxMei > 0 || meiUsed > 0;
+    }).length;
+  }, [empresas, users]);
+
   const filteredEmpresas = useMemo(() => {
-    return empresas.filter(e => 
-      e.empresa.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [empresas, searchTerm]);
+    return empresas.filter((empresa) => {
+      const matchesName = empresa.empresa.toLowerCase().includes(searchTerm.toLowerCase());
+      if (!matchesName) return false;
+
+      if (meiStatusFilter === 'all') return true;
+
+      const maxMei = empresa.max_mei || 0;
+      const meiUsed = users.filter((u) => u.empresaId === empresa.id && u.mei).length;
+      const meiAtivo = maxMei > 0 || meiUsed > 0;
+
+      return meiStatusFilter === 'active' ? meiAtivo : !meiAtivo;
+    });
+  }, [empresas, searchTerm, meiStatusFilter, users]);
 
   const totalPages = Math.ceil(filteredEmpresas.length / pageSize);
   const currentData = filteredEmpresas.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -186,19 +237,44 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
 
       {/* Toolbar */}
       <div className="admin-toolbar flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="relative flex-1 max-w-lg">
-          <span className="absolute inset-y-0 left-3 flex items-center text-slate-400">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </span>
-          <input
-            type="text"
-            placeholder="Pesquisar por nome da empresa..."
-            value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-            className="planner-input pl-10 w-full"
-          />
+        <div className="flex flex-col gap-3 flex-1 max-w-3xl">
+          <div className="relative flex-1 max-w-lg">
+            <span className="absolute inset-y-0 left-3 flex items-center text-slate-400">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Pesquisar por nome da empresa..."
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              className="planner-input pl-10 w-full"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+              <span>Filtro MEI</span>
+              <select
+                value={meiStatusFilter}
+                onChange={(e) => {
+                  setMeiStatusFilter(e.target.value as 'all' | 'active' | 'inactive');
+                  setCurrentPage(1);
+                }}
+                className="planner-input-compact min-w-[170px]"
+                aria-label="Filtrar empresas por estado do MEI"
+              >
+                <option value="all">Todas as empresas</option>
+                <option value="active">Só MEI ativo</option>
+                <option value="inactive">Só MEI inativo</option>
+              </select>
+            </label>
+
+            <span className="inline-flex items-center rounded-full border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+              MEI ativo: {totalEmpresasMeiAtivo}
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
@@ -344,6 +420,14 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                         <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
+                            onClick={() => setEmpresaBilling(empresa)}
+                            title="Cobrança MEI (link de pagamento ou próxima fatura)"
+                            className="inline-flex items-center justify-center p-2 text-sm font-medium text-violet-600 dark:text-violet-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all shadow-sm"
+                          >
+                            <CreditCard className="h-4 w-4" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleViewMembers(empresa)}
                             title="Ver membros desta empresa"
                             className="inline-flex items-center justify-center p-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all shadow-sm"
@@ -409,6 +493,30 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
           </div>
         )}
       </div>
+
+      <EmpresaStripeMeiBillingModal
+        open={Boolean(empresaBilling)}
+        empresa={
+          empresaBilling
+            ? {
+                id: empresaBilling.id,
+                empresa: empresaBilling.empresa,
+                maxMeiPlataforma:
+                  empresaBilling.max_mei === undefined || empresaBilling.max_mei === null
+                    ? null
+                    : Number(empresaBilling.max_mei),
+                meiUsuariosEmUso: users.filter(
+                  (u) => u.empresaId === empresaBilling.id && u.mei
+                ).length
+              }
+            : null
+        }
+        onClose={() => {
+          setEmpresaBilling(null);
+          void fetchEmpresas();
+        }}
+        onMaxMeiSynced={() => fetchEmpresas()}
+      />
 
       {/* Modal: membros da empresa */}
       {isMembersModalOpen && empresaForMembers && (

@@ -30,7 +30,8 @@ const EMPRESA_SELECT_FIELDS = [
   'telefone',
   'email',
   'max_mei',
-  'max_usuarios_nao_mei'
+  'max_usuarios_nao_mei',
+  'legacy_mei_slots_pix'
 ].join(', ');
 const EMPRESA_TEXT_FIELDS = [
   'empresa',
@@ -137,6 +138,16 @@ const normalizeLimitValue = (value) => {
   if (!Number.isFinite(numeric)) return null;
   return numeric;
 };
+
+/** Inteiro >= 0 — vagas MEI legadas (PIX) registadas pelo superadmin. */
+const normalizeLegacyMeiSlotsPixInput = (value, fieldName = 'legacy_mei_slots_pix') => {
+  if (value === undefined || value === null || value === '') return 0;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || !Number.isInteger(numeric) || numeric < 0) {
+    throw badRequest(`${fieldName} deve ser um inteiro maior ou igual a 0`);
+  }
+  return numeric;
+};
 const buildEmpresaPayload = (input = {}, { requireName = false } = {}) => {
   const payload = {};
   for (const field of EMPRESA_TEXT_FIELDS) {
@@ -154,6 +165,9 @@ const buildEmpresaPayload = (input = {}, { requireName = false } = {}) => {
       input.max_usuarios_nao_mei,
       'max_usuarios_nao_mei'
     );
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'legacy_mei_slots_pix')) {
+    payload.legacy_mei_slots_pix = normalizeLegacyMeiSlotsPixInput(input.legacy_mei_slots_pix);
   }
 
   if (requireName) {
@@ -276,6 +290,53 @@ const syncEmpresasMeiActivation = async (adminClient, scopedEmpresaIds = []) => 
 
   await Promise.all(updates);
   return fixedMaxMeiByEmpresa;
+};
+
+/**
+ * Garante que `max_mei` ≥ soma dos pacotes Stripe ativos (evita tabela presa em valor antigo se webhook falhou).
+ * Não reduz limite manual acima da Stripe: `max_mei = max(cadastro, soma_ativa)`.
+ */
+const mergeStripeContractedMeiIntoEmpresaLimits = async (adminClient, empresas) => {
+  const list = empresas || [];
+  if (list.length === 0) return list;
+
+  const ids = list.map((e) => e.id).filter(Boolean);
+  const { data: lines, error } = await adminClient
+    .from('empresa_mei_subscription_lines')
+    .select('empresa_id, mei_slots')
+    .in('empresa_id', ids)
+    .eq('status', 'active');
+
+  if (error) throw badRequest(error.message);
+
+  const sumByEmpresa = new Map();
+  for (const row of lines || []) {
+    const id = row?.empresa_id;
+    if (!id) continue;
+    sumByEmpresa.set(id, (sumByEmpresa.get(id) || 0) + Number(row.mei_slots || 0));
+  }
+
+  const updatePromises = [];
+  const merged = list.map((e) => {
+    const stripeSum = sumByEmpresa.get(e.id) || 0;
+    const dbMax = normalizeLimitValue(e.max_mei) ?? 0;
+    const nextMax = Math.max(dbMax, stripeSum);
+    if (stripeSum > 0 && nextMax !== dbMax) {
+      updatePromises.push(
+        adminClient.from('empresas').update({ max_mei: nextMax }).eq('id', e.id)
+      );
+      return { ...e, max_mei: nextMax };
+    }
+    return e;
+  });
+
+  if (updatePromises.length > 0) {
+    const results = await Promise.all(updatePromises);
+    const firstErr = results.find((r) => r.error);
+    if (firstErr?.error) throw badRequest(firstErr.error.message);
+  }
+
+  return merged;
 };
 
 export const ensureEmpresaCapacity = async (adminClient, { empresaId, mei, ignoreUserId }) => {
@@ -581,7 +642,7 @@ export const listEmpresas = async (accessToken) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   let query = adminClient
     .from('empresas')
-    .select('id, empresa, max_mei, max_usuarios_nao_mei')
+    .select('id, empresa, max_mei, max_usuarios_nao_mei, legacy_mei_slots_pix')
     .order('empresa', { ascending: true });
 
   if (role === 'admin') {
@@ -594,11 +655,15 @@ export const listEmpresas = async (accessToken) => {
 
   const scopedIds = (data || []).map((empresa) => empresa.id).filter(Boolean);
   const fixedMaxMeiByEmpresa = await syncEmpresasMeiActivation(adminClient, scopedIds);
-  const empresas = (data || []).map((empresa) => {
+  let empresas = (data || []).map((empresa) => {
     const fixedMaxMei = fixedMaxMeiByEmpresa.get(empresa.id);
     if (fixedMaxMei === undefined) return empresa;
     return { ...empresa, max_mei: fixedMaxMei };
   });
+
+  if (role === 'superadmin') {
+    empresas = await mergeStripeContractedMeiIntoEmpresaLimits(adminClient, empresas);
+  }
 
   console.log('[Users] listEmpresas role:', role, 'empresaId:', empresaId, 'count:', data?.length || 0);
   return { empresas };

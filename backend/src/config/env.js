@@ -143,5 +143,19 @@ export const env = {
    * Padrão 120 em desenvolvimento e 60 caso contrário.
    */
   INVITE_VALIDATE_MAX_PER_MINUTE: process.env.INVITE_VALIDATE_MAX_PER_MINUTE
-    || (process.env.NODE_ENV === 'development' ? '120' : '60')
+    || (process.env.NODE_ENV === 'development' ? '120' : '60'),
+  /** Chave secreta Stripe (`sk_test_...` / `sk_live_...`). Opcional até usar cobrança MEI. */
+  STRIPE_SECRET_KEY: (process.env.STRIPE_SECRET_KEY || '').trim(),
+  /**
+   * Segredo do endpoint de webhook (Dashboard → Webhooks → signing secret).
+   * Em produção recomenda-se `STRIPE_WEBHOOK_REQUIRE_SECRET=true` e secret definido.
+   */
+  STRIPE_WEBHOOK_SECRET: (process.env.STRIPE_WEBHOOK_SECRET || '').trim(),
+  STRIPE_WEBHOOK_REQUIRE_SECRET: process.env.STRIPE_WEBHOOK_REQUIRE_SECRET
+    || (process.env.NODE_ENV === 'development' ? 'false' : 'true'),
+  /**
+   * `true`: soma `mei_slots` das linhas `active` (MEI via Stripe) e grava em `empresas.max_mei` após webhook/checkout.
+   * Por defeito `true` para o limite na plataforma acompanhar o contratado na Stripe. Defina `false` para só ajustar limite à mão.
+   */
+  STRIPE_SYNC_MAX_MEI: process.env.STRIPE_SYNC_MAX_MEI || 'true'
 };

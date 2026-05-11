@@ -27,18 +27,22 @@ export interface EmpresaOption {
   empresa: string;
   max_mei?: number | null;
   max_usuarios_nao_mei?: number | null;
+  /** Vagas MEI pagas em PIX antes da Stripe — saldo manual pelo superadmin. */
+  legacy_mei_slots_pix?: number | null;
 }
 
 export interface EmpresaLimitsPayload {
   empresa: string;
   max_mei?: number | null;
   max_usuarios_nao_mei?: number | null;
+  legacy_mei_slots_pix?: number | null;
 }
 
 export interface EmpresaUpdatePayload {
   empresa?: string;
   max_mei?: number | null;
   max_usuarios_nao_mei?: number | null;
+  legacy_mei_slots_pix?: number | null;
 }
 
 export async function listUsers(search?: string) {

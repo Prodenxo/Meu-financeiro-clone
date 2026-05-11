@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { requireAuth } from '../middlewares/auth.js';
 import { requireAdmin } from '../middlewares/requireAdmin.js';
+import { requireSuperAdmin } from '../middlewares/requireSuperAdmin.js';
 import * as controller from '../controllers/admin.controller.js';
+import * as adminBillingController from '../controllers/admin-billing.controller.js';
 
 const router = Router();
 
@@ -52,5 +54,24 @@ router.get('/mei-guide/:userId/periods', requireAuth, requireAdmin, controller.l
 router.get('/mei-guide/:userId/periods-by-cnpj', requireAuth, requireAdmin, controller.listAdminMeiPeriodsByCnpj);
 router.get('/mei-guide/:userId/download/:periodoApuracao', requireAuth, requireAdmin, controller.downloadAdminMeiGuide);
 router.post('/mei-guide/:userId/send-whatsapp', requireAuth, requireAdmin, controller.sendAdminMeiWhatsapp);
+
+router.get(
+  '/billing/stripe/subscription-lines',
+  requireAuth,
+  requireSuperAdmin,
+  adminBillingController.listStripeMeiSubscriptionLines
+);
+router.post(
+  '/billing/stripe/mei-checkout',
+  requireAuth,
+  requireSuperAdmin,
+  adminBillingController.createStripeMeiCheckoutSession
+);
+router.post(
+  '/billing/stripe/sync-max-mei',
+  requireAuth,
+  requireSuperAdmin,
+  adminBillingController.syncStripeMaxMeiFromLines
+);
 
 export default router;
