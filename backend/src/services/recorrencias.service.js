@@ -24,6 +24,15 @@ const validateDiaDoMes = (dia) => {
   return n;
 };
 
+const validateMaxOcorrencias = (max) => {
+  if (max === null || max === undefined || max === '') return null;
+  const n = Number(max);
+  if (!Number.isInteger(n) || n < 1 || n > 1200) {
+    throw badRequest('max_ocorrencias deve ser um inteiro entre 1 e 1200, ou nulo');
+  }
+  return n;
+};
+
 export const listRecorrencias = async (userId) => {
   const db = createSupabaseClient({ useServiceRole: true });
   const { data, error } = await db
@@ -38,7 +47,7 @@ export const listRecorrencias = async (userId) => {
 };
 
 export const createRecorrencia = async (userId, payload) => {
-  const { dia_do_mes, valor, classificacao, tipo, status, obs, categoria, ativo } = payload || {};
+  const { dia_do_mes, valor, classificacao, tipo, status, obs, categoria, ativo, max_ocorrencias } = payload || {};
   const tipoNorm = normalizeTipo(tipo);
 
   if (!tipoNorm || valor == null || valor === '' || !classificacao?.trim()) {
@@ -46,6 +55,7 @@ export const createRecorrencia = async (userId, payload) => {
   }
 
   const dia = validateDiaDoMes(dia_do_mes);
+  const maxOco = validateMaxOcorrencias(max_ocorrencias);
   const db = createSupabaseClient({ useServiceRole: true });
 
   const row = {
@@ -58,6 +68,7 @@ export const createRecorrencia = async (userId, payload) => {
     obs: obs != null ? String(obs) : null,
     categoria: categoria != null ? String(categoria) : null,
     ativo: ativo !== false,
+    max_ocorrencias: maxOco,
     atualizado_em: new Date().toISOString()
   };
 
@@ -83,7 +94,7 @@ export const createRecorrencia = async (userId, payload) => {
 export const updateRecorrencia = async (userId, id, payload) => {
   if (!id) throw badRequest('ID da recorrência é obrigatório');
 
-  const { dia_do_mes, valor, classificacao, tipo, status, obs, categoria, ativo } = payload || {};
+  const { dia_do_mes, valor, classificacao, tipo, status, obs, categoria, ativo, max_ocorrencias } = payload || {};
   const updates = { atualizado_em: new Date().toISOString() };
 
   if (dia_do_mes !== undefined) updates.dia_do_mes = validateDiaDoMes(dia_do_mes);
@@ -94,6 +105,7 @@ export const updateRecorrencia = async (userId, id, payload) => {
   if (obs !== undefined) updates.obs = obs;
   if (categoria !== undefined) updates.categoria = categoria;
   if (ativo !== undefined) updates.ativo = ativo !== false;
+  if (max_ocorrencias !== undefined) updates.max_ocorrencias = validateMaxOcorrencias(max_ocorrencias);
 
   const db = createSupabaseClient({ useServiceRole: true });
   const { data, error } = await db

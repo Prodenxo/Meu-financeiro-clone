@@ -69,7 +69,7 @@ test('empresa service valida payload obrigatório', async () => {
   );
   await assert.rejects(
     () => cadastrarEmpresaPlugNotas({ cpfCnpj: '17422651000172' }),
-    /Certificado é obrigatório/
+    /Certificado digital não localizado no PlugNotas/
   );
 });
 

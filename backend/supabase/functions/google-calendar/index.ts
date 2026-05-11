@@ -1,0 +1,405 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || '';
+const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
+const GOOGLE_REDIRECT_URI = Deno.env.get('GOOGLE_REDIRECT_URI') || '';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+interface GoogleTokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+  token_type: string;
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const url = new URL(req.url);
+    const path = url.pathname.split('/').pop() || '';
+
+    // GET /callback — redirecionamento do Google OAuth (sem autenticação)
+    if (path === 'callback' && req.method === 'GET') {
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+      const state = url.searchParams.get('state');
+
+      let tokensSaved = false;
+      if (code && state) {
+        try {
+          const userId = atob(state);
+          const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              code,
+              client_id: GOOGLE_CLIENT_ID,
+              client_secret: GOOGLE_CLIENT_SECRET,
+              redirect_uri: GOOGLE_REDIRECT_URI,
+              grant_type: 'authorization_code',
+            }),
+          });
+          if (tokenResponse.ok) {
+            const tokens: GoogleTokenResponse = await tokenResponse.json();
+            const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+            const serviceClient = createClient(
+              Deno.env.get('SUPABASE_URL') ?? '',
+              Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+            );
+            const { error: dbError } = await serviceClient
+              .from('google_tokens_id')
+              .upsert({ user_id: userId, access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_at: expiresAt }, { onConflict: 'user_id' });
+            tokensSaved = !dbError;
+          }
+        } catch (_e) { tokensSaved = false; }
+      }
+
+      if (error) {
+        return new Response(
+          '<html><body><h1>Erro na Autorizacao</h1><p>Voce pode fechar esta janela.</p></body></html>',
+          { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } }
+        );
+      }
+      if (!code) {
+        return new Response(
+          '<html><body><h1>Erro</h1><p>Codigo nao fornecido.</p></body></html>',
+          { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } }
+        );
+      }
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+      const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+      const functionUrl = `${supabaseUrl}/functions/v1/google-calendar/callback`;
+      const deepLink = 'financas-pessoais://google-callback?code=' + encodeURIComponent(code) + (state ? '&state=' + encodeURIComponent(state) : '') + '&success=true';
+      const deepLinkSimple = 'financas-pessoais://google-callback?success=true';
+
+      if (tokensSaved) {
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Autorizacao Concluida</title></head><body>
+          <h1 style="color:#10B981">Autorizacao Concluida!</h1>
+          <p>Redirecionando para o app...</p>
+          <script>
+            function r(){
+              ['${deepLink}','${deepLinkSimple}'].forEach(function(l){
+                try{window.location.href=l;}catch(e){}
+              });
+            }
+            r();setTimeout(r,500);setTimeout(r,1000);setTimeout(r,2000);
+          <\/script>
+        </body></html>`;
+        return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
+      }
+
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Processando</title></head><body>
+        <h1>Processando Autorizacao...</h1>
+        <script>
+          fetch('${functionUrl}',{
+            method:'POST',
+            headers:{'Content-Type':'application/json','apikey':'${supabaseAnonKey}'},
+            body:JSON.stringify({code:${JSON.stringify(code)},state:${JSON.stringify(state)}})
+          }).finally(function(){
+            ['${deepLink}','${deepLinkSimple}'].forEach(function(l){
+              try{window.location.href=l;}catch(e){}
+            });
+          });
+        <\/script>
+      </body></html>`;
+      return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
+    }
+
+    // POST /callback — processar tokens OAuth
+    if (path === 'callback' && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        const code = body.code;
+        const state = body.state;
+
+        if (!code) {
+          return new Response(JSON.stringify({ error: 'Codigo de autorizacao nao fornecido' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        let userId: string | null = null;
+        let useServiceClient = false;
+
+        if (state) {
+          try { userId = atob(state); useServiceClient = true; }
+          catch (_e) { return new Response(JSON.stringify({ error: 'State invalido' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
+        } else {
+          const authHeader = req.headers.get('Authorization');
+          if (!authHeader) return new Response(JSON.stringify({ error: 'Nao autenticado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          const sc = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_ANON_KEY') ?? '', { global: { headers: { Authorization: authHeader } } });
+          const { data: { user } } = await sc.auth.getUser();
+          if (!user) return new Response(JSON.stringify({ error: 'Nao autenticado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          userId = user.id;
+        }
+
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ code, client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, redirect_uri: GOOGLE_REDIRECT_URI, grant_type: 'authorization_code' }),
+        });
+
+        if (!tokenResponse.ok) {
+          const err = await tokenResponse.text();
+          return new Response(JSON.stringify({ error: 'Erro ao obter tokens: ' + err }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const tokens: GoogleTokenResponse = await tokenResponse.json();
+        const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+
+        const dbClient = useServiceClient
+          ? createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '')
+          : createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_ANON_KEY') ?? '', { global: { headers: { Authorization: req.headers.get('Authorization')! } } });
+
+        const { error: dbError } = await dbClient
+          .from('google_tokens_id')
+          .upsert({ user_id: userId, access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_at: expiresAt }, { onConflict: 'user_id' });
+
+        if (dbError) return new Response(JSON.stringify({ error: 'Erro ao salvar tokens: ' + dbError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+        return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Erro ao processar callback: ' + (e.message || 'desconhecido') }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // GET /test-callback
+    if (path === 'test-callback' && req.method === 'GET') {
+      return new Response(JSON.stringify({ accessible: true, redirectUri: GOOGLE_REDIRECT_URI }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // GET /test-public
+    if (path === 'test-public' && req.method === 'GET') {
+      return new Response(JSON.stringify({ public: true, accessible: true, timestamp: new Date().toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Rotas autenticadas — verificar JWT
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+    );
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return new Response(JSON.stringify({ error: 'Nao autenticado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const userId = user.id;
+
+    // GET /auth — iniciar fluxo OAuth
+    if (path === 'auth' && req.method === 'GET') {
+      const state = btoa(userId);
+      const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+      authUrl.searchParams.set('redirect_uri', GOOGLE_REDIRECT_URI);
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.events');
+      authUrl.searchParams.set('access_type', 'offline');
+      authUrl.searchParams.set('prompt', 'consent');
+      authUrl.searchParams.set('state', state);
+      return new Response(JSON.stringify({ authUrl: authUrl.toString(), redirectUri: GOOGLE_REDIRECT_URI }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // GET /check-auth — verificar autenticação Google
+    if (path === 'check-auth' && req.method === 'GET') {
+      const { data: tokenData } = await supabaseClient
+        .from('google_tokens_id')
+        .select('access_token, expires_at')
+        .eq('user_id', userId)
+        .single();
+      const isAuthenticated = tokenData && (!tokenData.expires_at || new Date(tokenData.expires_at) > new Date());
+      return new Response(JSON.stringify({ authenticated: !!isAuthenticated }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // GET /events — listar eventos do Google Calendar
+    if (path === 'events' && req.method === 'GET') {
+      const timeMin = url.searchParams.get('timeMin');
+      const timeMax = url.searchParams.get('timeMax');
+
+      const { data: tokenData, error: tokenError } = await supabaseClient
+        .from('google_tokens_id')
+        .select('access_token, refresh_token, expires_at')
+        .eq('user_id', userId)
+        .single();
+
+      if (tokenError || !tokenData) {
+        return new Response(
+          JSON.stringify({ error: 'Tokens nao encontrados. Autorize o Google Calendar primeiro.' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let accessToken = tokenData.access_token;
+
+      // Refresh token se expirado
+      if (tokenData.expires_at && new Date(tokenData.expires_at) <= new Date()) {
+        if (!tokenData.refresh_token) {
+          return new Response(JSON.stringify({ error: 'Token expirado e refresh token nao disponivel' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, refresh_token: tokenData.refresh_token, grant_type: 'refresh_token' }),
+        });
+        if (!refreshResponse.ok) {
+          return new Response(JSON.stringify({ error: 'Erro ao renovar token' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        const refreshedTokens: GoogleTokenResponse = await refreshResponse.json();
+        accessToken = refreshedTokens.access_token;
+        const newExpiresAt = new Date(Date.now() + refreshedTokens.expires_in * 1000).toISOString();
+        await supabaseClient.from('google_tokens_id').update({ access_token: accessToken, expires_at: newExpiresAt }).eq('user_id', userId);
+      }
+
+      const calendarUrl = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
+      calendarUrl.searchParams.set('singleEvents', 'true');
+      calendarUrl.searchParams.set('orderBy', 'startTime');
+      if (timeMin) calendarUrl.searchParams.set('timeMin', timeMin);
+      if (timeMax) calendarUrl.searchParams.set('timeMax', timeMax);
+
+      const calendarResponse = await fetch(calendarUrl.toString(), {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      });
+
+      if (!calendarResponse.ok) {
+        const errText = await calendarResponse.text();
+        console.error('[EDGE] Erro ao listar eventos:', calendarResponse.status, errText);
+        return new Response(JSON.stringify({ error: 'Erro ao listar eventos: ' + errText }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const data = await calendarResponse.json();
+      return new Response(JSON.stringify({ events: data.items || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // POST /create-event — criar evento no Google Calendar
+    if (path === 'create-event' && req.method === 'POST') {
+      const { transaction } = await req.json();
+      if (!transaction) return new Response(JSON.stringify({ error: 'Dados da transacao nao fornecidos' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      const { data: tokenData, error: tokenError } = await supabaseClient
+        .from('google_tokens_id')
+        .select('access_token, refresh_token, expires_at')
+        .eq('user_id', userId)
+        .single();
+      if (tokenError || !tokenData) return new Response(JSON.stringify({ error: 'Tokens nao encontrados.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      let accessToken = tokenData.access_token;
+      if (tokenData.expires_at && new Date(tokenData.expires_at) <= new Date()) {
+        if (!tokenData.refresh_token) return new Response(JSON.stringify({ error: 'Token expirado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, refresh_token: tokenData.refresh_token, grant_type: 'refresh_token' }),
+        });
+        if (!refreshResponse.ok) return new Response(JSON.stringify({ error: 'Erro ao renovar token' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const refreshedTokens: GoogleTokenResponse = await refreshResponse.json();
+        accessToken = refreshedTokens.access_token;
+        const newExpiresAt = new Date(Date.now() + refreshedTokens.expires_in * 1000).toISOString();
+        await supabaseClient.from('google_tokens_id').update({ access_token: accessToken, expires_at: newExpiresAt }).eq('user_id', userId);
+      }
+
+      const eventDate = transaction.data || transaction.criado_em || new Date().toISOString().split('T')[0];
+      const eventDateTime = new Date(eventDate + 'T09:00:00');
+      const endDateTime = new Date(eventDateTime);
+      endDateTime.setHours(endDateTime.getHours() + 1);
+      const eventTitle = transaction.tipo === 'entrada'
+        ? `Receber: ${formatCurrency(transaction.valor)}`
+        : `Pagar: ${formatCurrency(transaction.valor)}`;
+      let eventDescription = `Categoria: ${transaction.classificacao || 'Sem categoria'}\nValor: ${formatCurrency(transaction.valor)}\nStatus: ${transaction.status === 'a_receber' ? 'A Receber' : 'A Pagar'}`;
+      if (transaction.obs && transaction.obs.trim()) eventDescription += `\nObservacoes: ${transaction.obs.trim()}`;
+
+      const calendarResponse = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summary: eventTitle, description: eventDescription, start: { dateTime: eventDateTime.toISOString(), timeZone: 'America/Sao_Paulo' }, end: { dateTime: endDateTime.toISOString(), timeZone: 'America/Sao_Paulo' } }),
+      });
+
+      if (!calendarResponse.ok) {
+        const err = await calendarResponse.text();
+        return new Response(JSON.stringify({ error: 'Erro ao criar evento: ' + err }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const eventData = await calendarResponse.json();
+      return new Response(JSON.stringify({ success: true, eventId: eventData.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // POST /create-custom-event — criar evento personalizado no Google Calendar
+    if (path === 'create-custom-event' && req.method === 'POST') {
+      const body = await req.json();
+      const { title, isAllDay, startDate, endDate, startHour, startMinute, endHour, endMinute, recurrence, location, description, colorId } = body;
+
+      if (!title || !startDate) {
+        return new Response(JSON.stringify({ error: 'Título e data de início são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const { data: tokenData, error: tokenError } = await supabaseClient
+        .from('google_tokens_id')
+        .select('access_token, refresh_token, expires_at')
+        .eq('user_id', userId)
+        .single();
+
+      if (tokenError || !tokenData) {
+        return new Response(JSON.stringify({ error: 'Tokens nao encontrados. Autorize o Google Calendar primeiro.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      let accessToken = tokenData.access_token;
+      if (tokenData.expires_at && new Date(tokenData.expires_at) <= new Date()) {
+        if (!tokenData.refresh_token) return new Response(JSON.stringify({ error: 'Token expirado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, refresh_token: tokenData.refresh_token, grant_type: 'refresh_token' }),
+        });
+        if (!refreshResponse.ok) return new Response(JSON.stringify({ error: 'Erro ao renovar token' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const refreshedTokens: GoogleTokenResponse = await refreshResponse.json();
+        accessToken = refreshedTokens.access_token;
+        const newExpiresAt = new Date(Date.now() + refreshedTokens.expires_in * 1000).toISOString();
+        await supabaseClient.from('google_tokens_id').update({ access_token: accessToken, expires_at: newExpiresAt }).eq('user_id', userId);
+      }
+
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const eventBody: Record<string, unknown> = {
+        summary: title,
+        ...(location ? { location } : {}),
+        ...(description ? { description } : {}),
+        ...(colorId ? { colorId } : {}),
+        ...(recurrence ? { recurrence: [recurrence] } : {}),
+      };
+
+      if (isAllDay) {
+        eventBody.start = { date: startDate };
+        eventBody.end = { date: endDate };
+      } else {
+        eventBody.start = { dateTime: `${startDate}T${pad(startHour)}:${pad(startMinute)}:00`, timeZone: 'America/Sao_Paulo' };
+        eventBody.end   = { dateTime: `${endDate}T${pad(endHour)}:${pad(endMinute)}:00`,   timeZone: 'America/Sao_Paulo' };
+      }
+
+      const calendarResponse = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(eventBody),
+      });
+
+      if (!calendarResponse.ok) {
+        const err = await calendarResponse.text();
+        return new Response(JSON.stringify({ error: 'Erro ao criar evento: ' + err }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const eventData = await calendarResponse.json();
+      return new Response(JSON.stringify({ success: true, eventId: eventData.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    return new Response(JSON.stringify({ error: 'Rota nao encontrada' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+  } catch (error) {
+    console.error('Erro na Edge Function:', error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+});
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}

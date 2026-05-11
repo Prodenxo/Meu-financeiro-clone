@@ -3603,20 +3603,6 @@ export default function GuidesMei() {
             </div>
           )}
 
-          {!hasCertificate && (
-            <div className="admin-alert-warning">
-              Opcional: envie o certificado para autenticar. Sem certificado, informe o CNPJ e
-              selecione o período abaixo para gerar o DAS.
-            </div>
-          )}
-
-          {canViewNfse ? (
-            <div className="admin-alert-warning">
-              Atenção: para emissão de NFS-e, a empresa emitente precisa estar cadastrada no emissor fiscal com certificado
-              digital A1 válido.
-            </div>
-          ) : null}
-
           {certificateConnectivityAlert ? <GuiaMeiCertificateConnectivityPanel /> : null}
           {certificateError ? (
             <GuiaMeiEmpresaCadastroErrorPanel
@@ -4578,11 +4564,6 @@ export default function GuidesMei() {
               <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
                 Certificado, emitente no emissor fiscal e atalhos do catálogo.
               </p>
-
-          <div className="admin-alert-warning">
-            Atenção: para emissão de NFS-e, a empresa emitente precisa estar cadastrada no emissor fiscal com certificado
-            digital A1 válido.
-          </div>
 
           {canViewNfse && (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border ui-border-section bg-slate-50/70 px-3 py-2 dark:bg-slate-900/50">

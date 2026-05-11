@@ -17,13 +17,15 @@ export const __setPersistDocumentosAtivosMirrorAfterEmitenteForTests = (fn) => {
 import {
   atualizarEmpresaPlugNotas,
   cadastrarCertificadoPlugNotas,
-  cadastrarEmpresaPlugNotas
+  cadastrarEmpresaPlugNotas,
+  resolverCertificadoIdPorCnpj
 } from '../services/plugnotas/empresa.service.js';
 import {
   parseEmpresaJsonPayloadField,
   runPlugnotasEmitenteCompositeSetup
 } from '../services/plugnotas/plugnotas-emitente-setup.service.js';
 import { savePlugNotasCertId, getPlugNotasCertId } from '../services/mei-certificate-store.js';
+import { lookupCnpjBrasilApi } from '../services/cnpj-lookup.service.js';
 import { unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendSuccess } from '../utils/response.js';
@@ -154,8 +156,27 @@ export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
   try {
     const payload = getEmpresaPayloadFromRequest(req);
     if (!payload.certificado && req.user?.id) {
-      const savedCertId = await getPlugNotasCertId(req.user.id);
-      if (savedCertId) payload.certificado = savedCertId;
+      let certId = await getPlugNotasCertId(req.user.id);
+      if (!certId) {
+        const cnpj = String(payload.cpfCnpj || payload.cnpj || '').replace(/\D/g, '');
+        if (cnpj.length === 14) {
+          try {
+            certId = await resolverCertificadoIdPorCnpj(cnpj);
+            if (certId) {
+              savePlugNotasCertId(req.user.id, certId).catch(() => {});
+            }
+          } catch (resolveErr) {
+            // Recovery best-effort: registrar mas não interromper — deixar fluxo seguir e
+            // cair na mensagem clara abaixo se ainda assim não houver certificado.
+            console.warn('[cadastrarPlugNotasEmpresa] Falha ao recuperar cert_id por CNPJ', {
+              userId: req.user.id,
+              cnpj14: cnpj,
+              error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr)
+            });
+          }
+        }
+      }
+      if (certId) payload.certificado = certId;
     }
     const data = await cadastrarEmpresaPlugNotas(payload);
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
@@ -198,6 +219,20 @@ export const consultarPlugNotasEmpresa = async (req, res, next) => {
     const cpfCnpj = String(req.query?.cpfCnpj || req.query?.cnpj || '').trim();
     const data = await consultarEmpresaAndReconcileMirror(req.user?.id, cpfCnpj);
     return sendSuccess(res, data, 'Empresa consultada no serviço de emissão fiscal');
+  } catch (error) {
+    if (error?.errors?.plugnotasCode === 'empresa_nao_cadastrada') {
+      return sendSuccess(res, null, 'Empresa ainda não cadastrada no emissor fiscal');
+    }
+    return next(error);
+  }
+};
+
+/** Consulta dados cadastrais de um CNPJ via BrasilAPI (público, gratuito). */
+export const lookupCnpj = async (req, res, next) => {
+  try {
+    const cnpj = String(req.params?.cnpj || req.query?.cnpj || '').trim();
+    const data = await lookupCnpjBrasilApi(cnpj);
+    return sendSuccess(res, data, 'Dados do CNPJ consultados via BrasilAPI');
   } catch (error) {
     return next(error);
   }

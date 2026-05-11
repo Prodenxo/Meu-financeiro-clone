@@ -7,7 +7,8 @@ import routes from './routes/index.js';
 import * as stripeWebhookController from './controllers/stripe-webhook.controller.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import { startMonthlyDasScheduler } from './services/mei-das.service.js';
-import { startRecorrenciasScheduler } from './services/recorrencias-materialize.service.js';
+// Recorrências agora usam projeção virtual no cliente — scheduler desativado.
+// import { startRecorrenciasScheduler } from './services/recorrencias-materialize.service.js';
 import { bootstrapDatabase } from './services/db-bootstrap.service.js';
 
 const app = express();
@@ -112,7 +113,7 @@ const startServer = async () => {
 
   app.listen(env.PORT, () => {
     startMonthlyDasScheduler();
-    startRecorrenciasScheduler();
+    // startRecorrenciasScheduler(); // Desativado — recorrências agora projetam virtualmente no cliente
     // eslint-disable-next-line no-console
     console.log(`[backend] rodando na porta ${env.PORT}`);
   });
