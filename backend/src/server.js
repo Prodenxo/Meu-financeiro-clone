@@ -4,6 +4,7 @@ import morgan from 'morgan';
 import { env } from './config/env.js';
 import { redactSensitiveUrlsForLog } from './utils/log-redact.js';
 import routes from './routes/index.js';
+import * as stripeWebhookController from './controllers/stripe-webhook.controller.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import { startMonthlyDasScheduler } from './services/mei-das.service.js';
 import { startRecorrenciasScheduler } from './services/recorrencias-materialize.service.js';
@@ -76,6 +77,14 @@ app.use((req, res, next) => {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+
+/** Stripe exige body bruto para validar `Stripe-Signature`. */
+app.post(
+  '/api/webhooks/stripe',
+  express.raw({ type: 'application/json' }),
+  (req, res, next) => stripeWebhookController.postStripeWebhook(req, res, next)
+);
+
 app.use(express.json({ limit: '2mb' }));
 morgan.token('url', (req) => redactSensitiveUrlsForLog(req.originalUrl || req.url || ''));
 app.use(morgan('dev'));

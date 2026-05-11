@@ -108,6 +108,13 @@ export default function ManageUsers() {
     void fetchEmpresas();
   }, [canManage, role]);
 
+  /** Ao abrir o separador Empresas, recarrega limites (ex.: após pagamento na Stripe noutro separador). */
+  useEffect(() => {
+    if (!canManage || role !== 'superadmin') return;
+    if (activeTab !== 'empresas') return;
+    void fetchEmpresas();
+  }, [activeTab, canManage, role]);
+
   const baseUsers =
     role === 'admin'
       ? users.filter((user) => user.role !== 'superadmin' && user.role !== 'outsider')

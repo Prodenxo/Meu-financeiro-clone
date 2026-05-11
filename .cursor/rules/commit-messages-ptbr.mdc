@@ -1,5 +1,5 @@
 ---
-description: Mensagens de commit em PT-BR, Conventional Commits com ícone+tipo e assinatura by (Arthur)
+description: Mensagens de commit em PT-BR, Conventional Commits com ícone+tipo e assinatura by (Leonardo)
 alwaysApply: true
 ---
 
@@ -14,30 +14,30 @@ alwaysApply: true
 Sempre em **português do Brasil**, com termos leigos.
 
 **Assinatura (sempre a última linha, em linha nova):** `by: <nome>`  
-**Nome a usar no `by:` (edite no topo desta regra se precisar):** `Arthur`
+**Nome a usar no `by:` (edite no topo desta regra se precisar):** `Leonardo`
 
-- Quando a mensagem tiver **só** a linha de assunto, **não** está pronta. Acrescente linha em branco (opcional) e na linha seguinte `by: Arthur`.
+- Quando a mensagem tiver **só** a linha de assunto, **não** está pronta. Acrescente linha em branco (opcional) e na linha seguinte `by: Leonardo`.
 - Em chat/copiar, mostre a mensagem completa, **incluindo** `by:`, mesmo que o utilizador só tenha colado a primeira linha.
 
 ## Conventional Commits
 
 O **assunto** começa com **ícone + tipo** (não pule o ícone):
 
-| Tipo | Ícone |
-|------|--------|
-| `fix` | 🐛 |
-| `feat` | ✨ |
-| `docs` | 📝 |
-| `refactor` | ♻️ |
-| `test` | 🧪 |
-| `chore` | 🔧 |
-| `perf` | ⚡ |
-| `build` | 📦 |
-| `ci` | 👷 |
-| `revert` | ↩️ |
+| Tipo       | Ícone |
+| ---------- | ----- |
+| `fix`      | 🐛    |
+| `feat`     | ✨    |
+| `docs`     | 📝    |
+| `refactor` | ♻️    |
+| `test`     | 🧪    |
+| `chore`    | 🔧    |
+| `perf`     | ⚡    |
+| `build`    | 📦    |
+| `ci`       | 👷    |
+| `revert`   | ↩️    |
 
 **Formato (linha 1 = assunto):** `<ícone> tipo: descrição em português`  
-**Última linha (sempre):** `by: Arthur`
+**Última linha (sempre):** `by: Leonardo`
 
 ### Regras do assunto (após o tipo)
 
@@ -48,7 +48,7 @@ O **assunto** começa com **ícone + tipo** (não pule o ícone):
 
 ### Regras do final
 
-- `by: Arthur` fica **na última linha**; sem ponto final nessa linha
+- `by: Leonardo` fica **na última linha**; sem ponto final nessa linha
 - se houver corpo (1–3 linhas entre assunto e `by:`), linhas de corpo podem terminar com ponto, se fizer sentido, mas o assunto continua sem ponto
 
 ### Escolher o tipo (ícone da tabela acima)
@@ -73,7 +73,7 @@ O **assunto** começa com **ícone + tipo** (não pule o ícone):
 
 O erro acontecia quando o campo vinha vazio
 
-by: Arthur
+by: Leonardo
 ```
 
 **Mínimo (só título + assinatura):**
@@ -81,14 +81,14 @@ by: Arthur
 ```text
 🔧 chore: atualiza regras de mensagens de commit
 
-by: Arthur
+by: Leonardo
 ```
 
 ## Quando o utilizador pedir "mensagem de commit" ou "crie um commit"
 
-1) olhe o diff e identifique o objetivo  
-2) escolha o tipo correto e o **ícone** correspondente  
-3) escreva a linha 1: `<ícone> tipo: assunto` em PT-BR, em termos leigos  
-4) se necessário, adicione corpo curto **antes** da linha `by:`  
-5) **Obrigatório:** a **última** linha tem que ser `by: Arthur` (ou o nome no topo desta regra) — nunca omitir  
-6) não invente mudanças; baseie-se só no diff
+1. olhe o diff e identifique o objetivo
+2. escolha o tipo correto e o **ícone** correspondente
+3. escreva a linha 1: `<ícone> tipo: assunto` em PT-BR, em termos leigos
+4. se necessário, adicione corpo curto **antes** da linha `by:`
+5. **Obrigatório:** a **última** linha tem que ser `by: Leonardo` (ou o nome no topo desta regra) — nunca omitir
+6. não invente mudanças; baseie-se só no diff
