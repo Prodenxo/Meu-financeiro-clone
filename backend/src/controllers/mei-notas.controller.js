@@ -24,7 +24,12 @@ import {
   parseEmpresaJsonPayloadField,
   runPlugnotasEmitenteCompositeSetup
 } from '../services/plugnotas/plugnotas-emitente-setup.service.js';
-import { savePlugNotasCertId, getPlugNotasCertId } from '../services/mei-certificate-store.js';
+import {
+  savePlugNotasCertId,
+  getPlugNotasCertId,
+  loadCertificate,
+  decryptPassphrase
+} from '../services/mei-certificate-store.js';
 import { lookupCnpjBrasilApi } from '../services/cnpj-lookup.service.js';
 import { unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
@@ -152,31 +157,83 @@ export const cadastrarPlugNotasCertificado = async (req, res, next) => {
   }
 };
 
+/**
+ * Faz auto-upload do .pfx salvo localmente para o PlugNotas quando o usuário
+ * tem certificado armazenado mas nunca passou pelo fluxo PlugNotas.
+ * Retorna o cert_id retornado pelo PlugNotas ou null se algo falhou.
+ */
+const tryAutoUploadStoredCertToPlugnotas = async (userId, cnpj14) => {
+  const stored = await loadCertificate(userId);
+  if (!stored) return null;
+
+  let password;
+  try {
+    password = decryptPassphrase(stored.passphraseEnc, stored.passphraseIv);
+  } catch (err) {
+    console.warn('[cadastrarPlugNotasEmpresa] Falha ao descriptografar senha do .pfx', {
+      userId,
+      error: err instanceof Error ? err.message : String(err)
+    });
+    return null;
+  }
+
+  let fileBuffer;
+  try {
+    fileBuffer = Buffer.from(stored.pfxBase64, 'base64');
+  } catch (err) {
+    console.warn('[cadastrarPlugNotasEmpresa] Falha ao decodificar .pfx base64', {
+      userId,
+      error: err instanceof Error ? err.message : String(err)
+    });
+    return null;
+  }
+
+  try {
+    const result = await cadastrarCertificadoPlugNotas({
+      fileBuffer,
+      fileName: 'certificado.pfx',
+      mimeType: 'application/x-pkcs12',
+      password,
+      cpfCnpj: cnpj14
+    });
+    return typeof result?.id === 'string' && result.id ? result.id : null;
+  } catch (err) {
+    console.warn('[cadastrarPlugNotasEmpresa] Auto-upload do .pfx para PlugNotas falhou', {
+      userId,
+      cnpj14,
+      error: err instanceof Error ? err.message : String(err)
+    });
+    return null;
+  }
+};
+
 export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
   try {
     const payload = getEmpresaPayloadFromRequest(req);
     if (!payload.certificado && req.user?.id) {
       let certId = await getPlugNotasCertId(req.user.id);
-      if (!certId) {
-        const cnpj = String(payload.cpfCnpj || payload.cnpj || '').replace(/\D/g, '');
-        if (cnpj.length === 14) {
-          try {
-            certId = await resolverCertificadoIdPorCnpj(cnpj);
-            if (certId) {
-              savePlugNotasCertId(req.user.id, certId).catch(() => {});
-            }
-          } catch (resolveErr) {
-            // Recovery best-effort: registrar mas não interromper — deixar fluxo seguir e
-            // cair na mensagem clara abaixo se ainda assim não houver certificado.
-            console.warn('[cadastrarPlugNotasEmpresa] Falha ao recuperar cert_id por CNPJ', {
-              userId: req.user.id,
-              cnpj14: cnpj,
-              error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr)
-            });
-          }
+      const cnpj = String(payload.cpfCnpj || payload.cnpj || '').replace(/\D/g, '');
+
+      if (!certId && cnpj.length === 14) {
+        try {
+          certId = await resolverCertificadoIdPorCnpj(cnpj);
+        } catch (resolveErr) {
+          console.warn('[cadastrarPlugNotasEmpresa] Falha ao recuperar cert_id por CNPJ', {
+            userId: req.user.id,
+            cnpj14: cnpj,
+            error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr)
+          });
         }
       }
-      if (certId) payload.certificado = certId;
+
+      if (!certId && cnpj.length === 14) {
+        certId = await tryAutoUploadStoredCertToPlugnotas(req.user.id, cnpj);
+      }
+
+      if (certId) {
+        savePlugNotasCertId(req.user.id, certId).catch(() => {});
+        payload.certificado = certId;
+      }
     }
     const data = await cadastrarEmpresaPlugNotas(payload);
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
