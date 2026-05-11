@@ -24,6 +24,7 @@ import {
   runPlugnotasEmitenteCompositeSetup
 } from '../services/plugnotas/plugnotas-emitente-setup.service.js';
 import { savePlugNotasCertId, getPlugNotasCertId } from '../services/mei-certificate-store.js';
+import { lookupCnpjBrasilApi } from '../services/cnpj-lookup.service.js';
 import { unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendSuccess } from '../utils/response.js';
@@ -198,6 +199,20 @@ export const consultarPlugNotasEmpresa = async (req, res, next) => {
     const cpfCnpj = String(req.query?.cpfCnpj || req.query?.cnpj || '').trim();
     const data = await consultarEmpresaAndReconcileMirror(req.user?.id, cpfCnpj);
     return sendSuccess(res, data, 'Empresa consultada no serviço de emissão fiscal');
+  } catch (error) {
+    if (error?.errors?.plugnotasCode === 'empresa_nao_cadastrada') {
+      return sendSuccess(res, null, 'Empresa ainda não cadastrada no emissor fiscal');
+    }
+    return next(error);
+  }
+};
+
+/** Consulta dados cadastrais de um CNPJ via BrasilAPI (público, gratuito). */
+export const lookupCnpj = async (req, res, next) => {
+  try {
+    const cnpj = String(req.params?.cnpj || req.query?.cnpj || '').trim();
+    const data = await lookupCnpjBrasilApi(cnpj);
+    return sendSuccess(res, data, 'Dados do CNPJ consultados via BrasilAPI');
   } catch (error) {
     return next(error);
   }
