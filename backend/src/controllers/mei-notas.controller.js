@@ -160,32 +160,35 @@ export const cadastrarPlugNotasCertificado = async (req, res, next) => {
 /**
  * Faz auto-upload do .pfx salvo localmente para o PlugNotas quando o usuário
  * tem certificado armazenado mas nunca passou pelo fluxo PlugNotas.
- * Retorna o cert_id retornado pelo PlugNotas ou null se algo falhou.
+ * Retorna { certId, error }. error contém o motivo real da falha (para diagnóstico).
  */
 const tryAutoUploadStoredCertToPlugnotas = async (userId, cnpj14) => {
-  const stored = await loadCertificate(userId);
-  if (!stored) return null;
+  let stored;
+  try {
+    stored = await loadCertificate(userId);
+  } catch (err) {
+    return { certId: null, error: `load_failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  if (!stored) {
+    return { certId: null, error: 'no_local_pfx_stored' };
+  }
 
   let password;
   try {
     password = decryptPassphrase(stored.passphraseEnc, stored.passphraseIv);
   } catch (err) {
-    console.warn('[cadastrarPlugNotasEmpresa] Falha ao descriptografar senha do .pfx', {
-      userId,
-      error: err instanceof Error ? err.message : String(err)
-    });
-    return null;
+    const msg = `decrypt_failed: ${err instanceof Error ? err.message : String(err)}`;
+    console.warn('[cadastrarPlugNotasEmpresa] Falha ao descriptografar senha do .pfx', { userId, error: msg });
+    return { certId: null, error: msg };
   }
 
   let fileBuffer;
   try {
     fileBuffer = Buffer.from(stored.pfxBase64, 'base64');
   } catch (err) {
-    console.warn('[cadastrarPlugNotasEmpresa] Falha ao decodificar .pfx base64', {
-      userId,
-      error: err instanceof Error ? err.message : String(err)
-    });
-    return null;
+    const msg = `base64_decode_failed: ${err instanceof Error ? err.message : String(err)}`;
+    console.warn('[cadastrarPlugNotasEmpresa] Falha ao decodificar .pfx base64', { userId, error: msg });
+    return { certId: null, error: msg };
   }
 
   try {
@@ -196,49 +199,68 @@ const tryAutoUploadStoredCertToPlugnotas = async (userId, cnpj14) => {
       password,
       cpfCnpj: cnpj14
     });
-    return typeof result?.id === 'string' && result.id ? result.id : null;
+    if (typeof result?.id === 'string' && result.id) {
+      return { certId: result.id, error: null };
+    }
+    return { certId: null, error: 'plugnotas_response_without_id' };
   } catch (err) {
+    const msg = `plugnotas_upload_failed: ${err instanceof Error ? err.message : String(err)}`;
     console.warn('[cadastrarPlugNotasEmpresa] Auto-upload do .pfx para PlugNotas falhou', {
       userId,
       cnpj14,
-      error: err instanceof Error ? err.message : String(err)
+      error: msg
     });
-    return null;
+    return { certId: null, error: msg };
   }
 };
 
 export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
   try {
     const payload = getEmpresaPayloadFromRequest(req);
+    const diagnostics = { local: null, resolve: null, autoUpload: null };
+
     if (!payload.certificado && req.user?.id) {
       let certId = await getPlugNotasCertId(req.user.id);
+      diagnostics.local = certId ? 'found' : 'not_found';
       const cnpj = String(payload.cpfCnpj || payload.cnpj || '').replace(/\D/g, '');
 
       if (!certId && cnpj.length === 14) {
         try {
           certId = await resolverCertificadoIdPorCnpj(cnpj);
+          diagnostics.resolve = certId ? 'found' : 'not_found_in_plugnotas';
         } catch (resolveErr) {
+          const msg = resolveErr instanceof Error ? resolveErr.message : String(resolveErr);
+          diagnostics.resolve = `error: ${msg}`;
           console.warn('[cadastrarPlugNotasEmpresa] Falha ao recuperar cert_id por CNPJ', {
             userId: req.user.id,
             cnpj14: cnpj,
-            error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr)
+            error: msg
           });
         }
       }
 
       if (!certId && cnpj.length === 14) {
-        certId = await tryAutoUploadStoredCertToPlugnotas(req.user.id, cnpj);
+        const autoResult = await tryAutoUploadStoredCertToPlugnotas(req.user.id, cnpj);
+        certId = autoResult.certId;
+        diagnostics.autoUpload = certId ? 'success' : autoResult.error;
       }
 
       if (certId) {
         savePlugNotasCertId(req.user.id, certId).catch(() => {});
         payload.certificado = certId;
+      } else {
+        // Anexa diagnóstico para próximo handler de erro propagar
+        req._certResolutionDiagnostics = diagnostics;
       }
     }
     const data = await cadastrarEmpresaPlugNotas(payload);
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
     return sendSuccess(res, data, 'Empresa configurada no serviço de emissão fiscal');
   } catch (error) {
+    // Se for o erro de certificado_nao_configurado, anexar diagnóstico ao errors
+    if (error?.errors?.plugnotasCode === 'certificado_nao_configurado' && req._certResolutionDiagnostics) {
+      error.errors = { ...error.errors, certResolution: req._certResolutionDiagnostics };
+    }
     return next(error);
   }
 };
