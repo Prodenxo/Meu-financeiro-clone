@@ -15,8 +15,13 @@ import {
   getCertificateValidity,
   patchEmitenteNfseFields,
   getEmitenteNfseSnapshot,
-  getDocumentosAtivosMirror
+  getDocumentosAtivosMirror,
+  savePlugNotasCertId
 } from './mei-certificate-store.js';
+import {
+  cadastrarCertificadoPlugNotas,
+  resolverCertificadoIdPorCnpj
+} from './plugnotas/empresa.service.js';
 import {
   isCompetenciaPaid,
   listPaidCompetencias,
@@ -1128,10 +1133,11 @@ export const uploadCertificate = async (userId, payload) => {
 
   const emitente = parseEmitenteFromPayload(payload);
 
+  const certDocument = certInfo?.doc ? normalizeDoc(certInfo.doc) : null;
+
   if (env.MEI_CERT_ENCRYPTION_KEY) {
     try {
       const { passphraseEnc, passphraseIv } = encryptPassphrase(password);
-      const certDocument = certInfo?.doc ? normalizeDoc(certInfo.doc) : null;
       await saveCertificate(userId, {
         pfxBase64: file.buffer.toString('base64'),
         passphraseEnc,
@@ -1151,7 +1157,50 @@ export const uploadCertificate = async (userId, payload) => {
     passphrase: password,
     certInfo
   });
-  return getCertificateStatus(userId);
+
+  // Integração com PlugNotas: best-effort, não interrompe o upload se falhar.
+  // 1) Tenta resolver cert_id já existente no PlugNotas por CNPJ.
+  // 2) Se não achou, faz upload do .pfx para o PlugNotas.
+  // 3) Salva o cert_id retornado em user_mei_certificates.plugnotas_cert_id.
+  let plugnotasIntegration = { status: 'skipped', reason: 'no_cnpj_in_cert' };
+  if (certDocument && certDocument.length === 14) {
+    try {
+      let plugnotasCertId = await resolverCertificadoIdPorCnpj(certDocument);
+      let source = plugnotasCertId ? 'resolved_existing' : null;
+
+      if (!plugnotasCertId) {
+        const result = await cadastrarCertificadoPlugNotas({
+          fileBuffer: file.buffer,
+          fileName: 'certificado.pfx',
+          mimeType: 'application/x-pkcs12',
+          password,
+          cpfCnpj: certDocument
+        });
+        if (typeof result?.id === 'string' && result.id) {
+          plugnotasCertId = result.id;
+          source = 'uploaded_new';
+        }
+      }
+
+      if (plugnotasCertId) {
+        await savePlugNotasCertId(userId, plugnotasCertId);
+        plugnotasIntegration = { status: 'ok', source, certId: plugnotasCertId };
+      } else {
+        plugnotasIntegration = { status: 'failed', reason: 'no_id_returned' };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[mei-guide.uploadCertificate] PlugNotas integration falhou (não-fatal)', {
+        userId,
+        cnpj14: certDocument,
+        error: msg
+      });
+      plugnotasIntegration = { status: 'failed', reason: msg };
+    }
+  }
+
+  const status = await getCertificateStatus(userId);
+  return { ...status, plugnotasIntegration };
 };
 
 /**
