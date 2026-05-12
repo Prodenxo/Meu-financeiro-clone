@@ -29,6 +29,14 @@ telefones. Depois de criar, confirma numa frase o que foi registado.
 Segue a skill "meu-financeiro-midas" para o formato exacto do pedido HTTP.
 ```
 
+### Rever se o número chega ao modelo (debug Hermes)
+
+1. **Mensagem de teste** ao agente (sem criar lançamento): *"Na secção **Current Session Context** desta sessão, que identificador de utilizador ou JID aparece para este chat? Copia literalmente a linha **User** / **User ID** / descrição da fonte."* — Deves ver dígitos ou algo como `...@s.whatsapp.net`; isso normaliza-se para o `phone` da API.
+2. **`privacy.redact_pii`:** se estiver `true` no `config.yaml` do Hermes, o gateway pode **substituir** IDs por hashes (`user_` + hex) no prompt ([privacidade no Hermes Agent](https://github.com/NousResearch/hermes-agent/pull/1542)). Esse valor **não** serve como `phone` no Meu Financeiro. Para esta integração mantém **redação desligada** (`privacy.redact_pii: false` ou omite a secção `privacy`).
+3. **OpenAI / `custom_providers`:** o campo `key_env` deve ser o **nome** da variável de ambiente (ex.: `OPENAI_API_KEY`), **nunca** a chave em texto. A chave fica só no `.hermes/.env`.
+
+Se, mesmo assim, o modelo não tiver um telefone utilizável no contexto, o caminho estável é **Z-API → n8n** (o webhook traz o número no JSON) e o n8n chama o mesmo backend.
+
 ---
 
 ## O que é o Meu Financeiro (neste contexto)
