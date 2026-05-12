@@ -42,6 +42,8 @@ No chat (ou `hermes chat`), pede para **carregar / usar a skill** `meu-financeir
 
 No `SOUL.md`, uma linha a dizer: para registar movimentos no Meu Financeiro, **seguir a skill `meu-financeiro-midas`** e usar o script com ficheiro JSON UTF-8.
 
+Copia também o **trecho “Midas”** de `docs/ops/hermes-midas-knowledge-base.md` (secção *Trecho para colar no SOUL.md*) para o modelo interpretar frases tipo *“recebi 4599 de salário”* e usar o **telefone do remetente** no `phone`.
+
 ---
 
 Referência de API: `docs/ops/hermes-midas-knowledge-base.md` e `docs/ops/hermes-bot-n8n-zapi.md`.

@@ -23,6 +23,48 @@ required_environment_variables:
 
 Quando o utilizador quiser **registar entrada/saída**, **listar movimentos**, **testar ligação** ou **apagar** um lançamento no sistema Meu Financeiro (não inventar dados — chama o backend).
 
+---
+
+## Fluxo principal (WhatsApp — frase em português)
+
+Isto é o que o utilizador final espera: **escreve em linguagem natural** e o lançamento vai para **a conta ligada ao número dele** na base (`n8n_link`).
+
+### 1) Quem é a pessoa (`phone`)
+
+- O backend descobre o `user_id` pelo campo **`phone`** no JSON (só dígitos; com ou sem `55` o servidor tenta as variantes).
+- **Obrigatório:** usar o **telefone WhatsApp do remetente** desta conversa — o que o Hermes / canal de mensagens expõe como identidade do contacto (metadados da sessão, JID, ou texto de sistema com o número). **Nunca** inventes um número.
+- Se estiveres em **self-chat / mensagens contigo**, o “remetente” és tu: usa o número WhatsApp real dessa sessão (o mesmo que o utilizador guardou no perfil da app).
+
+### 2) Ler a mensagem e mapear para `create_transaction`
+
+Exemplos (Portugal/Brasil, valor numérico):
+
+| Mensagem (exemplo) | `tipo` | `valor` | `classificacao` (sugestão) |
+|--------------------|--------|---------|----------------------------|
+| recebi 4599 de salário | entrada | 4599 | Salário |
+| recebi 4599,50 de salário | entrada | 4599.5 | Salário |
+| salário 3400 | entrada | 3400 | Salário |
+| ganhei 200 de extra | entrada | 200 | Outros rendimentos (ou pergunta) |
+| gastei 50 no uber | saida | 50 | Transporte (ou pergunta) |
+| -15,90 padaria | saida | 15.9 | Alimentação |
+
+Regras:
+
+- **Data:** se a mensagem **não** disser data, usa **a data de hoje** (calendário local do utilizador; se não souberes fuso, assume o dia corrente em ISO `YYYY-MM-DD` que o sistema te der ou pergunta “é hoje?”).
+- **`status`:** usa `pago` por defeito para despesas/rendas já recebidas, salvo o utilizador dizer “pendente” / “a pagar”.
+- **`classificacao`:** texto livre na BD; **preferir o nome exacto** de uma categoria que o utilizador já usa na app. Se disser só “salário”, usa **`Salário`**. Se for ambíguo (“gastei 30”), pergunta a categoria **antes** de criar.
+- **Valores BR:** aceita `4.599,99` → normaliza para número decimal `4599.99`; remove `R$`, espaços, pontos de milhar.
+
+### 3) Ordem de trabalho
+
+1. Interpretar a frase → extrair `tipo`, `valor`, `classificacao` (e `data`/`status` se aplicável).
+2. Se faltar algo essencial (valor ou não sabes se é entrada/saída), **pergunta numa frase**.
+3. Opcional: `resolve_user` com o `phone` do remetente; se falhar, explica que tem de guardar o telefone no perfil da app Meu Financeiro.
+4. Montar JSON e chamar `invoke-mf-action.ps1` (ou a tool HTTP equivalente) com `action`: `create_transaction` e o `payload`.
+5. Responder em humano: *“Registrei entrada de R$ 4599 em Salário (pago).”*
+
+---
+
 ## Como chamar o backend (Windows)
 
 1. Escreve o corpo do pedido num ficheiro JSON **UTF-8 sem BOM** (usa o script `write-json.ps1` ou o bloco PowerShell abaixo).

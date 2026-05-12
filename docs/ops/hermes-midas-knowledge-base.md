@@ -4,6 +4,33 @@ Ficheiro gerado a partir do **código do backend** (`hermes-bot`, `transactions.
 
 ---
 
+## O que o utilizador quer (WhatsApp + frase natural)
+
+Exemplo: *“recebi 4599 de salário”* → deve **criar um lançamento** na conta do **número que está a falar**, com `tipo` entrada, `valor` 4599, `classificacao` alinhada a **Salário**, `data` hoje, `status` pago.
+
+Isto **não** é feito pelo Express sozinho: o **modelo no Hermes** (ou um nó LLM no n8n) **lê a frase**, extrai valor/categoria, escolhe o **`phone` do remetente**, e chama `POST /api/bot/hermes/action` com `create_transaction`. O backend só valida o segredo, resolve `phone` → `user_id` via `n8n_link`, e insere na tabela.
+
+**Checklist para funcionar em produção**
+
+1. Telefone do WhatsApp **guardado no perfil** da app (para existir `n8n_link`).
+2. No Hermes: **skill** `meu-financeiro-midas` (ou tool HTTP) + variáveis `MEU_FINANCEIRO_API_URL` / segredo; ver `docs/ops/hermes-skill-meu-financeiro/INSTALAR.md`.
+3. No `SOUL.md` (ou personalidade): obrigar o agente a **sempre** usar o número do remetente no JSON e a seguir a secção de português da skill (frases tipo “recebi X de salário”).
+4. Se o Hermes **não** injetar o número no contexto, o fluxo natural quebra — aí o caminho é **Z-API → n8n** (o webhook traz o telefone no JSON) ou melhorar o bridge.
+
+### Trecho para colar no `SOUL.md` (Midas)
+
+```text
+És o Midas do Meu Financeiro. Quando alguém descrever um movimento em português
+(ex.: "recebi 4599 de salário", "gastei 20 no café"), interpreta valor, tipo
+(entrada/saída), categoria e data; pergunta só se faltar algo essencial.
+Usa sempre o número de WhatsApp DO REMETENTE desta conversa (só dígitos) no
+campo "phone" do JSON ao chamares a API do Meu Financeiro — nunca inventes
+telefones. Depois de criar, confirma numa frase o que foi registado.
+Segue a skill "meu-financeiro-midas" para o formato exacto do pedido HTTP.
+```
+
+---
+
 ## O que é o Meu Financeiro (neste contexto)
 
 - Utilizadores registam **lançamentos** (entradas e saídas) na tabela **`lancamentos_id`**.
