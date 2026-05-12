@@ -25,26 +25,47 @@ export const buildPhoneLookupCandidates = (digits) => {
   return [...new Set(out)];
 };
 
-export const resolveUserIdByPhone = async (rawPhone) => {
-  const digits = normalizeHermesPhoneDigits(rawPhone);
-  if (!digits) {
+/**
+ * Resolve telefone → user_id e devolve metadados para diagnóstico (Hermes / n8n).
+ * @returns {{ userId: string | null, phoneDigits: string, matchedUserNumber: string | null, lookupCandidates: string[] }}
+ */
+export const resolveUserIdByPhoneDetailed = async (rawPhone) => {
+  const phoneDigits = normalizeWhatsappPhoneDigits(rawPhone);
+  if (!phoneDigits) {
     throw badRequest('Telefone ausente ou inválido');
   }
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw badRequest('SUPABASE_SERVICE_ROLE_KEY não configurada');
   }
   const admin = createSupabaseClient({ useServiceRole: true });
-  const candidates = buildPhoneLookupCandidates(digits);
-  for (const num of candidates) {
+  const lookupCandidates = buildPhoneLookupCandidates(phoneDigits);
+  for (const num of lookupCandidates) {
     const { data, error } = await admin
       .from('n8n_link')
       .select('user_id')
       .eq('user_number', num)
       .maybeSingle();
     if (error) throw badRequest(error.message);
-    if (data?.user_id) return String(data.user_id);
+    if (data?.user_id) {
+      return {
+        userId: String(data.user_id),
+        phoneDigits,
+        matchedUserNumber: num,
+        lookupCandidates,
+      };
+    }
   }
-  return null;
+  return {
+    userId: null,
+    phoneDigits,
+    matchedUserNumber: null,
+    lookupCandidates,
+  };
+};
+
+export const resolveUserIdByPhone = async (rawPhone) => {
+  const r = await resolveUserIdByPhoneDetailed(rawPhone);
+  return r.userId;
 };
 
 /**
@@ -61,15 +82,22 @@ export const runHermesAction = async (input) => {
     return { ok: true, message: 'Hermes online', data: { pong: true } };
   }
 
-  const userId = await resolveUserIdByPhone(phone);
+  const resolved = await resolveUserIdByPhoneDetailed(phone);
+  const { userId, phoneDigits, matchedUserNumber, lookupCandidates } = resolved;
   if (!userId) {
     throw notFound(
       'Nenhum utilizador ligado a este telefone. Abre o app, mete o telefone no perfil e guarda.',
     );
   }
 
+  const linkDebug = { phoneDigits, matchedUserNumber, lookupCandidates };
+
   if (action === 'resolve_user') {
-    return { ok: true, message: 'Utilizador encontrado', data: { userId } };
+    return {
+      ok: true,
+      message: 'Utilizador encontrado',
+      data: { userId, ...linkDebug },
+    };
   }
 
   if (action === 'list_transactions') {
@@ -78,14 +106,21 @@ export const runHermesAction = async (input) => {
     return {
       ok: true,
       message: `Últimas ${sliced.length} transações (máx. ${MAX_LIST}).`,
-      data: { transactions: sliced },
+      data: { transactions: sliced, userId, ...linkDebug },
     };
   }
 
   if (action === 'create_transaction') {
     const created = await transactionsService.createTransaction(userId, payload);
-    // `userId` ajuda a confirmar em qual conta Supabase o lançamento ficou (n8n_link ↔ telefone).
-    return { ok: true, message: 'Transação criada', data: { transaction: created, userId } };
+    return {
+      ok: true,
+      message: 'Transação criada',
+      data: {
+        transaction: created,
+        userId,
+        ...linkDebug,
+      },
+    };
   }
 
   if (action === 'delete_transaction') {
