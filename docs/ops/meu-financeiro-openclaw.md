@@ -24,6 +24,37 @@ No **EasyPanel** costumas ter o **backend** Node com URL pública.
 
 Evita **dois** bridges WhatsApp no **mesmo** número (ex.: Z-API + OpenClaw a disputar a sessão).
 
+### Template OpenClaw no Easypanel (campos do assistente)
+
+| Campo | O que fazer |
+|-------|----------------|
+| **Gateway Token** | Gera uma string longa (gestor de passwords) e cola aqui **ou** deixa vazio se o template disser que gera sozinho. Se gerar automaticamente, **guarda o valor** quando o Easypanel o mostrar (precisas dele para o dashboard / clientes do gateway). |
+| **Gateway Bind** | `lan` é razoável no VPS: o processo escuta na interface de rede interna. O proxy do Easypanel encaminha para a porta publicada. |
+| **Gateway Port** | `18789` é o valor típico do [Control UI / dashboard](https://docs.openclaw.ai/cli/dashboard.md) OpenClaw. Mantém se não houver conflito com outro serviço no mesmo host. |
+| **Bridge Port** | `18790` — mantém o default do template salvo choque com `n8n` ou outro serviço. |
+| **Claude AI / Web Session Key** | Opcional; só preenche se fores usar esse caminho de auth. Na prática muita gente configura **OpenAI** ou outro provider no **onboarding** (passo seguinte). |
+
+**Depois do deploy**
+
+1. Abre o serviço OpenClaw no Easypanel → **Console / Exec** (shell dentro do contentor).
+2. Corre o comando que o próprio template indica (ajusta o directório se o erro disser que não encontrou o ficheiro):
+   ```bash
+   node dist/index.js onboard --no-install-daemon
+   ```
+   Se esse path não existir, tenta na raiz do projecto do contentor: `ls` e procura `package.json` / `openclaw`; em alternativa equivalente à CLI global: `npx openclaw@latest onboard --no-install-daemon`.
+3. Completa o assistente: modelo (API key), workspace, **canais** (ex.: WhatsApp conforme [channels/whatsapp](https://docs.openclaw.ai/channels/whatsapp.md)), `allowFrom` só com o teu número enquanto testas.
+4. **Persistência:** confirma no template Easypanel se há **volume** para dados do OpenClaw (config + sessão WhatsApp). Sem volume, um redeploy pode apagar a sessão e voltas a fazer QR.
+
+**Aceder ao dashboard**
+
+- Com portas publicadas: `https://<subdomínio-que-o-easypanel-te-deu>:18789` ou o URL que o painel mostrar para o serviço. Se o gateway exigir token, usa o **Gateway Token** que definiste ou o gerado.
+
+**Ligar ao backend `back_meufinanceiro`**
+
+- No onboarding ou depois em [config-tools](https://docs.openclaw.ai/gateway/config-tools.md) / skill: HTTP `POST` para  
+  `https://<URL-pública-do-back_meufinanceiro>/api/bot/openclaw/action`  
+  com header `Authorization: Bearer <o mesmo OPENCLAW_WEBHOOK_SECRET>` que está no serviço do backend. Não coloques esse segredo no repositório.
+
 ---
 
 ## Instalação OpenClaw (resumo)
