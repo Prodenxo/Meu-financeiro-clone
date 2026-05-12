@@ -120,5 +120,6 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 ## Como usar isto no Hermes (zero drama)
 
 1. Copia este ficheiro (ou só as secções que interessam) para a pasta de dados do Hermes, **ou** cola o resumo no `SOUL.md`.
-2. Na **tool HTTP**, na descrição, indica: “Corpo JSON com `phone`, `action`, `payload` conforme doc interna; Bearer obrigatório.”
-3. Se quiseres categorias **sempre certas** por utilizador, mais tarde podes acrescentar no backend uma action tipo `list_categories` — até lá, usa `list_transactions` para ver **que nomes** o utilizador já usou ou pergunta qual categoria da lista dele.
+2. **Recomendado (Windows):** instala a skill versionada no repositório — pasta `docs/ops/hermes-skill-meu-financeiro/` com `INSTALAR.md` e a skill `meu-financeiro-midas` (scripts PowerShell + `curl.exe` para o mesmo endpoint e Bearer). Evita JSON partido no PowerShell e mantém o segredo fora do prompt do modelo.
+3. Na **tool HTTP** (se usares uma em vez da skill), na descrição, indica: “Corpo JSON com `phone`, `action`, `payload` conforme doc interna; Bearer obrigatório.”
+4. Se quiseres categorias **sempre certas** por utilizador, mais tarde podes acrescentar no backend uma action tipo `list_categories` — até lá, usa `list_transactions` para ver **que nomes** o utilizador já usou ou pergunta qual categoria da lista dele.
