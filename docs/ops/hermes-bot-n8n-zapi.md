@@ -59,6 +59,18 @@ Se usares só `Authorization: 96185328` sem `Bearer`, ou passares `-H` como stri
 
 Deves ver JSON com `success: true` e mensagem tipo “Hermes online”.
 
+### Atalho: lançamento de salário (script, sem JSON à mão)
+
+Na pasta `Site/backend`, com `HERMES_WEBHOOK_SECRET` no `.env`. Contra **Easypanel** ou outro host remoto, define também `HERMES_ACTION_URL` com a URL completa (ex. `https://…/api/bot/hermes/action`). Contra o servidor **na mesma máquina**, podes omitir (usa `http://127.0.0.1:PORT/...`).
+
+```bash
+cd Site/backend
+npm run test:hermes:salario -- 55489991234567
+npm run test:hermes:salario -- 55489991234567 5000
+```
+
+O script chama `resolve_user` e depois `create_transaction` (entrada, categoria por defeito `Salário`, data de hoje). Detalhes: `backend/scripts/test-hermes-transaction.mjs`.
+
 ---
 
 ## 3. URL e formato do pedido (para colares no n8n)
@@ -125,7 +137,40 @@ O utilizador **não sabe** o UUID. Por isso, no n8n, o fluxo normal é: `list_tr
    - Body JSON: montas `phone`, `action`, `payload` conforme a lógica (ver secção 6).  
 6. **Nó 4 — HTTP Request Z-API** `send-text` (igual ao doc `n8n-zapi-das-mei.md`): envia para o mesmo `phone` o texto da resposta (ex.: `{{ $json.message }}` vindo do backend ou de um nó AI que resume `list_transactions`).
 
-Importante: o **telefone** no body do backend deve ser o **mesmo formato** que está em `n8n_link` (com ou sem `55` — o backend tenta as duas variantes).
+Importante: o **telefone** no body do backend deve ser o **mesmo formato** que está em `n8n_link` (com ou sem `55` — o backend tenta as duas variantes; na app o número passa a ser guardado **só com dígitos**).
+
+### 4.1 nó **HTTP Request** (ligar o n8n ao backend)
+
+Use um único nó **HTTP Request** entre o teu trigger (Webhook, Schedule, etc.) e o resto do fluxo.
+
+| Campo no n8n | Valor |
+|--------------|--------|
+| **Method** | `POST` |
+| **URL** | `https://O-TEU-BACKEND/api/bot/hermes/action` (URL real do Easypanel / servidor) |
+| **Authentication** | `None` (o segredo vai no header abaixo) |
+| **Send Headers** | Sim |
+| **Header** | `Authorization` → `Bearer SEU_SEGREDO` |
+| **Header** | `Content-Type` → `application/json; charset=utf-8` |
+| **Send Body** | Sim |
+| **Body Content Type** | `JSON` |
+| **Specify Body** | `Using JSON` ou `Using Fields Below` |
+
+**Segredo:** cria uma **Credential** do tipo *Header Auth* ou *Generic Credential* no n8n com o valor `Bearer <HERMES_WEBHOOK_SECRET>` (igual ao `HERMES_WEBHOOK_SECRET` do backend) e referencia no header — **não** commits o workflow com o segredo em texto plano.
+
+**Exemplo de corpo JSON** (expressões dependem do nó anterior; ajusta nomes de campos ao JSON da Z-API ou do Webhook):
+
+```json
+{
+  "phone": "{{ $json.telefoneNormalizado }}",
+  "action": "resolve_user"
+}
+```
+
+Para **só testar** sem WhatsApp: **Webhook** (POST) → **HTTP Request** como acima com `phone` fixo do teu teste (ex. `55489991234567`) e `action`: `ping` (sem `phone`) ou `list_transactions` (com `phone`).
+
+### 4.2 Só n8n + backend (sem Z-API)
+
+É possível: qualquer coisa que faça `POST` com JSON e `Authorization: Bearer …` pode chamar o endpoint. A Z-API entra quando queres **WhatsApp comercial** a disparar o webhook do n8n; para integrações internas, **Schedule**, **Manual Trigger** ou **Webhook** bastam.
 
 ---
 
