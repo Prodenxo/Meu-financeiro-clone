@@ -12,14 +12,15 @@ O OpenClaw que criaste no **Easypanel** corre **dentro do VPS**: o `localhost` d
 
 **Fluxo simples: tudo na mesma máquina (o teu PC)**
 
-1. **`Site/backend`** — No `.env` local: `OPENCLAW_WEBHOOK_SECRET`, Supabase de **dev/staging** (o mesmo projeto que a app de teste), `PORT` (ex. `3333`). Arranca: `npm run dev`.
-2. **Só API, sem OpenClaw** — Confirma o endpoint:  
+1. **`Site/backend/.env`** — É **este** ficheiro que o backend usa quando corres `npm run dev` **dentro de** `Site/backend` (`dotenv.config()` lê o `.env` do *current working directory*). Aí já tens Supabase, `PORT`, etc.; só precisas de acrescentar **`OPENCLAW_WEBHOOK_SECRET`** (se ainda não estiver). O **`.env` na raiz** do repo (`Meu Financeiro/.env`) é **outro** ficheiro (Expo, ferramentas na raiz, etc.): **não** substitui o do backend para o Express.
+2. **Arranca o API** — `cd Site/backend` → `npm run dev`.
+3. **Só API, sem OpenClaw** — Confirma o endpoint:  
    `npm run test:openclaw:salario -- 5548…`  
-   (por defeito usa `http://127.0.0.1:<PORT>/api/bot/openclaw/action` e o segredo do `.env`).
-3. **OpenClaw no PC** — Instalação na secção **Instalação OpenClaw (resumo)** abaixo, com `openclaw onboard` (não precisas do serviço Easypanel para isto). Na tool HTTP / skill, URL do Meu Financeiro:  
+   (o script lê o mesmo `Site/backend/.env` e usa `http://127.0.0.1:<PORT>/api/bot/openclaw/action` por defeito).
+4. **OpenClaw no PC** — Instalação na secção **Instalação OpenClaw (resumo)** abaixo, com `openclaw onboard` (não precisas do serviço Easypanel para isto). Na tool HTTP / skill, URL do Meu Financeiro:  
    `http://127.0.0.1:3333/api/bot/openclaw/action`  
-   (ajusta à tua `PORT`) e o **mesmo** `Authorization: Bearer` que está no `.env` do backend.
-4. **Instância no Easypanel** — **Para** o serviço OpenClaw ou deixa-o desligado até passares a testes em produção; assim não tens dois gateways nem confusão de sessão WhatsApp no mesmo número.
+   (ajusta à tua `PORT`) e o **mesmo** `Authorization: Bearer` que **`OPENCLAW_WEBHOOK_SECRET`** em `Site/backend/.env`.
+5. **Instância no Easypanel** — **Para** o serviço OpenClaw ou deixa-o desligado até passares a testes em produção; assim não tens dois gateways nem confusão de sessão WhatsApp no mesmo número.
 
 Quando quiseres testar **backend local** mas **OpenClaw só na nuvem**, aí sim precisas de túnel para o URL do backend ser público (`https://…ngrok…`).
 
@@ -31,9 +32,9 @@ No **EasyPanel** costumas ter o **backend** Node com URL pública.
 
 ### Backend (serviço Meu Financeiro)
 
-- Define `OPENCLAW_WEBHOOK_SECRET` (string longa aleatória) nas variáveis de ambiente do serviço.
+- Define `OPENCLAW_WEBHOOK_SECRET` nas variáveis de ambiente do serviço (equivalente ao que tens em **`Site/backend/.env`** em local).
 - Se já tinhas um segredo Bearer antigo no painel, **reutiliza o mesmo valor** nesta variável (só mudou o nome da env).
-- Supabase e resto do `.env` como já tens.
+- Replica o resto das variáveis críticas alinhadas ao teu `.env` local (Supabase, `PORT` se aplicável, etc.).
 
 ### Onde corre o OpenClaw
 
