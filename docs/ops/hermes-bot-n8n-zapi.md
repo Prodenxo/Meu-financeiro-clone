@@ -158,3 +158,26 @@ O utilizador tem de abrir a app, **meter o telefone no perfil** e guardar (isso 
 
 - Envio DAS / PDF pela mesma Z-API: `docs/ops/n8n-zapi-das-mei.md`  
 - Variável de ambiente no código: `HERMES_WEBHOOK_SECRET` em `Site/backend/src/config/env.js`
+
+---
+
+## 8. Hermes Agent (Nous Research) vs Z-API — o que a doc oficial diz
+
+Isto é **outro produto** do endpoint `/api/bot/hermes/action` deste repositório.
+
+Segundo a documentação oficial do **Hermes Agent** — [WhatsApp | Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/whatsapp):
+
+- O WhatsApp no Hermes liga-se por um **bridge integrado (Baileys)**, ou seja, **sessão tipo WhatsApp Web** (QR code, sessão guardada sob `~/.hermes/platforms/whatsapp/session`).
+- **Não** é a WhatsApp Cloud API oficial da Meta; na mesma página **não** aparece **Z-API**.
+
+A **Z-API** é um serviço à parte (REST HTTP, instância na cloud deles). **Na doc do Hermes Agent não existe integração nativa Hermes ↔ Z-API.**
+
+**Na prática:**
+
+| Abordagem | WhatsApp |
+|-----------|----------|
+| Só **Hermes Agent** (Nous) | Número + `hermes whatsapp` (QR) + `hermes gateway`; **sem** Z-API. |
+| Só **Z-API + n8n** (fluxos deste projeto) | Mantém-se como está. |
+| **Os dois no mesmo número** | Em geral **não** — dois stacks a disputar o mesmo canal. Dois números / duas instâncias é mais limpo. |
+
+Para o Hermes Agent aceder a dados do **Meu Financeiro**, o caminho genérico na doc deles é **ferramentas** (HTTP, MCP, etc.), não substituir o bridge WhatsApp pela Z-API.
