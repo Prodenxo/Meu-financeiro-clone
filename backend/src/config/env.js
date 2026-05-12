@@ -130,7 +130,6 @@ export const env = {
   N8N_WHATSAPP_WEBHOOK_SECRET: process.env.N8N_WHATSAPP_WEBHOOK_SECRET || '',
   /**
    * Segredo Bearer (OpenClaw / n8n → POST /api/bot/openclaw/action).
-   * Legado: se `OPENCLAW_WEBHOOK_SECRET` estiver vazio, usa `HERMES_WEBHOOK_SECRET` até migrares o Easypanel.
    */
   OPENCLAW_WEBHOOK_SECRET: (
     process.env.OPENCLAW_WEBHOOK_SECRET

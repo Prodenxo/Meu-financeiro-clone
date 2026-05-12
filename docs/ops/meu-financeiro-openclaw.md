@@ -13,7 +13,7 @@ No **EasyPanel** costumas ter o **backend** Node com URL pública.
 ### Backend (serviço Meu Financeiro)
 
 - Define `OPENCLAW_WEBHOOK_SECRET` (string longa aleatória) nas variáveis de ambiente do serviço.
-- **Legado:** se ainda tiveres só `HERMES_WEBHOOK_SECRET` no painel, o código **aceita** esse valor até migrares — preferível renomear no Easypanel para `OPENCLAW_WEBHOOK_SECRET` e o mesmo valor.
+- Se já tinhas um segredo Bearer antigo no painel, **reutiliza o mesmo valor** nesta variável (só mudou o nome da env).
 - Supabase e resto do `.env` como já tens.
 
 ### Onde corre o OpenClaw

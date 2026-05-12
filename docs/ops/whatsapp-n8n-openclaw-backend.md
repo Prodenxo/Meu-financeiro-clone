@@ -24,7 +24,7 @@ Este guia explica **em blocos pequenos** o que é cada coisa e o que tens de cli
 OPENCLAW_WEBHOOK_SECRET=a_tua_string_longa_secreta
 ```
 
-(Se ainda só tiveres `HERMES_WEBHOOK_SECRET`, o servidor aceita até migrares.)
+(Reutiliza o mesmo valor se já tinhas um segredo Bearer no backend; só atualiza o **nome** da variável no painel.)
 
 3. Reinicia o backend.
 

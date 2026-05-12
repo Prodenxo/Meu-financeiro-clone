@@ -6,9 +6,9 @@
  *   node scripts/test-openclaw-transaction.mjs 55489991234567 5000
  *
  * No `.env` do backend:
- *   OPENCLAW_WEBHOOK_SECRET=...   (obrigatório; legado: HERMES_WEBHOOK_SECRET)
- *   OPENCLAW_ACTION_URL=...       (opcional; legado: HERMES_ACTION_URL; senão http://127.0.0.1:PORT/api/bot/openclaw/action)
- *   TEST_OPENCLAW_CLASSIFICACAO=Salário   (opcional; legado: TEST_HERMES_CLASSIFICACAO)
+ *   OPENCLAW_WEBHOOK_SECRET=...   (obrigatório)
+ *   OPENCLAW_ACTION_URL=...       (opcional; senão http://127.0.0.1:PORT/api/bot/openclaw/action)
+ *   TEST_OPENCLAW_CLASSIFICACAO=Salário   (opcional)
  *
  * Para Easypanel / remoto, define OPENCLAW_ACTION_URL com a URL completa do POST.
  */
@@ -71,7 +71,7 @@ if (!phone) {
 }
 
 if (!secret) {
-  console.error('Define OPENCLAW_WEBHOOK_SECRET (ou legado HERMES_WEBHOOK_SECRET) no .env do backend.')
+  console.error('Define OPENCLAW_WEBHOOK_SECRET no .env do backend.')
   process.exit(1)
 }
 

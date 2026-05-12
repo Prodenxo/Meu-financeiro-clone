@@ -9,7 +9,7 @@ export const requireOpenclawSecret = (req, _res, next) => {
   if (!secret) {
     return next(
       serviceUnavailable(
-        'Bot OpenClaw desativado: defina OPENCLAW_WEBHOOK_SECRET no ambiente (aceita-se legado HERMES_WEBHOOK_SECRET até migrares).',
+        'Bot OpenClaw desativado: defina OPENCLAW_WEBHOOK_SECRET no ambiente.',
       ),
     );
   }
