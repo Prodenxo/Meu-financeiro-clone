@@ -12,6 +12,26 @@ Ou seja: **OpenClaw substitui o “quem recebe o WhatsApp e chama o modelo”**;
 
 ---
 
+## EasyPanel (o teu cenário)
+
+No **EasyPanel** costumas ter pelo menos o **backend** do Meu Financeiro (Node) com URL pública tipo `https://<serviço>.<domínio-do-painel>/…`.
+
+### O que fica no Easypanel (backend Meu Financeiro)
+
+- Garante as mesmas variáveis que já usas para o Hermes/n8n, por exemplo `HERMES_WEBHOOK_SECRET`, Supabase, etc. (ver [`hermes-bot-n8n-zapi.md`](./hermes-bot-n8n-zapi.md)).
+- O OpenClaw **não substitui** esse serviço: ele só faz **HTTP de saída** para  
+  `https://<O-TEU-BACKEND-EASYPANEL>/api/bot/hermes/action`  
+  com `Authorization: Bearer <HERMES_WEBHOOK_SECRET>`.
+
+### Onde corre o OpenClaw
+
+- **No Easypanel (outro app):** faz sentido se quiseres tudo no mesmo VPS: um serviço “openclaw” com Node, volume para `~/.openclaw` (sessão WhatsApp, config), e **segredos** no painel (API keys, `HERMES_WEBHOOK_SECRET`, URL do backend acima).
+- **Na tua máquina (daemon local):** também funciona; o importante é o OpenClaw conseguir **sair** para a internet e chamar o URL **HTTPS** do backend no Easypanel.
+
+Em ambos os casos: o **WhatsApp** liga-se ao processo onde o OpenClaw corre; o **Meu Financeiro** continua a ser o backend no Easypanel. Confirma que não tens **dois** bridges (n8n/Z-API + OpenClaw) no **mesmo** número, para não duplicar mensagens.
+
+---
+
 ## 1. Instalar o OpenClaw (resumo oficial)
 
 Documentação: [Getting Started](https://docs.openclaw.ai/start/getting-started) e índice [llms.txt](https://docs.openclaw.ai/llms.txt).
@@ -56,7 +76,7 @@ Exemplo mínimo (adaptar números):
 
 Define um tool (ou script) que faça `POST` para:
 
-`https://<TEU-BACKEND>/api/bot/hermes/action`
+`https://<O-TEU-BACKEND-EASYPANEL>/api/bot/hermes/action` (ou outro host; o path mantém-se)
 
 com `Authorization: Bearer …` e corpo JSON. O segredo deve ficar em **secrets** do OpenClaw, não no repositório.
 
