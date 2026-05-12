@@ -1,16 +1,16 @@
 /**
- * Teste rápido do endpoint Hermes (salário / entrada) sem curl nem JSON à mão.
+ * Teste rápido do endpoint OpenClaw (salário / entrada) sem curl nem JSON à mão.
  *
  * Uso (a partir da pasta `backend/`):
- *   node scripts/test-hermes-transaction.mjs 55489991234567
- *   node scripts/test-hermes-transaction.mjs 55489991234567 5000
+ *   node scripts/test-openclaw-transaction.mjs 55489991234567
+ *   node scripts/test-openclaw-transaction.mjs 55489991234567 5000
  *
  * No `.env` do backend:
- *   HERMES_WEBHOOK_SECRET=...   (obrigatório)
- *   HERMES_ACTION_URL=...       (opcional; se omitir, usa http://127.0.0.1:PORT/api/bot/hermes/action)
- *   TEST_HERMES_CLASSIFICACAO=Salário   (opcional)
+ *   OPENCLAW_WEBHOOK_SECRET=...   (obrigatório; legado: HERMES_WEBHOOK_SECRET)
+ *   OPENCLAW_ACTION_URL=...       (opcional; legado: HERMES_ACTION_URL; senão http://127.0.0.1:PORT/api/bot/openclaw/action)
+ *   TEST_OPENCLAW_CLASSIFICACAO=Salário   (opcional; legado: TEST_HERMES_CLASSIFICACAO)
  *
- * Para Easypanel / remoto, define HERMES_ACTION_URL com a URL completa do POST.
+ * Para Easypanel / remoto, define OPENCLAW_ACTION_URL com a URL completa do POST.
  */
 import dotenv from 'dotenv'
 import { dirname, resolve } from 'node:path'
@@ -47,21 +47,31 @@ async function postAction (url, secret, body) {
 
 const phone = process.argv[2]?.replace(/\D/g, '')
 const valor = Number(process.argv[3] ?? '3400')
-const secret = (process.env.HERMES_WEBHOOK_SECRET || '').trim()
+const secret = (
+  process.env.OPENCLAW_WEBHOOK_SECRET
+  || process.env.HERMES_WEBHOOK_SECRET
+  || ''
+).trim()
 const port = process.env.PORT || '3333'
-const url =
-  (process.env.HERMES_ACTION_URL || '').trim() ||
-  `http://127.0.0.1:${port}/api/bot/hermes/action`
-const classificacao = (process.env.TEST_HERMES_CLASSIFICACAO || 'Salário').trim()
+const url = (
+  (process.env.OPENCLAW_ACTION_URL || '').trim()
+  || (process.env.HERMES_ACTION_URL || '').trim()
+  || `http://127.0.0.1:${port}/api/bot/openclaw/action`
+)
+const classificacao = (
+  process.env.TEST_OPENCLAW_CLASSIFICACAO
+  || process.env.TEST_HERMES_CLASSIFICACAO
+  || 'Salário'
+).trim()
 
 if (!phone) {
-  console.error('Uso: node scripts/test-hermes-transaction.mjs <telefone_só_digitos> [valor]')
-  console.error('Ex.: node scripts/test-hermes-transaction.mjs 55489991234567')
+  console.error('Uso: node scripts/test-openclaw-transaction.mjs <telefone_só_digitos> [valor]')
+  console.error('Ex.: node scripts/test-openclaw-transaction.mjs 55489991234567')
   process.exit(1)
 }
 
 if (!secret) {
-  console.error('Define HERMES_WEBHOOK_SECRET no ficheiro .env do backend.')
+  console.error('Define OPENCLAW_WEBHOOK_SECRET (ou legado HERMES_WEBHOOK_SECRET) no .env do backend.')
   process.exit(1)
 }
 
@@ -85,7 +95,7 @@ const r2 = await postAction(url, secret, {
     classificacao,
     data: todayIso(),
     status: 'pago',
-    obs: 'teste script test-hermes-transaction.mjs',
+    obs: 'teste script test-openclaw-transaction.mjs',
   },
 })
 console.log(JSON.stringify(r2, null, 2))

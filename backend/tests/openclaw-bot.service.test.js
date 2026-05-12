@@ -1,17 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { normalizeWhatsappPhoneDigits } from '../src/utils/whatsapp-phone.js';
 import {
   buildPhoneLookupCandidates,
-  normalizeHermesPhoneDigits,
-} from '../src/services/hermes-bot.service.js';
+} from '../src/services/openclaw-bot.service.js';
 
-test('normalizeHermesPhoneDigits remove não dígitos e sufixo @', () => {
+test('normalizeWhatsappPhoneDigits remove não dígitos e sufixo @', () => {
   assert.equal(
-    normalizeHermesPhoneDigits('5548912345678@s.whatsapp.net'),
+    normalizeWhatsappPhoneDigits('5548912345678@s.whatsapp.net'),
     '5548912345678',
   );
   assert.equal(
-    normalizeHermesPhoneDigits('+55 (48) 91234-5678'),
+    normalizeWhatsappPhoneDigits('+55 (48) 91234-5678'),
     '5548912345678',
   );
 });

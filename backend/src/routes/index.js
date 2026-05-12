@@ -11,7 +11,7 @@ import adminRoutes from './admin.routes.js';
 import healthRoutes from './health.routes.js';
 import empresaInvitesRoutes from './empresa-invites.routes.js';
 import cronRoutes from './cron.routes.js';
-import hermesRoutes from './hermes.routes.js';
+import openclawRoutes from './openclaw.routes.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -27,5 +27,5 @@ router.use('/mei-notas', meiNotasRoutes);
 router.use('/notas', meiNotasRoutes);
 router.use('/recorrencias', recorrenciasRoutes);
 router.use('/cron', cronRoutes);
-router.use('/bot', hermesRoutes);
+router.use('/bot', openclawRoutes);
 export default router;

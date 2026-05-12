@@ -5,9 +5,6 @@ import * as transactionsService from './transactions.service.js';
 
 const MAX_LIST = 40;
 
-/** @deprecated use normalizeWhatsappPhoneDigits — mantido para testes/importações */
-export const normalizeHermesPhoneDigits = normalizeWhatsappPhoneDigits;
-
 /**
  * Tenta bater com o que está em `n8n_link.user_number` (pode estar com ou sem 55).
  */
@@ -26,7 +23,7 @@ export const buildPhoneLookupCandidates = (digits) => {
 };
 
 /**
- * Resolve telefone → user_id e devolve metadados para diagnóstico (Hermes / n8n).
+ * Resolve telefone → user_id e devolve metadados para diagnóstico (OpenClaw / n8n).
  * @returns {{ userId: string | null, phoneDigits: string, matchedUserNumber: string | null, lookupCandidates: string[] }}
  */
 export const resolveUserIdByPhoneDetailed = async (rawPhone) => {
@@ -71,7 +68,7 @@ export const resolveUserIdByPhone = async (rawPhone) => {
 /**
  * @param {{ phone: string, action: string, payload?: object }} input
  */
-export const runHermesAction = async (input) => {
+export const runOpenclawAction = async (input) => {
   const phone = input?.phone;
   const action = String(input?.action || '').trim();
   const payload = input?.payload && typeof input.payload === 'object' ? input.payload : {};
@@ -79,7 +76,7 @@ export const runHermesAction = async (input) => {
   if (!action) throw badRequest('action é obrigatório');
 
   if (action === 'ping') {
-    return { ok: true, message: 'Hermes online', data: { pong: true } };
+    return { ok: true, message: 'OpenClaw online', data: { pong: true } };
   }
 
   const resolved = await resolveUserIdByPhoneDetailed(phone);

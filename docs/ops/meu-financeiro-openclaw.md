@@ -1,121 +1,153 @@
-# Meu Financeiro + OpenClaw (em vez de Hermes)
+# Meu Financeiro + OpenClaw
 
-O [OpenClaw](https://docs.openclaw.ai/) é um **gateway self-hosted** (Node) que liga WhatsApp, Telegram, Discord, etc. a um agente com ferramentas, memória e **SOUL/skills** — filosofia parecida ao Hermes, com ecossistema e docs em `docs.openclaw.ai`.
+O [OpenClaw](https://docs.openclaw.ai/) é um **gateway self-hosted** (Node) que liga WhatsApp, Telegram, Discord, etc. a um agente com ferramentas, memória e **SOUL/skills**. Documentação oficial: [Getting Started](https://docs.openclaw.ai/start/getting-started) e [llms.txt](https://docs.openclaw.ai/llms.txt).
 
-**Boa notícia:** o teu backend **não precisa** do Hermes. O contrato é só HTTP:
-
-- `POST /api/bot/hermes/action` (o nome “hermes” no path é legado; serve para **qualquer** cliente)
-- Header `Authorization: Bearer <HERMES_WEBHOOK_SECRET>`
-- JSON: `phone`, `action`, `payload` — ver [`hermes-midas-knowledge-base.md`](./hermes-midas-knowledge-base.md)
-
-Ou seja: **OpenClaw substitui o “quem recebe o WhatsApp e chama o modelo”**; o Meu Financeiro continua igual.
+O **backend Meu Financeiro** expõe um único endpoint HTTP que o OpenClaw (ou n8n) chama com **Bearer** + JSON estruturado.
 
 ---
 
-## EasyPanel (o teu cenário)
+## EasyPanel
 
-No **EasyPanel** costumas ter pelo menos o **backend** do Meu Financeiro (Node) com URL pública tipo `https://<serviço>.<domínio-do-painel>/…`.
+No **EasyPanel** costumas ter o **backend** Node com URL pública.
 
-### O que fica no Easypanel (backend Meu Financeiro)
+### Backend (serviço Meu Financeiro)
 
-- Garante as mesmas variáveis que já usas para o Hermes/n8n, por exemplo `HERMES_WEBHOOK_SECRET`, Supabase, etc. (ver [`hermes-bot-n8n-zapi.md`](./hermes-bot-n8n-zapi.md)).
-- O OpenClaw **não substitui** esse serviço: ele só faz **HTTP de saída** para  
-  `https://<O-TEU-BACKEND-EASYPANEL>/api/bot/hermes/action`  
-  com `Authorization: Bearer <HERMES_WEBHOOK_SECRET>`.
+- Define `OPENCLAW_WEBHOOK_SECRET` (string longa aleatória) nas variáveis de ambiente do serviço.
+- **Legado:** se ainda tiveres só `HERMES_WEBHOOK_SECRET` no painel, o código **aceita** esse valor até migrares — preferível renomear no Easypanel para `OPENCLAW_WEBHOOK_SECRET` e o mesmo valor.
+- Supabase e resto do `.env` como já tens.
 
 ### Onde corre o OpenClaw
 
-- **No Easypanel (outro app):** faz sentido se quiseres tudo no mesmo VPS: um serviço “openclaw” com Node, volume para `~/.openclaw` (sessão WhatsApp, config), e **segredos** no painel (API keys, `HERMES_WEBHOOK_SECRET`, URL do backend acima).
-- **Na tua máquina (daemon local):** também funciona; o importante é o OpenClaw conseguir **sair** para a internet e chamar o URL **HTTPS** do backend no Easypanel.
+- **Outro app no Easypanel** ou **na tua máquina** (`openclaw onboard --install-daemon`). O gateway precisa de **saída HTTPS** para  
+  `https://<O-TEU-BACKEND>/api/bot/openclaw/action`  
+  com `Authorization: Bearer <OPENCLAW_WEBHOOK_SECRET>`.
 
-Em ambos os casos: o **WhatsApp** liga-se ao processo onde o OpenClaw corre; o **Meu Financeiro** continua a ser o backend no Easypanel. Confirma que não tens **dois** bridges (n8n/Z-API + OpenClaw) no **mesmo** número, para não duplicar mensagens.
+Evita **dois** bridges WhatsApp no **mesmo** número (ex.: Z-API + OpenClaw a disputar a sessão).
 
 ---
 
-## 1. Instalar o OpenClaw (resumo oficial)
-
-Documentação: [Getting Started](https://docs.openclaw.ai/start/getting-started) e índice [llms.txt](https://docs.openclaw.ai/llms.txt).
+## Instalação OpenClaw (resumo)
 
 ```bash
 npm install -g openclaw@latest
 openclaw onboard --install-daemon
 ```
 
-- Config por defeito: `~/.openclaw/openclaw.json`
-- Dashboard local típico: [http://127.0.0.1:18789/](http://127.0.0.1:18789/) (`openclaw dashboard`)
-- Node: preferir **Node 24** ou **22.16+** (LTS), conforme a doc
+- Config: `~/.openclaw/openclaw.json`
+- Dashboard típico: [http://127.0.0.1:18789/](http://127.0.0.1:18789/) (`openclaw dashboard`)
+- WhatsApp: [channels/whatsapp](https://docs.openclaw.ai/channels/whatsapp.md) — `channels.whatsapp.allowFrom` para números autorizados
+- Tools HTTP / gateway: [config-tools](https://docs.openclaw.ai/gateway/config-tools.md)
+- Skill: [skill-format](https://docs.openclaw.ai/clawhub/skill-format.md) · SOUL: [soul](https://docs.openclaw.ai/concepts/soul.md)
 
 ---
 
-## 2. WhatsApp (ou outro canal)
+## Endpoint do Meu Financeiro
 
-- WhatsApp: [channels/whatsapp](https://docs.openclaw.ai/channels/whatsapp.md)
-- Pairing / allowlist: no JSON, `channels.whatsapp.allowFrom` (números autorizados), análogo ao que fazias no Hermes
+| | |
+|--|--|
+| **Método** | `POST` |
+| **Caminho** | `/api/bot/openclaw/action` (URL completa = backend + path) |
+| **Header** | `Authorization: Bearer <OPENCLAW_WEBHOOK_SECRET>` |
+| **Header** | `Content-Type: application/json; charset=utf-8` |
+| **Corpo** | JSON com `action`; `phone` obrigatório exceto em `ping`. |
 
-Exemplo mínimo (adaptar números):
+Não passes chaves Supabase ao modelo: só este endpoint com Bearer.
 
-```json5
+### Ações
+
+| `action` | `phone` | O que faz |
+|----------|---------|-----------|
+| `ping` | não | Teste de vida; resposta inclui mensagem “OpenClaw online”. |
+| `resolve_user` | sim | Confirma vínculo telefone → `user_id` (`n8n_link`). |
+| `list_transactions` | sim | Até **40** lançamentos recentes. |
+| `create_transaction` | sim | Insere em `lancamentos_id`. |
+| `delete_transaction` | sim | `payload.id` (UUID); só dono. |
+
+### `create_transaction` — `payload`
+
+**Obrigatórios:** `tipo`, `valor`, `classificacao`, `data`, `status`.
+
+| Campo | Notas |
+|-------|--------|
+| `tipo` | `entrada` ou `saida` (aceita `saída`, normaliza). |
+| `valor` | Número. |
+| `classificacao` | Texto; ideal = nome da categoria na app. |
+| `data` | `YYYY-MM-DD`. |
+| `status` | Ex.: `pago`, `pendente`. |
+| `obs` | Opcional. |
+
+Exemplo entrada:
+
+```json
 {
-  channels: {
-    whatsapp: {
-      allowFrom: ["+5548999123456"],
-      groups: { "*": { requireMention: true } },
-    },
-  },
+  "phone": "5548999999999",
+  "action": "create_transaction",
+  "payload": {
+    "tipo": "entrada",
+    "valor": 3400,
+    "classificacao": "Salário",
+    "data": "2026-05-12",
+    "status": "pago",
+    "obs": "via OpenClaw"
+  }
 }
 ```
 
----
+### Frase natural (quem interpreta)
 
-## 3. Ligar o agente ao Meu Financeiro
+O Express **não** lê “recebi 4599 de salário”. O **modelo no OpenClaw** (ou LLM no n8n) extrai campos, preenche `phone` com o **remetente** do canal, e chama `create_transaction`. O backend valida o segredo, resolve `phone` → `user_id` via `n8n_link`, grava na BD.
 
-### Opção A — Tools HTTP / config do gateway
+**Checklist:** telefone guardado no **perfil** da app (existe linha em `n8n_link`).
 
-- [Configuration — tools and custom providers](https://docs.openclaw.ai/gateway/config-tools.md)
-- [Tools invoke API](https://docs.openclaw.ai/gateway/tools-invoke-http-api.md) (se fores orquestrar por fora)
+### Trecho para `SOUL.md` (Midas)
 
-Define um tool (ou script) que faça `POST` para:
+```text
+És o Midas do Meu Financeiro. Quando alguém descrever um movimento em português
+(ex.: "recebi 4599 de salário", "gastei 20 no café"), interpreta valor, tipo,
+categoria e data; pergunta só se faltar algo essencial.
+Usa sempre o número de WhatsApp DO REMETENTE desta conversa (só dígitos) no
+campo "phone" do JSON ao chamares a API — nunca inventes telefones.
+Depois de criar, confirma numa frase o que foi registado.
+Segue o contrato HTTP: POST .../api/bot/openclaw/action com action e payload.
+```
 
-`https://<O-TEU-BACKEND-EASYPANEL>/api/bot/hermes/action` (ou outro host; o path mantém-se)
+### “Sucesso” mas não na minha conta
 
-com `Authorization: Bearer …` e corpo JSON. O segredo deve ficar em **secrets** do OpenClaw, não no repositório.
-
-### Opção B — Skill + SOUL (comportamento “Midas”)
-
-- Formato de skill: [skill-format](https://docs.openclaw.ai/clawhub/skill-format.md)
-- Personalidade: [SOUL.md / soul format](https://docs.openclaw.ai/concepts/soul.md)
-
-Copia as regras de negócio de [`hermes-midas-knowledge-base.md`](./hermes-midas-knowledge-base.md) (ações, exemplos de JSON, `userId` / `matchedUserNumber` na resposta para debug).
-
-Instruções úteis no SOUL:
-
-- Interpretar português (“recebi X de salário”) → `create_transaction` com `data` em **`YYYY-MM-DD`**
-- Preencher `phone` com o **remetente** do canal (E.164 / só dígitos conforme o backend espera)
-- Nunca apagar sem confirmação; usar `resolve_user` se quiseres validar o vínculo antes
+1. **`userId` na resposta** de `create_transaction` — compara com o teu utilizador em Supabase `auth.users`.
+2. **`matchedUserNumber` / `lookupCandidates`** — confirma `n8n_link.user_number`.
+3. **Mesmo Supabase** no backend Easypanel e na app Expo.
+4. **`data` em ISO** `YYYY-MM-DD`.
+5. Refresh na app.
 
 ---
 
-## 4. Checklist (os mesmos problemas do Hermes)
+## Teste rápido (script)
 
-1. **`n8n_link`:** telefone na app = telefone que o OpenClaw manda no JSON.
-2. **Mesmo Supabase:** backend Easypanel e app apontam para o **mesmo** projeto.
-3. **Resposta de `create_transaction`:** usa `userId`, `phoneDigits`, `matchedUserNumber` para confirmar que bate com a tua conta (ver doc do Hermes/Midas).
+Na pasta `Site/backend`:
 
----
+```bash
+npm run test:openclaw:salario -- 55489991234567
+```
 
-## 5. Hermes vs OpenClaw (decisão rápida)
-
-| | Hermes (Nous) | OpenClaw |
-|---|----------------|----------|
-| Doc do projeto | `hermes-bot-n8n-zapi.md`, skills em `docs/ops/hermes-skill-*` | Este ficheiro + [docs.openclaw.ai](https://docs.openclaw.ai/) |
-| Backend Meu Financeiro | Mesmo `POST /api/bot/hermes/action` | Idem |
-
-Podes manter **n8n + Z-API** só para clientes e usar **OpenClaw** só para ti; evita dois bridges no **mesmo** número WhatsApp.
+Requer `OPENCLAW_WEBHOOK_SECRET` no `.env`. Para remoto: `OPENCLAW_ACTION_URL=https://.../api/bot/openclaw/action`. Detalhes: `backend/scripts/test-openclaw-transaction.mjs`.
 
 ---
 
-## Referências cruzadas
+## Código (referência dev)
 
-- Contrato da API e exemplos: [`hermes-midas-knowledge-base.md`](./hermes-midas-knowledge-base.md)
-- curl / n8n genérico: [`hermes-bot-n8n-zapi.md`](./hermes-bot-n8n-zapi.md)
-- Script de teste no backend: `npm run test:hermes:salario` em `Site/backend` (continua válido para validar URL + segredo)
+- Rota: `backend/src/routes/openclaw.routes.js` → `POST /openclaw/action` sob prefixo `/api` + `/bot`.
+- Lógica: `backend/src/services/openclaw-bot.service.js`, `transactions.service.js`.
+- Middleware Bearer: `backend/src/middlewares/openclawWebhook.js`.
+
+---
+
+## n8n + Z-API (sem OpenClaw no WhatsApp)
+
+O mesmo endpoint serve automações **só n8n**: ver [`whatsapp-n8n-openclaw-backend.md`](./whatsapp-n8n-openclaw-backend.md).
+
+---
+
+## Referências externas
+
+- [docs.openclaw.ai](https://docs.openclaw.ai/)
+- Envio DAS / PDF (outro fluxo Z-API): `docs/ops/n8n-zapi-das-mei.md`
