@@ -6,6 +6,25 @@ O **backend Meu Financeiro** expõe um único endpoint HTTP que o OpenClaw (ou n
 
 ---
 
+## Testar em localhost primeiro (Windows / dev)
+
+O OpenClaw que criaste no **Easypanel** corre **dentro do VPS**: o `localhost` desse contentor **não é** o teu PC. Para o bot na nuvem chamar o backend no teu `localhost:3333` precisavas de um **túnel** (ngrok, Cloudflare Tunnel, etc.) — evita isso na fase inicial.
+
+**Fluxo simples: tudo na mesma máquina (o teu PC)**
+
+1. **`Site/backend`** — No `.env` local: `OPENCLAW_WEBHOOK_SECRET`, Supabase de **dev/staging** (o mesmo projeto que a app de teste), `PORT` (ex. `3333`). Arranca: `npm run dev`.
+2. **Só API, sem OpenClaw** — Confirma o endpoint:  
+   `npm run test:openclaw:salario -- 5548…`  
+   (por defeito usa `http://127.0.0.1:<PORT>/api/bot/openclaw/action` e o segredo do `.env`).
+3. **OpenClaw no PC** — Instalação na secção **Instalação OpenClaw (resumo)** abaixo, com `openclaw onboard` (não precisas do serviço Easypanel para isto). Na tool HTTP / skill, URL do Meu Financeiro:  
+   `http://127.0.0.1:3333/api/bot/openclaw/action`  
+   (ajusta à tua `PORT`) e o **mesmo** `Authorization: Bearer` que está no `.env` do backend.
+4. **Instância no Easypanel** — **Para** o serviço OpenClaw ou deixa-o desligado até passares a testes em produção; assim não tens dois gateways nem confusão de sessão WhatsApp no mesmo número.
+
+Quando quiseres testar **backend local** mas **OpenClaw só na nuvem**, aí sim precisas de túnel para o URL do backend ser público (`https://…ngrok…`).
+
+---
+
 ## EasyPanel
 
 No **EasyPanel** costumas ter o **backend** Node com URL pública.
