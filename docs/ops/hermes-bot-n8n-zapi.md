@@ -28,14 +28,34 @@ HERMES_WEBHOOK_SECRET=a_tua_string_longa_secreta
 
 3. Reinicia o backend.
 
-4. Testa se o endpoint responde (no PC, troca URL e segredo):
+4. Testa se o endpoint responde (troca URL e o valor do segredo). O header **tem** de ser `Authorization: Bearer <segredo>` (com a palavra `Bearer` e um espaço), igual ao valor de `HERMES_WEBHOOK_SECRET`.
+
+**Git Bash / macOS / Linux**
 
 ```bash
-curl -s -X POST "https://O-TEU-BACKEND/api/bot/hermes/action" ^
-  -H "Content-Type: application/json" ^
-  -H "Authorization: Bearer a_tua_string_longa_secreta" ^
-  -d "{\"action\":\"ping\"}"
+curl -s -X POST "https://O-TEU-BACKEND/api/bot/hermes/action" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer a_tua_string_longa_secreta" \
+  -d '{"action":"ping"}'
 ```
+
+**Windows PowerShell** — aqui `curl` **não** é o mesmo do Linux; usa `curl.exe` **ou** `Invoke-RestMethod`:
+
+```powershell
+curl.exe -s -X POST "https://O-TEU-BACKEND/api/bot/hermes/action" `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer a_tua_string_longa_secreta" `
+  -d '{"action":"ping"}'
+```
+
+```powershell
+Invoke-RestMethod -Uri "https://O-TEU-BACKEND/api/bot/hermes/action" -Method Post `
+  -ContentType "application/json" `
+  -Headers @{ Authorization = "Bearer a_tua_string_longa_secreta" } `
+  -Body '{"action":"ping"}'
+```
+
+Se usares só `Authorization: 96185328` sem `Bearer`, ou passares `-H` como string no `Invoke-WebRequest`, o PowerShell dá erro: os headers têm de ser **dicionário** (`@{ ... }`), e o backend espera **Bearer**.
 
 Deves ver JSON com `success: true` e mensagem tipo “Hermes online”.
 
