@@ -181,3 +181,32 @@ A **Z-API** é um serviço à parte (REST HTTP, instância na cloud deles). **Na
 | **Os dois no mesmo número** | Em geral **não** — dois stacks a disputar o mesmo canal. Dois números / duas instâncias é mais limpo. |
 
 Para o Hermes Agent aceder a dados do **Meu Financeiro**, o caminho genérico na doc deles é **ferramentas** (HTTP, MCP, etc.), não substituir o bridge WhatsApp pela Z-API.
+
+---
+
+## 9. Testar criação de dados **antes** de produção (checklist)
+
+Objetivo: validar fluxo **telefone → utilizador → transações** sem abrir o robô a todo o mundo.
+
+1. **Backend de teste**  
+   Usa URL do backend **staging/dev** (ex. Easypanel de teste), **não** o domínio de produção. Define `HERMES_WEBHOOK_SECRET` **só** nesse ambiente (segredo diferente do prod).
+
+2. **Conta e telefone na base de teste**  
+   Cria um utilizador de teste na app, mete o **mesmo número** com que vais escrever no WhatsApp. Confirma que existe linha em **`n8n_link`** (`user_id` + `user_number`).
+
+3. **Hermes só para ti (ou beta)**  
+   No `.env` do Hermes (`%LOCALAPPDATA%\hermes\.env`):  
+   `WHATSAPP_ALLOWED_USERS=` **só o teu número** (e mais algum se for equipa). Assim **ningém aleatório** recebe respostas do Midas enquanto testas.
+
+4. **Ferramenta HTTP no Hermes**  
+   Configura um tool (HTTP/MCP) a fazer `POST` ao teu endpoint, por exemplo  
+   `https://<BACKEND-TESTE>/api/bot/hermes/action`  
+   com header `Authorization: Bearer <HERMES_WEBHOOK_SECRET>` e body com `phone`, `action`, `payload` (ver secção 3 deste doc). Sem isto o Hermes **só conversa**; não grava na BD.
+
+5. **Instruções do Midas**  
+   Em `SOUL.md` ou personalidade: “Só criar transação após confirmar valor e categoria; nunca apagar sem o utilizador confirmar o ID”, etc.
+
+6. **Só depois → produção**  
+   Troca URL para backend prod, segredo prod, alarga `WHATSAPP_ALLOWED_USERS` ou ativa **pairing** / regras de onboarding, e rever limites de custo do modelo na OpenRouter.
+
+**Resumo:** teste = **backend de teste + segredo de teste + 1 telefone na allowlist + tool para a API + `n8n_link`**. Produção = mesma ideia com outro URL, outro segredo e política de quem pode falar.
