@@ -129,6 +129,11 @@ export const env = {
   N8N_WHATSAPP_WEBHOOK_URL: process.env.N8N_WHATSAPP_WEBHOOK_URL || '',
   N8N_WHATSAPP_WEBHOOK_SECRET: process.env.N8N_WHATSAPP_WEBHOOK_SECRET || '',
   /**
+   * Segredo Bearer para o robô Hermes (n8n / Z-API → POST /api/bot/hermes/action).
+   * Gera uma string longa aleatória; não reutilizes a password de utilizador.
+   */
+  HERMES_WEBHOOK_SECRET: (process.env.HERMES_WEBHOOK_SECRET || '').trim(),
+  /**
    * `true`: após gerar e guardar o DAS no job mensal/cron, dispara o mesmo webhook WhatsApp (n8n)
    * que o admin usa — mesmo payload, `source: mei_das_automatico`. Requer telefone em `user_metadata.phone`.
    */
