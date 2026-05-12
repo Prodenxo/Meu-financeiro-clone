@@ -236,7 +236,7 @@ const countActiveUsersByMei = async (adminClient, { empresaId, mei, ignoreUserId
 
 /**
  * Sincroniza o módulo MEI para empresas que já possuem vínculos MEI ativos,
- * mas ainda estão com `max_mei` desativado (0/null).
+ * mas ainda estão com `max_mei` em 0 (desligado). Ignora `max_mei` NULL (ilimitado).
  */
 const syncEmpresasMeiActivation = async (adminClient, scopedEmpresaIds = []) => {
   let meiLinksQuery = adminClient
@@ -273,6 +273,8 @@ const syncEmpresasMeiActivation = async (adminClient, scopedEmpresaIds = []) => 
   const fixedMaxMeiByEmpresa = new Map();
   const updates = (empresasData || [])
     .filter((empresa) => {
+      // max_mei NULL = ilimitado (API); não tratar como «desligado» nem auto-subir limite.
+      if (empresa.max_mei === null) return false;
       const current = normalizeLimitValue(empresa.max_mei) || 0;
       return current <= 0 && (meiCountByEmpresa.get(empresa.id) || 0) > 0;
     })
@@ -318,6 +320,8 @@ const mergeStripeContractedMeiIntoEmpresaLimits = async (adminClient, empresas) 
 
   const updatePromises = [];
   const merged = list.map((e) => {
+    // Ilimitado explícito (NULL): não sobrescrever com soma Stripe na listagem.
+    if (e.max_mei === null) return e;
     const stripeSum = sumByEmpresa.get(e.id) || 0;
     const dbMax = normalizeLimitValue(e.max_mei) ?? 0;
     const nextMax = Math.max(dbMax, stripeSum);
