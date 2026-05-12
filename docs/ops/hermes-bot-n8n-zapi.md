@@ -157,7 +157,8 @@ O utilizador tem de abrir a app, **meter o telefone no perfil** e guardar (isso 
 ## Referência cruzada
 
 - Envio DAS / PDF pela mesma Z-API: `docs/ops/n8n-zapi-das-mei.md`  
-- Variável de ambiente no código: `HERMES_WEBHOOK_SECRET` em `Site/backend/src/config/env.js`
+- Variável de ambiente no código: `HERMES_WEBHOOK_SECRET` em `Site/backend/src/config/env.js`  
+- Base de conhecimento para o agente (Midas / Hermes): `docs/ops/hermes-midas-knowledge-base.md`
 
 ---
 
