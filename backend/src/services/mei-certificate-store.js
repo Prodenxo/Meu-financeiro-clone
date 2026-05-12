@@ -628,12 +628,29 @@ export const getDocumentosAtivosMirror = async (userId) => {
 
 /**
  * Remove o certificado do usuário.
- * Lança erro se o DELETE no Supabase falhar (antes era silencioso).
+ * Limpa apenas os campos do .pfx/senha, preservando dados da empresa (razão social,
+ * endereço, cert_document) para que não sumam da UI após a exclusão.
  */
 export const deleteCertificate = async (userId) => {
   if (!userId) return;
   const supabase = getSupabase();
-  const { error } = await supabase.from(TABLE).delete().eq('user_id', userId);
+  const { data: existing } = await supabase
+    .from(TABLE)
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!existing?.id) return;
+  const { error } = await supabase
+    .from(TABLE)
+    .update({
+      pfx_base64: null,
+      passphrase_enc: null,
+      passphrase_iv: null,
+      cert_valid_from: null,
+      cert_valid_to: null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('user_id', userId);
   if (error) {
     throw badRequest(error.message || 'Falha ao remover certificado');
   }
