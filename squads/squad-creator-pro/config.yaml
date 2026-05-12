@@ -11,7 +11,6 @@ description: >-
   Auto-detected by squad-creator base orchestrator when present.
   Remove this directory to degrade cleanly to base-only mode.
 author: AIOX Team
-
 # Feature manifest (per research document Section 4.3)
 features:
   mind-cloning:
@@ -143,3 +142,6 @@ metadata:
     data_files: 22
     minds: 2
     test_cases: 17
+model:
+  provider: openrouter
+  model: inclusionai/ring-2.6-1t:free

@@ -2,6 +2,7 @@ import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { badRequest, forbidden, unauthorized, serviceUnavailable } from '../utils/errors.js';
 import { assertStrongPassword } from '../utils/passwordPolicy.js';
+import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
 import crypto from 'crypto';
 
 const hashInviteToken = (rawToken) => crypto.createHash('sha256').update(String(rawToken).trim(), 'utf8').digest('hex');
@@ -178,7 +179,7 @@ export const signUp = async ({ email, password, phone, displayName, inviteToken 
   assertStrongPassword(password);
 
   const createSupabaseClientFn = deps.createSupabaseClientFn || createSupabaseClient;
-  const cleanedPhone = phone?.startsWith('+') ? phone.substring(1) : phone;
+  const cleanedPhone = phone ? normalizeWhatsappPhoneDigits(phone) : '';
   const supabase = createSupabaseClientFn({ useServiceRole: !!env.SUPABASE_SERVICE_ROLE_KEY });
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -469,7 +470,8 @@ export const updatePhone = async (accessToken, phone) => {
     throw badRequest('SUPABASE_SERVICE_ROLE_KEY não configurada');
   }
 
-  const cleanedPhone = phone.startsWith('+') ? phone.substring(1) : phone;
+  const cleanedPhone = normalizeWhatsappPhoneDigits(phone);
+  if (!cleanedPhone) throw badRequest('Telefone é obrigatório');
   const adminClient = createSupabaseClient({ useServiceRole: true });
 
   // 1. Atualiza no Auth (Metadata) - FUNDAMENTAL: manter metadados existentes
