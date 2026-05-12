@@ -144,6 +144,15 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 
 ---
 
+## “Criou com sucesso” mas não aparece na minha conta (app)
+
+1. **`userId` na resposta:** em `create_transaction`, o JSON de sucesso inclui `userId` (além de `transaction`). Compara esse UUID com o teu utilizador na app (ou em Supabase `auth.users`). Se for **diferente**, o `phone` que o Hermes mandou está ligado a **outra** linha em `n8n_link` — corrige o telefone no perfil / `n8n_link` para o número certo.
+2. **Mesmo projeto Supabase:** confirma que o backend onde o Hermes chama (`HERMES_ACTION_URL` / Easypanel) usa o **mesmo** Supabase que a app Expo (URL/chave no `.env` da app).
+3. **Data no payload:** usa sempre **`data` em ISO `YYYY-MM-DD`**. Datas tipo `12/05/2026` no payload podiam falhar filtros antigos no dashboard; a app foi ajustada para interpretar DD/MM/AAAA e cair para `criado_em` quando a `data` é inválida.
+4. **Atualizar a lista:** na app, puxa para baixo no Início (refresh) ou reabre o ecrã.
+
+---
+
 ## Onde está no código (para ti ou para outro dev)
 
 - Rotas: `backend/src/routes/hermes.routes.js` → `POST /hermes/action` sob o prefixo `/api` + `/bot`.

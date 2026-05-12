@@ -47,7 +47,10 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const transactions = await fetchTransactionsService(userId);
-      const filteredTransactions = transactions.filter((t) => t.user_id === userId);
+      const uid = String(userId);
+      const filteredTransactions = transactions.filter(
+        (t) => t.user_id != null && String(t.user_id) === uid,
+      );
       set({ transactions: filteredTransactions, loading: false });
     } catch (error: unknown) {
       set({ error, loading: false });

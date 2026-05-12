@@ -1,17 +1,12 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest, notFound } from '../utils/errors.js';
+import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
 
 const MAX_LIST = 40;
 
-/**
- * Z-API / WhatsApp manda às vezes "5548...@s.whatsapp.net". Normaliza para só dígitos.
- */
-export const normalizeHermesPhoneDigits = (raw) => {
-  if (raw === null || raw === undefined) return '';
-  const beforeAt = String(raw).split('@')[0];
-  return beforeAt.replace(/\D/g, '');
-};
+/** @deprecated use normalizeWhatsappPhoneDigits — mantido para testes/importações */
+export const normalizeHermesPhoneDigits = normalizeWhatsappPhoneDigits;
 
 /**
  * Tenta bater com o que está em `n8n_link.user_number` (pode estar com ou sem 55).
@@ -89,7 +84,8 @@ export const runHermesAction = async (input) => {
 
   if (action === 'create_transaction') {
     const created = await transactionsService.createTransaction(userId, payload);
-    return { ok: true, message: 'Transação criada', data: { transaction: created } };
+    // `userId` ajuda a confirmar em qual conta Supabase o lançamento ficou (n8n_link ↔ telefone).
+    return { ok: true, message: 'Transação criada', data: { transaction: created, userId } };
   }
 
   if (action === 'delete_transaction') {
