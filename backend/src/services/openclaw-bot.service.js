@@ -2,8 +2,38 @@ import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest, notFound } from '../utils/errors.js';
 import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
+import { getDasBase64 } from './mei-guide-das-base64.service.js';
 
 const MAX_LIST = 40;
+
+/**
+ * Competência no formato MM/YYYY (ex.: 05/2026). Mês pode ter 1 ou 2 dígitos.
+ * @param {string} raw
+ * @returns {{ display: string, periodoDigits: string } | null}
+ */
+export const parseMesCompetenciaMmYyyy = (raw) => {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  const m = /^(\d{1,2})\/(\d{4})$/.exec(s);
+  if (!m) return null;
+  const month = Number(m[1]);
+  const year = Number(m[2]);
+  if (!Number.isInteger(month) || !Number.isInteger(year)) return null;
+  if (month < 1 || month > 12) return null;
+  const display = `${String(month).padStart(2, '0')}/${year}`;
+  const periodoDigits = `${year}${String(month).padStart(2, '0')}`;
+  return { display, periodoDigits };
+};
+
+/** Competência actual (UTC) em MM/YYYY + dígitos YYYYMM para a tabela DAS_mei. */
+export const mesCompetenciaAtualUtc = () => {
+  const now = new Date();
+  const month = now.getUTCMonth() + 1;
+  const year = now.getUTCFullYear();
+  const display = `${String(month).padStart(2, '0')}/${year}`;
+  const periodoDigits = `${year}${String(month).padStart(2, '0')}`;
+  return { display, periodoDigits };
+};
 
 /**
  * Tenta bater com o que está em `n8n_link.user_number` (pode estar com ou sem 55).
@@ -125,7 +155,36 @@ export const runOpenclawAction = async (input) => {
     return { ok: true, message: 'Transação removida', data: { success: true } };
   }
 
+  if (action === 'get_das_current') {
+    const rawMes = payload?.mes;
+    let competencia;
+    if (rawMes === undefined || rawMes === null || String(rawMes).trim() === '') {
+      competencia = mesCompetenciaAtualUtc();
+    } else {
+      competencia = parseMesCompetenciaMmYyyy(rawMes);
+      if (!competencia) {
+        throw badRequest('mes inválido; use MM/YYYY, ex.: 05/2026');
+      }
+    }
+    const { display, periodoDigits } = competencia;
+    const pdfBase64 = await getDasBase64({ userId, periodoApuracao: periodoDigits });
+    if (!pdfBase64 || String(pdfBase64).trim() === '') {
+      throw notFound(`Nenhum DAS encontrado para a competência ${display}.`);
+    }
+    const fileName = `DAS-${display.replace('/', '-')}.pdf`;
+    return {
+      ok: true,
+      message: 'DAS encontrado',
+      data: {
+        fileName,
+        mimeType: 'application/pdf',
+        base64: pdfBase64,
+        mes: display,
+      },
+    };
+  }
+
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_transactions, create_transaction, delete_transaction.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_transactions, create_transaction, delete_transaction, get_das_current.`,
   );
 };

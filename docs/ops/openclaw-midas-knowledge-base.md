@@ -1,6 +1,6 @@
 # Base de conhecimento — Midas · Meu Financeiro (OpenClaw)
 
-Ficheiro alinhado ao **código actual** do backend (`openclaw-bot.service.js`, `transactions.service.js`). Cola no workspace do OpenClaw (ex.: `midas-kb.md` ao lado do `SOUL.md`) ou referencia no `SOUL.md`. **Atualiza** se mudares regras na BD ou no endpoint.
+Ficheiro alinhado ao **código actual** do backend (`openclaw-bot.service.js`, `transactions.service.js`, `mei-guide-das-base64.service.js`). Cola no workspace do OpenClaw (ex.: `midas-kb.md` ao lado do `SOUL.md`) ou referencia no `SOUL.md`. **Atualiza** se mudares regras na BD ou no endpoint.
 
 ---
 
@@ -41,6 +41,16 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 | `list_transactions` | Sim | Devolve até **40** lançamentos mais recentes (`criado_em` desc). |
 | `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. |
 | `delete_transaction` | Sim | Apaga por `id` (UUID), só se for **dono** do lançamento. |
+| `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp). |
+
+---
+
+## DAS MEI (`get_das_current`)
+
+- Tabela **`DAS_mei`**, campo **`DAS`** (base64 do PDF), filtro por **`user_id`** e **`periodo_apuracao`** (mesmo formato usado ao gravar: ver `mei-guide-das-base64.service.js`).
+- **`payload.mes`:** opcional, string **`MM/YYYY`** (ex.: `05/2026`). Se omitir, usa o **mês corrente em UTC**.
+- **Sucesso:** `data.fileName`, `data.mimeType` (`application/pdf`), `data.base64`, `data.mes`.
+- **Não encontrado:** HTTP **404**, `success: false`, mensagem do tipo *Nenhum DAS encontrado para a competência MM/YYYY.*
 
 ---
 
@@ -120,3 +130,4 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 ## Como chamar a API a partir do OpenClaw (sem plugin)
 
 No contentor, usa **`exec`** com **`curl`**, variáveis **`MF_API_URL`** e **`OPENCLAW_WEBHOOK_SECRET`** (env do Easypanel). O JSON do `-d` tem de ser **uma linha** válida ou escapado correctamente no shell.
+ENDKB

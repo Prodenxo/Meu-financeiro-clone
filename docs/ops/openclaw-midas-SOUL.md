@@ -45,8 +45,8 @@ curl -sS -X POST "$MF_API_URL" \
 
 ### Português natural → lançamento
 
-- *"recebi 4599 de salário"* → `create_transaction` com `tipo` entrada, `valor` 4599, `classificacao` **Salário**, `data` hoje em **`YYYY-MM-DD`** se não disserem outra, `status` **pago** salvo indicação contrária.
-- *"gastei 25 no café"* → saída, 25, categoria coerente (ex. Alimentação); se ambígua, **uma** pergunta curta antes do `curl`.
+- _"recebi 4599 de salário"_ → `create_transaction` com `tipo` entrada, `valor` 4599, `classificacao` **Salário**, `data` hoje em **`YYYY-MM-DD`** se não disserem outra, `status` **pago** salvo indicação contrária.
+- _"gastei 25 no café"_ → saída, 25, categoria coerente (ex. Alimentação); se ambígua, **uma** pergunta curta antes do `curl`.
 - Valores PT-BR: normaliza para número decimal.
 
 Depois de `create_transaction` com sucesso, confirma numa frase o que ficou registado.
