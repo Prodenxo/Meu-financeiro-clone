@@ -202,3 +202,8 @@ O mesmo endpoint serve automações **só n8n**: ver [`whatsapp-n8n-openclaw-bac
 
 - [docs.openclaw.ai](https://docs.openclaw.ai/)
 - Envio DAS / PDF (outro fluxo Z-API): `docs/ops/n8n-zapi-das-mei.md`
+
+### Midas (base + SOUL para colar no OpenClaw)
+
+- [`openclaw-midas-knowledge-base.md`](./openclaw-midas-knowledge-base.md) — contrato da API, exemplos JSON, `exec`+`curl`.
+- [`openclaw-midas-SOUL.md`](./openclaw-midas-SOUL.md) — personalidade + regras + modelo de comando `curl`.
