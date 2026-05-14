@@ -1,6 +1,8 @@
-# Base de conhecimento — Midas · Meu Financeiro (OpenClaw)
+# KNOWLEDGECERTO — Base de conhecimento Midas · Meu Financeiro
 
-Ficheiro alinhado ao **código actual** do backend (`openclaw-bot.service.js`, `transactions.service.js`, `mei-guide-das-base64.service.js`). Cola no workspace do OpenClaw (ex.: `midas-kb.md` ao lado do `SOUL.md`) ou referencia no `SOUL.md`. **Atualiza** se mudares regras na BD ou no endpoint.
+Alinhado ao backend (`openclaw-bot.service.js`, `transactions.service.js`, `mei-guide-das-base64.service.js`). **Actualiza** este ficheiro se mudares regras na BD ou no endpoint.
+
+**Hermes:** lê este ficheiro com ferramentas de ficheiro quando precisares de exemplos JSON completos, ou mantém trechos relevantes também em `AGENTSCERTO.md` (limite de contexto do Hermes).
 
 ---
 
@@ -20,24 +22,19 @@ Ficheiro alinhado ao **código actual** do backend (`openclaw-bot.service.js`, `
 
 ### Cargos e empresas (`actorContext`)
 
-Em **todas** as respostas com `phone` válido (excepto `ping`), o JSON inclui **`data.actorContext`**:
-
-- **`hasActiveMembership`:** `true` se existir pelo menos uma linha activa em `role_x_user_x_empresa` (`status = true`) para esse `user_id`.
-- **`memberships`:** lista de vínculos; cada item tem `role` (ex.: `admin`, `usuario`, `superadmin`, `outsider`), `empresaId`, `empresaNome`, `mei`, `linkId`.
-
-Isto vem das **mesmas** tabelas que a app usa para RBAC. O modelo pode usar isto para **explicar** o contexto (ex.: “és admin da empresa X”). **Lançamentos** (`list_transactions` / `create_transaction`) continuam escopados ao **`user_id`** resolvido pelo telefone — não listam automaticamente dados de **outros** utilizadores da empresa só por seres `admin` (isso exigiria novas `action` no backend).
+Com `phone` válido, as respostas incluem **`data.actorContext`**: `hasActiveMembership` e **`memberships`** (vínculos `role_x_user_x_empresa` + `roles` + `empresas`: `role`, `empresaId`, `empresaNome`, `mei`, `linkId`). **Lançamentos** seguem o `user_id` do telefone; não há listagem automática “de toda a empresa” só por cargo admin neste endpoint.
 
 ---
 
-## Chamada HTTP (única porta de entrada do robô)
+## Chamada HTTP (Hermes / n8n / qualquer cliente)
 
 - **Método:** `POST`
-- **Caminho:** `/api/bot/openclaw/action` (URL completa = variável **`MF_API_URL`** no contentor OpenClaw, já com path).
-- **Header:** `Authorization: Bearer <OPENCLAW_WEBHOOK_SECRET>` (mesmo valor no **backend** Easypanel e nas **env** do serviço OpenClaw que faz o `curl`).
+- **URL:** valor da variável de ambiente **`MF_BOT_URL`** (URL completa até `/api/bot/openclaw/action`).
+- **Header:** `Authorization: Bearer` + valor de **`MF_BOT_BEARER`** (o mesmo segredo que `OPENCLAW_WEBHOOK_SECRET` no backend Easypanel).
 - **Header:** `Content-Type: application/json; charset=utf-8`
-- **Corpo:** JSON com `action`; `phone` obrigatório exceto em `ping`.
+- **Corpo:** JSON com `action`; `phone` obrigatório excepto em `ping`.
 
-Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
+Não passes chaves **Supabase** ao modelo em texto: só este endpoint com Bearer em ambiente.
 
 ---
 
@@ -46,17 +43,17 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 | `action` | Precisa `phone`? | O que faz |
 |----------|------------------|-----------|
 | `ping` | Não | Teste de vida; não toca na BD de utilizador. |
-| `resolve_user` | Sim | Confirma se o telefone está ligado a um `user_id`; devolve também **`actorContext`** (cargos / empresas). |
+| `resolve_user` | Sim | Confirma `user_id` + devolve **`actorContext`** (cargos / empresas). |
 | `list_transactions` | Sim | Devolve até **40** lançamentos mais recentes (`criado_em` desc). |
 | `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. |
 | `delete_transaction` | Sim | Apaga por `id` (UUID), só se for **dono** do lançamento. |
-| `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp). |
+| `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp sozinho). |
 
 ---
 
 ## DAS MEI (`get_das_current`)
 
-- Tabela **`DAS_mei`**, campo **`DAS`** (base64 do PDF), filtro por **`user_id`** e **`periodo_apuracao`** (mesmo formato usado ao gravar: ver `mei-guide-das-base64.service.js`).
+- Tabela **`DAS_mei`**, campo **`DAS`** (base64 do PDF), filtro por **`user_id`** e **`periodo_apuracao`**.
 - **`payload.mes`:** opcional, string **`MM/YYYY`** (ex.: `05/2026`). Se omitir, usa o **mês corrente em UTC**.
 - **Sucesso:** `data.fileName`, `data.mimeType` (`application/pdf`), `data.base64`, `data.mes`.
 - **Não encontrado:** HTTP **404**, `success: false`, mensagem do tipo *Nenhum DAS encontrado para a competência MM/YYYY.*
@@ -73,7 +70,7 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 | `valor` | Número (ex.: `25.5` ou `3400`). |
 | `classificacao` | Texto. Preferir o **mesmo nome** que a categoria na app (ex.: `Salário`, `Alimentação`). |
 | `data` | String **ISO** `YYYY-MM-DD` (ex.: `2026-05-12`). |
-| `status` | Texto livre na BD; na migração antiga o default é **`pago`**. Usa o que a app usa (ex.: `pago`, `pendente`). |
+| `status` | Texto livre na BD; default comum **`pago`**. Usa o que a app usa (ex.: `pago`, `pendente`). |
 | `obs` | Opcional; pode ser `null`. |
 
 **Exemplo — saída**
@@ -105,7 +102,7 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
     "classificacao": "Salário",
     "data": "2026-05-12",
     "status": "pago",
-    "obs": "via OpenClaw"
+    "obs": "via Hermes"
   }
 }
 ```
@@ -130,13 +127,18 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 
 ## Onde está no código (dev)
 
-- Rota: `backend/src/routes/openclaw.routes.js` → `POST /openclaw/action` sob `/api` + `/bot`.
-- Lógica: `backend/src/services/openclaw-bot.service.js`, `transactions.service.js`.
-- Guia operacional: `docs/ops/meu-financeiro-openclaw.md`, `docs/ops/whatsapp-n8n-openclaw-backend.md`.
+- Rota: `Site/backend/src/routes/openclaw.routes.js` → `POST /openclaw/action` sob `/api` + `/bot`.
+- Lógica: `Site/backend/src/services/openclaw-bot.service.js`, `transactions.service.js`.
+- Guias: `Site/docs/ops/meu-financeiro-openclaw.md`, `Site/docs/ops/whatsapp-n8n-openclaw-backend.md`, `Site/docs/ops/hermes-midas-integracao.md`.
 
 ---
 
-## Como chamar a API a partir do OpenClaw (sem plugin)
+## Como chamar a partir do Hermes
 
-No contentor, usa **`exec`** com **`curl`**, variáveis **`MF_API_URL`** e **`OPENCLAW_WEBHOOK_SECRET`** (env do Easypanel). O JSON do `-d` tem de ser **uma linha** válida ou escapado correctamente no shell.
-ENDKB
+Usa a ferramenta **HTTP** (ou equivalente configurada) com:
+
+- URL = valor de **`MF_BOT_URL`**
+- Header `Authorization` = palavra `Bearer`, espaço, e o valor de **`MF_BOT_BEARER`**
+- Corpo JSON conforme as acções acima
+
+Define **`MF_BOT_URL`** e **`MF_BOT_BEARER`** no ficheiro `.env` do Hermes (`%LOCALAPPDATA%\hermes\.env` no Windows) ou no Easypanel, **sem** commit no Git.

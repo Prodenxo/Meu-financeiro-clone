@@ -95,6 +95,72 @@ export const resolveUserIdByPhone = async (rawPhone) => {
   return r.userId;
 };
 
+const normalizeOpenclawRoleLabel = (role) => {
+  if (!role) return null;
+  const n = String(role).trim().toLowerCase();
+  if (n === 'user') return 'usuario';
+  return n;
+};
+
+/**
+ * Vínculos activos empresa × role (mesma fonte que o auth da app).
+ * O Midas/OpenClaw identifica o utilizador pelo telefone (`n8n_link`); isto expõe **cargos**
+ * para a IA e para diagnóstico, sem bypass de RLS (usa service role só no servidor).
+ *
+ * @param {string} userId
+ * @returns {Promise<{ memberships: Array<{ linkId: string, role: string | null, empresaId: string | null, empresaNome: string | null, mei: boolean | null }>, hasActiveMembership: boolean }>}
+ */
+export const resolveActorMembershipsForUser = async (userId) => {
+  const admin = createSupabaseClient({ useServiceRole: true });
+  const { data: links, error } = await admin
+    .from('role_x_user_x_empresa')
+    .select('id, empresas_id, roles_id, mei')
+    .eq('user_id', userId)
+    .eq('status', true);
+
+  if (error) throw badRequest(error.message);
+  if (!links?.length) {
+    return { memberships: [], hasActiveMembership: false };
+  }
+
+  const roleIds = [...new Set(links.map((l) => l.roles_id).filter(Boolean))];
+  const empresaIds = [...new Set(links.map((l) => l.empresas_id).filter(Boolean))];
+
+  /** @type {Map<string, string | null>} */
+  let roleMap = new Map();
+  if (roleIds.length > 0) {
+    const { data: rolesRows, error: rErr } = await admin
+      .from('roles')
+      .select('id, roles')
+      .in('id', roleIds);
+    if (rErr) throw badRequest(rErr.message);
+    roleMap = new Map(
+      (rolesRows || []).map((r) => [r.id, normalizeOpenclawRoleLabel(r.roles)]),
+    );
+  }
+
+  /** @type {Map<string, string | null>} */
+  let empresaMap = new Map();
+  if (empresaIds.length > 0) {
+    const { data: empRows, error: eErr } = await admin
+      .from('empresas')
+      .select('id, empresa')
+      .in('id', empresaIds);
+    if (eErr) throw badRequest(eErr.message);
+    empresaMap = new Map((empRows || []).map((e) => [e.id, e.empresa ?? null]));
+  }
+
+  const memberships = links.map((link) => ({
+    linkId: String(link.id),
+    role: link.roles_id ? roleMap.get(link.roles_id) ?? null : null,
+    empresaId: link.empresas_id ? String(link.empresas_id) : null,
+    empresaNome: link.empresas_id ? empresaMap.get(link.empresas_id) ?? null : null,
+    mei: typeof link.mei === 'boolean' ? link.mei : null,
+  }));
+
+  return { memberships, hasActiveMembership: true };
+};
+
 /**
  * @param {{ phone: string, action: string, payload?: object }} input
  */
@@ -118,12 +184,13 @@ export const runOpenclawAction = async (input) => {
   }
 
   const linkDebug = { phoneDigits, matchedUserNumber, lookupCandidates };
+  const actorContext = await resolveActorMembershipsForUser(userId);
 
   if (action === 'resolve_user') {
     return {
       ok: true,
       message: 'Utilizador encontrado',
-      data: { userId, ...linkDebug },
+      data: { userId, actorContext, ...linkDebug },
     };
   }
 
@@ -133,7 +200,7 @@ export const runOpenclawAction = async (input) => {
     return {
       ok: true,
       message: `Últimas ${sliced.length} transações (máx. ${MAX_LIST}).`,
-      data: { transactions: sliced, userId, ...linkDebug },
+      data: { transactions: sliced, userId, actorContext, ...linkDebug },
     };
   }
 
@@ -145,6 +212,7 @@ export const runOpenclawAction = async (input) => {
       data: {
         transaction: created,
         userId,
+        actorContext,
         ...linkDebug,
       },
     };
@@ -152,7 +220,11 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'delete_transaction') {
     await transactionsService.deleteTransaction(userId, payload, { id: payload?.id });
-    return { ok: true, message: 'Transação removida', data: { success: true } };
+    return {
+      ok: true,
+      message: 'Transação removida',
+      data: { success: true, actorContext },
+    };
   }
 
   if (action === 'get_das_current') {
@@ -180,6 +252,8 @@ export const runOpenclawAction = async (input) => {
         mimeType: 'application/pdf',
         base64: pdfBase64,
         mes: display,
+        actorContext,
+        ...linkDebug,
       },
     };
   }

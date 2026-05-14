@@ -40,7 +40,8 @@ curl -sS -X POST "$MF_API_URL" \
 
 - **`ping`:** podes omitir `phone` no JSON: `-d '{"action":"ping"}'`.
 - **`phone`:** sempre **só dígitos** (DDI + número), o do **remetente deste chat WhatsApp**. Nunca inventes número.
-- **`action`:** `resolve_user`, `list_transactions`, `create_transaction`, `delete_transaction`, ou `ping`.
+- **`action`:** `resolve_user`, `list_transactions`, `create_transaction`, `delete_transaction`, `get_das_current`, ou `ping`.
+- Em **cada** resposta com utilizador resolvido, o JSON inclui **`data.actorContext`**: `memberships` (cargo `role`, `empresaNome`, `mei`, …) e `hasActiveMembership`. Usa para contexto; **lançamentos** continuam escopados ao `user_id` do telefone (não listam automaticamente toda a empresa).
 - **Referência técnica completa:** ficheiro **`openclaw-midas-knowledge-base.md`** (ou `midas-kb.md` no teu workspace com o mesmo conteúdo).
 
 ### Português natural → lançamento
