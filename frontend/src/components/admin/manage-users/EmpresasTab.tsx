@@ -279,7 +279,11 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
               ) : (
                 currentData.map((empresa) => {
                   const maxMei = empresa.max_mei || 0;
-                  const maxRegular = empresa.max_usuarios_nao_mei || 0;
+                  // null = ilimitado (única semântica válida desde 2026-05-14). 0/legacy também caem aqui.
+                  const naoMeiUnlimited = empresa.max_usuarios_nao_mei === null
+                    || empresa.max_usuarios_nao_mei === undefined
+                    || empresa.max_usuarios_nao_mei === 0;
+                  const maxRegular = naoMeiUnlimited ? 0 : (empresa.max_usuarios_nao_mei || 0);
                   const stats = getUsageStats(empresa.id, maxMei, maxRegular);
                   const hasMeiUsage = stats.meiUsed > 0;
                   const meiEnabled = maxMei > 0 || hasMeiUsage;
@@ -338,7 +342,7 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                       <td className="py-6">
                         <div className="flex flex-col gap-2">
                           <div className="flex flex-col gap-1">
-                            {maxRegular === 0 ? (
+                            {naoMeiUnlimited ? (
                               <div className="flex flex-col gap-1">
                                 <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-tight">
                                   {stats.regularUsed} cadastrados

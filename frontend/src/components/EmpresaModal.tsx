@@ -72,6 +72,19 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
     }
   };
 
+  // Clientes PF/Outros: null = ilimitado (padrão), número > 0 = limite explícito.
+  // Em edições antigas, 0 ou undefined também caem em "ilimitado" (alinhado ao novo backend).
+  const naoMeiUnlimited = form.max_usuarios_nao_mei === null
+    || form.max_usuarios_nao_mei === undefined
+    || form.max_usuarios_nao_mei === 0;
+  const toggleNaoMeiUnlimited = () => {
+    if (naoMeiUnlimited) {
+      setNum('max_usuarios_nao_mei', 1);
+    } else {
+      setNum('max_usuarios_nao_mei', null);
+    }
+  };
+
   const handleCnpjBlur = async (currentValue?: string) => {
     const digits = onlyDigits(currentValue ?? form.cnpj ?? '');
     if (digits.length !== 14) return;
@@ -439,22 +452,57 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Limite de Clientes (PF/Outros)
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={form.max_usuarios_nao_mei === null || form.max_usuarios_nao_mei === undefined ? '' : form.max_usuarios_nao_mei}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  setNum('max_usuarios_nao_mei', raw === '' ? null : Math.max(0, Number(raw) || 0));
-                }}
-                className="planner-input-compact w-full"
-                placeholder="Vazio = ilimitado, 0 = nenhum"
-              />
-              <p className="text-[10px] text-slate-500 mt-1">Vazio = ilimitado · 0 = nenhum permitido</p>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Clientes PF (Outros)</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {naoMeiUnlimited ? 'Sem teto de cadastros.' : 'Define um limite máximo de usuários.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleNaoMeiUnlimited}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    naoMeiUnlimited ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-700'
+                  }`}
+                  aria-pressed={naoMeiUnlimited}
+                  aria-label={naoMeiUnlimited ? 'Definir limite' : 'Tornar ilimitado'}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      naoMeiUnlimited ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                  naoMeiUnlimited
+                    ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-500/20'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                }`}>
+                  {naoMeiUnlimited ? 'Ilimitado' : 'Com limite'}
+                </span>
+              </div>
+              {!naoMeiUnlimited && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Limite máximo de clientes
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.max_usuarios_nao_mei === null || form.max_usuarios_nao_mei === undefined ? '' : form.max_usuarios_nao_mei}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setNum('max_usuarios_nao_mei', raw === '' ? 1 : Math.max(1, Number(raw) || 1));
+                    }}
+                    className="planner-input-compact w-full"
+                    placeholder="Ex.: 10"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

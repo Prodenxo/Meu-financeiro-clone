@@ -769,16 +769,43 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                   </button>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Data de Expiração
-                  </label>
-                  <input
-                    type="date"
-                    value={expiresAt}
-                    onChange={(e) => setExpiresAt(e.target.value)}
-                    className="planner-input w-full"
-                  />
+                <div className="bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="max-w-[70%]">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">Data de validade</h4>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                        {expiresAt ? 'Acesso será bloqueado nesta data.' : 'Sem expiração — acesso permanente.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (expiresAt) {
+                          setExpiresAt('');
+                        } else {
+                          const d = new Date();
+                          d.setDate(d.getDate() + 30);
+                          setExpiresAt(d.toISOString().split('T')[0]);
+                        }
+                      }}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 focus:outline-none ${
+                        expiresAt ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-700'
+                      }`}
+                      aria-pressed={Boolean(expiresAt)}
+                      aria-label={expiresAt ? 'Remover data de validade' : 'Definir data de validade'}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${expiresAt ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                  {expiresAt && (
+                    <input
+                      type="date"
+                      value={expiresAt}
+                      onChange={(e) => setExpiresAt(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="planner-input w-full"
+                    />
+                  )}
                 </div>
               </div>
             )}

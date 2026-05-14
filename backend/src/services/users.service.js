@@ -132,6 +132,14 @@ const normalizeLimitInput = (value, fieldName) => {
   return numeric;
 };
 
+// max_usuarios_nao_mei nunca teve "0" como estado intencional — o frontend sempre
+// exibiu 0 como ILIMITADO, mas o backend tratava como limite zero e bloqueava tudo.
+// Aqui sanitizamos 0 → null para garantir a única semântica suportada: null = ilimitado.
+const normalizeNaoMeiLimitInput = (value, fieldName) => {
+  const normalized = normalizeLimitInput(value, fieldName);
+  return normalized === 0 ? null : normalized;
+};
+
 const normalizeLimitValue = (value) => {
   if (value === undefined || value === null) return null;
   const numeric = Number(value);
@@ -161,7 +169,7 @@ const buildEmpresaPayload = (input = {}, { requireName = false } = {}) => {
     payload.max_mei = normalizeLimitInput(input.max_mei, 'max_mei');
   }
   if (Object.prototype.hasOwnProperty.call(input, 'max_usuarios_nao_mei')) {
-    payload.max_usuarios_nao_mei = normalizeLimitInput(
+    payload.max_usuarios_nao_mei = normalizeNaoMeiLimitInput(
       input.max_usuarios_nao_mei,
       'max_usuarios_nao_mei'
     );
@@ -348,6 +356,10 @@ export const ensureEmpresaCapacity = async (adminClient, { empresaId, mei, ignor
   const limit = mei ? maxMei : maxNaoMei;
 
   if (isUnlimitedLimit(limit)) return;
+  // Para max_usuarios_nao_mei, 0 legado é tratado como ilimitado (migration 20260514120000
+  // limpou registros existentes; este guard cobre qualquer 0 residual). max_mei mantém
+  // 0 = módulo desligado, então o caminho continua válido para esse caso.
+  if (!mei && limit === 0) return;
 
   const total = await countActiveUsersByMei(adminClient, { empresaId, mei, ignoreUserId });
   if (total >= limit) {
