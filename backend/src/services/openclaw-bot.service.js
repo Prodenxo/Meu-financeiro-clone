@@ -97,30 +97,47 @@ export const resolveUserIdByPhone = async (rawPhone) => {
 
 const normalizeOpenclawRoleLabel = (role) => {
   if (!role) return null;
-  const n = String(role).trim().toLowerCase();
+  const n = String(role).trim().toLowerCase().replace(/\s+/g, '');
   if (n === 'user') return 'usuario';
   return n;
 };
 
 /**
- * Vínculos activos empresa × role (mesma fonte que o auth da app).
- * O Midas/OpenClaw identifica o utilizador pelo telefone (`n8n_link`); isto expõe **cargos**
- * para a IA e para diagnóstico, sem bypass de RLS (usa service role só no servidor).
+ * Vínculos activos empresa × role + `profiles.role` (igual fallback de `getRequesterContext` na app).
+ * Superadmin pode existir só em `profiles.role` sem linha activa coerente em `role_x_user_x_empresa`.
  *
  * @param {string} userId
- * @returns {Promise<{ memberships: Array<{ linkId: string, role: string | null, empresaId: string | null, empresaNome: string | null, mei: boolean | null }>, hasActiveMembership: boolean }>}
+ * @returns {Promise<{
+ *   memberships: Array<{ linkId: string, role: string | null, empresaId: string | null, empresaNome: string | null, mei: boolean | null }>,
+ *   hasActiveMembership: boolean,
+ *   profileRole: string | null,
+ *   hasSuperadminCapability: boolean
+ * }>}
  */
 export const resolveActorMembershipsForUser = async (userId) => {
   const admin = createSupabaseClient({ useServiceRole: true });
-  const { data: links, error } = await admin
-    .from('role_x_user_x_empresa')
-    .select('id, empresas_id, roles_id, mei')
-    .eq('user_id', userId)
-    .eq('status', true);
+
+  const [{ data: links, error }, { data: profileRow, error: profileErr }] = await Promise.all([
+    admin
+      .from('role_x_user_x_empresa')
+      .select('id, empresas_id, roles_id, mei')
+      .eq('user_id', userId)
+      .eq('status', true),
+    admin.from('profiles').select('role').eq('id', userId).maybeSingle(),
+  ]);
 
   if (error) throw badRequest(error.message);
+  if (profileErr) throw badRequest(profileErr.message);
+
+  const profileRole = normalizeOpenclawRoleLabel(profileRow?.role);
+
   if (!links?.length) {
-    return { memberships: [], hasActiveMembership: false };
+    return {
+      memberships: [],
+      hasActiveMembership: false,
+      profileRole,
+      hasSuperadminCapability: profileRole === 'superadmin',
+    };
   }
 
   const roleIds = [...new Set(links.map((l) => l.roles_id).filter(Boolean))];
@@ -158,7 +175,10 @@ export const resolveActorMembershipsForUser = async (userId) => {
     mei: typeof link.mei === 'boolean' ? link.mei : null,
   }));
 
-  return { memberships, hasActiveMembership: true };
+  const hasSuperadminCapability =
+    profileRole === 'superadmin' || memberships.some((m) => m.role === 'superadmin');
+
+  return { memberships, hasActiveMembership: true, profileRole, hasSuperadminCapability };
 };
 
 /**
@@ -186,7 +206,12 @@ export const runOpenclawAction = async (input) => {
   const linkDebug = { phoneDigits, matchedUserNumber, lookupCandidates };
 
   /** Nunca bloquear Midas/OpenClaw se memberships falharem (schema, rede, Supabase). */
-  let actorContext = { memberships: [], hasActiveMembership: false };
+  let actorContext = {
+    memberships: [],
+    hasActiveMembership: false,
+    profileRole: null,
+    hasSuperadminCapability: false,
+  };
   try {
     actorContext = await resolveActorMembershipsForUser(userId);
   } catch (err) {
