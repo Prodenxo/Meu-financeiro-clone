@@ -2,10 +2,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { CreditCard } from 'lucide-react';
 import { toast } from '../../../lib/toast';
 import { EmpresaStripeMeiBillingModal } from './EmpresaStripeMeiBillingModal';
+import EmpresaModal from '../../EmpresaModal';
 import {
-  updateEmpresaLimits,
-  createEmpresaLimits,
   deleteEmpresa,
+  getEmpresaById,
+  type EmpresaFullData,
   type ManagedUser
 } from '../../../services/usersService';
 
@@ -35,11 +36,10 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
   const [searchTerm, setSearchTerm] = useState('');
   const [meiStatusFilter, setMeiStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [loading, setLoading] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [empresaFormOpen, setEmpresaFormOpen] = useState(false);
+  const [empresaFormInitial, setEmpresaFormInitial] = useState<EmpresaFullData | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
-  const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
   const [empresaForMembers, setEmpresaForMembers] = useState<Empresa | null>(null);
   const [empresaToDelete, setEmpresaToDelete] = useState<Empresa | null>(null);
   const [empresaBilling, setEmpresaBilling] = useState<Empresa | null>(null);
@@ -72,14 +72,6 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
       if (debounce) clearTimeout(debounce);
     };
   }, [fetchEmpresas]);
-
-  // Estados para formulário (reutilizados para edit/create)
-  const [formData, setFormData] = useState({
-    nome: '',
-    maxMei: '1',
-    maxNaoMei: '0',
-    meiEnabled: false
-  });
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -130,59 +122,30 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
     };
   };
 
-  const handleEditClick = (empresa: Empresa) => {
-    setSelectedEmpresa(empresa);
-    const meiVal = empresa.max_mei || 0;
-    setFormData({
-      nome: empresa.empresa,
-      meiEnabled: meiVal > 0,
-      maxMei: meiVal > 0 ? meiVal.toString() : '1',
-      maxNaoMei: empresa.max_usuarios_nao_mei?.toString() || '0'
-    });
-    setIsEditModalOpen(true);
-  };
-
-  const handleStartCreate = () => {
-    setSelectedEmpresa(null);
-    setFormData({
-      nome: '',
-      meiEnabled: true,
-      maxMei: '5',
-      maxNaoMei: '0'
-    });
-    setIsCreateModalOpen(true);
-  };
-
-  const handleSave = async (mode: 'create' | 'edit') => {
-    if (!formData.nome.trim()) {
-      toast.error('O nome da empresa é obrigatório.');
-      return;
-    }
-
+  const handleEditClick = async (empresa: Empresa) => {
     setLoading(true);
     try {
-      const payload = {
-        empresa: formData.nome,
-        max_mei: formData.meiEnabled ? (Number(formData.maxMei) || 1) : 0,
-        max_usuarios_nao_mei: Number(formData.maxNaoMei) || 0,
-      };
-
-      if (mode === 'edit' && selectedEmpresa) {
-        await updateEmpresaLimits(selectedEmpresa.id, payload);
-        toast.success('Empresa atualizada com sucesso!');
-      } else {
-        await createEmpresaLimits(payload);
-        toast.success('Empresa cadastrada com sucesso!');
-      }
-
-      await fetchEmpresas();
-      setIsEditModalOpen(false);
-      setIsCreateModalOpen(false);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao processar empresa');
+      const res = await getEmpresaById(empresa.id);
+      setEmpresaFormInitial(res?.empresa ?? { id: empresa.id, empresa: empresa.empresa });
+      setEmpresaFormOpen(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao carregar dados da empresa';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStartCreate = () => {
+    setEmpresaFormInitial(null);
+    setEmpresaFormOpen(true);
+  };
+
+  const handleEmpresaSaved = async () => {
+    setEmpresaFormOpen(false);
+    setEmpresaFormInitial(null);
+    toast.success('Empresa salva com sucesso!');
+    await fetchEmpresas();
   };
 
   const handleDeleteClick = (empresa: Empresa) => {
@@ -602,106 +565,16 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
         </div>
       )}
 
-      {/* Modal de Cadastro/Edição */}
-      {(isEditModalOpen || isCreateModalOpen) && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="planner-card w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
-                {isCreateModalOpen ? 'Nova Empresa' : 'Editar Empresa'}
-              </h3>
-              <button 
-                onClick={() => { setIsEditModalOpen(false); setIsCreateModalOpen(false); }} 
-                className="text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Nome da Empresa</label>
-                <input
-                  type="text"
-                  value={formData.nome}
-                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                  className="planner-input w-full"
-                  placeholder="Ex: Contabilidade Central"
-                />
-              </div>
-
-              {/* Módulo MEI com Toggle */}
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Módulo MEI</h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Habilita a criação de usuários MEI para esta empresa.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, meiEnabled: !formData.meiEnabled })}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                      formData.meiEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        formData.meiEnabled ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {formData.meiEnabled && (
-                  <div className="animate-in slide-in-from-top-2 duration-200">
-                    <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Limite de usuários MEI</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={formData.maxMei}
-                      onChange={(e) => setFormData({ ...formData, maxMei: e.target.value })}
-                      className="planner-input w-full"
-                      placeholder="Quantidade permitida"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Limite de Clientes (PF/Outros)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={formData.maxNaoMei}
-                  onChange={(e) => setFormData({ ...formData, maxNaoMei: e.target.value })}
-                  className="planner-input w-full"
-                  placeholder="0 = sem limite"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 mt-8">
-              <button 
-                onClick={() => { setIsEditModalOpen(false); setIsCreateModalOpen(false); }} 
-                className="planner-button-secondary px-6"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={() => handleSave(isCreateModalOpen ? 'create' : 'edit')} 
-                disabled={loading}
-                className={`planner-button text-white px-8 shadow-lg ${
-                  isCreateModalOpen 
-                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' 
-                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
-                }`}
-              >
-                {loading ? 'Salvando...' : (isCreateModalOpen ? 'Cadastrar Empresa' : 'Salvar Alterações')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal completo de Cadastro/Edição (com CNPJ + endereço + limites) */}
+      <EmpresaModal
+        open={empresaFormOpen}
+        initial={empresaFormInitial}
+        onClose={() => {
+          setEmpresaFormOpen(false);
+          setEmpresaFormInitial(null);
+        }}
+        onSuccess={handleEmpresaSaved}
+      />
 
       {/* Modal de Exclusão */}
       {isDeleteModalOpen && empresaToDelete && (

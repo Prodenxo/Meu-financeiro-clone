@@ -45,6 +45,10 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
   const [password, setPassword] = useState('');
   const [showCreatePassword, setShowCreatePassword] = useState(false);
 
+  // Edit-only: alteração de e-mail do membro
+  const [editEmail, setEditEmail] = useState('');
+  const [originalEmail, setOriginalEmail] = useState('');
+
   // Common fields
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
@@ -77,6 +81,8 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
       if (mode === 'edit' && user) {
         setDisplayName(user.displayName || '');
         setPhone(user.phone || '');
+        setEditEmail(user.email || '');
+        setOriginalEmail(user.email || '');
         setSelectedRole((user.role as 'admin' | 'usuario' | 'outsider') || 'usuario');
         setMei(user.mei === true);
         setExpiresAt(user.expiresAt ? new Date(user.expiresAt).toISOString().split('T')[0] : '');
@@ -87,6 +93,8 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
       } else {
         setEmail('');
         setPassword('');
+        setEditEmail('');
+        setOriginalEmail('');
         setDisplayName('');
         setPhone('');
         setSelectedRole('usuario');
@@ -287,16 +295,28 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
         await createUser(payload);
         toast.success('Usuário criado com sucesso');
       } else if (user) {
+        const trimmedEditEmail = editEmail.trim().toLowerCase();
+        const emailChanged = trimmedEditEmail && trimmedEditEmail !== (originalEmail || '').trim().toLowerCase();
+        if (trimmedEditEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEditEmail)) {
+          toast.error('E-mail inválido');
+          setLoading(false);
+          return;
+        }
         const payload = {
           displayName: displayName || undefined,
           phone: phone || undefined,
+          email: emailChanged ? trimmedEditEmail : undefined,
           role: role === 'superadmin' || role === 'admin' ? selectedRole : undefined,
           empresaId: role === 'superadmin' ? targetEmpresaId || undefined : undefined,
           mei,
           expiresAt: expiresAt || null
         };
         await updateUser(user.id, payload);
-        toast.success('Usuário atualizado com sucesso');
+        if (emailChanged) {
+          toast.success(`Usuário atualizado. Link de confirmação enviado para ${trimmedEditEmail}.`);
+        } else {
+          toast.success('Usuário atualizado com sucesso');
+        }
       }
       onSuccess();
       onClose();
@@ -407,13 +427,27 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                 <div className="flex-grow border-t border-slate-100 dark:border-slate-800" />
               </div>
               <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-3">
-                <div>
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="user-modal-email"
+                    className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
+                  >
                     E-mail de login
-                  </p>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white break-all mt-0.5">
-                    {user.email || '—'}
-                  </p>
+                  </label>
+                  <input
+                    id="user-modal-email"
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="planner-input w-full"
+                    placeholder="email@exemplo.com"
+                    autoComplete="off"
+                  />
+                  {editEmail.trim().toLowerCase() !== (originalEmail || '').trim().toLowerCase() && editEmail.trim() && (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-snug">
+                      Ao salvar, um link de confirmação será enviado para <strong>{editEmail.trim()}</strong>. O e-mail só passa a valer após o usuário clicar no link.
+                    </p>
+                  )}
                 </div>
                 {role === 'admin' && (
                   <div className="space-y-2 pt-0.5">

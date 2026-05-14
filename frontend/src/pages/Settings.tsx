@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
+import { supabaseBrowser } from '../lib/supabaseBrowser';
 import { checkGoogleAuth } from '../lib/google-calendar';
 import { initiateGoogleAuthFlow } from '../lib/google-auth-flow';
 import { MessageCircle } from 'lucide-react';
@@ -34,6 +35,11 @@ export default function Settings() {
   
   const [editPhone, setEditPhone] = useState(phone || '');
   const [editDisplayName, setEditDisplayName] = useState(displayName || '');
+  const [editEmail, setEditEmail] = useState(user?.email || '');
+
+  useEffect(() => {
+    if (user?.email && !editEmail) setEditEmail(user.email);
+  }, [user?.email, editEmail]);
 
   useEffect(() => {
     checkGoogleAuthStatus();
@@ -80,6 +86,38 @@ export default function Settings() {
       await updateDisplayName(editDisplayName);
       setSuccess('Nome atualizado com sucesso!');
       setTimeout(() => setSuccess(''), 3000);
+    } catch (err: unknown) {
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateEmail = async () => {
+    const trimmed = editEmail.trim().toLowerCase();
+    if (!trimmed) {
+      setError(new Error('E-mail é obrigatório'));
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError(new Error('E-mail inválido'));
+      return;
+    }
+    if (trimmed === (user?.email || '').trim().toLowerCase()) {
+      setError(new Error('Informe um e-mail diferente do atual'));
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess('');
+    try {
+      const { error: updateError } = await supabaseBrowser.auth.updateUser({ email: trimmed });
+      if (updateError) throw updateError;
+      setSuccess(
+        `Enviamos um link de confirmação para ${trimmed}. O e-mail só passa a valer após você clicar no link.`,
+      );
+      setTimeout(() => setSuccess(''), 6000);
     } catch (err: unknown) {
       setError(err);
     } finally {
@@ -213,6 +251,43 @@ export default function Settings() {
                   {loading ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  E-mail
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="planner-input-compact flex-1"
+                  placeholder="email@exemplo.com"
+                  autoComplete="email"
+                />
+                <button
+                  onClick={handleUpdateEmail}
+                  disabled={
+                    loading ||
+                    !editEmail.trim() ||
+                    editEmail.trim().toLowerCase() === (user?.email || '').trim().toLowerCase()
+                  }
+                  className="planner-button whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Salvando...' : 'Alterar e-mail'}
+                </button>
+              </div>
+              {editEmail.trim() && editEmail.trim().toLowerCase() !== (user?.email || '').trim().toLowerCase() && (
+                <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                  Ao salvar, enviaremos um link de confirmação para <strong>{editEmail.trim()}</strong>. O e-mail só passa a valer após você clicar no link.
+                </p>
+              )}
             </div>
           </div>
         </div>

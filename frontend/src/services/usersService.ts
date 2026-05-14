@@ -81,6 +81,7 @@ export async function updateUser(
     empresaId?: string;
     displayName?: string;
     phone?: string;
+    email?: string;
     mei?: boolean;
     expiresAt?: string | null;
   }
@@ -135,6 +136,9 @@ export interface EmpresaFullData {
   cep?: string;
   telefone?: string;
   email?: string;
+  max_mei?: number | null;
+  max_usuarios_nao_mei?: number | null;
+  legacy_mei_slots_pix?: number | null;
 }
 
 export async function getEmpresa() {

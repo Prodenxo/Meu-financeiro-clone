@@ -849,6 +849,10 @@ export const updateUser = async (accessToken, userId, input) => {
   const requestedEmpresaId = input?.empresaId || null;
   const requestedDisplayName = input?.displayName?.trim();
   const requestedPhone = cleanPhone(input?.phone?.trim());
+  const requestedEmail = typeof input?.email === 'string' ? input.email.trim().toLowerCase() : undefined;
+  if (requestedEmail !== undefined && requestedEmail !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requestedEmail)) {
+    throw badRequest('E-mail inválido');
+  }
   const requestedMei = typeof input?.mei === 'boolean' ? input.mei : undefined;
   const requestedExpiresAt =
     input?.expiresAt === undefined
@@ -1044,6 +1048,25 @@ export const updateUser = async (accessToken, userId, input) => {
     if (updateUserError) {
       console.warn('[Users] updateUser metadata error:', updateUserError.message);
       throw badRequest(updateUserError.message);
+    }
+  }
+
+  if (requestedEmail) {
+    const { data: currentAuthUser, error: getUserError } = await adminClient.auth.admin.getUserById(userId);
+    if (getUserError) {
+      console.warn('[Users] updateUser getUserById error:', getUserError.message);
+      throw badRequest(getUserError.message);
+    }
+    const currentEmail = currentAuthUser?.user?.email?.trim().toLowerCase() || '';
+    if (currentEmail !== requestedEmail) {
+      // Sem email_confirm → Supabase envia link de confirmação para o novo endereço.
+      const { error: updateEmailError } = await adminClient.auth.admin.updateUserById(userId, {
+        email: requestedEmail
+      });
+      if (updateEmailError) {
+        console.warn('[Users] updateUser email error:', updateEmailError.message);
+        throw badRequest(updateEmailError.message);
+      }
     }
   }
 
