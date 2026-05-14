@@ -109,11 +109,29 @@ const startServer = async () => {
     process.exit(1);
   }
 
-  app.listen(env.PORT, () => {
+  const server = app.listen(env.PORT, () => {
     startMonthlyDasScheduler();
     // eslint-disable-next-line no-console
     console.log(`[backend] rodando na porta ${env.PORT}`);
   });
+
+  const shutdown = (signal) => {
+    // eslint-disable-next-line no-console
+    console.log(`[backend] sinal ${signal}, encerramento gracioso…`);
+    server.close(() => {
+      // eslint-disable-next-line no-console
+      console.log('[backend] HTTP encerrado');
+      process.exit(0);
+    });
+    setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.warn('[backend] timeout no shutdown, a sair');
+      process.exit(0);
+    }, 15_000).unref();
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 };
 
 if (process.env.VERCEL !== '1') {
