@@ -15,10 +15,11 @@ COPY . .
 EXPOSE 3333
 
 # Docker / Easypanel: marca o contentor como "healthy" só com rota pública (evita 401 de /api/*).
-# start-period generoso para o primeiro npm start + listen.
+# start-period generoso para o primeiro boot + listen.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3333)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 
-# Comando para iniciar o backend
+# Node como PID 1: SIGTERM do Docker/Easypanel chega ao processo certo (evita ruído
+# "npm error Lifecycle script `start` failed" em cada restart/redeploy).
 WORKDIR /app/backend
-CMD ["npm", "start"]
+CMD ["node", "src/server.js"]

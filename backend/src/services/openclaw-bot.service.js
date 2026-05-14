@@ -184,7 +184,15 @@ export const runOpenclawAction = async (input) => {
   }
 
   const linkDebug = { phoneDigits, matchedUserNumber, lookupCandidates };
-  const actorContext = await resolveActorMembershipsForUser(userId);
+
+  /** Nunca bloquear Midas/OpenClaw se memberships falharem (schema, rede, Supabase). */
+  let actorContext = { memberships: [], hasActiveMembership: false };
+  try {
+    actorContext = await resolveActorMembershipsForUser(userId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[OpenClaw] actorContext ignorado (action continua):', msg);
+  }
 
   if (action === 'resolve_user') {
     return {
