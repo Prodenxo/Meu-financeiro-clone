@@ -1,6 +1,6 @@
 import { badRequest } from '../utils/errors.js';
-
-const BRASILAPI_URL = 'https://brasilapi.com.br/api/cnpj/v1';
+import { env } from '../config/env.js';
+import { getPlugnotasRootUrl } from './plugnotas/root-url.js';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
@@ -76,4 +76,110 @@ export const lookupCnpjBrasilApi = async (cnpjInput) => {
   };
 
   return data;
+};
+
+/**
+ * Consulta dados cadastrais via PlugNotas. Requer `PLUGNOTAS_API_KEY` configurado.
+ * PlugNotas geralmente traz IE/IM e outros campos que a BrasilAPI omite.
+ * @param {string} cnpjInput
+ */
+export const lookupCnpjPlugnotas = async (cnpjInput) => {
+  const cnpj = normalizeDoc(cnpjInput);
+  if (cnpj.length !== 14) {
+    throw badRequest('CNPJ inválido. Informe 14 dígitos.');
+  }
+  if (!env.PLUGNOTAS_API_KEY) {
+    throw badRequest('PlugNotas não configurado.');
+  }
+
+  const url = `${getPlugnotasRootUrl()}/cnpj/${cnpj}`;
+  const timeoutMs = Number(env.PLUGNOTAS_TIMEOUT_MS || 15000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'x-api-key': env.PLUGNOTAS_API_KEY
+      },
+      signal: controller.signal
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    throw badRequest('Falha ao consultar PlugNotas. Verifique sua conexão.');
+  }
+  clearTimeout(timer);
+
+  if (response.status === 404) {
+    throw badRequest('CNPJ não encontrado no PlugNotas.');
+  }
+  if (!response.ok) {
+    throw badRequest(`PlugNotas retornou status ${response.status}.`);
+  }
+
+  const raw = await response.json();
+  const root = raw?.data || raw; // alguns envelopes do PlugNotas vêm em { data: {...} }
+
+  const ddd = padZeros(root?.telefone?.ddd, 2) || padZeros(String(root?.ddd_telefone_1 || '').slice(0, 2), 2);
+  const numero =
+    String(root?.telefone?.numero || '').replace(/\D/g, '') ||
+    String(root?.ddd_telefone_1 || '').replace(/\D/g, '').slice(2);
+
+  const enderecoSrc = root?.endereco || root?.address || {};
+
+  return {
+    cpfCnpj: cnpj,
+    razaoSocial: root?.razaoSocial || root?.razao_social || root?.nome || null,
+    nomeFantasia: root?.nomeFantasia || root?.nome_fantasia || null,
+    email: root?.email || null,
+    telefone: ddd && numero ? { ddd, numero } : null,
+    inscricaoMunicipal: root?.inscricaoMunicipal || root?.inscricao_municipal || null,
+    inscricaoEstadual: root?.inscricaoEstadual || root?.inscricao_estadual || null,
+    endereco: {
+      logradouro: enderecoSrc?.logradouro || null,
+      numero: enderecoSrc?.numero || null,
+      complemento: enderecoSrc?.complemento || null,
+      bairro: enderecoSrc?.bairro || null,
+      codigoCidade:
+        enderecoSrc?.codigoCidade ||
+        enderecoSrc?.codigo_municipio_ibge ||
+        (enderecoSrc?.cidade?.codigoIbge ? String(enderecoSrc.cidade.codigoIbge) : null),
+      descricaoCidade: enderecoSrc?.descricaoCidade || enderecoSrc?.municipio || enderecoSrc?.cidade?.descricao || null,
+      estado: enderecoSrc?.estado || enderecoSrc?.uf || enderecoSrc?.cidade?.uf || null,
+      cep: enderecoSrc?.cep ? String(enderecoSrc.cep).replace(/\D/g, '') : null
+    },
+    situacaoCadastral: root?.situacaoCadastral || root?.descricao_situacao_cadastral || null,
+    porte: root?.porte || null,
+    capitalSocial: root?.capitalSocial || root?.capital_social || null,
+    opcaoSimples: root?.opcaoSimples ?? root?.opcao_pelo_simples ?? null,
+    opcaoMei: root?.opcaoMei ?? root?.opcao_pelo_mei ?? null,
+    cnaePrincipal: root?.cnaePrincipal
+      ? {
+          codigo: String(root.cnaePrincipal.codigo || ''),
+          descricao: root.cnaePrincipal.descricao || null
+        }
+      : root?.cnae_fiscal
+        ? { codigo: String(root.cnae_fiscal), descricao: root?.cnae_fiscal_descricao || null }
+        : null,
+    raw
+  };
+};
+
+/**
+ * Tenta PlugNotas primeiro; se falhar (sem key, 404, timeout, etc.), cai pra BrasilAPI.
+ * @param {string} cnpjInput
+ */
+export const lookupCnpjCascade = async (cnpjInput) => {
+  if (env.PLUGNOTAS_API_KEY) {
+    try {
+      return await lookupCnpjPlugnotas(cnpjInput);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[cnpj-lookup] PlugNotas falhou, caindo para BrasilAPI:', err?.message);
+    }
+  }
+  return lookupCnpjBrasilApi(cnpjInput);
 };

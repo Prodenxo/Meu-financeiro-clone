@@ -1,4 +1,5 @@
 import * as usersService from '../services/users.service.js';
+import { lookupCnpjCascade } from '../services/cnpj-lookup.service.js';
 import { sendSuccess } from '../utils/response.js';
 
 export const listUsers = async (req, res, next) => {
@@ -136,6 +137,17 @@ export const deleteEmpresa = async (req, res, next) => {
   try {
     const result = await usersService.deleteEmpresa(req.accessToken, req.params.empresaId);
     return sendSuccess(res, result, 'Empresa excluída');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+/** Consulta CNPJ para autofill no cadastro/edição de empresa (PlugNotas + fallback BrasilAPI). */
+export const lookupEmpresaCnpj = async (req, res, next) => {
+  try {
+    const cnpj = String(req.params?.cnpj || req.query?.cnpj || '').trim();
+    const data = await lookupCnpjCascade(cnpj);
+    return sendSuccess(res, data, 'Dados do CNPJ consultados');
   } catch (error) {
     return next(error);
   }

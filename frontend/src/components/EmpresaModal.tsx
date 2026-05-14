@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { createEmpresa, updateEmpresa, type EmpresaFullData } from '../services/usersService';
+import {
+  createEmpresa,
+  lookupEmpresaCnpj,
+  updateEmpresa,
+  type EmpresaFullData,
+} from '../services/usersService';
 
 export type EmpresaData = EmpresaFullData;
 
@@ -11,17 +16,6 @@ interface EmpresaModalProps {
 }
 
 const REGIMES = ['Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI'];
-
-const matchRegime = (apiRegimes: { ano: number; forma_de_tributacao: string }[]): string => {
-  if (!Array.isArray(apiRegimes) || apiRegimes.length === 0) return '';
-  const latest = [...apiRegimes].sort((a, b) => b.ano - a.ano)[0];
-  const raw = (latest.forma_de_tributacao || '').toUpperCase();
-  if (raw.includes('SIMPLES')) return 'Simples Nacional';
-  if (raw.includes('MEI')) return 'MEI';
-  if (raw.includes('PRESUMIDO')) return 'Lucro Presumido';
-  if (raw.includes('REAL')) return 'Lucro Real';
-  return '';
-};
 
 /** Remove tudo que não for dígito e limita a 14 caracteres. */
 const normalizeCnpjInput = (value: string) => value.replace(/\D/g, '').slice(0, 14);
@@ -85,32 +79,29 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
     setCnpjLoading(true);
     setCnpjError('');
     try {
-      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`);
-      if (!res.ok) {
-        setCnpjError(res.status === 404 ? 'CNPJ não encontrado.' : 'Erro ao consultar CNPJ.');
-        return;
-      }
-      const data = await res.json();
+      const data = await lookupEmpresaCnpj(digits);
+      const telefoneStr = data.telefone
+        ? `${data.telefone.ddd || ''}${data.telefone.numero || ''}`
+        : '';
       setForm((prev) => ({
         ...prev,
-        empresa: data.razao_social || prev.empresa || '',
-        razao_social: data.razao_social || prev.razao_social || '',
-        nome_fantasia: data.nome_fantasia || prev.nome_fantasia || '',
-        logradouro: data.logradouro || prev.logradouro || '',
-        numero: data.numero || prev.numero || '',
-        complemento: data.complemento || prev.complemento || '',
-        bairro: data.bairro || prev.bairro || '',
-        cidade: data.municipio || prev.cidade || '',
-        estado: data.uf || prev.estado || '',
-        cep: (data.cep || '').replace(/\D/g, '') || prev.cep || '',
-        telefone: data.ddd_telefone_1
-          ? data.ddd_telefone_1.replace(/\D/g, '')
-          : prev.telefone || '',
+        empresa: data.razaoSocial || prev.empresa || '',
+        razao_social: data.razaoSocial || prev.razao_social || '',
+        nome_fantasia: data.nomeFantasia || prev.nome_fantasia || '',
+        inscricao_estadual: data.inscricaoEstadual || prev.inscricao_estadual || '',
+        logradouro: data.endereco?.logradouro || prev.logradouro || '',
+        numero: data.endereco?.numero || prev.numero || '',
+        complemento: data.endereco?.complemento || prev.complemento || '',
+        bairro: data.endereco?.bairro || prev.bairro || '',
+        cidade: data.endereco?.descricaoCidade || prev.cidade || '',
+        estado: data.endereco?.estado || prev.estado || '',
+        cep: data.endereco?.cep || prev.cep || '',
+        telefone: telefoneStr || prev.telefone || '',
         email: data.email || prev.email || '',
-        regime_tributario: matchRegime(data.regime_tributario) || prev.regime_tributario || '',
       }));
-    } catch {
-      setCnpjError('Erro de conexão ao consultar CNPJ.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao consultar CNPJ.';
+      setCnpjError(msg);
     } finally {
       setCnpjLoading(false);
     }

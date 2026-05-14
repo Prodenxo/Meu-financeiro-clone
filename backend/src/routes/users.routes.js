@@ -6,6 +6,7 @@ const router = Router();
 
 router.get('/', requireAuth, controller.listUsers);
 router.get('/empresas', requireAuth, controller.listEmpresas);
+router.get('/empresas/cnpj-lookup/:cnpj', requireAuth, controller.lookupEmpresaCnpj);
 router.get('/empresas/current', requireAuth, controller.getEmpresa);
 router.get('/empresas/:empresaId', requireAuth, controller.getEmpresaById);
 router.post('/empresas', requireAuth, controller.createEmpresa);

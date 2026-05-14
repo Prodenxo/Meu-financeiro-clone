@@ -30,7 +30,7 @@ import {
   loadCertificate,
   decryptPassphrase
 } from '../services/mei-certificate-store.js';
-import { lookupCnpjBrasilApi } from '../services/cnpj-lookup.service.js';
+import { lookupCnpjCascade } from '../services/cnpj-lookup.service.js';
 import { unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendSuccess } from '../utils/response.js';
@@ -306,12 +306,12 @@ export const consultarPlugNotasEmpresa = async (req, res, next) => {
   }
 };
 
-/** Consulta dados cadastrais de um CNPJ via BrasilAPI (público, gratuito). */
+/** Consulta dados cadastrais de um CNPJ (PlugNotas com fallback BrasilAPI). */
 export const lookupCnpj = async (req, res, next) => {
   try {
     const cnpj = String(req.params?.cnpj || req.query?.cnpj || '').trim();
-    const data = await lookupCnpjBrasilApi(cnpj);
-    return sendSuccess(res, data, 'Dados do CNPJ consultados via BrasilAPI');
+    const data = await lookupCnpjCascade(cnpj);
+    return sendSuccess(res, data, 'Dados do CNPJ consultados');
   } catch (error) {
     return next(error);
   }

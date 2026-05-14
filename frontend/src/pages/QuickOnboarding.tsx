@@ -2,10 +2,21 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { strongPasswordRequirementsSummary, validateStrongPassword } from '../lib/passwordPolicy';
-import { createEmpresaLimits, createUser } from '../services/usersService';
+import { createUser, type EmpresaFullData } from '../services/usersService';
 import { useAuthStore } from '../store/authStore';
+import EmpresaModal from '../components/EmpresaModal';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
+
+const formatCnpjMask = (digits?: string | null) => {
+  if (!digits) return '';
+  const d = digits.replace(/\D/g, '').slice(0, 14);
+  return d
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2');
+};
 
 export default function QuickOnboarding() {
   const navigate = useNavigate();
@@ -19,24 +30,34 @@ export default function QuickOnboarding() {
       navigate('/settings/users');
     }
   }, [role, navigate]);
-  
+
   // User state
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showErrors, setShowErrors] = useState(false);
-  
-  // Company state
-  const [companyName, setCompanyName] = useState('');
-  const [maxMei, setMaxMei] = useState('5');
-  const [maxNonMei, setMaxNonMei] = useState('1');
+
+  // Company state — agora gerenciado pelo EmpresaModal
+  const [empresaCriada, setEmpresaCriada] = useState<EmpresaFullData | null>(null);
+  const [empresaModalOpen, setEmpresaModalOpen] = useState(false);
+
+  const handleEmpresaSaved = (empresa: EmpresaFullData) => {
+    setEmpresaCriada(empresa);
+    setEmpresaModalOpen(false);
+    toast.success('Empresa cadastrada. Agora finalize com o administrador.');
+  };
 
   const handleOnboarding = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowErrors(true);
+
+    if (!empresaCriada?.id) {
+      toast.error('Cadastre a empresa antes de finalizar.');
+      return;
+    }
+
     setLoading(true);
-    
     try {
       const pwdCheck = validateStrongPassword(password);
       if (!pwdCheck.ok) {
@@ -44,25 +65,15 @@ export default function QuickOnboarding() {
         return;
       }
 
-      // 1. Create Company
-      const companyResp = await createEmpresaLimits({
-        empresa: companyName,
-        max_mei: parseInt(maxMei),
-        max_usuarios_nao_mei: parseInt(maxNonMei)
-      });
-      
-      const empresaId = companyResp.empresa.id;
-      
-      // 2. Create User linked to Company
       await createUser({
         email,
         displayName,
         phone,
         password,
-        role: 'admin', // Default to admin for the new company
-        empresaId
+        role: 'admin',
+        empresaId: empresaCriada.id,
       });
-      
+
       toast.success('Empresa e Usuário cadastrados com sucesso!');
       navigate('/settings/users');
     } catch (err: any) {
@@ -96,7 +107,7 @@ export default function QuickOnboarding() {
               </div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">Dados do Administrador</h2>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -111,7 +122,7 @@ export default function QuickOnboarding() {
                   onChange={(e) => setDisplayName(e.target.value)}
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   E-mail Profissional <span className="text-rose-500">*</span>
@@ -141,12 +152,12 @@ export default function QuickOnboarding() {
                       paddingBottom: '10px',
                       paddingLeft: '48px',
                       borderRadius: '0.5rem',
-                      border: showErrors && !phone.trim() 
-                        ? '1px solid #f43f5e' 
+                      border: showErrors && !phone.trim()
+                        ? '1px solid #f43f5e'
                         : (window.matchMedia('(prefers-color-scheme: dark)').matches ? '1px solid #334155' : '1px solid #D1D5DB'),
                       fontSize: '1rem',
-                      backgroundColor: showErrors && !phone.trim() 
-                        ? '#fff1f2' 
+                      backgroundColor: showErrors && !phone.trim()
+                        ? '#fff1f2'
                         : (window.matchMedia('(prefers-color-scheme: dark)').matches ? '#0f172a' : 'white'),
                       color: window.matchMedia('(prefers-color-scheme: dark)').matches ? '#f8fafc' : '#0f172a',
                       height: '42px',
@@ -186,49 +197,51 @@ export default function QuickOnboarding() {
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Nome da Empresa / Escritório <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  className={`planner-input ${showErrors && !companyName.trim() ? 'border-rose-500 bg-rose-50/5' : ''}`}
-                  placeholder="Ex: Contabilidade Central"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Limite MEI</label>
-                  <input
-                    type="number"
-                    className="planner-input"
-                    value={maxMei}
-                    onChange={(e) => setMaxMei(e.target.value)}
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Qtd. de clientes MEI permitidos</p>
+              {empresaCriada ? (
+                <div className="rounded-xl border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50/60 dark:bg-emerald-900/20 p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 text-sm font-semibold">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Empresa cadastrada
+                  </div>
+                  <p className="text-base font-semibold text-slate-900 dark:text-white">
+                    {empresaCriada.empresa || empresaCriada.razao_social || 'Sem nome'}
+                  </p>
+                  {empresaCriada.cnpj && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                      CNPJ: {formatCnpjMask(empresaCriada.cnpj)}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setEmpresaModalOpen(true)}
+                    className="planner-button-secondary-compact text-xs mt-2"
+                  >
+                    Editar dados da empresa
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Limite Usuários</label>
-                  <input
-                    type="number"
-                    className="planner-input"
-                    value={maxNonMei}
-                    onChange={(e) => setMaxNonMei(e.target.value)}
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Colaboradores adicionais</p>
+              ) : (
+                <div className="rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-6 text-center">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+                    Cadastre a empresa com CNPJ, endereço, regime tributário e limites de MEI/PF.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setEmpresaModalOpen(true)}
+                    className="planner-button bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    Cadastrar empresa
+                  </button>
                 </div>
-              </div>
+              )}
 
               <div className="mt-6 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700">
                 <p className="text-xs text-slate-500 dark:text-slate-400 flex gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Ao finalizar, a empresa será criada e o usuário será vinculado automaticamente como administrador.
+                  Ao finalizar, o usuário será vinculado automaticamente como administrador da empresa cadastrada.
                 </p>
               </div>
             </div>
@@ -245,8 +258,8 @@ export default function QuickOnboarding() {
           </button>
           <button
             type="submit"
-            disabled={loading}
-            className="planner-button px-10 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 shadow-lg shadow-blue-500/20"
+            disabled={loading || !empresaCriada?.id}
+            className="planner-button px-10 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <span className="flex items-center gap-2">
@@ -260,6 +273,13 @@ export default function QuickOnboarding() {
           </button>
         </div>
       </form>
+
+      <EmpresaModal
+        open={empresaModalOpen}
+        initial={empresaCriada}
+        onClose={() => setEmpresaModalOpen(false)}
+        onSuccess={handleEmpresaSaved}
+      />
     </div>
   );
 }

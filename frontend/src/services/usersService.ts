@@ -157,6 +157,35 @@ export async function updateEmpresa(empresaId: string, input: EmpresaFullData) {
   return apiClient.put<{ empresa: EmpresaFullData }>(`/users/empresas/${empresaId}`, input);
 }
 
+export interface CnpjLookupResult {
+  cpfCnpj: string;
+  razaoSocial: string | null;
+  nomeFantasia: string | null;
+  email: string | null;
+  telefone: { ddd: string; numero: string } | null;
+  inscricaoMunicipal: string | null;
+  inscricaoEstadual: string | null;
+  endereco: {
+    logradouro: string | null;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    codigoCidade: string | null;
+    descricaoCidade: string | null;
+    estado: string | null;
+    cep: string | null;
+  };
+  situacaoCadastral?: string | null;
+  porte?: string | null;
+}
+
+/** Consulta dados cadastrais (PlugNotas com fallback BrasilAPI) via backend. */
+export async function lookupEmpresaCnpj(cnpj: string): Promise<CnpjLookupResult> {
+  const digits = cnpj.replace(/\D/g, '');
+  if (digits.length !== 14) throw new Error('CNPJ deve ter 14 dígitos.');
+  return apiClient.get<CnpjLookupResult>(`/users/empresas/cnpj-lookup/${digits}`);
+}
+
 export async function createUser(input: {
   email: string;
   password?: string;
