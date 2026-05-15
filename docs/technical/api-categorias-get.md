@@ -4,9 +4,11 @@ Liste as categorias do utilizador autenticado (**mesmo `user_id` do token JWT ou
 
 ## Variáveis de ambiente (OpenClaw / integrações)
 
-- **`MF_API_URL`** — usar **apenas** para chamadas **`POST`** a **`/api/bot/openclaw/action`**. O header **`Authorization: Bearer`** deve ser **`OPENCLAW_WEBHOOK_SECRET`** (o mesmo valor definido no backend). **Não** usar este URL nem este Bearer para `GET /api/categories`.
+- **`MF_API_URL`** — usar para **`POST`** a **`/api/bot/openclaw/action`**. O Bearer deve ser **`OPENCLAW_WEBHOOK_SECRET`**.
 
-- **`MF_API_BASE`** — URL base do backend **sem** barra no fim (ex.: `https://auto-back-meufinanceiro-site.4tnf3f.easypanel.host`). Para listagem compacta de categorias, o path recomendado é **`/api/categories?minimal=true`** (prefixo **`/api`** obrigatório). Lista completa: **`GET /api/categories`** (sem `minimal`).
+- **`MF_API_BASE`** — URL base do backend **sem** barra no fim (ex.: `https://auto-back-meufinanceiro-site.4tnf3f.easypanel.host`). Para categorias: **`GET /api/categories?minimal=true`** (prefixo **`/api`** obrigatório). Lista completa: **`GET /api/categories`** (sem `minimal`).
+
+- **`OPENCLAW_WEBHOOK_SECRET` em GET categorias** — **apenas** nesta rota (**`GET /api/categories`** ou **`GET /api/categories?…`**), o backend aceita o **mesmo** Bearer do webhook **desde que** envie **`X-MeuFinanceiro-User-Id`** (UUID) ou **`userId`** na query — igual ao fluxo `API_SECRET`. **Não** aplica a outros paths (ex.: `/api/transactions`).
 
 - **JWT** — deve ser um **access token** válido do Supabase (**sessão não expirada**). Header: `Authorization: Bearer <access_token>`.
 
@@ -17,9 +19,8 @@ Liste as categorias do utilizador autenticado (**mesmo `user_id` do token JWT ou
 **Para `/api/categories`:**
 
 - Header: `Authorization: Bearer <access_token Supabase válido>`
-- Ou `Bearer <API_SECRET>` (variável **`API_SECRET`** no backend) — sempre com **`X-MeuFinanceiro-User-Id: <uuid>`** ou **`userId`** na query, para definir o utilizador-alvo.
-
-**(Estas opções não substituem o Bearer `OPENCLAW_WEBHOOK_SECRET` — esse só vale para `POST /api/bot/openclaw/action`.)**
+- Ou `Bearer <API_SECRET>` — sempre com **`X-MeuFinanceiro-User-Id: <uuid>`** ou **`userId`** na query.
+- Ou **`Bearer <OPENCLAW_WEBHOOK_SECRET>`** — **só** para **`GET /api/categories`** (qualquer query como `minimal=true`), com o mesmo header/query de utilizador-alvo.
 
 ## Método e URL
 

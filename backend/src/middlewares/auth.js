@@ -4,6 +4,36 @@ import { unauthorized, badRequest } from '../utils/errors.js';
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const pathWithoutQuery = (originalUrl) => {
+  const s = originalUrl || '';
+  const q = s.indexOf('?');
+  return (q === -1 ? s : s.slice(0, q)).replace(/\/+$/, '') || '';
+};
+
+/** Apenas listagem raiz: GET /api/categories (sem /budgets/…). */
+const isGetCategoriesCollection = (req) => {
+  if (req.method !== 'GET') return false;
+  const p = pathWithoutQuery(req.originalUrl || '');
+  return p === '/api/categories';
+};
+
+const resolveAutomationUserId = (req) => {
+  const raw =
+    (req.headers['x-meufinanceiro-user-id'] ||
+      req.query?.userId ||
+      '')
+      .toString()
+      .trim();
+  if (!raw || !UUID_RE.test(raw)) return null;
+  return raw;
+};
+
+const attachAutomationUser = (req, userId) => {
+  req.authType = 'api_key';
+  req.user = { id: userId };
+  req.accessToken = null;
+};
+
 export const requireAuth = async (req, _res, next) => {
   try {
     const authHeader = req.headers.authorization || '';
@@ -14,29 +44,45 @@ export const requireAuth = async (req, _res, next) => {
 
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-    // 🔑 1. Tenta validar como API_SECRET (n8n / automação / OpenClaw)
+    // 🔑 1. API_SECRET (automação) + utilizador alvo
     const apiSecret = (process.env.API_SECRET || '').trim();
     if (apiSecret && token === apiSecret) {
-      const raw =
-        (req.headers['x-meufinanceiro-user-id'] ||
-          req.query?.userId ||
-          '')
-          .toString()
-          .trim();
-      if (!raw || !UUID_RE.test(raw)) {
+      const userId = resolveAutomationUserId(req);
+      if (!userId) {
         return next(
           badRequest(
             'Com Bearer API_SECRET envie o UUID do utilizador no header X-MeuFinanceiro-User-Id (ou query userId).',
           ),
         );
       }
-      req.authType = 'api_key';
-      req.user = { id: raw };
-      req.accessToken = null;
+      attachAutomationUser(req, userId);
       return next();
     }
 
-    // 🔐 2. Tenta validar como JWT do Supabase (usuário real)
+    // 🔑 2. Mesmo Bearer do OpenClaw só para GET /api/categories (robô + lista minimal/full)
+    const clawSecret = (
+      process.env.OPENCLAW_WEBHOOK_SECRET ||
+      process.env.HERMES_WEBHOOK_SECRET ||
+      ''
+    ).trim();
+    if (
+      clawSecret &&
+      token === clawSecret &&
+      isGetCategoriesCollection(req)
+    ) {
+      const userId = resolveAutomationUserId(req);
+      if (!userId) {
+        return next(
+          badRequest(
+            'Com Bearer OPENCLAW_WEBHOOK_SECRET neste GET envie X-MeuFinanceiro-User-Id (ou query userId) com UUID do utilizador.',
+          ),
+        );
+      }
+      attachAutomationUser(req, userId);
+      return next();
+    }
+
+    // 🔐 3. JWT do Supabase (utilizador real)
     const supabase = createSupabaseClient({ accessToken: token });
     const { data, error } = await supabase.auth.getUser();
 
@@ -47,7 +93,7 @@ export const requireAuth = async (req, _res, next) => {
       return next();
     }
 
-    // ❌ 3. Se não passou em nenhum
+    // ❌ 4. Se não passou em nenhum
     return next(unauthorized('Não autenticado'));
 
   } catch (error) {

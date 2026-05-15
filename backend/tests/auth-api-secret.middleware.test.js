@@ -61,3 +61,67 @@ test('API_SECRET aceita userId na query', async (t) => {
   assert.equal(err, undefined);
   assert.equal(req.user?.id, SAMPLE_UUID);
 });
+
+test('OPENCLAW_WEBHOOK_SECRET só autentica GET /api/categories com user id', async (t) => {
+  t.after(() => {
+    delete process.env.OPENCLAW_WEBHOOK_SECRET;
+    delete process.env.API_SECRET;
+  });
+  delete process.env.API_SECRET;
+  process.env.OPENCLAW_WEBHOOK_SECRET = 'claw-test-secret';
+
+  const reqOk = {
+    method: 'GET',
+    originalUrl: '/api/categories?minimal=true',
+    headers: {
+      authorization: 'Bearer claw-test-secret',
+      'x-meufinanceiro-user-id': SAMPLE_UUID,
+    },
+    query: { minimal: 'true' },
+  };
+  let errOk;
+  await requireAuth(reqOk, {}, (e) => {
+    errOk = e;
+  });
+  assert.equal(errOk, undefined);
+  assert.equal(reqOk.user?.id, SAMPLE_UUID);
+  assert.equal(reqOk.authType, 'api_key');
+
+  const reqWrongPath = {
+    method: 'GET',
+    originalUrl: '/api/transactions',
+    headers: {
+      authorization: 'Bearer claw-test-secret',
+      'x-meufinanceiro-user-id': SAMPLE_UUID,
+    },
+    query: {},
+  };
+  let errPath;
+  await requireAuth(reqWrongPath, {}, (e) => {
+    errPath = e;
+  });
+  assert.ok(errPath);
+  assert.equal(errPath.status, 401);
+});
+
+test('OPENCLAW_WEBHOOK_SECRET GET categories sem user id devolve 400', async (t) => {
+  t.after(() => {
+    delete process.env.OPENCLAW_WEBHOOK_SECRET;
+    delete process.env.API_SECRET;
+  });
+  delete process.env.API_SECRET;
+  process.env.OPENCLAW_WEBHOOK_SECRET = 'claw-test-secret';
+
+  const req = {
+    method: 'GET',
+    originalUrl: '/api/categories',
+    headers: { authorization: 'Bearer claw-test-secret' },
+    query: {},
+  };
+  let err;
+  await requireAuth(req, {}, (e) => {
+    err = e;
+  });
+  assert.ok(err);
+  assert.equal(err.status, 400);
+});
