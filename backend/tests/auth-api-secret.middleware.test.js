@@ -175,3 +175,27 @@ test('API_SECRET com aspas no valor do ambiente ainda autentica', async (t) => {
   assert.equal(err, undefined);
   assert.equal(req.user?.id, SAMPLE_UUID);
 });
+
+test('OPENCLAW_WEBHOOK_SECRET aceita user_id (snake_case) na query', async (t) => {
+  t.after(() => {
+    delete process.env.OPENCLAW_WEBHOOK_SECRET;
+    delete process.env.API_SECRET;
+    delete process.env.API_SECRET_OP;
+  });
+  delete process.env.API_SECRET;
+  delete process.env.API_SECRET_OP;
+  process.env.OPENCLAW_WEBHOOK_SECRET = 'claw-test-secret';
+
+  const req = {
+    method: 'GET',
+    originalUrl: '/api/categories?minimal=true',
+    headers: { authorization: 'Bearer claw-test-secret' },
+    query: { minimal: 'true', user_id: SAMPLE_UUID },
+  };
+  let err;
+  await requireAuth(req, {}, (e) => {
+    err = e;
+  });
+  assert.equal(err, undefined);
+  assert.equal(req.user?.id, SAMPLE_UUID);
+});

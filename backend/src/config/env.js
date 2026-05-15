@@ -2,6 +2,18 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+/** Easypanel/Docker às vezes guardam o valor com aspas — remove uma camada só se fechar o par. */
+export const normalizeEnvSecret = (raw) => {
+  let s = String(raw ?? '').trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+};
+
 const required = (key) => {
   const value = process.env[key];
   if (!value) {
@@ -131,11 +143,11 @@ export const env = {
   /**
    * Segredo Bearer (OpenClaw / n8n → POST /api/bot/openclaw/action).
    */
-  OPENCLAW_WEBHOOK_SECRET: (
+  OPENCLAW_WEBHOOK_SECRET: normalizeEnvSecret(
     process.env.OPENCLAW_WEBHOOK_SECRET
     || process.env.HERMES_WEBHOOK_SECRET
-    || ''
-  ).trim(),
+    || '',
+  ),
   /**
    * Token partilhado na URL do webhook Z-API (`?token=`) ou header `Client-Token` / `x-zapi-webhook-token`.
    * Ver `POST /api/webhooks/zapi/inbound`.

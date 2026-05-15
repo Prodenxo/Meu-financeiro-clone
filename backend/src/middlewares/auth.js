@@ -1,17 +1,6 @@
 import { createSupabaseClient } from '../config/supabase.js';
+import { normalizeEnvSecret } from '../config/env.js';
 import { unauthorized, badRequest } from '../utils/errors.js';
-
-/** Easypanel/Docker às vezes guardam o valor com aspas à volta — remove uma camada só se fechar o par. */
-const normalizeEnvSecret = (raw) => {
-  let s = String(raw ?? '').trim();
-  if (
-    (s.startsWith('"') && s.endsWith('"')) ||
-    (s.startsWith("'") && s.endsWith("'"))
-  ) {
-    s = s.slice(1, -1).trim();
-  }
-  return s;
-};
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,6 +26,7 @@ const resolveAutomationUserId = (req) => {
   const raw =
     (req.headers['x-meufinanceiro-user-id'] ||
       req.query?.userId ||
+      req.query?.user_id ||
       '')
       .toString()
       .trim();
@@ -58,7 +48,9 @@ export const requireAuth = async (req, _res, next) => {
       return next(unauthorized('Token ausente'));
     }
 
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    const token = normalizeEnvSecret(
+      authHeader.replace(/^Bearer\s+/i, '').trim(),
+    );
 
     // 🔑 1a. API_SECRET (automação) + utilizador alvo
     const apiSecret = normalizeEnvSecret(process.env.API_SECRET);
@@ -67,7 +59,7 @@ export const requireAuth = async (req, _res, next) => {
       if (!userId) {
         return next(
           badRequest(
-            'Com Bearer API_SECRET envie o UUID do utilizador no header X-MeuFinanceiro-User-Id (ou query userId).',
+            'Com Bearer API_SECRET envie o UUID do utilizador no header X-MeuFinanceiro-User-Id ou na query userId / user_id.',
           ),
         );
       }
@@ -82,7 +74,7 @@ export const requireAuth = async (req, _res, next) => {
       if (!userId) {
         return next(
           badRequest(
-            'Com Bearer API_SECRET_OP envie o UUID do utilizador no header X-MeuFinanceiro-User-Id (ou query userId).',
+            'Com Bearer API_SECRET_OP envie o UUID do utilizador no header X-MeuFinanceiro-User-Id ou na query userId / user_id.',
           ),
         );
       }
@@ -91,9 +83,11 @@ export const requireAuth = async (req, _res, next) => {
     }
 
     // 🔑 2. Mesmo Bearer do OpenClaw só para GET /api/categories (robô + lista minimal/full)
-    const clawSecret =
-      normalizeEnvSecret(process.env.OPENCLAW_WEBHOOK_SECRET)
-      || normalizeEnvSecret(process.env.HERMES_WEBHOOK_SECRET);
+    const clawSecret = normalizeEnvSecret(
+      process.env.OPENCLAW_WEBHOOK_SECRET
+      || process.env.HERMES_WEBHOOK_SECRET
+      || '',
+    );
     if (
       clawSecret &&
       token === clawSecret &&
@@ -103,7 +97,7 @@ export const requireAuth = async (req, _res, next) => {
       if (!userId) {
         return next(
           badRequest(
-            'Com Bearer OPENCLAW_WEBHOOK_SECRET neste GET envie X-MeuFinanceiro-User-Id (ou query userId) com UUID do utilizador.',
+            'Com Bearer OPENCLAW_WEBHOOK_SECRET neste GET envie X-MeuFinanceiro-User-Id ou query userId / user_id com UUID do utilizador.',
           ),
         );
       }

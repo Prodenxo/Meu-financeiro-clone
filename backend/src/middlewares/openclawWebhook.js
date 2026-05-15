@@ -1,11 +1,11 @@
-import { env } from '../config/env.js';
+import { env, normalizeEnvSecret } from '../config/env.js';
 import { unauthorized, serviceUnavailable } from '../utils/errors.js';
 
 /**
  * Autenticação servidor-a-servidor (OpenClaw / n8n → backend). Estilo Bearer.
  */
 export const requireOpenclawSecret = (req, _res, next) => {
-  const secret = (env.OPENCLAW_WEBHOOK_SECRET || '').trim();
+  const secret = env.OPENCLAW_WEBHOOK_SECRET;
   if (!secret) {
     return next(
       serviceUnavailable(
@@ -19,7 +19,7 @@ export const requireOpenclawSecret = (req, _res, next) => {
     return next(unauthorized('Bearer obrigatório'));
   }
 
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const token = normalizeEnvSecret(authHeader.replace(/^Bearer\s+/i, '').trim());
   if (token !== secret) {
     return next(unauthorized('Segredo inválido'));
   }
