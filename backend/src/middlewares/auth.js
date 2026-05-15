@@ -13,8 +13,12 @@ const pathWithoutQuery = (originalUrl) => {
 /** Apenas listagem raiz: GET /api/categories (sem /budgets/…). */
 const isGetCategoriesCollection = (req) => {
   if (req.method !== 'GET') return false;
-  const p = pathWithoutQuery(req.originalUrl || '');
-  return p === '/api/categories';
+  const fromOriginal = pathWithoutQuery(req.originalUrl || '');
+  const merged = `${req.baseUrl || ''}${req.path || ''}`.replace(/\/+$/, '');
+  return (
+    fromOriginal === '/api/categories' ||
+    merged === '/api/categories'
+  );
 };
 
 const resolveAutomationUserId = (req) => {
