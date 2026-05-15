@@ -23,9 +23,13 @@ Ficheiro alinhado ao **código actual** do backend (`openclaw-bot.service.js`, `
 Em **todas** as respostas com `phone` válido (excepto `ping`), o JSON inclui **`data.actorContext`**:
 
 - **`hasActiveMembership`:** `true` se existir pelo menos uma linha activa em `role_x_user_x_empresa` (`status = true`) para esse `user_id`.
+- **`profileRole`:** papel em `profiles` (ex.: **superadmin**) quando preenchido — alinhado ao fallback da app quando o vínculo não diz tudo.
+- **`hasSuperadminCapability`:** `true` se `profileRole === 'superadmin'` ou alguma `memberships[].role` for `superadmin`.
 - **`memberships`:** lista de vínculos; cada item tem `role` (ex.: `admin`, `usuario`, `superadmin`, `outsider`), `empresaId`, `empresaNome`, `mei`, `linkId`.
 
-Isto vem das **mesmas** tabelas que a app usa para RBAC. O modelo pode usar isto para **explicar** o contexto (ex.: “és admin da empresa X”). **Lançamentos** (`list_transactions` / `create_transaction`) continuam escopados ao **`user_id`** resolvido pelo telefone — não listam automaticamente dados de **outros** utilizadores da empresa só por seres `admin` (isso exigiria novas `action` no backend).
+Isto vem das **mesmas** tabelas que a app usa para RBAC. O agente deve **consultar** isto antes de prometer algo que só admin/superadmin faz na web; ver `openclaw-midas-SOUL.md` (fluxo número + cargo → pedido → permite ou recusa).
+
+**DAS e admin da empresa:** conforme `SOUL`, um **Administrador** pode usar `get_das_current` com **`phone`** = telefone (**n8n_link**) de um **colaborador**, **desde que** `resolve_user` no remetente mostre papel **admin**, um segundo `resolve_user` no colaborador mostre **pelo menos um `membership.empresaId`** igual ao do admin (mesmo tenant); sem essa igualdade → **recusar** a consulta. O backend **ainda não aplica RBAC servidor** nesta rota Bot — por isso esta **disciplina do agente** é obrigatória por segurança.
 
 ---
 

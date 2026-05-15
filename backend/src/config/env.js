@@ -137,6 +137,19 @@ export const env = {
     || ''
   ).trim(),
   /**
+   * Token partilhado na URL do webhook Z-API (`?token=`) ou header `Client-Token` / `x-zapi-webhook-token`.
+   * Ver `POST /api/webhooks/zapi/inbound`.
+   */
+  ZAPI_WEBHOOK_TOKEN: (process.env.ZAPI_WEBHOOK_TOKEN || '').trim(),
+  /**
+   * URL para onde o backend reencaminha mensagens Z-API normalizadas (n8n, OpenClaw HTTP, etc.).
+   */
+  OPENCLAW_ZAPI_RELAY_URL: (process.env.OPENCLAW_ZAPI_RELAY_URL || '').trim(),
+  /** Bearer opcional para o relay (`Authorization: Bearer …`). */
+  OPENCLAW_ZAPI_RELAY_SECRET: (process.env.OPENCLAW_ZAPI_RELAY_SECRET || '').trim(),
+  /** Timeout ms do POST de relay (1000–60000). Padrão 8000. */
+  OPENCLAW_ZAPI_RELAY_TIMEOUT_MS: process.env.OPENCLAW_ZAPI_RELAY_TIMEOUT_MS || '8000',
+  /**
    * `true`: após gerar e guardar o DAS no job mensal/cron, dispara o mesmo webhook WhatsApp (n8n)
    * que o admin usa — mesmo payload, `source: mei_das_automatico`. Requer telefone em `user_metadata.phone`.
    */

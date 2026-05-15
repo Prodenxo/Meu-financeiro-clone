@@ -12,6 +12,7 @@ import healthRoutes from './health.routes.js';
 import empresaInvitesRoutes from './empresa-invites.routes.js';
 import cronRoutes from './cron.routes.js';
 import openclawRoutes from './openclaw.routes.js';
+import zapiRoutes from './zapi.routes.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -28,4 +29,5 @@ router.use('/notas', meiNotasRoutes);
 router.use('/recorrencias', recorrenciasRoutes);
 router.use('/cron', cronRoutes);
 router.use('/bot', openclawRoutes);
+router.use('/webhooks/zapi', zapiRoutes);
 export default router;

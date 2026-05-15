@@ -30,6 +30,12 @@ OPENCLAW_WEBHOOK_SECRET=a_tua_string_longa_secreta
 
 4. Testa o endpoint (troca URL e segredo). Header: `Authorization: Bearer <segredo>` (com a palavra `Bearer` e um espaço).
 
+### 2b. Webhook Z-API no próprio backend (relay)
+
+- **URL no painel Z-API:** `https://O-TEU-BACKEND/api/webhooks/zapi/inbound?token=<ZAPI_WEBHOOK_TOKEN>` (HTTPS obrigatório na Z-API).
+- **Env:** `ZAPI_WEBHOOK_TOKEN` (obrigatório para activar o POST). Opcional: `OPENCLAW_ZAPI_RELAY_URL` + `OPENCLAW_ZAPI_RELAY_SECRET` — o servidor reencaminha JSON `{ source: "zapi", phone, text, messageId, instanceId, receivedAt }` para n8n ou qualquer URL que alimente o OpenClaw.
+- **Monitor:** `GET /api/webhooks/zapi/monitor` — indica se o relay está configurado (sem token).
+
 **Git Bash / macOS / Linux**
 
 ```bash

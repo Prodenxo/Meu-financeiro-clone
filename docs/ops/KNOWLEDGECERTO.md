@@ -22,7 +22,7 @@ Alinhado ao backend (`openclaw-bot.service.js`, `transactions.service.js`, `mei-
 
 ### Cargos e empresas (`actorContext`)
 
-Com `phone` válido, as respostas incluem **`data.actorContext`**: `hasActiveMembership` e **`memberships`** (vínculos `role_x_user_x_empresa` + `roles` + `empresas`: `role`, `empresaId`, `empresaNome`, `mei`, `linkId`). **Lançamentos** seguem o `user_id` do telefone; não há listagem automática “de toda a empresa” só por cargo admin neste endpoint.
+Com `phone` válido, as respostas incluem **`data.actorContext`**: `hasActiveMembership`, **`profileRole`** (papel em `profiles`, ex. **superadmin**), **`hasSuperadminCapability`** (true se perfil ou alguma membership for superadmin), e **`memberships`** (vínculos `role_x_user_x_empresa` + `roles` + `empresas`: `role`, `empresaId`, `empresaNome`, `mei`, `linkId`). **Lançamentos** seguem o `user_id` do telefone; não há listagem automática “de toda a empresa” só por cargo admin neste endpoint. O bot deve usar `resolve_user`/`actorContext` **antes** de prometer algo que só **admin**/ **superadmin** faz na app; ver `openclaw-midas-SOUL.md` (telefone + cargo). **`get_das_current` pode usar `phone` do colaborador** quando o solicitante é **admin** e `empresaId` do admin e do colaborador coincidem (validação no agente; endpoint Bot não faz este RBAC servidor).
 
 ---
 
