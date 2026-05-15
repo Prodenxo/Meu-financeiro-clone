@@ -1,6 +1,6 @@
 # Base de conhecimento — Midas · Meu Financeiro (OpenClaw)
 
-Ficheiro alinhado ao **código actual** do backend (`openclaw-bot.service.js`, `transactions.service.js`, `mei-guide-das-base64.service.js`). Cola no workspace do OpenClaw (ex.: `midas-kb.md` ao lado do `SOUL.md`) ou referencia no `SOUL.md`. **Atualiza** se mudares regras na BD ou no endpoint.
+Ficheiro alinhado ao **código actual** do backend (`openclaw-bot.service.js`, `transactions.service.js`, `categories.service.js`, `mei-guide-das-base64.service.js`). Cola no workspace do OpenClaw (ex.: `midas-kb.md` ao lado do `SOUL.md`) ou referencia no `SOUL.md`. **Atualiza** se mudares regras na BD ou no endpoint.
 
 ---
 
@@ -51,10 +51,28 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 |----------|------------------|-----------|
 | `ping` | Não | Teste de vida; não toca na BD de utilizador. |
 | `resolve_user` | Sim | Confirma se o telefone está ligado a um `user_id`; devolve também **`actorContext`** (cargos / empresas). |
+| `list_categories` | Sim | Lista categorias do utilizador (`categorias_id`). Opcional no `payload`: **`minimal`** (`true`) → só `id` e `nome`; **`tipo`** ou **`type`** → filtra `entrada` / `saida`. |
 | `list_transactions` | Sim | Devolve até **40** lançamentos mais recentes (`criado_em` desc). |
 | `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. |
 | `delete_transaction` | Sim | Apaga por `id` (UUID), só se for **dono** do lançamento. |
 | `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp). |
+
+---
+
+## Listar categorias (`list_categories`)
+
+- **Mesmo** `POST /api/bot/openclaw/action` e **mesmo** Bearer que as outras ações — **não** uses `GET /api/categories` no bot (evita 401 com ferramentas HTTP separadas).
+- **`payload` opcional:**
+  - **`minimal`:** `true` / `"true"` / `1` → `data.categories` com apenas `{ id, nome }`.
+  - **`tipo`** ou **`type`:** `entrada` ou `saida` / `saída` para filtrar.
+
+```json
+{
+  "phone": "5548999999999",
+  "action": "list_categories",
+  "payload": { "minimal": true }
+}
+```
 
 ---
 
@@ -118,6 +136,7 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 
 ## Listar e apagar
 
+- **`list_categories`:** `data.categories`; formato completo inclui `id`, `nome`, `tipo`, `user_id`; com `minimal: true` só `id` e `nome`.
 - **`list_transactions`:** resposta inclui objetos com pelo menos `id`, `tipo`, `valor`, `classificacao`, `data`, `status`, etc.
 - **`delete_transaction`:** `payload` deve ter `{ "id": "<uuid>" }`. O utilizador **não sabe** o UUID — o fluxo seguro é: listar → identificar linha pela conversa → **pedir confirmação explícita** → só depois apagar.
 
@@ -135,7 +154,7 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 ## Onde está no código (dev)
 
 - Rota: `backend/src/routes/openclaw.routes.js` → `POST /openclaw/action` sob `/api` + `/bot`.
-- Lógica: `backend/src/services/openclaw-bot.service.js`, `transactions.service.js`.
+- Lógica: `backend/src/services/openclaw-bot.service.js`, `transactions.service.js`, `categories.service.js`.
 - Guia operacional: `docs/ops/meu-financeiro-openclaw.md`, `docs/ops/whatsapp-n8n-openclaw-backend.md`.
 
 ---

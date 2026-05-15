@@ -1,6 +1,6 @@
 # KNOWLEDGECERTO — Base de conhecimento Midas · Meu Financeiro
 
-Alinhado ao backend (`openclaw-bot.service.js`, `transactions.service.js`, `mei-guide-das-base64.service.js`). **Actualiza** este ficheiro se mudares regras na BD ou no endpoint.
+Alinhado ao backend (`openclaw-bot.service.js`, `transactions.service.js`, `categories.service.js`, `mei-guide-das-base64.service.js`). **Actualiza** este ficheiro se mudares regras na BD ou no endpoint.
 
 **Hermes:** lê este ficheiro com ferramentas de ficheiro quando precisares de exemplos JSON completos, ou mantém trechos relevantes também em `AGENTSCERTO.md` (limite de contexto do Hermes).
 
@@ -44,6 +44,7 @@ Não passes chaves **Supabase** ao modelo em texto: só este endpoint com Bearer
 |----------|------------------|-----------|
 | `ping` | Não | Teste de vida; não toca na BD de utilizador. |
 | `resolve_user` | Sim | Confirma `user_id` + devolve **`actorContext`** (cargos / empresas). |
+| `list_categories` | Sim | Lista categorias do utilizador; `payload.minimal: true` opcional (`id` + `nome` apenas). |
 | `list_transactions` | Sim | Devolve até **40** lançamentos mais recentes (`criado_em` desc). |
 | `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. |
 | `delete_transaction` | Sim | Apaga por `id` (UUID), só se for **dono** do lançamento. |
@@ -111,6 +112,7 @@ Não passes chaves **Supabase** ao modelo em texto: só este endpoint com Bearer
 
 ## Listar e apagar
 
+- **`list_categories`:** mesmo `POST` que as outras acções; **não** uses `GET /api/categories` no Hermes (Bearer diferente / 401). Resposta: `data.categories`.
 - **`list_transactions`:** resposta inclui objetos com pelo menos `id`, `tipo`, `valor`, `classificacao`, `data`, `status`, etc.
 - **`delete_transaction`:** `payload` deve ter `{ "id": "<uuid>" }`. O utilizador **não sabe** o UUID — o fluxo seguro é: listar → identificar linha pela conversa → **pedir confirmação explícita** → só depois apagar.
 

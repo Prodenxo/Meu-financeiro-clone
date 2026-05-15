@@ -2,6 +2,7 @@ import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest, notFound } from '../utils/errors.js';
 import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
+import * as categoriesService from './categories.service.js';
 import { getDasBase64 } from './mei-guide-das-base64.service.js';
 
 const MAX_LIST = 40;
@@ -237,6 +238,30 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'list_categories') {
+    const tipoRaw = payload?.tipo ?? payload?.type;
+    const tipo =
+      tipoRaw !== undefined && tipoRaw !== null && String(tipoRaw).trim() !== ''
+        ? String(tipoRaw).trim()
+        : undefined;
+    const minimal =
+      payload?.minimal === true ||
+      String(payload?.minimal || '').toLowerCase() === 'true' ||
+      payload?.minimal === 1 ||
+      String(payload?.minimal || '').toLowerCase() === '1';
+
+    const rows = await categoriesService.listCategories(userId, tipo);
+    const categories = minimal
+      ? categoriesService.mapCategoriesToMinimalRows(rows)
+      : rows;
+
+    return {
+      ok: true,
+      message: `Lista de categorias (${categories.length}).`,
+      data: { categories, userId, actorContext, ...linkDebug },
+    };
+  }
+
   if (action === 'create_transaction') {
     const created = await transactionsService.createTransaction(userId, payload);
     return {
@@ -292,6 +317,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_transactions, create_transaction, delete_transaction, get_das_current.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_categories, list_transactions, create_transaction, delete_transaction, get_das_current.`,
   );
 };
