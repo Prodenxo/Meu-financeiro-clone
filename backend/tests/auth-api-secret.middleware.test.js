@@ -152,3 +152,26 @@ test('API_SECRET_OP com userId na query (API_SECRET principal diferente)', async
   assert.equal(req.user?.id, SAMPLE_UUID);
   assert.equal(req.authType, 'api_key');
 });
+
+test('API_SECRET com aspas no valor do ambiente ainda autentica', async (t) => {
+  t.after(() => {
+    delete process.env.API_SECRET;
+    delete process.env.API_SECRET_OP;
+  });
+  delete process.env.API_SECRET_OP;
+  process.env.API_SECRET = '"quoted-secret-value"';
+
+  const req = {
+    headers: {
+      authorization: 'Bearer quoted-secret-value',
+      'x-meufinanceiro-user-id': SAMPLE_UUID,
+    },
+    query: {},
+  };
+  let err;
+  await requireAuth(req, {}, (e) => {
+    err = e;
+  });
+  assert.equal(err, undefined);
+  assert.equal(req.user?.id, SAMPLE_UUID);
+});

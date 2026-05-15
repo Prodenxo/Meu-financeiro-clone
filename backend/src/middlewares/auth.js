@@ -1,6 +1,18 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { unauthorized, badRequest } from '../utils/errors.js';
 
+/** Easypanel/Docker às vezes guardam o valor com aspas à volta — remove uma camada só se fechar o par. */
+const normalizeEnvSecret = (raw) => {
+  let s = String(raw ?? '').trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+};
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -49,7 +61,7 @@ export const requireAuth = async (req, _res, next) => {
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
     // 🔑 1a. API_SECRET (automação) + utilizador alvo
-    const apiSecret = (process.env.API_SECRET || '').trim();
+    const apiSecret = normalizeEnvSecret(process.env.API_SECRET);
     if (apiSecret && token === apiSecret) {
       const userId = resolveAutomationUserId(req);
       if (!userId) {
@@ -64,7 +76,7 @@ export const requireAuth = async (req, _res, next) => {
     }
 
     // 🔑 1b. Segundo segredo opcional (ex.: OpenClaw / n8n sem mexer no API_SECRET principal)
-    const apiSecretOp = (process.env.API_SECRET_OP || '').trim();
+    const apiSecretOp = normalizeEnvSecret(process.env.API_SECRET_OP);
     if (apiSecretOp && token === apiSecretOp) {
       const userId = resolveAutomationUserId(req);
       if (!userId) {
@@ -79,11 +91,9 @@ export const requireAuth = async (req, _res, next) => {
     }
 
     // 🔑 2. Mesmo Bearer do OpenClaw só para GET /api/categories (robô + lista minimal/full)
-    const clawSecret = (
-      process.env.OPENCLAW_WEBHOOK_SECRET ||
-      process.env.HERMES_WEBHOOK_SECRET ||
-      ''
-    ).trim();
+    const clawSecret =
+      normalizeEnvSecret(process.env.OPENCLAW_WEBHOOK_SECRET)
+      || normalizeEnvSecret(process.env.HERMES_WEBHOOK_SECRET);
     if (
       clawSecret &&
       token === clawSecret &&
