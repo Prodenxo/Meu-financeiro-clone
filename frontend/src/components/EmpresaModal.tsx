@@ -488,7 +488,7 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
               {!naoMeiUnlimited && (
                 <div>
                   <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                    Limite máximo de clientes
+                  Quantidade máxima de clientes
                   </label>
                   <input
                     type="number"

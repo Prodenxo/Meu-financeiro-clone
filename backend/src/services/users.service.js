@@ -658,7 +658,7 @@ export const listEmpresas = async (accessToken) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   let query = adminClient
     .from('empresas')
-    .select('id, empresa, max_mei, max_usuarios_nao_mei, legacy_mei_slots_pix')
+    .select('id, empresa, nome_fantasia, max_mei, max_usuarios_nao_mei, legacy_mei_slots_pix')
     .order('empresa', { ascending: true });
 
   if (role === 'admin') {
