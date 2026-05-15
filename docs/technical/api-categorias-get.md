@@ -10,14 +10,14 @@ Liste as categorias do utilizador autenticado (**mesmo `user_id` do token JWT ou
 
 - **JWT** — deve ser um **access token** válido do Supabase (**sessão não expirada**). Header: `Authorization: Bearer <access_token>`.
 
-- **`API_SECRET` (alternativa)** — se estiver configurada no backend (Easypanel / `.env`), pode usar **`Authorization: Bearer <API_SECRET>`** para chamadas servidor‑a‑servidor sem JWT de utilizador.
+- **`API_SECRET` (alternativa)** — se estiver configurada no backend (Easypanel / `.env`), pode usar **`Authorization: Bearer <API_SECRET>`** para chamadas servidor‑a‑servidor **sem** JWT. É **obrigatório** indicar de qual utilizador são os dados: header **`X-MeuFinanceiro-User-Id: <uuid>`** (UUID Supabase do utilizador) ou query **`userId=<uuid>`**. Quem possui o segredo pode consultar categorias desse `user_id` — proteja o `API_SECRET`.
 
 ## Autenticação
 
 **Para `/api/categories`:**
 
 - Header: `Authorization: Bearer <access_token Supabase válido>`
-- Ou `Bearer <API_SECRET>` se o projeto tiver configurado **`API_SECRET`** e o cliente usar esse token (automações).
+- Ou `Bearer <API_SECRET>` (variável **`API_SECRET`** no backend) — sempre com **`X-MeuFinanceiro-User-Id: <uuid>`** ou **`userId`** na query, para definir o utilizador-alvo.
 
 **(Estas opções não substituem o Bearer `OPENCLAW_WEBHOOK_SECRET` — esse só vale para `POST /api/bot/openclaw/action`.)**
 
@@ -63,3 +63,13 @@ GET /api/categories?minimal=true HTTP/1.1
 Authorization: Bearer <token>
 Host: ...
 ```
+
+### Exemplo com `API_SECRET`
+
+```http
+GET /api/categories?minimal=true HTTP/1.1
+Authorization: Bearer <API_SECRET>
+X-MeuFinanceiro-User-Id: 550e8400-e29b-41d4-a716-446655440000
+```
+
+(Equivalente: `GET /api/categories?minimal=true&userId=<uuid>` com o mesmo Bearer.)

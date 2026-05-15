@@ -32,7 +32,7 @@ Rotas como **`POST /api/invites`** dependem da tabela `public.empresa_invites`. 
 
 ## GET /api/categories
 
-- **Auth:** `Authorization: Bearer <JWT Supabase>` (ou `API_SECRET` se configurado e usado como Bearer).
+- **Auth:** `Authorization: Bearer <JWT Supabase>` ou **`Bearer <API_SECRET>`** com **`X-MeuFinanceiro-User-Id`** / **`userId`** (UUID).
 - **`GET /api/categories`:** lista categorias do utilizador (tabela `categorias_id`).
 - **Query `minimal=true` (ou `1` / `yes`):** resposta com itens só **`{ id, nome }`** — ver [`docs/technical/api-categorias-get.md`](../docs/technical/api-categorias-get.md).
 - **Query `type` / `tipo`:** filtro por tipo de categoria (`entrada` / `saída`).
