@@ -3,7 +3,16 @@ import { sendSuccess } from '../utils/response.js';
 
 export const listCategories = async (req, res, next) => {
   try {
-    const data = await categoriesService.listCategories(req.user.id, req.query?.type);
+    const tipoFilter = req.query?.type ?? req.query?.tipo;
+    const minimal =
+      req.query?.minimal === '1' ||
+      req.query?.minimal === 'true' ||
+      String(req.query?.minimal || '').toLowerCase() === 'yes';
+
+    const rows = await categoriesService.listCategories(req.user.id, tipoFilter);
+
+    const data = minimal ? categoriesService.mapCategoriesToMinimalRows(rows) : rows;
+
     return sendSuccess(res, data, 'Categorias listadas');
   } catch (error) {
     return next(error);

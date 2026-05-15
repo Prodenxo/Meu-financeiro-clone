@@ -164,6 +164,14 @@ export const listCategories = async (userId, tipo) => {
   return allCategories.sort((a, b) => a.nome.localeCompare(b.nome));
 };
 
+/**
+ * Lista mínima para integrações (somente identificadores visíveis ao utilizador).
+ * @param {{ id: number, nome: string }[]} rows
+ * @returns {{ id: number, nome: string }[]}
+ */
+export const mapCategoriesToMinimalRows = (rows) =>
+  (rows || []).map(({ id, nome }) => ({ id, nome }));
+
 export const createCategory = async (userId, payload) => {
   const { nome, tipo } = payload || {};
   if (!nome || !tipo) throw badRequest('Nome e tipo são obrigatórios');
