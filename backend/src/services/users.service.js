@@ -591,7 +591,7 @@ export const listUsers = async (accessToken, queryParams = {}) => {
 
   const [{ data: rolesData }, { data: empresasData }] = await Promise.all([
     adminClient.from('roles').select('id, roles').in('id', roleIds.length ? roleIds : ['none']),
-    adminClient.from('empresas').select('id, empresa').in('id', empresaIds.length ? empresaIds : ['none'])
+    adminClient.from('empresas').select('id, empresa, nome_fantasia').in('id', empresaIds.length ? empresaIds : ['none'])
   ]);
 
   const roleMap = new Map((rolesData || []).map(r => [r.id, r.roles]));
@@ -610,7 +610,7 @@ export const listUsers = async (accessToken, queryParams = {}) => {
         ...user,
         role: normalizeRoleValue(roleMap.get(link.roles_id) || (link.isOrphan ? 'N/A' : 'usuario')),
         empresaId: link.empresas_id || null,
-        empresaName: empresaMap.get(link.empresas_id)?.empresa || (link.isOrphan ? 'SEM VÍNCULO' : null),
+        empresaName: (() => { const e = empresaMap.get(link.empresas_id); return e ? (e.nome_fantasia || e.empresa) : (link.isOrphan ? 'SEM VÍNCULO' : null); })(),
         status: link.status ?? true,
         mei: typeof link.mei === 'boolean' ? link.mei : true,
         expiresAt: link.expires_at ? new Date(link.expires_at).toISOString() : null
