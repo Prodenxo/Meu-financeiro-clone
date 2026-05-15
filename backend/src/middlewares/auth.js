@@ -48,7 +48,7 @@ export const requireAuth = async (req, _res, next) => {
 
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-    // 🔑 1. API_SECRET (automação) + utilizador alvo
+    // 🔑 1a. API_SECRET (automação) + utilizador alvo
     const apiSecret = (process.env.API_SECRET || '').trim();
     if (apiSecret && token === apiSecret) {
       const userId = resolveAutomationUserId(req);
@@ -56,6 +56,21 @@ export const requireAuth = async (req, _res, next) => {
         return next(
           badRequest(
             'Com Bearer API_SECRET envie o UUID do utilizador no header X-MeuFinanceiro-User-Id (ou query userId).',
+          ),
+        );
+      }
+      attachAutomationUser(req, userId);
+      return next();
+    }
+
+    // 🔑 1b. Segundo segredo opcional (ex.: OpenClaw / n8n sem mexer no API_SECRET principal)
+    const apiSecretOp = (process.env.API_SECRET_OP || '').trim();
+    if (apiSecretOp && token === apiSecretOp) {
+      const userId = resolveAutomationUserId(req);
+      if (!userId) {
+        return next(
+          badRequest(
+            'Com Bearer API_SECRET_OP envie o UUID do utilizador no header X-MeuFinanceiro-User-Id (ou query userId).',
           ),
         );
       }

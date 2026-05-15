@@ -12,14 +12,14 @@ Liste as categorias do utilizador autenticado (**mesmo `user_id` do token JWT ou
 
 - **JWT** — deve ser um **access token** válido do Supabase (**sessão não expirada**). Header: `Authorization: Bearer <access_token>`.
 
-- **`API_SECRET` (alternativa)** — se estiver configurada no backend (Easypanel / `.env`), pode usar **`Authorization: Bearer <API_SECRET>`** para chamadas servidor‑a‑servidor **sem** JWT. É **obrigatório** indicar de qual utilizador são os dados: header **`X-MeuFinanceiro-User-Id: <uuid>`** (UUID Supabase do utilizador) ou query **`userId=<uuid>`**. Quem possui o segredo pode consultar categorias desse `user_id` — proteja o `API_SECRET`.
+- **`API_SECRET` ou `API_SECRET_OP` (alternativa)** — se estiver configurada no backend (Easypanel / `.env`), pode usar **`Authorization: Bearer <valor>`** para chamadas servidor‑a‑servidor **sem** JWT. **`API_SECRET_OP`** é opcional: mesmo contrato que `API_SECRET` (útil quando já existe outro `API_SECRET` para outra integração). É **obrigatório** indicar o utilizador: header **`X-MeuFinanceiro-User-Id: <uuid>`** ou query **`userId=<uuid>`**. Quem possui o segredo pode consultar categorias desse `user_id` — proteja os segredos.
 
 ## Autenticação
 
 **Para `/api/categories`:**
 
 - Header: `Authorization: Bearer <access_token Supabase válido>`
-- Ou `Bearer <API_SECRET>` — sempre com **`X-MeuFinanceiro-User-Id: <uuid>`** ou **`userId`** na query.
+- Ou `Bearer <API_SECRET>` ou **`Bearer <API_SECRET_OP>`** — sempre com **`X-MeuFinanceiro-User-Id: <uuid>`** ou **`userId`** na query.
 - Ou **`Bearer <OPENCLAW_WEBHOOK_SECRET>`** — **só** para **`GET /api/categories`** (qualquer query como `minimal=true`), com o mesmo header/query de utilizador-alvo.
 
 ## Método e URL

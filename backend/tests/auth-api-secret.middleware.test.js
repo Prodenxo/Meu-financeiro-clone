@@ -66,8 +66,10 @@ test('OPENCLAW_WEBHOOK_SECRET só autentica GET /api/categories com user id', as
   t.after(() => {
     delete process.env.OPENCLAW_WEBHOOK_SECRET;
     delete process.env.API_SECRET;
+    delete process.env.API_SECRET_OP;
   });
   delete process.env.API_SECRET;
+  delete process.env.API_SECRET_OP;
   process.env.OPENCLAW_WEBHOOK_SECRET = 'claw-test-secret';
 
   const reqOk = {
@@ -108,8 +110,10 @@ test('OPENCLAW_WEBHOOK_SECRET GET categories sem user id devolve 400', async (t)
   t.after(() => {
     delete process.env.OPENCLAW_WEBHOOK_SECRET;
     delete process.env.API_SECRET;
+    delete process.env.API_SECRET_OP;
   });
   delete process.env.API_SECRET;
+  delete process.env.API_SECRET_OP;
   process.env.OPENCLAW_WEBHOOK_SECRET = 'claw-test-secret';
 
   const req = {
@@ -124,4 +128,27 @@ test('OPENCLAW_WEBHOOK_SECRET GET categories sem user id devolve 400', async (t)
   });
   assert.ok(err);
   assert.equal(err.status, 400);
+});
+
+test('API_SECRET_OP com userId na query (API_SECRET principal diferente)', async (t) => {
+  t.after(() => {
+    delete process.env.API_SECRET;
+    delete process.env.API_SECRET_OP;
+  });
+  process.env.API_SECRET = 'other-integration-secret';
+  process.env.API_SECRET_OP = 'openclaw-op-test-secret';
+
+  const req = {
+    headers: {
+      authorization: 'Bearer openclaw-op-test-secret',
+    },
+    query: { userId: SAMPLE_UUID },
+  };
+  let err;
+  await requireAuth(req, {}, (e) => {
+    err = e;
+  });
+  assert.equal(err, undefined);
+  assert.equal(req.user?.id, SAMPLE_UUID);
+  assert.equal(req.authType, 'api_key');
 });
