@@ -197,6 +197,74 @@ export const runOpenclawAction = async (input) => {
     return { ok: true, message: 'OpenClaw online', data: { pong: true } };
   }
 
+  if (action === 'list_roles') {
+    const includeDb =
+      payload?.includeDatabase === true ||
+      String(payload?.includeDatabase || '').toLowerCase() === 'true';
+    let databaseRoles = [];
+    if (includeDb) {
+      try {
+        databaseRoles = await rbacCatalogService.listRolesFromDatabase();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        databaseRoles = { error: msg };
+      }
+    }
+    const base = {
+      catalog: rbacCatalogService.listRolesCatalog(),
+      databaseRoles,
+    };
+    const phoneDigits = phone ? normalizeWhatsappPhoneDigits(phone) : '';
+    if (!phoneDigits) {
+      return {
+        ok: true,
+        message: 'Catálogo de cargos (OpenClaw autorizado)',
+        data: { ...base, actorContext: null },
+      };
+    }
+    try {
+      const resolved = await resolveUserIdByPhoneDetailed(phone);
+      const { userId, matchedUserNumber, lookupCandidates } = resolved;
+      const linkDebug = {
+        phoneDigits: resolved.phoneDigits,
+        matchedUserNumber,
+        lookupCandidates,
+      };
+      if (!userId) {
+        return {
+          ok: true,
+          message:
+            'Catálogo de cargos. Telefone ainda sem utilizador na app (n8n_link).',
+          data: { ...base, ...linkDebug, actorContext: null },
+        };
+      }
+      let actorContext = {
+        memberships: [],
+        hasActiveMembership: false,
+        profileRole: null,
+        hasSuperadminCapability: false,
+      };
+      try {
+        actorContext = await resolveActorMembershipsForUser(userId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[OpenClaw] actorContext list_roles:', msg);
+      }
+      return {
+        ok: true,
+        message: 'Catálogo de cargos e cargo do utilizador',
+        data: { ...base, userId, actorContext, ...linkDebug },
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        ok: true,
+        message: 'Catálogo de cargos',
+        data: { ...base, actorContext: null, resolveNote: msg },
+      };
+    }
+  }
+
   const resolved = await resolveUserIdByPhoneDetailed(phone);
   const { userId, phoneDigits, matchedUserNumber, lookupCandidates } = resolved;
   if (!userId) {
@@ -226,32 +294,6 @@ export const runOpenclawAction = async (input) => {
       ok: true,
       message: 'Utilizador encontrado',
       data: { userId, actorContext, ...linkDebug },
-    };
-  }
-
-  if (action === 'list_roles') {
-    const includeDb =
-      payload?.includeDatabase === true ||
-      String(payload?.includeDatabase || '').toLowerCase() === 'true';
-    let databaseRoles = [];
-    if (includeDb) {
-      try {
-        databaseRoles = await rbacCatalogService.listRolesFromDatabase();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        databaseRoles = { error: msg };
-      }
-    }
-    return {
-      ok: true,
-      message: 'Catálogo de cargos',
-      data: {
-        catalog: rbacCatalogService.listRolesCatalog(),
-        databaseRoles,
-        userId,
-        actorContext,
-        ...linkDebug,
-      },
     };
   }
 

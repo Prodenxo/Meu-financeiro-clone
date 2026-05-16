@@ -61,7 +61,7 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 |----------|------------------|-----------|
 | `ping` | Não | Teste de vida; não toca na BD de utilizador. |
 | `resolve_user` | Sim | Confirma se o telefone está ligado a um `user_id`; devolve também **`actorContext`** (cargos / empresas). |
-| `list_roles` | Sim | Catálogo de cargos (`superadmin`, `admin`, `usuario`, `outsider`) e permissões por cargo. Opcional: **`payload.includeDatabase: true`** → linhas da tabela `roles`. |
+| `list_roles` | **Opcional** | **OpenClaw autorizado** — catálogo de cargos/permissões. Sem `phone` = só catálogo. Com `phone` = + `actorContext` do utilizador. **`payload.includeDatabase: true`** → tabela `roles`. |
 | `get_permissions` | Sim | Sem `payload.role`: permissões **efectivas** do utilizador do `phone`. Com **`payload.role`**: permissões desse cargo (catálogo). |
 | `check_permission` | Sim | **`payload.permission`** (ex.: `bot.das_colaborador_same_company`) → `{ allowed, primaryRole, reason }`. |
 | `list_categories` | Sim | Lista categorias do utilizador (`categorias_id`). Opcional no `payload`: **`minimal`** (`true`) → só `id` e `nome`; **`tipo`** ou **`type`** → filtra `entrada` / `saida`. |

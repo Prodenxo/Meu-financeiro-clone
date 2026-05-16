@@ -52,7 +52,7 @@ Não passes chaves **Supabase** ao modelo em texto: só este endpoint com Bearer
 |----------|------------------|-----------|
 | `ping` | Não | Teste de vida; não toca na BD de utilizador. |
 | `resolve_user` | Sim | Confirma `user_id` + devolve **`actorContext`** (cargos / empresas). |
-| `list_roles` | Sim | Catálogo de cargos e permissões; `includeDatabase` opcional. |
+| `list_roles` | Opcional (`phone`) | **Bot autorizado.** Catálogo de cargos/permissões; com `phone` + `actorContext`. |
 | `get_permissions` | Sim | Permissões do utilizador (`phone`) ou de `payload.role`. |
 | `check_permission` | Sim | `payload.permission` → permitido ou não. |
 | `list_categories` | Sim | Lista categorias do utilizador; `payload.minimal: true` opcional (`id` + `nome` apenas). |
