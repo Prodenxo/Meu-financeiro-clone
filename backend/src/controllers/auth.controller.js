@@ -1,5 +1,9 @@
 import * as authService from '../services/auth.service.js';
+import * as rbacCatalogService from '../services/rbac-catalog.service.js';
+import { getRequesterContext } from '../services/users.service.js';
+import { resolveActorMembershipsForUser } from '../services/openclaw-bot.service.js';
 import { sendSuccess } from '../utils/response.js';
+import { badRequest } from '../utils/errors.js';
 
 export const signUp = async (req, res, next) => {
   try {
@@ -126,6 +130,79 @@ export const impersonate = async (req, res, next) => {
   try {
     const result = await authService.impersonate(req.accessToken, req.body.userId);
     return sendSuccess(res, result, 'Link de impersonação gerado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+/** Catálogo estático de cargos e permissões (app + bot + painel). */
+export const listRolesCatalog = async (_req, res, next) => {
+  try {
+    const catalog = rbacCatalogService.listRolesCatalog();
+    let databaseRoles = [];
+    try {
+      databaseRoles = await rbacCatalogService.listRolesFromDatabase();
+    } catch (dbErr) {
+      const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+      databaseRoles = { error: msg };
+    }
+    return sendSuccess(
+      res,
+      { catalog, databaseRoles },
+      'Catálogo de cargos',
+    );
+  } catch (error) {
+    return next(error);
+  }
+};
+
+/**
+ * Permissões por role (query `role`) ou do utilizador autenticado (JWT).
+ */
+export const getPermissions = async (req, res, next) => {
+  try {
+    const roleQuery = req.query?.role;
+    if (roleQuery) {
+      const data = rbacCatalogService.getPermissionsForRole(String(roleQuery));
+      return sendSuccess(res, data, 'Permissões do cargo');
+    }
+
+    const requester = await getRequesterContext(req.accessToken);
+    const actorContext = await resolveActorMembershipsForUser(requester.userId);
+    const effective = rbacCatalogService.resolveEffectivePermissionsForActor({
+      ...actorContext,
+      profileRole: actorContext.profileRole || requester.role,
+    });
+    return sendSuccess(
+      res,
+      {
+        userId: requester.userId,
+        empresaId: requester.empresaId,
+        requesterRole: requester.role,
+        ...effective,
+      },
+      'Permissões efectivas do utilizador',
+    );
+  } catch (error) {
+    return next(error);
+  }
+};
+
+/** Verifica uma permissão (query `permission`) para o utilizador autenticado. */
+export const checkPermission = async (req, res, next) => {
+  try {
+    const permission = req.query?.permission;
+    if (!permission) throw badRequest('Query permission é obrigatória');
+    const requester = await getRequesterContext(req.accessToken);
+    const actorContext = await resolveActorMembershipsForUser(requester.userId);
+    const result = rbacCatalogService.checkActorPermission(
+      {
+        ...actorContext,
+        profileRole: actorContext.profileRole || requester.role,
+      },
+      String(permission),
+    );
+    return sendSuccess(res, result, result.allowed ? 'Permitido' : 'Não permitido');
   } catch (error) {
     return next(error);
   }

@@ -36,6 +36,14 @@ Com `phone` válido, as respostas incluem **`data.actorContext`**: `hasActiveMem
 
 Não passes chaves **Supabase** ao modelo em texto: só este endpoint com Bearer em ambiente.
 
+### API REST (JWT Supabase)
+
+| Método | Caminho | Uso |
+|--------|---------|-----|
+| `GET` | `/api/auth/roles` | Lista cargos e permissões (catálogo). |
+| `GET` | `/api/auth/permissions` | Permissões do utilizador logado; ou `?role=admin` para um cargo. |
+| `GET` | `/api/auth/permissions/check?permission=…` | Verifica permissão do utilizador logado. |
+
 ---
 
 ## Ações suportadas (MVP)
@@ -44,6 +52,9 @@ Não passes chaves **Supabase** ao modelo em texto: só este endpoint com Bearer
 |----------|------------------|-----------|
 | `ping` | Não | Teste de vida; não toca na BD de utilizador. |
 | `resolve_user` | Sim | Confirma `user_id` + devolve **`actorContext`** (cargos / empresas). |
+| `list_roles` | Sim | Catálogo de cargos e permissões; `includeDatabase` opcional. |
+| `get_permissions` | Sim | Permissões do utilizador (`phone`) ou de `payload.role`. |
+| `check_permission` | Sim | `payload.permission` → permitido ou não. |
 | `list_categories` | Sim | Lista categorias do utilizador; `payload.minimal: true` opcional (`id` + `nome` apenas). |
 | `list_transactions` | Sim | Devolve até **40** lançamentos mais recentes (`criado_em` desc). |
 | `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. |

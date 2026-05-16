@@ -19,5 +19,8 @@ router.post('/update-role', requireAuth, controller.updateRole);
 router.get('/last-seen-update', requireAuth, controller.getLastSeenUpdate);
 router.post('/last-seen-update', requireAuth, controller.updateLastSeenUpdate);
 router.post('/impersonate', requireAuth, controller.impersonate);
+router.get('/roles', requireAuth, controller.listRolesCatalog);
+router.get('/permissions', requireAuth, controller.getPermissions);
+router.get('/permissions/check', requireAuth, controller.checkPermission);
 
 export default router;

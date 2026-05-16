@@ -3,6 +3,7 @@ import { badRequest, notFound } from '../utils/errors.js';
 import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
 import * as categoriesService from './categories.service.js';
+import * as rbacCatalogService from './rbac-catalog.service.js';
 import { getDasBase64 } from './mei-guide-das-base64.service.js';
 
 const MAX_LIST = 40;
@@ -228,6 +229,57 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'list_roles') {
+    const includeDb =
+      payload?.includeDatabase === true ||
+      String(payload?.includeDatabase || '').toLowerCase() === 'true';
+    let databaseRoles = [];
+    if (includeDb) {
+      try {
+        databaseRoles = await rbacCatalogService.listRolesFromDatabase();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        databaseRoles = { error: msg };
+      }
+    }
+    return {
+      ok: true,
+      message: 'Catálogo de cargos',
+      data: {
+        catalog: rbacCatalogService.listRolesCatalog(),
+        databaseRoles,
+        userId,
+        actorContext,
+        ...linkDebug,
+      },
+    };
+  }
+
+  if (action === 'get_permissions') {
+    const roleRaw = payload?.role ?? payload?.cargo;
+    const data = roleRaw
+      ? rbacCatalogService.getPermissionsForRole(String(roleRaw))
+      : rbacCatalogService.resolveEffectivePermissionsForActor(actorContext);
+    return {
+      ok: true,
+      message: roleRaw ? 'Permissões do cargo' : 'Permissões efectivas do utilizador',
+      data: { ...data, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'check_permission') {
+    const permission = payload?.permission ?? payload?.key;
+    if (!permission) {
+      throw badRequest('payload.permission (ou key) é obrigatório');
+    }
+    const check = rbacCatalogService.checkActorPermission(actorContext, String(permission));
+    return {
+      ok: true,
+      message: check.allowed ? 'Permitido' : 'Não permitido',
+      data: { ...check, userId, actorContext, ...linkDebug },
+    };
+  }
+
   if (action === 'list_transactions') {
     const rows = await transactionsService.listTransactions(userId);
     const sliced = (rows || []).slice(0, MAX_LIST);
@@ -317,6 +369,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_categories, list_transactions, create_transaction, delete_transaction, get_das_current.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, create_transaction, delete_transaction, get_das_current.`,
   );
 };
