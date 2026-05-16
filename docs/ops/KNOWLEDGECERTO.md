@@ -1,6 +1,6 @@
 # KNOWLEDGECERTO — Base de conhecimento Midas · Meu Financeiro
 
-Alinhado ao backend (`openclaw-bot.service.js`, `transactions.service.js`, `categories.service.js`, `mei-guide-das-base64.service.js`). **Actualiza** este ficheiro se mudares regras na BD ou no endpoint.
+Alinhado ao backend (`openclaw-bot.service.js`, `transactions.service.js`, `categories.service.js`, `calendar-events.service.js`, `mei-guide-das-base64.service.js`). **Actualiza** este ficheiro se mudares regras na BD ou no endpoint.
 
 **Hermes:** lê este ficheiro com ferramentas de ficheiro quando precisares de exemplos JSON completos, ou mantém trechos relevantes também em `AGENTSCERTO.md` (limite de contexto do Hermes).
 
@@ -60,6 +60,30 @@ Não passes chaves **Supabase** ao modelo em texto: só este endpoint com Bearer
 | `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. |
 | `delete_transaction` | Sim | Apaga por `id` (UUID), só se for **dono** do lançamento. |
 | `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp sozinho). |
+| `list_calendar_events` | Sim | Compromissos numa data: lançamentos, Google Calendar (se ligado), vencimento certificado MEI. |
+
+---
+
+## Agenda / calendário (`list_calendar_events`)
+
+- **`payload.data`** ou **`payload.date`:** opcional. Formatos: **`YYYY-MM-DD`** (ex.: `2026-05-16`) ou **`DD/MM/YYYY`** (ex.: `16/05/2026`). Se omitir, usa **hoje** em `America/Sao_Paulo`.
+- **Fontes agregadas:** transações com `data` igual ao dia; eventos do **Google Calendar** (tabela `google_tokens_id`); evento de **vencimento do certificado digital** MEI quando `cert_valid_to` cai nesse dia.
+- **Sucesso com eventos:** `message` do tipo *N compromisso(s) em DD/MM/YYYY.*; `data.events[]` com `title`, `date`, `time`, `allDay`, `source` (`transaction` | `google` | `certificate`).
+- **Sem eventos:** HTTP **200** (não é 404), `data.empty: true`, `data.events: []`, `message` *Nenhum compromisso ou atividade programada para DD/MM/YYYY.*
+- **Google não conectado:** ainda devolve lançamentos/certificado; `data.googleCalendarNote` explica; `data.googleCalendarLinked: false`.
+- **Data inválida:** HTTP **400**, mensagem pedindo `YYYY-MM-DD` ou `DD/MM/YYYY`.
+
+**Exemplo**
+
+```json
+{
+  "phone": "5548999999999",
+  "action": "list_calendar_events",
+  "payload": { "data": "2026-05-16" }
+}
+```
+
+**Código:** `Site/backend/src/services/calendar-events.service.js`, acção em `openclaw-bot.service.js`.
 
 ---
 
@@ -141,7 +165,7 @@ Não passes chaves **Supabase** ao modelo em texto: só este endpoint com Bearer
 ## Onde está no código (dev)
 
 - Rota: `Site/backend/src/routes/openclaw.routes.js` → `POST /openclaw/action` sob `/api` + `/bot`.
-- Lógica: `Site/backend/src/services/openclaw-bot.service.js`, `transactions.service.js`.
+- Lógica: `Site/backend/src/services/openclaw-bot.service.js`, `transactions.service.js`, `calendar-events.service.js`.
 - Guias: `Site/docs/ops/meu-financeiro-openclaw.md`, `Site/docs/ops/whatsapp-n8n-openclaw-backend.md`, `Site/docs/ops/hermes-midas-integracao.md`.
 
 ---

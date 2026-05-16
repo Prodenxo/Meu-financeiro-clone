@@ -69,6 +69,26 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 | `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. |
 | `delete_transaction` | Sim | Apaga por `id` (UUID), só se for **dono** do lançamento. |
 | `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp). |
+| `list_calendar_events` | Sim | Compromissos numa data (`payload.data` / `payload.date`); ver secção Agenda abaixo. |
+
+---
+
+## Agenda (`list_calendar_events`)
+
+- **`payload.data`** ou **`payload.date`:** `YYYY-MM-DD` ou `DD/MM/YYYY`; omitir = hoje (`America/Sao_Paulo`).
+- Agrega: **lançamentos** do dia, **Google Calendar** (se o utilizador autorizou na app), **vencimento certificado** MEI.
+- **Lista vazia:** resposta **200** com `empty: true` e mensagem clara (não usar 404).
+- **Google desligado:** `googleCalendarNote` na resposta; lançamentos do dia continuam visíveis.
+
+```json
+{
+  "phone": "5548999999999",
+  "action": "list_calendar_events",
+  "payload": { "date": "16/05/2026" }
+}
+```
+
+Implementação: `calendar-events.service.js`.
 
 ---
 

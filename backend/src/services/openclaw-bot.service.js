@@ -5,6 +5,7 @@ import * as transactionsService from './transactions.service.js';
 import * as categoriesService from './categories.service.js';
 import * as rbacCatalogService from './rbac-catalog.service.js';
 import { getDasBase64 } from './mei-guide-das-base64.service.js';
+import * as calendarEventsService from './calendar-events.service.js';
 
 const MAX_LIST = 40;
 
@@ -379,6 +380,24 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'list_calendar_events') {
+    const rawDate = payload?.data ?? payload?.date;
+    const calendar = await calendarEventsService.listCalendarEventsForUser(userId, {
+      date: rawDate,
+      data: rawDate,
+    });
+    return {
+      ok: true,
+      message: calendar.message,
+      data: {
+        ...calendar,
+        userId,
+        actorContext,
+        ...linkDebug,
+      },
+    };
+  }
+
   if (action === 'get_das_current') {
     const rawMes = payload?.mes;
     let competencia;
@@ -411,6 +430,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, create_transaction, delete_transaction, get_das_current.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_das_current.`,
   );
 };

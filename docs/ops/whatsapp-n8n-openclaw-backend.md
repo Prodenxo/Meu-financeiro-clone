@@ -85,6 +85,7 @@ Ficheiro: `backend/scripts/test-openclaw-transaction.mjs`.
 | `ping` | não precisa | — |
 | `resolve_user` | sim | — |
 | `list_transactions` | sim | — |
+| `list_calendar_events` | sim | `payload.data` ou `date` opcional (`YYYY-MM-DD` ou `DD/MM/YYYY`) |
 | `create_transaction` | sim | `tipo`, `valor`, `classificacao`, `data`, `status`, `obs` opcional |
 | `delete_transaction` | sim | `{ "id": "<uuid>" }` |
 
