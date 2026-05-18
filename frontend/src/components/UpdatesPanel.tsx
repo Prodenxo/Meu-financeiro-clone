@@ -3,70 +3,40 @@ import { APP_UPDATES } from '../config/updates';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
 
-const STORAGE_KEY_PREFIX = 'app_updates_last_seen_';
-
-function getLocalKey(userId: string | null): string {
-  return userId ? `${STORAGE_KEY_PREFIX}${userId}` : STORAGE_KEY_PREFIX;
-}
-
 export default function UpdatesPanel() {
   const userId = useAuthStore((s) => s.userId);
   const [visible, setVisible] = useState(false);
-  const [checked, setChecked] = useState(false);
+  const [checkedForUserId, setCheckedForUserId] = useState<string | undefined>(undefined);
 
   const latestUpdate = APP_UPDATES[0];
 
   useEffect(() => {
-    if (!latestUpdate || checked) return;
+    if (!latestUpdate || !userId) return;
+    if (checkedForUserId === userId) return;
 
     const checkSeen = async () => {
-      setChecked(true);
-      if (userId) {
-        try {
-          const result = await apiClient.get<{ lastSeenUpdateId: string | null }>('/auth/last-seen-update');
-          if (result.lastSeenUpdateId !== latestUpdate.id) {
-            setVisible(true);
-          }
-        } catch {
-          // erro de rede — não exibe para não irritar o usuário
-        }
-        return;
-      }
-
+      setCheckedForUserId(userId);
       try {
-        const key = getLocalKey(null);
-        const lastSeenId = window.localStorage.getItem(key);
-        if (lastSeenId !== latestUpdate.id) {
+        const result = await apiClient.get<{ lastSeenUpdateId: string | null }>('/auth/last-seen-update');
+        if (result.lastSeenUpdateId !== latestUpdate.id) {
           setVisible(true);
         }
       } catch {
-        // sem localStorage, não mostra
+        // erro de rede — não exibe
       }
     };
 
     void checkSeen();
-  }, [userId, latestUpdate?.id, checked]);
+  }, [userId, latestUpdate?.id, checkedForUserId]);
 
   if (!visible || !latestUpdate) return null;
 
   const handleClose = async () => {
     setVisible(false);
-
-    const currentUserId = useAuthStore.getState().userId;
-
-    if (currentUserId) {
-      try {
-        await apiClient.post('/auth/last-seen-update', { updateId: latestUpdate.id });
-      } catch (err) {
-        console.error('[UpdatesPanel] Falha ao salvar preferência no banco:', err);
-      }
-      return;
-    }
-
     try {
-      window.localStorage.setItem(getLocalKey(null), latestUpdate.id);
-    } catch {
-      // ignora erro de localStorage
+      await apiClient.post('/auth/last-seen-update', { updateId: latestUpdate.id });
+    } catch (err) {
+      console.error('[UpdatesPanel] Falha ao salvar preferência no banco:', err);
     }
   };
 
