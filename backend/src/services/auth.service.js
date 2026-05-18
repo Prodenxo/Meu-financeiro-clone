@@ -1,4 +1,4 @@
-import { createSupabaseClient } from '../config/supabase.js';
+import { createSupabaseClient, getServiceRoleClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { badRequest, forbidden, unauthorized, serviceUnavailable } from '../utils/errors.js';
 import { assertStrongPassword } from '../utils/passwordPolicy.js';
@@ -554,7 +554,8 @@ export const updateLastSeenUpdate = async (accessToken, updateId) => {
   const { data: { user } = {}, error: userError } = await supabase.auth.getUser();
   if (userError || !user) throw unauthorized();
 
-  const { error } = await supabase
+  const adminClient = getServiceRoleClient();
+  const { error } = await adminClient
     .from('profiles')
     .update({ last_seen_update_id: updateId })
     .eq('id', user.id);
