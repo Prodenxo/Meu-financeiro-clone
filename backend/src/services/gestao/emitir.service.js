@@ -155,9 +155,35 @@ export const emitirServico = async ({
     return { response, message };
   };
 
-  let result = await requestEmitir(false);
+  let result;
+  try {
+    result = await requestEmitir(false);
+  } catch (networkError) {
+    if (networkError?.status) throw networkError;
+    throw serviceUnavailable(
+      'Falha de conexão com o serviço da Receita Federal. Tente novamente em alguns minutos.',
+      {
+        code: MEI_GUIDE_SERPRO_UNAVAILABLE,
+        integration: MEI_GUIDE_INTEGRATION_SERPRO,
+        originalMessage: networkError.message
+      }
+    );
+  }
+
   if (!result.response.ok && isAuthTokenError(result.response.status, result.message)) {
-    result = await requestEmitir(true);
+    try {
+      result = await requestEmitir(true);
+    } catch (networkError) {
+      if (networkError?.status) throw networkError;
+      throw serviceUnavailable(
+        'Falha de conexão com o serviço da Receita Federal. Tente novamente em alguns minutos.',
+        {
+          code: MEI_GUIDE_SERPRO_UNAVAILABLE,
+          integration: MEI_GUIDE_INTEGRATION_SERPRO,
+          originalMessage: networkError.message
+        }
+      );
+    }
   }
 
   if (!result.response.ok) {
@@ -182,7 +208,20 @@ export const emitirServico = async ({
     throw badRequest(result.message || 'Falha ao emitir serviço');
   }
 
-  const payload = await result.response.json();
+  let payload;
+  try {
+    payload = await result.response.json();
+  } catch (parseError) {
+    throw serviceUnavailable(
+      'Resposta inválida recebida do serviço da Receita Federal.',
+      {
+        code: MEI_GUIDE_SERPRO_UNAVAILABLE,
+        integration: MEI_GUIDE_INTEGRATION_SERPRO,
+        originalMessage: parseError.message
+      }
+    );
+  }
+
   return {
     status: result.response.status,
     headers: Object.fromEntries(result.response.headers.entries()),

@@ -133,7 +133,19 @@ export const getSerproTokens = async ({ forceRefresh = false } = {}) => {
 
   const attemptOauthToken = async (useMtls) => {
     const tlsConfig = useMtls ? getSerproTlsConfig() : null;
-    const response = await requestWithOptionalMtls(env.SERPRO_OAUTH_TOKEN_URL, requestOptions, tlsConfig);
+    let response;
+    try {
+      response = await requestWithOptionalMtls(env.SERPRO_OAUTH_TOKEN_URL, requestOptions, tlsConfig);
+    } catch (networkError) {
+      return {
+        ok: false,
+        useMtls,
+        status: 0,
+        contentType: '',
+        message: networkError.message || 'Falha de conexão ao autenticar com o Serpro',
+        networkError
+      };
+    }
     if (response.ok) {
       return { ok: true, payload: await response.json(), useMtls };
     }
