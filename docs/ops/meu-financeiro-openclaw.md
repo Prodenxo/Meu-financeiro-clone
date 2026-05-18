@@ -111,6 +111,7 @@ Não passes chaves Supabase ao modelo: só este endpoint com Bearer.
 | `ping` | não | Teste de vida; resposta inclui mensagem “OpenClaw online”. |
 | `resolve_user` | sim | Confirma vínculo telefone → `user_id` (`n8n_link`). |
 | `list_transactions` | sim | Até **40** lançamentos recentes. |
+| `list_calendar_events` | sim | Compromissos numa data (`payload.data` / `date`; ver `calendar-events.service.js`). |
 | `create_transaction` | sim | Insere em `lancamentos_id`. |
 | `delete_transaction` | sim | `payload.id` (UUID); só dono. |
 

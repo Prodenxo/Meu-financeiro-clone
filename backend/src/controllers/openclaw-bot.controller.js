@@ -6,8 +6,13 @@ export const postOpenclawAction = async (req, res, next) => {
   try {
     const body = req.body || {};
     const phone = body.phone;
-    if (!phone && body.action !== 'ping') {
-      throw badRequest('phone é obrigatório (exceto na action ping)');
+    const actionName = String(body.action || '').trim();
+    const phoneOptional =
+      actionName === 'ping' || actionName === 'list_roles';
+    if (!phone && !phoneOptional) {
+      throw badRequest(
+        'phone é obrigatório (exceto em ping e list_roles)',
+      );
     }
     const result = await openclawBotService.runOpenclawAction({
       phone,

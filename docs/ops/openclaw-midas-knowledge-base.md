@@ -43,6 +43,16 @@ Isto vem das **mesmas** tabelas que a app usa para RBAC. O agente deve **consult
 
 Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 
+### API REST (app / integrações com JWT)
+
+Com sessão Supabase (`Authorization: Bearer <access_token>`):
+
+| Método | Caminho | Descrição |
+|--------|---------|-----------|
+| `GET` | `/api/auth/roles` | Catálogo de cargos + permissões; opcionalmente linhas da tabela `roles`. |
+| `GET` | `/api/auth/permissions` | Sem query: permissões **efectivas** do utilizador logado. Com `?role=admin`: catálogo desse cargo. |
+| `GET` | `/api/auth/permissions/check?permission=bot.own_das` | Verifica se o utilizador logado tem a permissão. |
+
 ---
 
 ## Ações suportadas (MVP)
@@ -51,11 +61,34 @@ Não passes chaves **Supabase** ao modelo: só este endpoint com Bearer.
 |----------|------------------|-----------|
 | `ping` | Não | Teste de vida; não toca na BD de utilizador. |
 | `resolve_user` | Sim | Confirma se o telefone está ligado a um `user_id`; devolve também **`actorContext`** (cargos / empresas). |
+| `list_roles` | **Opcional** | **OpenClaw autorizado** — catálogo de cargos/permissões. Sem `phone` = só catálogo. Com `phone` = + `actorContext` do utilizador. **`payload.includeDatabase: true`** → tabela `roles`. |
+| `get_permissions` | Sim | Sem `payload.role`: permissões **efectivas** do utilizador do `phone`. Com **`payload.role`**: permissões desse cargo (catálogo). |
+| `check_permission` | Sim | **`payload.permission`** (ex.: `bot.das_colaborador_same_company`) → `{ allowed, primaryRole, reason }`. |
 | `list_categories` | Sim | Lista categorias do utilizador (`categorias_id`). Opcional no `payload`: **`minimal`** (`true`) → só `id` e `nome`; **`tipo`** ou **`type`** → filtra `entrada` / `saida`. |
 | `list_transactions` | Sim | Devolve até **40** lançamentos mais recentes (`criado_em` desc). |
 | `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. |
 | `delete_transaction` | Sim | Apaga por `id` (UUID), só se for **dono** do lançamento. |
 | `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp). |
+| `list_calendar_events` | Sim | Compromissos numa data (`payload.data` / `payload.date`); ver secção Agenda abaixo. |
+
+---
+
+## Agenda (`list_calendar_events`)
+
+- **`payload.data`** ou **`payload.date`:** `YYYY-MM-DD` ou `DD/MM/YYYY`; omitir = hoje (`America/Sao_Paulo`).
+- Agrega: **lançamentos** do dia, **Google Calendar** (se o utilizador autorizou na app), **vencimento certificado** MEI.
+- **Lista vazia:** resposta **200** com `empty: true` e mensagem clara (não usar 404).
+- **Google desligado:** `googleCalendarNote` na resposta; lançamentos do dia continuam visíveis.
+
+```json
+{
+  "phone": "5548999999999",
+  "action": "list_calendar_events",
+  "payload": { "date": "16/05/2026" }
+}
+```
+
+Implementação: `calendar-events.service.js`.
 
 ---
 

@@ -3,7 +3,9 @@ import { badRequest, notFound } from '../utils/errors.js';
 import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
 import * as categoriesService from './categories.service.js';
+import * as rbacCatalogService from './rbac-catalog.service.js';
 import { getDasBase64 } from './mei-guide-das-base64.service.js';
+import * as calendarEventsService from './calendar-events.service.js';
 
 const MAX_LIST = 40;
 
@@ -196,6 +198,74 @@ export const runOpenclawAction = async (input) => {
     return { ok: true, message: 'OpenClaw online', data: { pong: true } };
   }
 
+  if (action === 'list_roles') {
+    const includeDb =
+      payload?.includeDatabase === true ||
+      String(payload?.includeDatabase || '').toLowerCase() === 'true';
+    let databaseRoles = [];
+    if (includeDb) {
+      try {
+        databaseRoles = await rbacCatalogService.listRolesFromDatabase();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        databaseRoles = { error: msg };
+      }
+    }
+    const base = {
+      catalog: rbacCatalogService.listRolesCatalog(),
+      databaseRoles,
+    };
+    const phoneDigits = phone ? normalizeWhatsappPhoneDigits(phone) : '';
+    if (!phoneDigits) {
+      return {
+        ok: true,
+        message: 'Catálogo de cargos (OpenClaw autorizado)',
+        data: { ...base, actorContext: null },
+      };
+    }
+    try {
+      const resolved = await resolveUserIdByPhoneDetailed(phone);
+      const { userId, matchedUserNumber, lookupCandidates } = resolved;
+      const linkDebug = {
+        phoneDigits: resolved.phoneDigits,
+        matchedUserNumber,
+        lookupCandidates,
+      };
+      if (!userId) {
+        return {
+          ok: true,
+          message:
+            'Catálogo de cargos. Telefone ainda sem utilizador na app (n8n_link).',
+          data: { ...base, ...linkDebug, actorContext: null },
+        };
+      }
+      let actorContext = {
+        memberships: [],
+        hasActiveMembership: false,
+        profileRole: null,
+        hasSuperadminCapability: false,
+      };
+      try {
+        actorContext = await resolveActorMembershipsForUser(userId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[OpenClaw] actorContext list_roles:', msg);
+      }
+      return {
+        ok: true,
+        message: 'Catálogo de cargos e cargo do utilizador',
+        data: { ...base, userId, actorContext, ...linkDebug },
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        ok: true,
+        message: 'Catálogo de cargos',
+        data: { ...base, actorContext: null, resolveNote: msg },
+      };
+    }
+  }
+
   const resolved = await resolveUserIdByPhoneDetailed(phone);
   const { userId, phoneDigits, matchedUserNumber, lookupCandidates } = resolved;
   if (!userId) {
@@ -225,6 +295,31 @@ export const runOpenclawAction = async (input) => {
       ok: true,
       message: 'Utilizador encontrado',
       data: { userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'get_permissions') {
+    const roleRaw = payload?.role ?? payload?.cargo;
+    const data = roleRaw
+      ? rbacCatalogService.getPermissionsForRole(String(roleRaw))
+      : rbacCatalogService.resolveEffectivePermissionsForActor(actorContext);
+    return {
+      ok: true,
+      message: roleRaw ? 'Permissões do cargo' : 'Permissões efectivas do utilizador',
+      data: { ...data, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'check_permission') {
+    const permission = payload?.permission ?? payload?.key;
+    if (!permission) {
+      throw badRequest('payload.permission (ou key) é obrigatório');
+    }
+    const check = rbacCatalogService.checkActorPermission(actorContext, String(permission));
+    return {
+      ok: true,
+      message: check.allowed ? 'Permitido' : 'Não permitido',
+      data: { ...check, userId, actorContext, ...linkDebug },
     };
   }
 
@@ -285,6 +380,24 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'list_calendar_events') {
+    const rawDate = payload?.data ?? payload?.date;
+    const calendar = await calendarEventsService.listCalendarEventsForUser(userId, {
+      date: rawDate,
+      data: rawDate,
+    });
+    return {
+      ok: true,
+      message: calendar.message,
+      data: {
+        ...calendar,
+        userId,
+        actorContext,
+        ...linkDebug,
+      },
+    };
+  }
+
   if (action === 'get_das_current') {
     const rawMes = payload?.mes;
     let competencia;
@@ -317,6 +430,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_categories, list_transactions, create_transaction, delete_transaction, get_das_current.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_das_current.`,
   );
 };
