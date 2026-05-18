@@ -35,7 +35,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div
       className={`min-h-screen flex flex-col ${
         isDarkMode
-          ? 'bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-slate-100'
+          ? 'bg-premium-bg bg-grid-pattern text-slate-100'
           : 'bg-gradient-to-b from-slate-100 via-slate-100 to-slate-50 text-slate-900'
       }`}
     >

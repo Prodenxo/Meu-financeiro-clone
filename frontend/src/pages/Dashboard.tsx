@@ -551,7 +551,7 @@ export default function Dashboard() {
       {/* Conteúdo do dashboard abaixo, sem header/main duplicado */}
       {/* FR-SIDEBAR-ADMIN-06 opção B (PRD §6 / UX §7): cartão só em viewports sem sidebar desktop (md:hidden). */}
       {hasRole(role, ['admin']) && (
-        <div className="md:hidden planner-card p-5 md:p-6 mb-4 md:mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="md:hidden card-premium p-5 md:p-6 mb-4 md:mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <span className="text-slate-500 dark:text-slate-400 text-sm">Administração</span>
             <h2 className="text-lg md:text-xl font-semibold text-slate-900 dark:text-white">
@@ -563,7 +563,7 @@ export default function Dashboard() {
           </div>
           <Link
             to="/settings/usuarios-dados"
-            className="planner-button"
+            className="btn-premium"
           >
             Painel Admin
           </Link>
@@ -629,14 +629,14 @@ export default function Dashboard() {
             <>
           {/* Cards de resumo */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5 mb-4 md:mb-6">
-            <div className="planner-card p-5 md:p-6 flex flex-col justify-between md:min-h-[150px]">
+            <div className="card-premium p-5 md:p-6 flex flex-col justify-between md:min-h-[150px]">
               <span className="text-slate-500 dark:text-slate-400 text-sm mb-2">Saldo Geral</span>
               <span className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-1">{balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               <div className="mt-2">
                 <div className="h-1 w-full bg-gradient-to-r from-blue-500 to-blue-100 rounded-full"></div>
               </div>
             </div>
-            <div className="planner-card p-5 md:p-6 flex flex-col justify-between md:min-h-[150px]">
+            <div className="card-premium p-5 md:p-6 flex flex-col justify-between md:min-h-[150px]">
               <span className="text-slate-500 dark:text-slate-400 text-sm mb-2">Entradas</span>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xl md:text-2xl">{entradasPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
@@ -647,7 +647,7 @@ export default function Dashboard() {
                 <span>{entradasAReceber.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
             </div>
-            <div className="planner-card p-5 md:p-6 flex flex-col justify-between md:min-h-[150px]">
+            <div className="card-premium p-5 md:p-6 flex flex-col justify-between md:min-h-[150px]">
               <span className="text-slate-500 dark:text-slate-400 text-sm mb-2">Saídas</span>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-rose-500 dark:text-rose-400 font-bold text-xl md:text-2xl">{saidasPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
@@ -661,7 +661,7 @@ export default function Dashboard() {
           </div>
           {/* Gráficos e detalhes */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            <div className="planner-card p-4 md:p-6 lg:col-span-2">
+            <div className="card-premium p-4 md:p-6 lg:col-span-2">
               <span className="font-semibold text-slate-800 dark:text-white text-sm md:text-base">Evolução do Saldo no Período</span>
               <div className="mt-4">
                 <Line
@@ -703,7 +703,7 @@ export default function Dashboard() {
                 />
               </div>
             </div>
-            <div className="planner-card p-4 md:p-6 flex flex-col lg:col-span-1">
+            <div className="card-premium p-4 md:p-6 flex flex-col lg:col-span-1">
               <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-6 mb-4">
                 <span className="font-semibold text-slate-800 dark:text-gray-200 text-sm md:text-base">Despesas</span>
                 <div className="flex gap-2">
@@ -765,7 +765,7 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          <div className="mt-4 md:mt-6 planner-card p-4 md:p-6">
+          <div className="mt-4 md:mt-6 card-premium p-4 md:p-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <span className="font-semibold text-slate-800 dark:text-white text-sm md:text-base">
                 Categorias por percentual de orçamento (mês atual)
@@ -871,7 +871,7 @@ export default function Dashboard() {
         </>
       )}
       {bpoOpen && (
-        <div className="mt-4 md:mt-6 planner-card p-4 md:p-6">
+        <div className="mt-4 md:mt-6 card-premium p-4 md:p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <span className="font-semibold text-slate-800 dark:text-white text-sm md:text-base block">
@@ -923,7 +923,7 @@ export default function Dashboard() {
                     const totals = getBpoTotalsForCategory(cat.id);
                     const monthlyBudgets = getMonthlyBudgetsForCategory(cat.id);
                     return (
-                      <div key={`bpo-entrada-${cat.id}`} className="planner-card-muted p-4">
+                      <div key={`bpo-entrada-${cat.id}`} className="card-premium-muted p-4">
                         <div className="flex items-center justify-between mb-2">
                           <span className="font-semibold text-slate-800 dark:text-white text-sm">
                             {cat.nome}
@@ -1017,7 +1017,7 @@ export default function Dashboard() {
                     const totals = getBpoTotalsForCategory(cat.id);
                     const monthlyBudgets = getMonthlyBudgetsForCategory(cat.id);
                     return (
-                      <div key={`bpo-saida-${cat.id}`} className="planner-card-muted p-4">
+                      <div key={`bpo-saida-${cat.id}`} className="card-premium-muted p-4">
                         <div className="flex items-center justify-between mb-2">
                           <span className="font-semibold text-slate-800 dark:text-white text-sm">
                             {cat.nome}

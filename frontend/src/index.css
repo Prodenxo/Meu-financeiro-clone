@@ -406,6 +406,27 @@
   .admin-limit-progress-fill {
     @apply min-w-0 min-h-[0.625rem];
   }
+
+  /* --- Tema Premium --- */
+  .card-premium {
+    @apply rounded-2xl bg-premium-card border border-premium-border shadow-glass backdrop-blur-md transition-all duration-300;
+  }
+
+  .card-premium-muted {
+    @apply bg-slate-50/80 dark:bg-[#0B101A] border border-[color:rgb(var(--color-surface-border))] dark:border-premium-border/50 rounded-2xl backdrop-blur-sm;
+  }
+
+  .btn-premium {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-premium-neon/10 border border-premium-neon/30 text-premium-neon px-4 py-2.5 text-sm font-semibold shadow-neon transition hover:bg-premium-neon/20 active:bg-premium-neon/30;
+  }
+}
+
+@layer utilities {
+  .bg-grid-pattern {
+    background-size: 40px 40px;
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  }
 }
 
 /* Estilos para react-big-calendar no modo escuro (7A: variáveis CSS) */
