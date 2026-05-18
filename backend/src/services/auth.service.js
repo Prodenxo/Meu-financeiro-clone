@@ -557,8 +557,7 @@ export const updateLastSeenUpdate = async (accessToken, updateId) => {
   const adminClient = getServiceRoleClient();
   const { error } = await adminClient
     .from('profiles')
-    .update({ last_seen_update_id: updateId })
-    .eq('id', user.id);
+    .upsert({ id: user.id, last_seen_update_id: updateId }, { onConflict: 'id' });
 
   if (error) throw badRequest(error.message);
   return { success: true };

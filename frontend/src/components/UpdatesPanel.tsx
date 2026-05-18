@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { APP_UPDATES } from '../config/updates';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
@@ -6,38 +6,35 @@ import { apiClient } from '../services/apiClient';
 export default function UpdatesPanel() {
   const userId = useAuthStore((s) => s.userId);
   const [visible, setVisible] = useState(false);
-  const [checkedForUserId, setCheckedForUserId] = useState<string | undefined>(undefined);
+  const checkedRef = useRef<string | undefined>(undefined);
 
   const latestUpdate = APP_UPDATES[0];
 
   useEffect(() => {
     if (!latestUpdate || !userId) return;
-    if (checkedForUserId === userId) return;
+    if (checkedRef.current === userId) return;
 
-    const checkSeen = async () => {
-      setCheckedForUserId(userId);
-      try {
-        const result = await apiClient.get<{ lastSeenUpdateId: string | null }>('/auth/last-seen-update');
+    checkedRef.current = userId;
+
+    apiClient
+      .get<{ lastSeenUpdateId: string | null }>('/auth/last-seen-update')
+      .then((result) => {
         if (result.lastSeenUpdateId !== latestUpdate.id) {
           setVisible(true);
         }
-      } catch {
+      })
+      .catch(() => {
         // erro de rede — não exibe
-      }
-    };
-
-    void checkSeen();
-  }, [userId, latestUpdate?.id, checkedForUserId]);
+      });
+  }, [userId, latestUpdate?.id]);
 
   if (!visible || !latestUpdate) return null;
 
-  const handleClose = async () => {
+  const handleClose = () => {
     setVisible(false);
-    try {
-      await apiClient.post('/auth/last-seen-update', { updateId: latestUpdate.id });
-    } catch (err) {
-      console.error('[UpdatesPanel] Falha ao salvar preferência no banco:', err);
-    }
+    apiClient
+      .post('/auth/last-seen-update', { updateId: latestUpdate.id })
+      .catch((err) => console.error('[UpdatesPanel] Erro ao salvar:', err));
   };
 
   return (
@@ -82,10 +79,7 @@ export default function UpdatesPanel() {
                   const trimmed = line.trim();
                   if (!trimmed) return null;
                   return (
-                    <p
-                      key={trimmed}
-                      className="text-sm text-slate-700 dark:text-slate-200"
-                    >
+                    <p key={trimmed} className="text-sm text-slate-700 dark:text-slate-200">
                       {trimmed}
                     </p>
                   );
@@ -96,11 +90,7 @@ export default function UpdatesPanel() {
         </div>
 
         <div className="px-6 py-3 border-t border-slate-200/60 dark:border-slate-800/60 flex justify-end">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="planner-button"
-          >
+          <button type="button" onClick={handleClose} className="planner-button">
             Não mostrar mais
           </button>
         </div>
