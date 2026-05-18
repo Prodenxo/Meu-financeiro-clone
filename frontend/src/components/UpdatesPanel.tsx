@@ -21,20 +21,20 @@ export default function UpdatesPanel() {
 
     const checkSeen = async () => {
       setChecked(true);
-      try {
-        if (userId) {
+      if (userId) {
+        try {
           const result = await apiClient.get<{ lastSeenUpdateId: string | null }>('/auth/last-seen-update');
           if (result.lastSeenUpdateId !== latestUpdate.id) {
             setVisible(true);
           }
-          return;
+        } catch {
+          // erro de rede — não exibe para não irritar o usuário
         }
-      } catch {
-        // fallback para localStorage se backend falhar
+        return;
       }
 
       try {
-        const key = getLocalKey(userId);
+        const key = getLocalKey(null);
         const lastSeenId = window.localStorage.getItem(key);
         if (lastSeenId !== latestUpdate.id) {
           setVisible(true);
@@ -54,17 +54,17 @@ export default function UpdatesPanel() {
 
     const currentUserId = useAuthStore.getState().userId;
 
-    try {
-      if (currentUserId) {
+    if (currentUserId) {
+      try {
         await apiClient.post('/auth/last-seen-update', { updateId: latestUpdate.id });
+      } catch (err) {
+        console.error('[UpdatesPanel] Falha ao salvar preferência no banco:', err);
       }
-    } catch {
-      // fallback localStorage
+      return;
     }
 
     try {
-      const key = getLocalKey(currentUserId);
-      window.localStorage.setItem(key, latestUpdate.id);
+      window.localStorage.setItem(getLocalKey(null), latestUpdate.id);
     } catch {
       // ignora erro de localStorage
     }
@@ -131,7 +131,7 @@ export default function UpdatesPanel() {
             onClick={handleClose}
             className="planner-button"
           >
-            Entendi, pode ocultar
+            Não mostrar mais
           </button>
         </div>
       </div>
