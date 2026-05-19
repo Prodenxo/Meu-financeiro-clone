@@ -8,6 +8,7 @@ const GOOGLE_REDIRECT_URI = Deno.env.get('GOOGLE_REDIRECT_URI') || '';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
 };
 
 interface GoogleTokenResponse {
@@ -15,6 +16,108 @@ interface GoogleTokenResponse {
   refresh_token?: string;
   expires_in: number;
   token_type: string;
+}
+
+interface OAuthStatePayload {
+  userId: string;
+  returnTo?: string;
+}
+
+function encodeOAuthState(userId: string, returnTo?: string): string {
+  if (returnTo) {
+    return btoa(JSON.stringify({ u: userId, r: returnTo }));
+  }
+  return btoa(userId);
+}
+
+function parseOAuthState(state: string | null): OAuthStatePayload | null {
+  if (!state) return null;
+  try {
+    const raw = atob(state);
+    if (raw.startsWith('{')) {
+      const parsed = JSON.parse(raw) as { u?: string; r?: string };
+      if (parsed.u) return { userId: parsed.u, returnTo: parsed.r };
+    }
+    if (raw) return { userId: raw };
+  } catch {
+    /* legacy */
+  }
+  return null;
+}
+
+function isAllowedReturnTo(returnTo: string): boolean {
+  try {
+    const u = new URL(returnTo);
+    if (u.protocol === 'financas-pessoais:') return true;
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    const host = u.hostname.toLowerCase();
+    return (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host.endsWith('.vercel.app') ||
+      host.includes('meufinanceiro') ||
+      host.includes('contabhub')
+    );
+  } catch {
+    return false;
+  }
+}
+
+function oauthFinishResponse(
+  ok: boolean,
+  returnTo: string | undefined,
+  deepLink: string,
+  deepLinkSimple: string,
+): Response {
+  if (returnTo && isAllowedReturnTo(returnTo)) {
+    const target = new URL(returnTo);
+    target.searchParams.set('googleCalendar', ok ? 'connected' : 'error');
+    return Response.redirect(target.toString(), 302);
+  }
+
+  const title = ok ? 'Autorização concluída' : 'Erro na autorização';
+  const message = ok
+    ? 'Voltando ao app…'
+    : 'Não foi possível conectar. Feche esta janela e tente novamente.';
+  const primaryLink = ok ? deepLinkSimple : deepLink;
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <meta http-equiv="refresh" content="0;url=${primaryLink}" />
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0;
+      display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; padding: 24px; }
+    p { margin: 0; font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <p>${message}</p>
+  <script>
+    (function () {
+      var links = ${JSON.stringify([primaryLink, deepLink, deepLinkSimple])};
+      function go() {
+        for (var i = 0; i < links.length; i++) {
+          try { window.location.replace(links[i]); } catch (e) {}
+        }
+        try { window.close(); } catch (e) {}
+      }
+      go();
+      setTimeout(go, 400);
+    })();
+  </script>
+</body>
+</html>`;
+
+  return new Response(html, {
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'text/html; charset=UTF-8',
+      'Cache-Control': 'no-store',
+    },
+  });
 }
 
 serve(async (req) => {
@@ -30,12 +133,24 @@ serve(async (req) => {
     if (path === 'callback' && req.method === 'GET') {
       const code = url.searchParams.get('code');
       const error = url.searchParams.get('error');
-      const state = url.searchParams.get('state');
+      const stateRaw = url.searchParams.get('state');
+      const statePayload = parseOAuthState(stateRaw);
+      const returnTo = statePayload?.returnTo;
+
+      const deepLink = 'financas-pessoais://google-callback?code=' + encodeURIComponent(code || '') + (stateRaw ? '&state=' + encodeURIComponent(stateRaw) : '') + '&success=true';
+      const deepLinkSimple = 'financas-pessoais://google-callback?success=true';
+
+      if (error) {
+        return oauthFinishResponse(false, returnTo, deepLink, deepLinkSimple);
+      }
+      if (!code) {
+        return oauthFinishResponse(false, returnTo, deepLink, deepLinkSimple);
+      }
 
       let tokensSaved = false;
-      if (code && state) {
+      if (code && stateRaw && statePayload?.userId) {
         try {
-          const userId = atob(state);
+          const userId = statePayload.userId;
           const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -62,56 +177,51 @@ serve(async (req) => {
         } catch (_e) { tokensSaved = false; }
       }
 
-      if (error) {
-        return new Response(
-          '<html><body><h1>Erro na Autorizacao</h1><p>Voce pode fechar esta janela.</p></body></html>',
-          { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } }
-        );
-      }
-      if (!code) {
-        return new Response(
-          '<html><body><h1>Erro</h1><p>Codigo nao fornecido.</p></body></html>',
-          { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } }
-        );
+      if (tokensSaved) {
+        return oauthFinishResponse(true, returnTo, deepLink, deepLinkSimple);
       }
 
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
       const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
       const functionUrl = `${supabaseUrl}/functions/v1/google-calendar/callback`;
-      const deepLink = 'financas-pessoais://google-callback?code=' + encodeURIComponent(code) + (state ? '&state=' + encodeURIComponent(state) : '') + '&success=true';
-      const deepLinkSimple = 'financas-pessoais://google-callback?success=true';
-
-      if (tokensSaved) {
-        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Autorizacao Concluida</title></head><body>
-          <h1 style="color:#10B981">Autorizacao Concluida!</h1>
-          <p>Redirecionando para o app...</p>
-          <script>
-            function r(){
-              ['${deepLink}','${deepLinkSimple}'].forEach(function(l){
-                try{window.location.href=l;}catch(e){}
-              });
-            }
-            r();setTimeout(r,500);setTimeout(r,1000);setTimeout(r,2000);
-          <\/script>
-        </body></html>`;
-        return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
+      let fallbackRedirect = deepLinkSimple;
+      if (returnTo && isAllowedReturnTo(returnTo)) {
+        const target = new URL(returnTo);
+        target.searchParams.set('googleCalendar', 'connected');
+        fallbackRedirect = target.toString();
       }
 
-      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Processando</title></head><body>
-        <h1>Processando Autorizacao...</h1>
-        <script>
-          fetch('${functionUrl}',{
-            method:'POST',
-            headers:{'Content-Type':'application/json','apikey':'${supabaseAnonKey}'},
-            body:JSON.stringify({code:${JSON.stringify(code)},state:${JSON.stringify(state)}})
-          }).finally(function(){
-            ['${deepLink}','${deepLinkSimple}'].forEach(function(l){
-              try{window.location.href=l;}catch(e){}
-            });
-          });
-        <\/script>
-      </body></html>`;
-      return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
+      const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Processando</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0;
+      display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <p>Processando autorização…</p>
+  <script>
+    fetch(${JSON.stringify(functionUrl)}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: ${JSON.stringify(supabaseAnonKey)} },
+      body: JSON.stringify({ code: ${JSON.stringify(code)}, state: ${JSON.stringify(stateRaw)} }),
+    }).finally(function () {
+      window.location.replace(${JSON.stringify(fallbackRedirect)});
+    });
+  </script>
+</body>
+</html>`;
+      return new Response(html, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/html; charset=UTF-8',
+          'Cache-Control': 'no-store',
+        },
+      });
     }
 
     // POST /callback — processar tokens OAuth
@@ -129,8 +239,12 @@ serve(async (req) => {
         let useServiceClient = false;
 
         if (state) {
-          try { userId = atob(state); useServiceClient = true; }
-          catch (_e) { return new Response(JSON.stringify({ error: 'State invalido' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
+          const parsed = parseOAuthState(state);
+          if (!parsed?.userId) {
+            return new Response(JSON.stringify({ error: 'State invalido' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          userId = parsed.userId;
+          useServiceClient = true;
         } else {
           const authHeader = req.headers.get('Authorization');
           if (!authHeader) return new Response(JSON.stringify({ error: 'Nao autenticado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -192,7 +306,9 @@ serve(async (req) => {
 
     // GET /auth — iniciar fluxo OAuth
     if (path === 'auth' && req.method === 'GET') {
-      const state = btoa(userId);
+      const returnToParam = url.searchParams.get('returnTo')?.trim() || '';
+      const returnTo = returnToParam && isAllowedReturnTo(returnToParam) ? returnToParam : undefined;
+      const state = encodeOAuthState(userId, returnTo);
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
       authUrl.searchParams.set('redirect_uri', GOOGLE_REDIRECT_URI);
@@ -667,6 +783,57 @@ serve(async (req) => {
       }
 
       return new Response(JSON.stringify({ success: true, eventId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // DELETE|POST /disconnect — revogar tokens Google e remover do banco
+    if (path === 'disconnect' && (req.method === 'DELETE' || req.method === 'POST')) {
+      const serviceClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      );
+
+      const { data: tokenData } = await serviceClient
+        .from('google_tokens_id')
+        .select('access_token, refresh_token')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const tokenToRevoke = tokenData?.refresh_token || tokenData?.access_token;
+      if (tokenToRevoke) {
+        try {
+          await fetch('https://oauth2.googleapis.com/revoke', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ token: tokenToRevoke }),
+          });
+        } catch {
+          /* revogação opcional — segue removendo do banco */
+        }
+      }
+
+      const { error: deleteError, count } = await serviceClient
+        .from('google_tokens_id')
+        .delete({ count: 'exact' })
+        .eq('user_id', userId);
+
+      if (deleteError) {
+        return new Response(
+          JSON.stringify({ error: 'Erro ao remover tokens: ' + deleteError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      if ((count ?? 0) === 0 && tokenData) {
+        return new Response(
+          JSON.stringify({ error: 'Não foi possível remover a integração do banco de dados.' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, removed: count ?? 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     return new Response(JSON.stringify({ error: 'Rota nao encontrada' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

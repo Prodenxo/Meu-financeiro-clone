@@ -57,7 +57,9 @@ npm test
 Use a pasta canônica `supabase/`:
 
 ```bash
-cd supabase
-supabase link --project-ref <seu-project-ref>
+cd Site/backend
+supabase link --project-ref iqcupswgotsuncysagmj
 supabase functions deploy google-calendar
 ```
+
+`google-calendar` usa `verify_jwt = false` para o redirect OAuth em `GET /callback` (sem JWT). Ver `docs/ops/google-calendar-oauth-callback.md`.

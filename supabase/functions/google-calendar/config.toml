@@ -1,0 +1,2 @@
+# OAuth: redirect do Google em GET /callback não envia JWT do Supabase.
+verify_jwt = false
