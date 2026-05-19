@@ -8,13 +8,12 @@ const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '..');
 
 // Rotas críticas que precisam de arquivos HTML físicos
+// privacidade/termos: HTML estático em public/ — não sobrescrever com SPA
 const criticalRoutes = [
   'reset-password',
   'forgot-password',
   'login',
   'register',
-  'privacidade',
-  'termos',
 ];
 
 const distDir = join(rootDir, 'dist');
