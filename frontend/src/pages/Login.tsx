@@ -102,7 +102,14 @@ export default function Login() {
       footer={
         <>
           Ao clicar em Entrar, você concorda com nossa{' '}
-          <span className="underline cursor-pointer">Política de Privacidade</span>.
+          <Link to="/privacidade" className="underline text-blue-600 hover:text-blue-700 dark:text-blue-400">
+            Política de Privacidade
+          </Link>{' '}
+          e os{' '}
+          <Link to="/termos" className="underline text-blue-600 hover:text-blue-700 dark:text-blue-400">
+            Termos de Uso
+          </Link>
+          .
         </>
       }
     >

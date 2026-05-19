@@ -8,6 +8,8 @@ import LoginOnly from './pages/LoginOnly';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import Privacidade from './pages/Privacidade';
+import Termos from './pages/Termos';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
 import Orcamentos from './pages/Orcamentos';
@@ -120,7 +122,9 @@ export function AppRoutes() {
         {/* Rotas públicas sempre acessíveis */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        
+        <Route path="/privacidade" element={<Privacidade />} />
+        <Route path="/termos" element={<Termos />} />
+
         {!user ? (
           <>
             <Route path="/login" element={<Login />} />
