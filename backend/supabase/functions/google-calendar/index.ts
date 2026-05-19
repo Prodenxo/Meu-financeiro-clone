@@ -329,7 +329,22 @@ serve(async (req) => {
     // POST /create-custom-event — criar evento personalizado no Google Calendar
     if (path === 'create-custom-event' && req.method === 'POST') {
       const body = await req.json();
-      const { title, isAllDay, startDate, endDate, startHour, startMinute, endHour, endMinute, recurrence, location, description, colorId } = body;
+      const {
+        title,
+        isAllDay,
+        startDate,
+        endDate,
+        startHour,
+        startMinute,
+        endHour,
+        endMinute,
+        recurrence,
+        location,
+        description,
+        colorId,
+        reminderMinutes,
+        createMeetLink,
+      } = body;
 
       if (!title || !startDate) {
         return new Response(JSON.stringify({ error: 'Título e data de início são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -365,9 +380,28 @@ serve(async (req) => {
         summary: title,
         ...(location ? { location } : {}),
         ...(description ? { description } : {}),
-        ...(colorId ? { colorId } : {}),
+        ...(colorId != null && String(colorId).trim() !== ''
+          ? { colorId: String(colorId) }
+          : {}),
         ...(recurrence ? { recurrence: [recurrence] } : {}),
       };
+
+      const reminderMins = reminderMinutes != null ? Number(reminderMinutes) : NaN;
+      if (Number.isFinite(reminderMins) && reminderMins >= 0) {
+        eventBody.reminders = {
+          useDefault: false,
+          overrides: [{ method: 'popup', minutes: reminderMins }],
+        };
+      }
+
+      if (createMeetLink === true) {
+        eventBody.conferenceData = {
+          createRequest: {
+            requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            conferenceSolutionKey: { type: 'hangoutsMeet' },
+          },
+        };
+      }
 
       if (isAllDay) {
         eventBody.start = { date: startDate };
@@ -377,11 +411,15 @@ serve(async (req) => {
         eventBody.end   = { dateTime: `${endDate}T${pad(endHour)}:${pad(endMinute)}:00`,   timeZone: 'America/Sao_Paulo' };
       }
 
-      const calendarResponse = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(eventBody),
-      });
+      const calendarQuery = createMeetLink === true ? '?conferenceDataVersion=1' : '';
+      const calendarResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events${calendarQuery}`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(eventBody),
+        }
+      );
 
       if (!calendarResponse.ok) {
         const err = await calendarResponse.text();
