@@ -27,6 +27,17 @@ export default defineConfig({
   plugins: [
     react(),
     {
+      name: 'legal-static-routes-dev',
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          const url = req.url?.split('?')[0] ?? '';
+          if (url === '/privacidade' || url === '/privacidade/') req.url = '/privacidade.html';
+          if (url === '/termos' || url === '/termos/') req.url = '/termos.html';
+          next();
+        });
+      },
+    },
+    {
       name: 'copy-redirects',
       closeBundle() {
         if (isVitest) return;
