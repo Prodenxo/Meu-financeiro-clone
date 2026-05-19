@@ -257,6 +257,7 @@ serve(async (req) => {
       const calendarUrl = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
       calendarUrl.searchParams.set('singleEvents', 'true');
       calendarUrl.searchParams.set('orderBy', 'startTime');
+      calendarUrl.searchParams.set('conferenceDataVersion', '1');
       if (timeMin) calendarUrl.searchParams.set('timeMin', timeMin);
       if (timeMax) calendarUrl.searchParams.set('timeMax', timeMax);
 
@@ -376,10 +377,17 @@ serve(async (req) => {
       }
 
       const pad = (n: number) => String(n).padStart(2, '0');
+      const wantsMeet =
+        createMeetLink === true || String(createMeetLink).toLowerCase() === 'true';
+      let descText = description ? String(description).trim() : '';
+      if (wantsMeet) {
+        descText = descText ? `${descText}\n[MF_MEET]` : '[MF_MEET]';
+      }
+
       const eventBody: Record<string, unknown> = {
         summary: title,
         ...(location ? { location } : {}),
-        ...(description ? { description } : {}),
+        ...(descText ? { description: descText } : {}),
         ...(colorId != null && String(colorId).trim() !== ''
           ? { colorId: String(colorId) }
           : {}),
@@ -394,13 +402,14 @@ serve(async (req) => {
         };
       }
 
-      if (createMeetLink === true) {
+      if (wantsMeet) {
         eventBody.conferenceData = {
           createRequest: {
             requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             conferenceSolutionKey: { type: 'hangoutsMeet' },
           },
         };
+        eventBody.extendedProperties = { private: { mfMeet: '1' } };
       }
 
       if (isAllDay) {
@@ -411,7 +420,7 @@ serve(async (req) => {
         eventBody.end   = { dateTime: `${endDate}T${pad(endHour)}:${pad(endMinute)}:00`,   timeZone: 'America/Sao_Paulo' };
       }
 
-      const calendarQuery = createMeetLink === true ? '?conferenceDataVersion=1' : '';
+      const calendarQuery = wantsMeet ? '?conferenceDataVersion=1' : '';
       const calendarResponse = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events${calendarQuery}`,
         {
@@ -426,8 +435,238 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'Erro ao criar evento: ' + err }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      const eventData = await calendarResponse.json();
-      return new Response(JSON.stringify({ success: true, eventId: eventData.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      let eventData = await calendarResponse.json();
+
+      const pickMeetUri = (ev: Record<string, unknown>) => {
+        const hangout = typeof ev.hangoutLink === 'string' ? ev.hangoutLink.trim() : '';
+        if (hangout.includes('meet.google')) return hangout;
+        const cdata = ev.conferenceData as { entryPoints?: Array<{ entryPointType?: string; uri?: string }> } | undefined;
+        for (const ep of cdata?.entryPoints || []) {
+          const uri = String(ep?.uri || '').trim();
+          if (uri.includes('meet.google')) return uri;
+        }
+        return null;
+      };
+
+      let meetUri = pickMeetUri(eventData);
+
+      if (wantsMeet && eventData.id && !meetUri) {
+        const getRes = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventData.id)}?conferenceDataVersion=1`,
+          { method: 'GET', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } },
+        );
+        if (getRes.ok) {
+          eventData = await getRes.json();
+          meetUri = pickMeetUri(eventData);
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          eventId: eventData.id,
+          hangoutLink: meetUri,
+          htmlLink: eventData.htmlLink || null,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // POST /update-custom-event — atualizar evento no Google Calendar
+    if (path === 'update-custom-event' && req.method === 'POST') {
+      const body = await req.json();
+      const eventId = String(body?.eventId || '').trim();
+      if (!eventId) {
+        return new Response(JSON.stringify({ error: 'eventId é obrigatório' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const {
+        title,
+        isAllDay,
+        startDate,
+        endDate,
+        startHour,
+        startMinute,
+        endHour,
+        endMinute,
+        recurrence,
+        location,
+        description,
+        colorId,
+        reminderMinutes,
+        createMeetLink,
+      } = body;
+
+      if (!title || !startDate) {
+        return new Response(JSON.stringify({ error: 'Título e data de início são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const { data: tokenData, error: tokenError } = await supabaseClient
+        .from('google_tokens_id')
+        .select('access_token, refresh_token, expires_at')
+        .eq('user_id', userId)
+        .single();
+
+      if (tokenError || !tokenData) {
+        return new Response(JSON.stringify({ error: 'Tokens nao encontrados. Autorize o Google Calendar primeiro.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      let accessToken = tokenData.access_token;
+      if (tokenData.expires_at && new Date(tokenData.expires_at) <= new Date()) {
+        if (!tokenData.refresh_token) return new Response(JSON.stringify({ error: 'Token expirado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, refresh_token: tokenData.refresh_token, grant_type: 'refresh_token' }),
+        });
+        if (!refreshResponse.ok) return new Response(JSON.stringify({ error: 'Erro ao renovar token' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const refreshedTokens: GoogleTokenResponse = await refreshResponse.json();
+        accessToken = refreshedTokens.access_token;
+        const newExpiresAt = new Date(Date.now() + refreshedTokens.expires_in * 1000).toISOString();
+        await supabaseClient.from('google_tokens_id').update({ access_token: accessToken, expires_at: newExpiresAt }).eq('user_id', userId);
+      }
+
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const wantsMeet =
+        createMeetLink === true || String(createMeetLink).toLowerCase() === 'true';
+      let descText = description ? String(description).trim() : '';
+      if (wantsMeet) {
+        descText = descText ? `${descText}\n[MF_MEET]` : '[MF_MEET]';
+      }
+
+      const eventBody: Record<string, unknown> = {
+        summary: title,
+        ...(location ? { location } : {}),
+        ...(descText ? { description: descText } : {}),
+        ...(colorId != null && String(colorId).trim() !== ''
+          ? { colorId: String(colorId) }
+          : {}),
+        ...(recurrence ? { recurrence: [recurrence] } : {}),
+      };
+
+      const reminderMins = reminderMinutes != null ? Number(reminderMinutes) : NaN;
+      if (Number.isFinite(reminderMins) && reminderMins >= 0) {
+        eventBody.reminders = {
+          useDefault: false,
+          overrides: [{ method: 'popup', minutes: reminderMins }],
+        };
+      }
+
+      if (wantsMeet) {
+        eventBody.conferenceData = {
+          createRequest: {
+            requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            conferenceSolutionKey: { type: 'hangoutsMeet' },
+          },
+        };
+        eventBody.extendedProperties = { private: { mfMeet: '1' } };
+      }
+
+      if (isAllDay) {
+        eventBody.start = { date: startDate };
+        eventBody.end = { date: endDate };
+      } else {
+        eventBody.start = { dateTime: `${startDate}T${pad(startHour)}:${pad(startMinute)}:00`, timeZone: 'America/Sao_Paulo' };
+        eventBody.end = { dateTime: `${endDate}T${pad(endHour)}:${pad(endMinute)}:00`, timeZone: 'America/Sao_Paulo' };
+      }
+
+      const calendarQuery = wantsMeet ? '?conferenceDataVersion=1' : '';
+      const calendarResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}${calendarQuery}`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(eventBody),
+        },
+      );
+
+      if (!calendarResponse.ok) {
+        const err = await calendarResponse.text();
+        return new Response(JSON.stringify({ error: 'Erro ao atualizar evento: ' + err }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      let eventData = await calendarResponse.json();
+      const pickMeetUri = (ev: Record<string, unknown>) => {
+        const hangout = typeof ev.hangoutLink === 'string' ? ev.hangoutLink.trim() : '';
+        if (hangout.includes('meet.google')) return hangout;
+        const cdata = ev.conferenceData as { entryPoints?: Array<{ entryPointType?: string; uri?: string }> } | undefined;
+        for (const ep of cdata?.entryPoints || []) {
+          const uri = String(ep?.uri || '').trim();
+          if (uri.includes('meet.google')) return uri;
+        }
+        return null;
+      };
+
+      let meetUri = pickMeetUri(eventData);
+      if (wantsMeet && !meetUri) {
+        const getRes = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?conferenceDataVersion=1`,
+          { method: 'GET', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } },
+        );
+        if (getRes.ok) {
+          eventData = await getRes.json();
+          meetUri = pickMeetUri(eventData);
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          eventId: eventData.id || eventId,
+          hangoutLink: meetUri,
+          htmlLink: eventData.htmlLink || null,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // POST /delete-custom-event — excluir evento no Google Calendar
+    if (path === 'delete-custom-event' && req.method === 'POST') {
+      const body = await req.json();
+      const eventId = String(body?.eventId || '').trim();
+      if (!eventId) {
+        return new Response(JSON.stringify({ error: 'eventId é obrigatório' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const { data: tokenData, error: tokenError } = await supabaseClient
+        .from('google_tokens_id')
+        .select('access_token, refresh_token, expires_at')
+        .eq('user_id', userId)
+        .single();
+
+      if (tokenError || !tokenData) {
+        return new Response(JSON.stringify({ error: 'Tokens nao encontrados. Autorize o Google Calendar primeiro.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      let accessToken = tokenData.access_token;
+      if (tokenData.expires_at && new Date(tokenData.expires_at) <= new Date()) {
+        if (!tokenData.refresh_token) return new Response(JSON.stringify({ error: 'Token expirado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, refresh_token: tokenData.refresh_token, grant_type: 'refresh_token' }),
+        });
+        if (!refreshResponse.ok) return new Response(JSON.stringify({ error: 'Erro ao renovar token' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const refreshedTokens: GoogleTokenResponse = await refreshResponse.json();
+        accessToken = refreshedTokens.access_token;
+        const newExpiresAt = new Date(Date.now() + refreshedTokens.expires_in * 1000).toISOString();
+        await supabaseClient.from('google_tokens_id').update({ access_token: accessToken, expires_at: newExpiresAt }).eq('user_id', userId);
+      }
+
+      const calendarResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
+
+      if (!calendarResponse.ok && calendarResponse.status !== 204) {
+        const err = await calendarResponse.text();
+        return new Response(JSON.stringify({ error: 'Erro ao excluir evento: ' + err }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      return new Response(JSON.stringify({ success: true, eventId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     return new Response(JSON.stringify({ error: 'Rota nao encontrada' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
