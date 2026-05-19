@@ -49,12 +49,23 @@ Deve mencionar explicitamente:
 ### 1.3 Página inicial da aplicação
 
 - `https://meiinfinito.com.br/` (landing ou login público)
+- O Google exige **link HTML** `<a href="/privacidade">Política de Privacidade</a>` visível na homepage (não só botão React). O App usa `LegalWebLink` + `LegalHomepageStrip` na landing.
 
 ### 1.4 Checklist Fase 1
 
 - [ ] URLs abrem sem login em navegador anónimo
 - [ ] HTTPS válido (certificado)
 - [ ] Links no rodapé do login apontam para `/privacidade` e `/termos`
+- [ ] Homepage (`/`) mostra **Política de Privacidade** como link clicável (hero + rodapé)
+
+### 1.5 Verificação “em análise” — não há botão de reenviar
+
+Quando o painel mostra **“Sua marca e acesso aos dados estão em análise”**:
+
+1. **Não existe** botão “pedir análise de novo” no Console — é normal.
+2. Se aparecer item vermelho (ex.: *Requisitos da página inicial*), **corrija o site**, faça deploy e só então **responda ao e-mail** da Equipe de Confiança e Segurança (thread que o Google enviou).
+3. A reanálise continua **por e-mail** depois que todos os problemas listados em “Progresso da verificação” estiverem resolvidos.
+4. Prazo típico: vários dias úteis após a resposta.
 
 ---
 
