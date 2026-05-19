@@ -12,7 +12,9 @@ const criticalRoutes = [
   'reset-password',
   'forgot-password',
   'login',
-  'register'
+  'register',
+  'privacidade',
+  'termos',
 ];
 
 const distDir = join(rootDir, 'dist');

@@ -109,10 +109,20 @@ function GoogleOAuthCallback() {
 }
 
 export function AppRoutes() {
+  const location = useLocation();
   const { user, role, mei } = useAuthStore();
   const canAccessMeiArea = role === 'superadmin'
     || role === 'admin'
     || (role === 'usuario' && mei !== false);
+
+  // Rotas legais: sempre públicas (evita catch-all → /login)
+  const legalPath = location.pathname.replace(/\/$/, '') || '/';
+  if (legalPath === '/privacidade') {
+    return <Privacidade />;
+  }
+  if (legalPath === '/termos') {
+    return <Termos />;
+  }
 
   return (
     <>
