@@ -44,7 +44,12 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
 
   useEffect(() => {
     if (open) {
-      setForm(initial || {});
+      const base = initial || {};
+      setForm({
+        ...base,
+        max_mei:
+          base.max_mei === null || base.max_mei === undefined ? 0 : base.max_mei,
+      });
       setErrors({});
       setCnpjError('');
       setSubmitError('');
@@ -62,10 +67,13 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
-  // null (ilimitado) ou > 0 = MEI ativo; 0/undefined = desativado.
-  const meiEnabled = form.max_mei === null || (typeof form.max_mei === 'number' && form.max_mei > 0);
-  const toggleMei = () => {
-    if (meiEnabled) {
+  const meiSlots =
+    form.max_mei === null || form.max_mei === undefined
+      ? 0
+      : Math.max(0, Math.trunc(form.max_mei));
+  const meiModuleOn = meiSlots > 0;
+  const toggleMeiModule = () => {
+    if (meiModuleOn) {
       setNum('max_mei', 0);
     } else {
       setNum('max_mei', 1);
@@ -140,6 +148,7 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
       const payload: EmpresaData = {
         ...form,
         cnpj: onlyDigits(form.cnpj || '') || undefined,
+        max_mei: meiSlots,
       };
 
       let result: EmpresaData;
@@ -415,42 +424,47 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Módulo MEI</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Habilita criação de usuários MEI.</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    {meiModuleOn
+                      ? 'Defina quantas vagas MEI (CNPJ) esta empresa pode ter.'
+                      : 'Desativado — esta empresa não pode ter clientes MEI.'}
+                  </p>
                 </div>
                 <button
                   type="button"
-                  onClick={toggleMei}
+                  onClick={toggleMeiModule}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                    meiEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                    meiModuleOn ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
                   }`}
-                  aria-pressed={meiEnabled}
-                  aria-label={meiEnabled ? 'Desligar Módulo MEI' : 'Ligar Módulo MEI'}
+                  aria-pressed={meiModuleOn}
+                  aria-label={meiModuleOn ? 'Desativar módulo MEI' : 'Ativar módulo MEI'}
                 >
                   <span
                     className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      meiEnabled ? 'translate-x-6' : 'translate-x-1'
+                      meiModuleOn ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
                 </button>
               </div>
-              {meiEnabled && (
+              {meiModuleOn ? (
                 <div>
                   <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                    Limite de usuários MEI <span className="text-[10px]">(vazio = ilimitado)</span>
+                    Quantidade de vagas MEI
                   </label>
                   <input
                     type="number"
                     min={1}
-                    value={form.max_mei === null || form.max_mei === undefined ? '' : form.max_mei}
+                    value={meiSlots}
                     onChange={(e) => {
                       const raw = e.target.value;
-                      setNum('max_mei', raw === '' ? null : Math.max(1, Number(raw) || 1));
+                      const n = raw === '' ? 0 : Math.min(9999, Math.max(0, Number(raw) || 0));
+                      setNum('max_mei', n);
                     }}
                     className="planner-input-compact w-full"
-                    placeholder="Ilimitado"
+                    placeholder="Ex.: 1, 3, 10"
                   />
                 </div>
-              )}
+              ) : null}
             </div>
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-4">
               <div className="flex items-center justify-between mb-3">

@@ -278,15 +278,16 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                 </tr>
               ) : (
                 currentData.map((empresa) => {
-                  const maxMei = empresa.max_mei || 0;
-                  // null = ilimitado (única semântica válida desde 2026-05-14). 0/legacy também caem aqui.
+                  const maxMei =
+                    empresa.max_mei === null || empresa.max_mei === undefined
+                      ? 0
+                      : Number(empresa.max_mei) || 0;
                   const naoMeiUnlimited = empresa.max_usuarios_nao_mei === null
                     || empresa.max_usuarios_nao_mei === undefined
                     || empresa.max_usuarios_nao_mei === 0;
                   const maxRegular = naoMeiUnlimited ? 0 : (empresa.max_usuarios_nao_mei || 0);
                   const stats = getUsageStats(empresa.id, maxMei, maxRegular);
-                  const hasMeiUsage = stats.meiUsed > 0;
-                  const meiEnabled = maxMei > 0 || hasMeiUsage;
+                  const meiEnabled = maxMei > 0;
                   const effectiveMaxMei = Math.max(maxMei, stats.meiUsed, 1);
                   const meiProgressRatio = stats.meiUsed / effectiveMaxMei;
                   const meiAvailable = Math.max(0, effectiveMaxMei - stats.meiUsed);
