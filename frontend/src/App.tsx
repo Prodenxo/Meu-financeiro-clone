@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { hasRole } from './lib/roles';
+import { canAccessMeiArea } from './lib/meiAccess';
 import { useThemeStore } from './store/themeStore';
 import Login from './pages/Login';
 import LoginOnly from './pages/LoginOnly';
@@ -111,9 +112,7 @@ function GoogleOAuthCallback() {
 export function AppRoutes() {
   const location = useLocation();
   const { user, role, mei } = useAuthStore();
-  const canAccessMeiArea = role === 'superadmin'
-    || role === 'admin'
-    || (role === 'usuario' && mei !== false);
+  const showMeiNav = canAccessMeiArea(role, mei);
 
   // Rotas legais: sempre públicas (evita catch-all → /login)
   const legalPath = location.pathname.replace(/\/$/, '') || '/';
@@ -157,7 +156,7 @@ export function AppRoutes() {
                   <Route
                     path="/guias-mei"
                     element={
-                      canAccessMeiArea ? (
+                      showMeiNav ? (
                         <GuidesMei />
                       ) : (
                         <Navigate to="/" replace state={{ accessBlock: 'mei-required' as const }} />
@@ -167,7 +166,7 @@ export function AppRoutes() {
                   <Route
                     path="/mei-catalogo/clientes"
                     element={
-                      canAccessMeiArea ? (
+                      showMeiNav ? (
                         <MeiCatalogoClientes />
                       ) : (
                         <Navigate to="/" replace state={{ accessBlock: 'mei-required' as const }} />
@@ -177,7 +176,7 @@ export function AppRoutes() {
                   <Route
                     path="/mei-catalogo/servicos-produtos"
                     element={
-                      canAccessMeiArea ? (
+                      showMeiNav ? (
                         <MeiCatalogoServicosProdutos />
                       ) : (
                         <Navigate to="/" replace state={{ accessBlock: 'mei-required' as const }} />

@@ -11,7 +11,7 @@ vi.mock('../store/themeStore', () => ({
 }));
 
 const { useAuthStoreMock, authState } = vi.hoisted(() => {
-  const state = { role: 'usuario' as UserRole };
+  const state = { role: 'usuario' as UserRole, mei: true as boolean | null };
   const hook = Object.assign(() => state, { getState: () => state });
   return { useAuthStoreMock: hook, authState: state };
 });
@@ -31,9 +31,42 @@ function renderBottomNav(pathname = '/') {
   );
 }
 
+describe('BottomNavigation (Meu MEI mobile)', () => {
+  beforeEach(() => {
+    authState.role = 'usuario';
+    authState.mei = true;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('com acesso MEI mostra Meu MEI em vez de Categorias', () => {
+    renderBottomNav('/');
+    expect(screen.getByRole('link', { name: /Meu MEI — notas e guias/i }).getAttribute('href')).toBe(
+      '/guias-mei'
+    );
+    expect(screen.queryByRole('link', { name: 'Categorias' })).toBeNull();
+  });
+
+  it('sem acesso MEI (mei=false) mantém Categorias e oculta Meu MEI', () => {
+    authState.mei = false;
+    renderBottomNav('/');
+    expect(screen.getByRole('link', { name: 'Categorias' }).getAttribute('href')).toBe('/categorias');
+    expect(screen.queryByRole('link', { name: /Meu MEI/i })).toBeNull();
+  });
+
+  it('em /guias-mei Meu MEI fica ativo (aria-current)', () => {
+    renderBottomNav('/guias-mei');
+    const mei = screen.getByRole('link', { name: /Meu MEI — notas e guias/i });
+    expect(mei.getAttribute('aria-current')).toBe('page');
+  });
+});
+
 describe('BottomNavigation (UX-GLOBAL-03)', () => {
   beforeEach(() => {
     authState.role = 'usuario';
+    authState.mei = true;
   });
 
   afterEach(() => {
@@ -69,6 +102,7 @@ describe('BottomNavigation (UX-GLOBAL-03)', () => {
 describe('BottomNavigation (Painel Admin mobile — SA-P1)', () => {
   beforeEach(() => {
     authState.role = 'usuario';
+    authState.mei = true;
   });
 
   afterEach(() => {
