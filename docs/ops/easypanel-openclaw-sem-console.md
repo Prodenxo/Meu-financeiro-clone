@@ -29,15 +29,33 @@ sh -c 'printf "%s\n" "const fs=require(\"fs\");const p=\"/home/node/.openclaw/op
 
 Depois do deploy, nos **Logs** deve aparecer `[fix] agentRuntime removido` e `[gateway] ready` (sem `Config invalid`).
 
-### Comando bootstrap Meu Financeiro (opcional, após subir)
+### Comando único recomendado (fix + `mf-curl` + `mf-das` + gateway)
 
-Cola **uma linha** (ajusta o URL em `OPENCLAW_PUBLIC_ORIGIN` nas env, não aqui):
+Substitui o CMD por **esta** linha (cria scripts em `/home/node/.openclaw/workspace` a cada arranque):
 
 ```sh
-sh -c 'STATE="${OPENCLAW_STATE_DIR:-/tmp/openclaw-state}"; ORIGIN="${OPENCLAW_PUBLIC_ORIGIN}"; MF_URL="${MF_API_URL}"; MF_SEC="${OPENCLAW_WEBHOOK_SECRET}"; PORT="${OPENCLAW_GATEWAY_PORT:-18789}"; mkdir -p "$STATE/workspace"; test -n "$MF_URL" && test -n "$MF_SEC" || { echo ERRO env; exit 1; }; node -e "const fs=require(\"fs\"),p=require(\"path\"),d=p.join(process.env.STATE,\"workspace\"),u=process.env.MF_URL,s=process.env.MF_SEC;fs.writeFileSync(p.join(d,\"mf-curl.sh\"),\"#!/bin/sh\\nexec curl -sS -X POST \"+JSON.stringify(u)+\" -H \"+JSON.stringify(\"Content-Type: application/json; charset=utf-8\")+\" -H \"+JSON.stringify(\"Authorization: Bearer \"+s)+\" -d \\\"\\\\$1\\\"\\n\",{mode:0o755});fs.writeFileSync(p.join(d,\"MF-API.md\"),\"# Meu Financeiro\\nSEMPRE: \"+p.join(d,\"mf-curl.sh\")+\"\\n\");" STATE="$STATE" MF_URL="$MF_URL" MF_SEC="$MF_SEC"; node -e "const fs=require(\"fs\");const p=process.env.CFG;const o=process.env.ORIGIN||\"\";let c={};try{c=JSON.parse(fs.readFileSync(p,\"utf8\"))}catch(e){}c.gateway=c.gateway||{};c.gateway.controlUi=c.gateway.controlUi||{};const set=new Set([...(c.gateway.controlUi.allowedOrigins||[]),\"http://localhost:18789\",\"http://127.0.0.1:18789\"]);if(o)set.add(o);c.gateway.controlUi.allowedOrigins=[...set];c.gateway.trustedProxies=c.gateway.trustedProxies||[\"10.0.0.0/8\",\"172.16.0.0/12\"];c.tools={exec:{host:\"gateway\",security:\"full\",ask:\"off\"},profile:\"coding\"};fs.writeFileSync(p,JSON.stringify(c,null,2));" CFG="$STATE/openclaw.json" ORIGIN="$ORIGIN"; export OPENCLAW_STATE_DIR="$STATE"; exec openclaw gateway run --bind lan --port "$PORT"'
+sh -c 'printf "%s\n" "const fs=require(\"fs\");const p=\"/home/node/.openclaw/openclaw.json\";if(!fs.existsSync(p))process.exit(0);const c=JSON.parse(fs.readFileSync(p,\"utf8\"));const k=\"openai/gpt-4o-mini\";const m=c.agents&&c.agents.defaults&&c.agents.defaults.models&&c.agents.defaults.models[k];if(m&&m.agentRuntime){delete m.agentRuntime;fs.writeFileSync(p,JSON.stringify(c,null,2));console.log(\"[fix] agentRuntime removido\");}" > /tmp/fix-openclaw.js && node /tmp/fix-openclaw.js; chown -R node:node /home/node/.openclaw 2>/dev/null; WS=/home/node/.openclaw/workspace; mkdir -p "$WS"; test -n "$MF_API_URL" && test -n "$OPENCLAW_WEBHOOK_SECRET" || { echo ERRO env MF; exit 1; }; export WS MF_URL="$MF_API_URL" MF_SEC="$OPENCLAW_WEBHOOK_SECRET"; node -e "const fs=require(\"fs\"),path=require(\"path\"),d=process.env.WS,u=process.env.MF_URL,s=process.env.MF_SEC,curl=path.join(d,\"mf-curl.sh\");fs.writeFileSync(curl,\"#!/bin/sh\\nexec curl -sS -X POST \"+JSON.stringify(u)+\" -H \"+JSON.stringify(\"Content-Type: application/json; charset=utf-8\")+\" -H \"+JSON.stringify(\"Authorization: Bearer \"+s)+\" -d \\\"\\\\$1\\\"\\n\",{mode:0o755});const das=\"#!/bin/sh\\nset -e\\nMF_CURL=\"+JSON.stringify(curl)+\"\\nPHONE=\\\"${1:?phone}\\\"\\nMES=\\\"${2:?mes}\\\"\\nTMP=\\\"$(mktemp)\\\";trap \\\"rm -f $TMP\\\" EXIT\\n\\\"$MF_CURL\\\" \\\"{\\\\\\\"phone\\\\\\\":\\\\\\\"$PHONE\\\\\\\",\\\\\\\"action\\\\\\\":\\\\\\\"get_das_current\\\\\\\",\\\\\\\"payload\\\\\\\":{\\\\\\\"mes\\\\\\\":\\\\\\\"$MES\\\\\\\"}}\\\"\\\" > \\\"$TMP\\\"\\nnode -e \\\"const fs=require(\\\\\\\"fs\\\\\\\");const r=JSON.parse(fs.readFileSync(process.argv[1],\\\\\\\"utf8\\\\\\\"));if(!r.success){console.log(JSON.stringify(r));process.exit(1);}const x=r.data||{};if(!x.base64)process.exit(1);const fn=String(x.fileName||\\\\\\\"DAS.pdf\\\\\\\").replace(/[^a-zA-Z0-9._-]/g,\\\\\\\"_\\\\\\\");const p=\\\\\\\"/tmp/\\\\\\\"+fn;fs.writeFileSync(p,Buffer.from(x.base64,\\\\\\\"base64\\\\\\\"));console.log(JSON.stringify({success:true,mes:x.mes,file:p}));\\\" \\\"$TMP\\\"\\n\";fs.writeFileSync(path.join(d,\"mf-das.sh\"),das,{mode:0o755});fs.writeFileSync(path.join(d,\"MF-API.md\"),\"# MF\\n\"+curl+\"\\n\"+path.join(d,\"mf-das.sh\")+\" PHONE MM/YYYY\\n\");console.log(\"[mf] scripts OK\");"; ORIGIN="${OPENCLAW_PUBLIC_ORIGIN}"; CFG=/home/node/.openclaw/openclaw.json; node -e "const fs=require(\"fs\");const p=process.env.CFG,o=process.env.ORIGIN||\"\";let c={};try{c=JSON.parse(fs.readFileSync(p,\"utf8\"))}catch(e){}c.gateway=c.gateway||{};c.gateway.controlUi=c.gateway.controlUi||{};const set=new Set([...(c.gateway.controlUi.allowedOrigins||[]),\"http://localhost:18789\",\"http://127.0.0.1:18789\"]);if(o)set.add(o);c.gateway.controlUi.allowedOrigins=[...set];c.tools={exec:{host:\"gateway\",security:\"full\",ask:\"off\"},profile:\"coding\"};fs.writeFileSync(p,JSON.stringify(c,null,2));" CFG="$CFG" ORIGIN="$ORIGIN"; exec node dist/index.js gateway --bind lan --port 18789 --allow-unconfigured'
 ```
 
-Versão legível (ficheiro no repo): [`easypanel-openclaw-bootstrap.sh`](./easypanel-openclaw-bootstrap.sh).
+Versão legível: [`easypanel-openclaw-bootstrap.sh`](./easypanel-openclaw-bootstrap.sh).
+
+### `mf-das.sh: not found` — instalar agora no Console
+
+Com o serviço **Running**, cola **todo** o bloco abaixo (uma vez). Usa as env `MF_API_URL` e `OPENCLAW_WEBHOOK_SECRET` do Easypanel:
+
+```sh
+WS=/home/node/.openclaw/workspace
+mkdir -p "$WS"
+test -n "$MF_API_URL" && test -n "$OPENCLAW_WEBHOOK_SECRET" || { echo ERRO: falta MF_API_URL ou OPENCLAW_WEBHOOK_SECRET; exit 1; }
+export WS MF_URL="$MF_API_URL" MF_SEC="$OPENCLAW_WEBHOOK_SECRET"
+node -e "const fs=require('fs'),path=require('path'),d=process.env.WS,u=process.env.MF_URL,s=process.env.MF_SEC,curl=path.join(d,'mf-curl.sh');fs.writeFileSync(curl,'#!/bin/sh\nexec curl -sS -X POST '+JSON.stringify(u)+' -H '+JSON.stringify('Content-Type: application/json; charset=utf-8')+' -H '+JSON.stringify('Authorization: Bearer '+s)+' -d \"\$1\"\n',{mode:0o755});const das='#!/bin/sh\nset -e\nMF_CURL='+JSON.stringify(curl)+'\nPHONE=\"${1:?phone}\"\nMES=\"${2:?MM/YYYY}\"\nTMP=\"$(mktemp)\";trap \"rm -f \"$TMP\"\" EXIT\n\"$MF_CURL\" \"{\\\"phone\\\":\\\"$PHONE\\\",\\\"action\\\":\\\"get_das_current\\\",\\\"payload\\\":{\\\"mes\\\":\\\"$MES\\\"}}\" > \"$TMP\"\nnode -e \"const fs=require(\\\"fs\\\");const r=JSON.parse(fs.readFileSync(process.argv[1],\\\"utf8\\\"));if(!r.success){console.log(JSON.stringify(r));process.exit(1);}const x=r.data||{};if(!x.base64)process.exit(1);const fn=String(x.fileName||\\\"DAS.pdf\\\").replace(/[^a-zA-Z0-9._-]/g,\\\"_\\\");const p=\\\"/tmp/\\\"+fn;fs.writeFileSync(p,Buffer.from(x.base64,\\\"base64\\\"));console.log(JSON.stringify({success:true,mes:x.mes,file:p}));\" \"$TMP\"\n';fs.writeFileSync(path.join(d,'mf-das.sh'),das,{mode:0o755});console.log('OK',curl,path.join(d,'mf-das.sh'));"
+ls -la "$WS/mf-curl.sh" "$WS/mf-das.sh"
+"$WS/mf-das.sh" 5521996185328 03/2026
+```
+
+Se a última linha devolver JSON com `"file":"/tmp/DAS-03-2026.pdf"`, está pronto. No WhatsApp: `/new` e pede o DAS outra vez.
+
+Ficheiro equivalente no repo: [`easypanel-console-install-mf.sh`](./easypanel-console-install-mf.sh).
 
 **Importante:** não corras `openclaw gateway restart` no console — isso pode matar o contentor. Usa só **Restart/Deploy** no painel.
 
@@ -89,9 +107,10 @@ A API **funcionou** (`"message":"DAS encontrado"`), mas o agente mostrou `data.b
 | Agente | Deve correr `mf-das.sh 5521996185328 03/2026` e depois `openclaw message send --channel whatsapp --target … --media /tmp/DAS-….pdf` |
 | Proibido | `curl` com `$MF_API_URL`, `fetch url`, ou responder com o JSON completo |
 
-No Console (Running), testa:
+Se `mf-das.sh` não existir, segue a secção **`mf-das.sh: not found`** acima antes de testar.
 
 ```sh
+ls -la /home/node/.openclaw/workspace/mf-das.sh
 /home/node/.openclaw/workspace/mf-das.sh 5521996185328 03/2026
 ```
 

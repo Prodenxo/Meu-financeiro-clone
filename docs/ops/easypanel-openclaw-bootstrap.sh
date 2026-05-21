@@ -14,7 +14,7 @@
 
 set -e
 
-STATE="${OPENCLAW_STATE_DIR:-/tmp/openclaw-state}"
+STATE="${OPENCLAW_STATE_DIR:-/home/node/.openclaw}"
 ORIGIN="${OPENCLAW_PUBLIC_ORIGIN:-}"
 MF_URL="${MF_API_URL:-}"
 MF_SECRET="${OPENCLAW_WEBHOOK_SECRET:-}"
