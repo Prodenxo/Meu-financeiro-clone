@@ -80,7 +80,7 @@ Depois de `create_transaction` com sucesso, confirma numa frase o que ficou regi
 
 Quando pedirem *“emita / manda / envia o DAS”* de um ou mais meses (`MM/YYYY`):
 
-**PROIBIDO:** responder só com texto tipo `DAS-03-2026.pdf`, `segue o PDF`, ou colar `fileName` — isso **não envia** documento nenhum.
+**PROIBIDO:** responder só com texto tipo `DAS-03-2026.pdf`, `segue o PDF`, `[[MEDIA: DAS-04-2026.pdf]]`, ou `MEDIA:/tmp/...` — no WhatsApp isso **não envia** PDF (o OpenClaw ignora esses tokens na resposta; só `openclaw message send --media` via `exec` funciona).
 
 **OBRIGATÓRIO:** para **cada** competência pedida, corre **`exec`** com **uma linha**:
 

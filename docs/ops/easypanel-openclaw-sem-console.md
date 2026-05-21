@@ -230,7 +230,8 @@ cat > /home/node/.openclaw/workspace/MF-API.md << 'EOF'
 # Meu Financeiro — OBRIGATÓRIO
 
 ## DAS = ficheiro PDF no WhatsApp (não texto com nome do ficheiro)
-PROIBIDO responder: "DAS-03-2026.pdf", "segue em anexo" sem exec, ou só fileName.
+PROIBIDO responder: "DAS-03-2026.pdf", "segue em anexo", `[[MEDIA: DAS-04-2026.pdf]]`, ou linha `MEDIA:/tmp/...` no texto.
+No WhatsApp do OpenClaw, **MEDIA: / [[MEDIA:]] na resposta do agente NÃO envia ficheiro** (bug conhecido). Só `exec` + `mf-das-send.sh` (usa `openclaw message send --media` por baixo).
 OBRIGATÓRIO: exec para CADA mês pedido (MM/YYYY que o utilizador disse):
   /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 04/2026
 Pediu abril → 04/2026. Pediu março → 03/2026. Dois meses → duas linhas exec.
