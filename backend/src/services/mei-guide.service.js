@@ -276,7 +276,8 @@ const normalizePeriodoApuracao = (periodo, mes, ano) => {
   return null;
 };
 
-const PAID_PERIOD_BUSINESS_MESSAGE = 'Período já consta como pago. Não é necessário emitir nova guia.';
+const PAID_PERIOD_BUSINESS_MESSAGE =
+  'Período já consta como pago e não há PDF guardado. A Receita não devolveu nova guia — use Validar/Criar guia para este mês.';
 const HISTORICO_DAS_ERROR_FALLBACK = 'Falha técnica ao consultar período no Serpro.';
 const SERPRO_PAID_ERROR_PATTERNS = [
   /j[aá]\s*est[aá]\s*pago/i,
@@ -1395,18 +1396,18 @@ export const downloadGuide = async (payload, dependencies = {}) => {
 
   if (userId && competencia) {
     const paidInCache = await isCompetenciaPaidFn({ userId, competencia });
-    if (paidInCache) {
-      if (period) {
-        const storedBase64 = await getDasBase64Fn({ userId, periodoApuracao: period });
-        if (storedBase64 && String(storedBase64).trim()) {
-          const label = competencia.replace('-', '/');
-          return {
-            buffer: Buffer.from(storedBase64, 'base64'),
-            contentType: 'application/pdf',
-            filename: `DAS-${label.replace('/', '-')}.pdf`
-          };
-        }
+    if (paidInCache && period) {
+      const storedBase64 = await getDasBase64Fn({ userId, periodoApuracao: period });
+      if (storedBase64 && String(storedBase64).trim()) {
+        const label = competencia.replace('-', '/');
+        return {
+          buffer: Buffer.from(storedBase64, 'base64'),
+          contentType: 'application/pdf',
+          filename: `DAS-${label.replace('/', '-')}.pdf`
+        };
       }
+      /* Sem PDF em DAS_mei (ex.: linha apagada) — segue para SERPRO e grava de novo se vier PDF */
+    } else if (paidInCache && !period) {
       throw badRequest(PAID_PERIOD_BUSINESS_MESSAGE);
     }
   }

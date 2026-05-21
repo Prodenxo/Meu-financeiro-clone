@@ -142,20 +142,27 @@ test('downloadGuide devolve PDF armazenado quando período já está pago', asyn
   assert.equal(file.buffer.toString(), '%PDF-test');
 });
 
-test('downloadGuide bloqueia quando pago sem PDF armazenado', async () => {
+test('downloadGuide busca na SERPRO quando pago sem PDF armazenado', async () => {
   const { downloadGuide } = await import('../src/services/mei-guide.service.js');
+  const storedPdf = Buffer.from('%PDF-new').toString('base64');
+  let createCalls = 0;
 
-  await assert.rejects(
-    () => downloadGuide({
-      userId: 'user-4b',
-      cnpj: '12345678000199',
-      periodoApuracao: '202601'
-    }, {
-      isCompetenciaPaidFn: async () => true,
-      getDasBase64Fn: async () => null
-    }),
-    /Período já consta como pago/
-  );
+  const file = await downloadGuide({
+    userId: 'user-4b',
+    cnpj: '12345678000199',
+    periodoApuracao: '202601'
+  }, {
+    isCompetenciaPaidFn: async () => true,
+    getDasBase64Fn: async () => null,
+    createGuideByCnpjFn: async () => {
+      createCalls += 1;
+      return { pdfBase64: storedPdf, id: '202601' };
+    }
+  });
+
+  assert.equal(createCalls, 1);
+  assert.equal(file.filename, 'das-mei-202601.pdf');
+  assert.equal(file.buffer.toString(), '%PDF-new');
 });
 
 test('downloadGuide persiste pago quando SERPRO retorna período quitado', async () => {

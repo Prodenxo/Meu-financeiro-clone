@@ -251,6 +251,8 @@ O JSON mostra **a tua conta** (`dasAccount.displayName`); o **ficheiro** em `DAS
 /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 02/2026
 ```
 
+**Download 400 depois de apagar no Supabase:** o mês continua **“Pago”** na app, mas sem linha em `DAS_mei` o backend antigo respondia *“Período já consta como pago”*. Com o fix em `downloadGuide`, o **Baixar guia** volta a chamar a SERPRO e gravar o PDF de novo (precisa **deploy** do backend Site).
+
 **Ou no Supabase** (apaga só fevereiro/2026 do teu `user_id`, depois gera de novo na app com Validar/Criar guia):
 
 ```sql
