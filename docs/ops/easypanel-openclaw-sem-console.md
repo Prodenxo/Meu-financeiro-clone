@@ -235,19 +235,17 @@ Deve imprimir uma linha JSON curta com `"file":"/tmp/DAS-03-2026.pdf"` — não 
 | Agente **não** leu `DAS-WHATSAPP.md` / `SOUL.md` | Responde texto bonito **sem** `"whatsapp":"sent"` no output do exec |
 | `mf-send-das.sh` antigo | Tentava `send_das_whatsapp` e saía sem fallback; use versão nova (= `exec mf-das-send.sh`) |
 
-**No Console (OpenClaw), cola e corre:**
+**No Console (OpenClaw)** — se o heredoc partiu o terminal (`EOF$ > > >` ou path `/home/nod$ e/`), usa o script único do repo (cola **de uma vez** ou `wget`+`sh`):
 
 ```sh
+# Opção A: colar o conteúdo de Site/docs/ops/openclaw-console-fix-das-agent.sh no console
+# Opção B: uma linha por vez (sem heredoc aninhado):
 WS=/home/node/.openclaw/workspace
+printf '%s\n' 'DAS: só exec /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 MM/YYYY' 'Proibido: curl, get_das_current, só mf-das.sh.' 'Só diga enviado se JSON tiver "whatsapp":"sent".' > "$WS/DAS-WHATSAPP.md"
+printf '%s\n' 'DAS: /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 03/2026' 'Confirmar só com "whatsapp":"sent".' > "$WS/MF-API.md"
 printf '#!/bin/sh\nset -e\nWS="$(cd "$(dirname "$0")" && pwd)"\nexec "$WS/mf-das-send.sh" "$@"\n' > "$WS/mf-send-das.sh"
 chmod +x "$WS/mf-send-das.sh"
-cat > "$WS/DAS-WHATSAPP.md" << 'EOF'
-DAS: só exec /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 MM/YYYY
-Proibido curl, get_das_current, só mf-das.sh. Só diga enviado se JSON tiver "whatsapp":"sent".
-EOF
-cat > "$WS/MF-API.md" << EOF
-DAS: $WS/mf-das-send.sh 5521996185328 03/2026 — só confirmar se "whatsapp":"sent"
-EOF
+cat "$WS/DAS-WHATSAPP.md"
 ```
 
 Copia também `openclaw-midas-SOUL.md` → `$WS/SOUL.md` (secção DAS). WhatsApp: **`/new`**, pede o DAS, abre os **2 Exec** e confirma que o comando é `mf-das-send.sh` ou `mf-send-das.sh`.
