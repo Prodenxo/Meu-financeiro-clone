@@ -9,7 +9,7 @@ MES="${2:?informe competencia MM/YYYY, ex. 03/2026}"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 
-"$MF_CURL" "{\"phone\":\"$PHONE\",\"action\":\"get_das_current\",\"payload\":{\"mes\":\"$MES\"}}" > "$TMP"
+"$MF_CURL" "{\"phone\":\"$PHONE\",\"action\":\"get_das_current\",\"payload\":{\"mes\":\"$MES\",\"includeBase64\":true}}" > "$TMP"
 
 node -e "
 const fs = require('fs');

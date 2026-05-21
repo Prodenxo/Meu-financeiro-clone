@@ -36,7 +36,7 @@ if (!phone || !mes) {
   process.exit(1);
 }
 const curl = path.join(dir, 'mf-curl.sh');
-const body = JSON.stringify({ phone, action: 'get_das_current', payload: { mes } });
+const body = JSON.stringify({ phone, action: 'get_das_current', payload: { mes, includeBase64: true } });
 const raw = execFileSync(curl, [body], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 let r;
 try { r = JSON.parse(raw); } catch (e) {

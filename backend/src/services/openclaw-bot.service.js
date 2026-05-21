@@ -473,6 +473,50 @@ export const runOpenclawAction = async (input) => {
       throw notFound(`Nenhum DAS encontrado para a competência ${display}.`);
     }
     const fileName = `DAS-${display.replace('/', '-')}.pdf`;
+    const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+    const includeBase64 =
+      payload?.includeBase64 === true ||
+      String(payload?.includeBase64 || '').toLowerCase() === 'true' ||
+      payload?.includeBase64 === 1;
+
+    if (!includeBase64) {
+      const deliverWhatsapp =
+        payload?.deliverWhatsapp === true ||
+        String(payload?.deliverWhatsapp || '').toLowerCase() === 'true';
+      let whatsapp = { whatsappStatus: 'not_requested' };
+      if (deliverWhatsapp) {
+        whatsapp = await trySendDasWhatsappWebhook({
+          userId,
+          phone: destinationPhone,
+          display,
+          periodoDigits,
+          pdfBase64,
+          fileName,
+        });
+      }
+      const sent = whatsapp.whatsappStatus === 'sent';
+      return {
+        ok: true,
+        message: sent
+          ? `PDF DAS ${display} enviado no WhatsApp.`
+          : `DAS ${display} encontrado. Para enviar o PDF no WhatsApp, use action send_das_whatsapp ou exec mf-send-das.sh (não get_das_current com base64).`,
+        data: {
+          fileName,
+          mes: display,
+          mimeType: 'application/pdf',
+          includeBase64: false,
+          whatsappStatus: whatsapp.whatsappStatus,
+          whatsappError: whatsapp.whatsappError ?? null,
+          hint: whatsapp.hint ?? null,
+          execCommand: destinationPhone
+            ? `/home/node/.openclaw/workspace/mf-send-das.sh ${destinationPhone} ${display}`
+            : null,
+          actorContext,
+          ...linkDebug,
+        },
+      };
+    }
+
     return {
       ok: true,
       message: 'DAS encontrado',

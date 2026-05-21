@@ -44,7 +44,7 @@ const mfCurl = path.join(dir, 'mf-curl.sh');
 const dasSh = '#!/bin/sh\\nset -e\\nDIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\\n'
   + 'MF_CURL=\"' + mfCurl + '\"\\nPHONE=\"${1:?phone}\"\\nMES=\"${2:?MM/YYYY}\"\\n'
   + 'TMP=\"$(mktemp)\"; trap \\'rm -f \"$TMP\"\\' EXIT\\n'
-  + '\"$MF_CURL\" \"{\\\\\"phone\\\\\":\\\\\"$PHONE\\\\\",\\\\\"action\\\\\":\\\\\"get_das_current\\\\\",\\\\\"payload\\\\\":{\\\\\"mes\\\\\":\\\\\"$MES\\\\\"}}\" > \"$TMP\"\\n'
+  + '\"$MF_CURL\" \"{\\\\\"phone\\\\\":\\\\\"$PHONE\\\\\",\\\\\"action\\\\\":\\\\\"get_das_current\\\\\",\\\\\"payload\\\\\":{\\\\\"mes\\\\\":\\\\\"$MES\\\\\",\\\\\"includeBase64\\\\\":true}}\" > \"$TMP\"\\n'
   + 'node -e \"const fs=require(\\\\'fs\\\\');const r=JSON.parse(fs.readFileSync(process.argv[1],\\\\'utf8\\\\'));'
   + 'if(!r.success){console.log(JSON.stringify(r));process.exit(1);}const d=r.data||{};'
   + 'if(!d.base64){console.log(JSON.stringify({success:false,message:\\\\'sem PDF\\\\'}));process.exit(1);}'

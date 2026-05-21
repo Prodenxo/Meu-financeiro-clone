@@ -193,6 +193,21 @@ ls -la /home/node/.openclaw/workspace/mf-das.sh
 
 Deve imprimir uma linha JSON curta com `"file":"/tmp/DAS-03-2026.pdf"` — não centenas de KB de base64.
 
+### Agente diz “DAS gerado” mas **não manda PDF**
+
+| O que o log mostra | O que acontece |
+|--------------------|----------------|
+| `Exec` com `curl … $MF_API_URL` + `get_das_current` | Variáveis `$MF_*` no `exec` costumam estar **vazias**; mesmo quando a API responde, o JSON traz **base64 gigante** — o modelo **não** corre `openclaw message send --media` e só escreve texto. |
+| Resposta com `"message":"DAS encontrado"` + base64 | PDF **existe na API**, mas **não foi enviado** no WhatsApp. |
+
+**Correção:** deploy do backend novo (`get_das_current` **sem** `includeBase64` por defeito) + no Console instalar `mf-send-das.sh` + no WhatsApp `/new` + pedir de novo. O agente deve fazer **só**:
+
+```sh
+/home/node/.openclaw/workspace/mf-send-das.sh 5521996185328 03/2026
+```
+
+**Segurança:** se o log do painel mostrou o `Bearer` completo, **roda** `OPENCLAW_WEBHOOK_SECRET` no backend e no Easypanel.
+
 ### Agente: `couldn't generate a response` ao pedir DAS
 
 Mensagem do OpenClaw: *"agent couldn't generate a response. Some tool actions may have already been executed"*.

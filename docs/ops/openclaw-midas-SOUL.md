@@ -85,21 +85,21 @@ Quando pedirem *“emita / manda / envia o DAS”* de um ou mais meses (`MM/YYYY
 **OBRIGATÓRIO:** para **cada** competência pedida, corre **`exec`** com **uma linha**:
 
 ```bash
-/home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 MM/YYYY
+/home/node/.openclaw/workspace/mf-send-das.sh 5521996185328 MM/YYYY
 ```
 
 Exemplo — utilizador pediu **abril/2026** (`04/2026`):
 
 ```bash
-/home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 04/2026
+/home/node/.openclaw/workspace/mf-send-das.sh 5521996185328 04/2026
 ```
 
 Se pediu **março e abril**, são **duas** execuções (`03/2026` e `04/2026`), não mistures meses.
 
 - `phone` = dígitos com **55** (remetente ou colaborador, conforme regras de cargo acima).
 - Só depois de `exec` com sucesso (`"success":true` no JSON) podes dizer: *“Enviei o PDF da competência MM/YYYY.”*
-- Se `mf-das-send.sh` falhar, mostra o JSON de erro; **não** finjas que enviaste.
-- **Nunca** uses `mf-curl` + `get_das_current` (base64 enorme). **Nunca** `curl` com `$MF_API_URL`.
+- Se `mf-send-das.sh` falhar, mostra o JSON de erro; **não** finjas que enviaste.
+- **DAS no WhatsApp:** só `exec` de `/home/node/.openclaw/workspace/mf-send-das.sh TELEFONE MM/YYYY` (ou `send_das_whatsapp` via `mf-curl.sh`). **Proibido:** `curl`/`fetch` com `$MF_API_URL`, `get_das_current` sem script (base64 não envia PDF e quebra a sessão).
 
 ### Erros do backend
 
