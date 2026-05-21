@@ -73,46 +73,42 @@ WS="$(cd "$(dirname "$0")" && pwd)"
 PHONE="${1:?phone}"
 MES="${2:?MM/YYYY}"
 TARGET="${3:-$PHONE}"
-OUT="$("$WS/mf-das.sh" "$PHONE" "$MES")"
-FILE="$(echo "$OUT" | node -e "let j=JSON.parse(require('fs').readFileSync(0,'utf8'));if(!j.file)process.exit(1);process.stdout.write(j.file)")"
-openclaw message send --channel whatsapp --target "$TARGET" --media "$FILE" --message "DAS $MES"
+OUT="$("$WS/mf-das.sh" "$PHONE" "$MES")" || {
+  echo '{"success":false,"step":"mf-das.sh"}'
+  exit 1
+}
+FILE="$(echo "$OUT" | node -e "let j=JSON.parse(require('fs').readFileSync(0,'utf8'));if(!j.file)process.exit(1);process.stdout.write(j.file)")" || {
+  echo "$OUT"
+  echo '{"success":false,"step":"parse"}'
+  exit 1
+}
+if ! openclaw message send --channel whatsapp --target "$TARGET" --media "$FILE" --message "DAS $MES" 2>/tmp/mf-das-send.err; then
+  echo '{"success":false,"step":"openclaw message send"}'
+  head -c 200 /tmp/mf-das-send.err 2>/dev/null || true
+  exit 1
+fi
 echo "{\"success\":true,\"mes\":\"$MES\",\"file\":\"$FILE\",\"whatsapp\":\"sent\"}"
 SEND_EOF
 chmod +x "$WS/mf-das-send.sh"
 
-cat > "$WS/mf-send-das.sh" << 'MF_SEND_EOF'
-#!/bin/sh
-set -e
-WS="$(cd "$(dirname "$0")" && pwd)"
-PHONE="${1:?phone com DDI 55}"
-MES="${2:?MM/YYYY}"
-TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
-"$WS/mf-curl.sh" "{\"phone\":\"$PHONE\",\"action\":\"send_das_whatsapp\",\"payload\":{\"mes\":\"$MES\"}}" > "$TMP"
-node -e "
-const fs=require('fs');
-const r=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
-if(!r.success){console.log(JSON.stringify(r));process.exit(1);}
-const d=r.data||{};
-const st=d.whatsappStatus||'';
-if(st==='sent'){console.log(JSON.stringify({success:true,mes:d.mes,fileName:d.fileName,whatsapp:'sent'}));process.exit(0);}
-if(st==='skipped_no_webhook'||st==='failed'||st==='skipped_no_phone')process.exit(42);
-console.log(JSON.stringify(r));process.exit(1);
-" "$TMP" && exit 0
-EC=$?
-[ "$EC" = "42" ] && exec "$WS/mf-das-send.sh" "$PHONE" "$MES"
-exit "$EC"
-MF_SEND_EOF
+printf '#!/bin/sh\nset -e\nWS="$(cd "$(dirname "$0")" && pwd)"\nexec "$WS/mf-das-send.sh" "$@"\n' > "$WS/mf-send-das.sh"
 chmod +x "$WS/mf-send-das.sh"
 
-cat > "$WS/MF-API.md" << EOF
-# Meu Financeiro — OBRIGATÓRIO
+cat > "$WS/DAS-WHATSAPP.md" << 'EOF'
+# DAS WhatsApp — OBRIGATÓRIO
+Um comando por mês (envia PDF de verdade):
+  /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 MM/YYYY
+Proibido: curl, get_das_current, só mf-das.sh, dizer "enviei" sem "whatsapp":"sent" no JSON do exec.
+EOF
 
-## DAS = PDF no WhatsApp (não texto)
-PROIBIDO: "DAS-03-2026.pdf", [[MEDIA:]], get_das_current via mf-curl, base64 no chat.
-OBRIGATÓRIO exec (cada mês pedido):
-  $WS/mf-send-das.sh 5521996185328 04/2026
-Responda só após success:true: "Enviei o PDF da competência MM/YYYY."
+cat > "$WS/MF-API.md" << EOF
+# Meu Financeiro
+
+## DAS (único fluxo)
+exec: $WS/mf-das-send.sh 5521996185328 03/2026
+(ou mf-send-das.sh — mesmo script)
+Só confirmar envio se JSON tiver "whatsapp":"sent".
+Proibido: curl, fetch, get_das_current, mf-das.sh sozinho.
 
 ## Outras ações
   $WS/mf-curl.sh '{"phone":"5521...","action":"..."}'

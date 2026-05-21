@@ -227,6 +227,31 @@ ls -la /home/node/.openclaw/workspace/mf-das.sh
 
 Deve imprimir uma linha JSON curta com `"file":"/tmp/DAS-03-2026.pdf"` — não centenas de KB de base64.
 
+### Bot diz *“enviado com sucesso”* mas **PDF não chega** no WhatsApp
+
+| Causa frequente | O que ver no painel |
+|-----------------|---------------------|
+| Agente correu **só** `mf-das.sh` ou `get_das_current` | Exec com **~16k tokens** ou `curl` — PDF fica na API/`/tmp`, **não** vai ao WhatsApp |
+| Agente **não** leu `DAS-WHATSAPP.md` / `SOUL.md` | Responde texto bonito **sem** `"whatsapp":"sent"` no output do exec |
+| `mf-send-das.sh` antigo | Tentava `send_das_whatsapp` e saía sem fallback; use versão nova (= `exec mf-das-send.sh`) |
+
+**No Console (OpenClaw), cola e corre:**
+
+```sh
+WS=/home/node/.openclaw/workspace
+printf '#!/bin/sh\nset -e\nWS="$(cd "$(dirname "$0")" && pwd)"\nexec "$WS/mf-das-send.sh" "$@"\n' > "$WS/mf-send-das.sh"
+chmod +x "$WS/mf-send-das.sh"
+cat > "$WS/DAS-WHATSAPP.md" << 'EOF'
+DAS: só exec /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 MM/YYYY
+Proibido curl, get_das_current, só mf-das.sh. Só diga enviado se JSON tiver "whatsapp":"sent".
+EOF
+cat > "$WS/MF-API.md" << EOF
+DAS: $WS/mf-das-send.sh 5521996185328 03/2026 — só confirmar se "whatsapp":"sent"
+EOF
+```
+
+Copia também `openclaw-midas-SOUL.md` → `$WS/SOUL.md` (secção DAS). WhatsApp: **`/new`**, pede o DAS, abre os **2 Exec** e confirma que o comando é `mf-das-send.sh` ou `mf-send-das.sh`.
+
 ### Agente diz “DAS gerado” mas **não manda PDF**
 
 | O que o log mostra | O que acontece |

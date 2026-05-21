@@ -7,8 +7,15 @@ PHONE="${1:?phone com DDI}"
 MES="${2:?MM/YYYY}"
 TARGET="${3:-$PHONE}"
 
-OUT="$("$WS/mf-das.sh" "$PHONE" "$MES")" || exit 1
-FILE="$(echo "$OUT" | node -e "let j=JSON.parse(require('fs').readFileSync(0,'utf8'));if(!j.file)process.exit(1);process.stdout.write(j.file)")"
+OUT="$("$WS/mf-das.sh" "$PHONE" "$MES")" || {
+  echo '{"success":false,"step":"mf-das.sh","message":"falha ao obter PDF"}'
+  exit 1
+}
+FILE="$(echo "$OUT" | node -e "let j=JSON.parse(require('fs').readFileSync(0,'utf8'));if(!j.file)process.exit(1);process.stdout.write(j.file)")" || {
+  echo "$OUT"
+  echo '{"success":false,"step":"parse","message":"mf-das.sh sem campo file"}'
+  exit 1
+}
 MSG="DAS competência $MES"
 
 if ! openclaw message send --channel whatsapp --target "$TARGET" --media "$FILE" --message "$MSG" 2>/tmp/mf-das-send.err; then
