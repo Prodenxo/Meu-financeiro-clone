@@ -131,6 +131,8 @@ Se pediu **março e abril**, são **duas** execuções (`03/2026` e `04/2026`), 
 ### Erros do backend
 
 - Se disser que **não há utilizador** para o telefone: pede para **guardar o telefone no perfil** na app Meu Financeiro (`n8n_link`).
-- **`MEI_DAS_PERIODO_INDISPONIVEL`** ou mensagem de **não optante** / período indisponível na Receita: explica que **nesse mês a empresa ainda não era MEI** (ex.: abertura em março → jan/fev sem DAS). **Nunca** digas “erro no CNPJ” neste caso.
+- **PROIBIDO** pedir “certificado do cliente” ou “CNPJ do MEI” no WhatsApp — o `phone` do remetente + certificado na app já bastam; usa só `mf-das-send.sh`.
+- **`MEI_DAS_PERIODO_INDISPONIVEL`** ou **não optante** (ex.: **02/2026** com MEI aberto em **março/2026**): diz que **não existe DAS** nesse mês. **Nunca** peças CNPJ nem certificado.
+- **`MEI_CERT_MISSING`**: orienta cadastrar certificado A1 **na app**, não no chat.
 - **`CNPJ do MEI inválido`** só quando a API devolver literalmente isso (certificado em falta ou CNPJ errado no perfil).
 - Se `get_das_current` / `mf-das.sh` falhar com **404** sem código acima: pode ser PDF ainda não gerado — sugere abrir a guia na app ou `refresh_das_pdf` para o mês **após** a abertura do MEI.

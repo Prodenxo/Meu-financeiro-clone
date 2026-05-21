@@ -38,7 +38,14 @@ try { r = JSON.parse(raw); } catch (e) {
   process.exit(1);
 }
 if (!r.success) {
-  console.log(raw);
+  const errOut = {
+    success: false,
+    message: r.message || 'Falha na API',
+    code: r.errors?.code || r.data?.code || null,
+    botHint: r.errors?.botHint || null,
+    mes: r.errors?.mes || mes,
+  };
+  console.log(JSON.stringify(errOut));
   process.exit(1);
 }
 const x = r.data || {};
@@ -81,9 +88,10 @@ chmod +x "$WS/mf-send-das.sh"
 
 printf '%s\n' \
   'DAS: exec mf-das-send.sh com o TELEFONE DO REMETENTE deste chat (DDI 55).' \
-  'PROIBIDO usar 5521996185328 ou outro número de exemplo se não for o remetente.' \
+  'PROIBIDO pedir CNPJ ou certificado no chat — a API usa o telefone + certificado da app.' \
+  '02/2026 antes da abertura MEI (março): API devolve MEI_DAS_PERIODO_INDISPONIVEL — explique, não peça dados.' \
+  'Se mf-das.sh falhar, repita o campo message do JSON; não inventes pedido de certificado.' \
   'Confirme dasAccount.displayName no JSON antes de enviar.' \
-  'Proibido: curl manual, get_das_current no chat.' \
   'Só diga enviado se JSON tiver "whatsapp":"sent".' > "$WS/DAS-WHATSAPP.md"
 
 printf '%s\n' \

@@ -20,6 +20,39 @@ import {
 
 const MAX_LIST = 40;
 
+/** Erros de DAS com texto claro para o agente WhatsApp (não pedir CNPJ/certificado no chat). */
+const rethrowDasFetchErrorForBot = (err, display) => {
+  if (isPeriodoIndisponivelSerproError(err)) {
+    throw badRequest(err.message, {
+      code: 'MEI_DAS_PERIODO_INDISPONIVEL',
+      mes: display,
+      botHint:
+        'Não há DAS neste mês (ex.: empresa abriu em março → jan/fev sem guia). Não peça CNPJ nem certificado.',
+    });
+  }
+  const code = err?.errors?.code;
+  if (code === 'MEI_CERT_MISSING' || code === 'MEI_CERT_LOAD_FAILED') {
+    throw badRequest(err.message, {
+      code,
+      mes: display,
+      botHint:
+        'Oriente cadastro do certificado A1 na app Meu Financeiro. Proibido pedir certificado ou CNPJ pelo WhatsApp.',
+    });
+  }
+  const msg = String(err?.message || '');
+  if (/certificado|CNPJ do MEI/i.test(msg)) {
+    throw badRequest(
+      `DAS ${display}: conta identificada pelo telefone WhatsApp — não peça certificado nem CNPJ. Se o mês for anterior à abertura do MEI, explique que não existe DAS nesse período.`,
+      {
+        code: 'MEI_DAS_USE_APP_OR_PERIOD',
+        mes: display,
+        botHint: 'Repita a message da API; use mf-das-send.sh com o telefone do remetente.',
+      }
+    );
+  }
+  throw err;
+};
+
 /**
  * Competência no formato MM/YYYY (ex.: 05/2026). Mês pode ter 1 ou 2 dígitos.
  * @param {string} raw
@@ -648,15 +681,7 @@ export const runOpenclawAction = async (input) => {
         contribuinte: payload?.contribuinte,
       });
     } catch (err) {
-      if (isPeriodoIndisponivelSerproError(err)) {
-        throw badRequest(err.message, {
-          code: 'MEI_DAS_PERIODO_INDISPONIVEL',
-          mes: display,
-          botHint:
-            'Neste mês a empresa ainda não era MEI optante (ex.: abertura em março). Informe o utilizador sem falar em erro de CNPJ.',
-        });
-      }
-      throw err;
+      rethrowDasFetchErrorForBot(err, display);
     }
     const pdfBase64 = pdfResult.pdfBase64;
     const fileName = pdfResult.fileName || `DAS-${display.replace('/', '-')}.pdf`;
@@ -772,15 +797,7 @@ export const runOpenclawAction = async (input) => {
         contribuinte: payload?.contribuinte,
       });
     } catch (err) {
-      if (isPeriodoIndisponivelSerproError(err)) {
-        throw badRequest(err.message, {
-          code: 'MEI_DAS_PERIODO_INDISPONIVEL',
-          mes: display,
-          botHint:
-            'Neste mês a empresa ainda não era MEI optante. Informe o utilizador sem falar em erro de CNPJ.',
-        });
-      }
-      throw err;
+      rethrowDasFetchErrorForBot(err, display);
     }
     const pdfBase64 = pdfResult.pdfBase64;
     const fileName = pdfResult.fileName || `DAS-${display.replace('/', '-')}.pdf`;

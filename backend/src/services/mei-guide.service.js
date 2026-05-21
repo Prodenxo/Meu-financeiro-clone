@@ -413,6 +413,36 @@ const clearUserCaches = (userId) => {
 
 const hasUserCertificate = (userId) => Boolean(getUserCert(userId));
 
+/** Certificado na sessão ou persistido no Supabase (carrega PFX se necessário). */
+export const userHasMeiCertificate = async (userId) => {
+  if (!userId) return false;
+  await ensureUserCertLoaded(userId);
+  if (hasUserCertificate(userId)) return true;
+  try {
+    const doc = await getCertificateDocument(userId);
+    return Boolean(doc && validateDoc(normalizeDoc(doc)));
+  } catch {
+    return false;
+  }
+};
+
+const resolveMeiCnpjForUser = async (userId, cnpj) => {
+  const fromPayload = normalizeDoc(cnpj || '');
+  if (validateDoc(fromPayload)) return fromPayload;
+  if (!userId) return '';
+  await ensureUserCertLoaded(userId);
+  const fromCache = normalizeDoc(getUserCertDocument(userId) || '');
+  if (validateDoc(fromCache)) return fromCache;
+  try {
+    const doc = await getCertificateDocument(userId);
+    const fromDb = normalizeDoc(doc || '');
+    if (validateDoc(fromDb)) return fromDb;
+  } catch {
+    /* ignora */
+  }
+  return '';
+};
+
 /** Carrega certificado do banco para o cache quando não está em memória. */
 const ensureUserCertLoaded = async (userId) => {
   if (getUserCert(userId)) return;
@@ -1578,7 +1608,7 @@ export const regenerateDasPdf = async (userId, payload) => {
       /* ignora */
     }
   }
-  if (userId && hasUserCertificate(userId)) {
+  if (userId && (await userHasMeiCertificate(userId))) {
     return await createGuide(userId, { cnpj, periodoApuracao: period, contribuinte });
   }
   return await createGuideByCnpj(userId, { cnpj, periodoApuracao: period });
@@ -1600,10 +1630,11 @@ export const fetchDasPdfBase64ForUser = async (userId, payload = {}) => {
     return { pdfBase64: cached, fileName, source: 'cache' };
   }
 
+  const cnpjResolved = await resolveMeiCnpjForUser(userId, cnpj);
   const file = await downloadGuide({
     userId,
     periodoApuracao: period,
-    cnpj,
+    cnpj: cnpjResolved || cnpj,
     contribuinte
   });
   const pdfBase64 = file.buffer.toString('base64');
@@ -1632,7 +1663,7 @@ export const downloadGuide = async (payload, dependencies = {}) => {
   const competencia = periodoApuracaoToCompetencia(periodoApuracao);
 
   const cnpjFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
-  const hasCert = userId ? hasUserCertificate(userId) : false;
+  const hasCert = userId ? await userHasMeiCertificate(userId) : false;
 
   if (userId && competencia && period) {
     const storedBase64 = await getDasBase64Fn({ userId, periodoApuracao: period });
@@ -1705,7 +1736,20 @@ export const downloadGuide = async (payload, dependencies = {}) => {
     return await ensureDownloadBuffer(guide, userId, null);
   }
 
-  throw badRequest('Envie o certificado do cliente ou informe o CNPJ do MEI para baixar a guia');
+  if (userId) {
+    const hasPersisted = await userHasMeiCertificate(userId);
+    if (hasPersisted) {
+      throw badRequest(
+        'Não foi possível usar o certificado MEI desta conta. Reabra a app e reenvie o certificado A1 (Certificado e DAS).',
+        { code: 'MEI_CERT_LOAD_FAILED' }
+      );
+    }
+    throw badRequest(
+      'Certificado MEI não cadastrado na conta. Cadastre o certificado A1 na app Meu Financeiro (aba Certificado e DAS).',
+      { code: 'MEI_CERT_MISSING' }
+    );
+  }
+  throw badRequest('Informe o CNPJ do MEI para baixar a guia');
 };
 
 const buildRecentCompetencias = (count = 12, includeCurrent = false) => {
