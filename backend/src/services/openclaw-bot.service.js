@@ -11,6 +11,7 @@ import {
   upsertDasBase64,
 } from './mei-guide-das-base64.service.js';
 import * as meiGuideService from './mei-guide.service.js';
+import { isPeriodoIndisponivelSerproError } from './mei-guide-serpro-period-guard.js';
 import * as calendarEventsService from './calendar-events.service.js';
 import { sendWhatsappMessage } from './n8n-whatsapp.service.js';
 import {
@@ -640,6 +641,18 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'get_das_current') {
     const { display, periodoDigits } = resolveDasCompetencia();
+    try {
+      await meiGuideService.assertDasPeriodoPermitidoParaEnvio(dasUserId, {
+        periodoApuracao: periodoDigits,
+        cnpj: payload?.cnpj,
+        contribuinte: payload?.contribuinte,
+      });
+    } catch (err) {
+      if (isPeriodoIndisponivelSerproError(err)) {
+        throw badRequest(err.message);
+      }
+      throw err;
+    }
     const pdfBase64 = await getDasBase64({ userId: dasUserId, periodoApuracao: periodoDigits });
     if (!pdfBase64 || String(pdfBase64).trim() === '') {
       throw notFound(`Nenhum DAS encontrado para a competência ${display}.`);
@@ -749,6 +762,18 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'send_das_whatsapp') {
     const { display, periodoDigits } = resolveDasCompetencia();
+    try {
+      await meiGuideService.assertDasPeriodoPermitidoParaEnvio(dasUserId, {
+        periodoApuracao: periodoDigits,
+        cnpj: payload?.cnpj,
+        contribuinte: payload?.contribuinte,
+      });
+    } catch (err) {
+      if (isPeriodoIndisponivelSerproError(err)) {
+        throw badRequest(err.message);
+      }
+      throw err;
+    }
     const pdfBase64 = await getDasBase64({ userId: dasUserId, periodoApuracao: periodoDigits });
     if (!pdfBase64 || String(pdfBase64).trim() === '') {
       throw notFound(`Nenhum DAS encontrado para a competência ${display}.`);

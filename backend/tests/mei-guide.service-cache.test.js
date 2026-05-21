@@ -97,6 +97,30 @@ test('mei-guide persiste pago quando erro indica período quitado', async () => 
   assert.equal(persistedPaid, items.length);
 });
 
+test('mei-guide marca indisponível quando SERPRO indica não optante', async () => {
+  const { __buildPeriodsFromPdfForTests } = await import('../src/services/mei-guide.service.js');
+  let persistedPaid = 0;
+
+  const items = await __buildPeriodsFromPdfForTests('user-nao-opt', {
+    cnpj: '65805583000173',
+    useCertificate: false
+  }, {
+    listPaidCompetenciasFn: async () => [],
+    createGuideByCnpjFn: async () => {
+      const err = new Error('DAS MEI indisponível (02/2026): neste período a empresa ainda não era optante pelo Simples (MEI).');
+      err.errors = { code: 'MEI_DAS_PERIODO_INDISPONIVEL' };
+      throw err;
+    },
+    markCompetenciaAsPaidFn: async () => {
+      persistedPaid += 1;
+    }
+  });
+
+  assert.equal(persistedPaid, 0);
+  assert.ok(items.some((item) => item.status === 'indisponivel'));
+  assert.equal(items.filter((item) => item.status === 'pago').length, 0);
+});
+
 test('mei-guide marca período como pago quando resposta vem sem PDF', async () => {
   const { __buildPeriodsFromPdfForTests } = await import('../src/services/mei-guide.service.js');
   let persistedPaid = 0;

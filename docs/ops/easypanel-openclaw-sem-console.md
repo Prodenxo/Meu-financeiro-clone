@@ -240,6 +240,16 @@ ls -la /home/node/.openclaw/workspace/mf-das.sh
 
 Deve imprimir uma linha JSON curta com `"file":"/tmp/DAS-03-2026.pdf"` — não centenas de KB de base64.
 
+### Período **Não Optante** (empresa aberta depois — ex. abertura em março/2026)
+
+No PGMEI, meses anteriores à abertura aparecem como **Não Optante** (não há DAS válido). O backend passa a:
+
+- Bloquear **Criar Guia**, **download** e **WhatsApp** com código `MEI_DAS_PERIODO_INDISPONIVEL` (mensagem SERPRO MSG_23008).
+- Mostrar status **Indisponível** no histórico (não marcar como “pago”).
+- **Não gravar** PDF aleatório de outra pessoa nesses meses.
+
+Use DAS apenas a partir da primeira competência em que a empresa era MEI optante (ex.: **03/2026**).
+
 ### PDF com **nome de outra pessoa** mas `dasAccount` certo (ex. Fernando no JSON, Rodrigo no PDF)
 
 O JSON mostra **a tua conta** (`dasAccount.displayName`); o **ficheiro** em `DAS_mei` para esse mês foi gravado errado (PDF de outra pessoa). O WhatsApp manda esse ficheiro — por isso o nome dentro do PDF não bate com o JSON.

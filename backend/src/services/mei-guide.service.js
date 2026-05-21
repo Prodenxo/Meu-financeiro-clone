@@ -37,6 +37,13 @@ import {
   downloadStoredDasPdfBuffer,
 } from './mei-guide-storage.service.js';
 import { clearCompetenciaPaidStatus } from './mei-period-status.service.js';
+import {
+  assertSerproDasPeriodoDisponivel,
+  competenciaLabelFromPeriod,
+  isPeriodoIndisponivelSerproError,
+  isPeriodoIndisponivelSerproMessage,
+  periodoIndisponivelError
+} from './mei-guide-serpro-period-guard.js';
 
 const MEI_DAS_PAID_NO_PDF_CODE = 'MEI_DAS_PAID_NO_PDF';
 import * as parcelamentoPdfService from './mei-guide-parcelamento-pdf.service.js';
@@ -319,6 +326,7 @@ const isPeriodoSemPdfError = (error) => {
 };
 
 const shouldMarkCompetenciaAsPaid = (error) => {
+  if (isPeriodoIndisponivelSerproError(error)) return false;
   return isPeriodoPagoSerproError(error) || isPeriodoSemPdfError(error);
 };
 
@@ -1366,6 +1374,7 @@ const fetchDasPdfFromSerpro = async ({
   if (!period) {
     throw badRequest('Período de apuração inválido');
   }
+  const competenciaLabel = competenciaLabelFromPeriod(period);
   const serproParams = {
     contratanteNumero,
     autorPedidoNumero,
@@ -1379,12 +1388,15 @@ const fetchDasPdfFromSerpro = async ({
   let lastError = null;
   try {
     const emitResponse = await emitirServico(serproParams);
+    assertSerproDasPeriodoDisponivel(emitResponse, competenciaLabel);
     const pdfBase64 = extractDasPdfBase64FromSerproResponse(emitResponse);
     if (pdfBase64) {
       return { pdfBase64, period, status: emitResponse?.status || 'gerado' };
     }
-    lastError = new Error('PDF do DAS não retornado');
+    const serproHint = assertSerproDasPeriodoDisponivel(emitResponse, competenciaLabel);
+    lastError = new Error(serproHint || 'PDF do DAS não retornado');
   } catch (error) {
+    if (isPeriodoIndisponivelSerproError(error)) throw error;
     lastError = error;
   }
 
@@ -1397,11 +1409,13 @@ const fetchDasPdfFromSerpro = async ({
       idServico: serproParams.idServico,
       dados: serproParams.dados
     });
+    assertSerproDasPeriodoDisponivel(consultResponse, competenciaLabel);
     const pdfBase64 = extractDasPdfBase64FromSerproResponse(consultResponse);
     if (pdfBase64) {
       return { pdfBase64, period, status: consultResponse?.status || 'consultado' };
     }
   } catch (error) {
+    if (isPeriodoIndisponivelSerproError(error)) throw error;
     if (lastError) {
       if (shouldMarkCompetenciaAsPaid(lastError)) {
         throw paidPeriodNoPdfError();
@@ -1415,6 +1429,9 @@ const fetchDasPdfFromSerpro = async ({
   }
 
   if (lastError) {
+    if (isPeriodoIndisponivelSerproMessage(String(lastError?.message || ''))) {
+      throw periodoIndisponivelError(lastError.message, competenciaLabel);
+    }
     if (shouldMarkCompetenciaAsPaid(lastError)) {
       throw paidPeriodNoPdfError();
     }
@@ -1718,6 +1735,15 @@ const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
         guideId: period
       });
     } catch (error) {
+      if (isPeriodoIndisponivelSerproError(error)) {
+        items.push({
+          competencia,
+          status: 'indisponivel',
+          guideId: period,
+          errorMessage: String(error?.message || 'Período indisponível para DAS MEI').slice(0, 220)
+        });
+        continue;
+      }
       if (!shouldMarkCompetenciaAsPaid(error)) {
         items.push({
           competencia,
@@ -2035,6 +2061,57 @@ export const getOrDownloadParcelamentoPdf = async (userId, payload) => {
   }
 
   throw notFound('PDF não disponível para este parcelamento');
+};
+
+/** Bloqueia envio/consulta de DAS quando a Receita indica período indisponível (ex.: não optante). */
+export const assertDasPeriodoPermitidoParaEnvio = async (userId, payload) => {
+  ensureConfigured();
+  const { cnpj, periodoApuracao, contribuinte } = payload || {};
+  const period = normalizePeriodoApuracao(periodoApuracao);
+  if (!period) {
+    throw badRequest('Período de apuração inválido');
+  }
+  const competenciaLabel = competenciaLabelFromPeriod(period);
+
+  let contratanteNumero;
+  let autorPedidoNumero;
+  let contribuinteNumero;
+
+  if (userId && hasUserCertificate(userId)) {
+    await ensureClientCertificate(userId);
+    const contrib = resolveContribuinte(userId, contribuinte, cnpj);
+    contribuinteNumero = normalizeDoc(contrib.numero);
+    autorPedidoNumero = contribuinteNumero;
+    contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || contribuinteNumero);
+  } else {
+    contribuinteNumero = normalizeDoc(cnpj);
+    if (!validateDoc(contribuinteNumero)) {
+      throw badRequest('CNPJ do MEI inválido');
+    }
+    contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO);
+    if (!contratanteNumero) {
+      throw badRequest('Contratante Serpro não configurado');
+    }
+    autorPedidoNumero = contratanteNumero;
+  }
+
+  try {
+    const emitResponse = await emitirServico({
+      contratanteNumero,
+      autorPedidoNumero,
+      contribuinteNumero,
+      idSistema: 'PGMEI',
+      idServico: 'GERARDASPDF21',
+      dados: { periodoApuracao: period },
+      versaoSistema: '1.0'
+    });
+    assertSerproDasPeriodoDisponivel(emitResponse, competenciaLabel);
+  } catch (error) {
+    if (isPeriodoIndisponivelSerproError(error)) {
+      throw error;
+    }
+    /* Falha técnica na sonda: não bloqueia leitura de PDF já armazenado em outro fluxo */
+  }
 };
 
 export const validateGuide = async (userId, payload) => {

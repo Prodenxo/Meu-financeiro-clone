@@ -20,7 +20,7 @@ export interface MeiGuideResponse {
 
 export interface MeiPeriod {
   competencia: string;
-  status: 'pago' | 'a_pagar' | 'erro';
+  status: 'pago' | 'a_pagar' | 'erro' | 'indisponivel';
   guideId?: string | null;
   errorMessage?: string | null;
 }
