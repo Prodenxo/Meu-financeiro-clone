@@ -1297,11 +1297,62 @@ export const getSerproTokenForFrontend = async () => {
   };
 };
 
+const looksLikePdfBase64 = (value) => {
+  const text = String(value || '').trim();
+  if (text.length < 80) return null;
+  if (!/^%PDF/i.test(text) && !/^[A-Za-z0-9+/=\r\n]+$/.test(text.slice(0, 120))) return null;
+  return text;
+};
+
+const findPdfBase64Deep = (value, depth = 0) => {
+  if (!value || depth > 8) return null;
+  if (typeof value === 'string') return looksLikePdfBase64(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findPdfBase64Deep(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof value !== 'object') return null;
+  for (const key of ['pdf', 'PDF', 'pdfBase64', 'arquivo', 'guia', 'das', 'documento']) {
+    const found = looksLikePdfBase64(value[key]);
+    if (found) return found;
+  }
+  for (const nested of Object.values(value)) {
+    const found = findPdfBase64Deep(nested, depth + 1);
+    if (found) return found;
+  }
+  return null;
+};
+
 const extractDasPdfBase64FromSerproResponse = (response) => {
   const dados = parseSerproDados(response?.dados);
-  const das = Array.isArray(dados) ? dados[0] : dados;
-  const pdf = das?.pdf;
-  return pdf && String(pdf).trim() ? String(pdf).trim() : null;
+  return (
+    findPdfBase64Deep(dados)
+    || findPdfBase64Deep(response?.raw)
+    || findPdfBase64Deep(response)
+    || null
+  );
+};
+
+/** PDF já guardado (DAS_mei ou bucket) — não chama a Receita. */
+const tryLoadLocalDasPdfBase64 = async (userId, period) => {
+  if (!userId || !period) return null;
+  const competencia = periodoApuracaoToCompetencia(period);
+  try {
+    const stored = await getDasBase64({ userId, periodoApuracao: period });
+    if (stored && String(stored).trim()) return String(stored).trim();
+  } catch {
+    /* ignora */
+  }
+  const buffer = await downloadStoredDasPdfBuffer({
+    userId,
+    competencia,
+    periodoApuracao: period
+  });
+  if (buffer?.length) return buffer.toString('base64');
+  return null;
 };
 
 /** Emitir na SERPRO; se vier sem PDF, tenta Consultar (segunda via / período quitado). */
@@ -1405,11 +1456,27 @@ export const createGuideByCnpj = async (userId, payload) => {
     throw badRequest('Contratante Serpro não configurado');
   }
 
-  const { pdfBase64, period, status } = await fetchDasPdfFromSerpro({
+  const period = normalizePeriodoApuracao(periodoApuracao, mes, ano);
+  if (!period) {
+    throw badRequest('Período de apuração inválido');
+  }
+
+  const localPdf = userId ? await tryLoadLocalDasPdfBase64(userId, period) : null;
+  if (localPdf) {
+    return {
+      id: period,
+      status: 'armazenado',
+      pdfBase64: localPdf,
+      filename: `das-mei-${period}.pdf`,
+      contentType: 'application/pdf'
+    };
+  }
+
+  const { pdfBase64, status } = await fetchDasPdfFromSerpro({
     contratanteNumero,
     autorPedidoNumero: contratanteNumero,
     contribuinteNumero: cnpjNumerico,
-    periodoApuracao: normalizePeriodoApuracao(periodoApuracao, mes, ano)
+    periodoApuracao: period
   });
 
   return {
@@ -1437,6 +1504,17 @@ export const createGuide = async (userId, payload) => {
   const period = normalizePeriodoApuracao(periodoApuracao, mes, ano);
   if (!period) {
     throw badRequest('Período de apuração inválido');
+  }
+
+  const localPdf = await tryLoadLocalDasPdfBase64(userId, period);
+  if (localPdf) {
+    return {
+      id: period,
+      status: 'armazenado',
+      pdfBase64: localPdf,
+      filename: `das-mei-${period}.pdf`,
+      contentType: 'application/pdf'
+    };
   }
 
   const cnpjNumerico = normalizeDoc(contrib.numero);
