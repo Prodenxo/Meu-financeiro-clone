@@ -238,10 +238,25 @@ Deve imprimir uma linha JSON curta com `"file":"/tmp/DAS-03-2026.pdf"` — não 
 Teste no Console (troca pelo telefone **do remetente**):
 
 ```sh
-# Troca 5521999999999 pelo teu número real (DDI 55, sem + e sem prefixo "SEU_")
+# Obrigatório na MESMA sessão do console (senão dá /mf-curl.sh: not found)
+WS=/home/node/.openclaw/workspace
+test -x "$WS/mf-curl.sh" || { echo "ERRO: corre openclaw-console-fix-das-agent.sh primeiro"; exit 1; }
+
+# Troca 5521999999999 pelo teu número real (DDI 55, sem + e sem "SEU_")
 "$WS/mf-curl.sh" '{"phone":"5521999999999","action":"resolve_user"}'
 "$WS/mf-curl.sh" '{"phone":"5521999999999","action":"get_das_current","payload":{"mes":"02/2026","includeBase64":true}}'
 ```
+
+Ou **sem variável** (copia/cola seguro):
+
+```sh
+/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"5521999999999","action":"get_das_current","payload":{"mes":"02/2026","includeBase64":true}}'
+```
+
+| Erro no console | Causa |
+|-----------------|--------|
+| `/mf-curl.sh: not found` | `$WS` vazio — falta `WS=/home/node/.openclaw/workspace` **antes** do comando |
+| `mf-curl.sh: not found` (sem `/` no início) | Script não instalado — corre `openclaw-console-fix-das-agent.sh` |
 
 Se aparecer `column profiles.display_name does not exist`, o backend em produção está desatualizado — faz deploy da versão que lê o nome em `auth.users` (metadata), não em `profiles`.
 
