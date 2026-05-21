@@ -26,16 +26,12 @@ export const downloadGuide = async (req, res, next) => {
       numero: req.query.contribuinteNumero,
       tipo: req.query?.contribuinteTipo
     } : null;
-    const forceRefresh =
-      req.query?.forceRefresh === 'true' ||
-      req.query?.forceRefresh === '1';
     const file = await meiGuideService.downloadGuide({
       userId: req.user.id,
       cnpj: req.query?.cnpj,
       periodoApuracao: id,
       autorPedidoDados,
-      contribuinte,
-      forceRefresh
+      contribuinte
     });
     await meiGuideDasBase64Service.upsertDasBase64({
       userId: req.user.id,

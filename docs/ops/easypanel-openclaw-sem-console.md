@@ -13,11 +13,7 @@ Confirma no browser: `GET https://auto-back-meufinanceiro-site.4tnf3f.easypanel.
 
 `POST .../api/mei-guide/validate` sem token deve dar **401**, não **404**.
 
-Após redeploy:
-
-- **Baixar Guia DAS** em mês **PAGO** deixa de dar 400: devolve o PDF já guardado em `DAS_mei`.
-- Para **substituir** PDF errado (ex. fevereiro com nome de outra pessoa): na app usa download com regeneração (`forceRefresh=true` na API) ou apaga a linha `DAS_mei` desse mês no Supabase e volta a emitir.
-- **Validar / Criar guia** continuam a precisar das rotas `POST /api/mei-guide*` (redeploy).
+Após redeploy: **Validar / Criar guia / Baixar** precisam das rotas `POST/GET /api/mei-guide*` (redeploy). Problema de PDF de **outra pessoa no WhatsApp** = telefone errado no `mf-das-send.sh` (ver secção DAS com nome errado).
 
 ## 1. Variáveis no Easypanel (serviço OpenClaw → Environment)
 

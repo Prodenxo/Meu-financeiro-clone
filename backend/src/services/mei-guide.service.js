@@ -1378,7 +1378,7 @@ export const createGuide = async (userId, payload) => {
 
 export const downloadGuide = async (payload, dependencies = {}) => {
   ensureConfigured();
-  const { userId, cnpj, periodoApuracao, contribuinte, forceRefresh } = payload || {};
+  const { userId, cnpj, periodoApuracao, contribuinte } = payload || {};
   if (!periodoApuracao) throw badRequest('Período de apuração é obrigatório');
   const {
     isCompetenciaPaidFn = isCompetenciaPaid,
@@ -1389,13 +1389,11 @@ export const downloadGuide = async (payload, dependencies = {}) => {
   } = dependencies;
   const period = normalizePeriodoApuracao(periodoApuracao);
   const competencia = periodoApuracaoToCompetencia(periodoApuracao);
-  const wantsForceRefresh =
-    forceRefresh === true || String(forceRefresh || '').toLowerCase() === 'true';
 
   const cnpjFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
   const hasCert = userId ? hasUserCertificate(userId) : false;
 
-  if (userId && competencia && !wantsForceRefresh) {
+  if (userId && competencia) {
     const paidInCache = await isCompetenciaPaidFn({ userId, competencia });
     if (paidInCache) {
       if (period) {
