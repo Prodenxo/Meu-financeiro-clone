@@ -9,13 +9,27 @@ Quando o **Console do Serviço** mostra `container is not running`, não dá par
 | `MF_API_URL` | `https://auto-back-meufinanceiro-site.4tnf3f.easypanel.host/api/bot/openclaw/action` |
 | `OPENCLAW_WEBHOOK_SECRET` | **igual** ao backend |
 | `OPENCLAW_PUBLIC_ORIGIN` | `https://auto-openclaw-gateway.4tnf3f.easypanel.host` |
-| `OPENCLAW_STATE_DIR` | `/tmp/openclaw-state` |
+| `OPENCLAW_STATE_DIR` | **Não definir** (usa `/home/node/.openclaw` no volume) |
 
-Mantém as que o template já tinha (API keys, Gateway Token, etc.).
+**Não uses** `OPENCLAW_STATE_DIR=/tmp/...` se quiseres WhatsApp estável: o QR grava credenciais num sítio e o gateway pode ler noutro → painel mostra **Vinculado: Sim** mas **not linked** / **Em execução: Não**.
+
+Mantém as que o template já tinha (API keys, Gateway Token, etc.). Confirma **volume persistente** montado em `/home/node/.openclaw`.
 
 ## 2. Comando de arranque (substitui o CMD default)
 
 No serviço OpenClaw, procura **Command**, **Start command**, **Docker command** ou **Override command** (nome varia no Easypanel).
+
+### Comando com fix de `agentRuntime` (contentor em crash loop)
+
+Se os logs repetem `Config invalid` + `agentRuntime`, cola **uma linha** em **Implantar → Comando**:
+
+```sh
+sh -c 'printf "%s\n" "const fs=require(\"fs\");const p=\"/home/node/.openclaw/openclaw.json\";if(!fs.existsSync(p))process.exit(0);const c=JSON.parse(fs.readFileSync(p,\"utf8\"));const k=\"openai/gpt-4o-mini\";const m=c.agents&&c.agents.defaults&&c.agents.defaults.models&&c.agents.defaults.models[k];if(m&&m.agentRuntime){delete m.agentRuntime;fs.writeFileSync(p,JSON.stringify(c,null,2));console.log(\"[fix] agentRuntime removido\");}" > /tmp/fix-openclaw.js && node /tmp/fix-openclaw.js; chown -R node:node /home/node/.openclaw 2>/dev/null; exec node dist/index.js gateway --bind lan --port 18789 --allow-unconfigured'
+```
+
+Depois do deploy, nos **Logs** deve aparecer `[fix] agentRuntime removido` e `[gateway] ready` (sem `Config invalid`).
+
+### Comando bootstrap Meu Financeiro (opcional, após subir)
 
 Cola **uma linha** (ajusta o URL em `OPENCLAW_PUBLIC_ORIGIN` nas env, não aqui):
 
@@ -42,9 +56,53 @@ Se ainda aparecer `origin not allowed`, confirma que `OPENCLAW_PUBLIC_ORIGIN` é
 
 ## 5. WhatsApp
 
+### Painel: Vinculado Sim + **not linked** + Em execução Não
+
+Isto significa: ficheiros de sessão existem, mas o **listener** (socket Baileys) não está ativo no gateway.
+
+| Check | Ação |
+|-------|------|
+| Estado no mesmo path | Remove `OPENCLAW_STATE_DIR` das env; volume em `/home/node/.openclaw` |
+| Um só comando de arranque | Usa o comando **fix `agentRuntime`** (secção 2); **não** mistures com bootstrap que faz `export OPENCLAW_STATE_DIR=/tmp` |
+| Religar no contentor | Com serviço **Running** → Console: `openclaw channels login --channel whatsapp` → espera QR → `openclaw channels status` |
+| Plugin | Se logs disserem plugin bloqueado: em `openclaw.json`, `plugins.allow` deve incluir o plugin WhatsApp (ex. `@openclaw/whatsapp`) |
+| Reinício | **Deploy/Restart** no Easypanel (não `gateway restart` no console) |
+
+Objetivo no painel **Canais → WhatsApp**: **Vinculado Sim**, **Em execução Sim**, **Conectado Sim** (sem caixa vermelha `not linked`).
+
+Se continuar após 2–3 minutos, no Console (com volume montado):
+
+```sh
+rm -rf /home/node/.openclaw/credentials/whatsapp
+openclaw channels login --channel whatsapp
+```
+
+Depois **Deploy** de novo. Só apaga `credentials/whatsapp` se aceitares novo QR.
+
+### Bot despejou base64 / JSON gigante ao pedir DAS
+
+A API **funcionou** (`"message":"DAS encontrado"`), mas o agente mostrou `data.base64` no chat em vez de enviar PDF.
+
+| Correção | Ação |
+|----------|------|
+| Scripts | Deploy com bootstrap que cria `mf-curl.sh` + **`mf-das.sh`** + `MF-API.md` (ver `easypanel-openclaw-bootstrap.sh`) |
+| Agente | Deve correr `mf-das.sh 5521996185328 03/2026` e depois `openclaw message send --channel whatsapp --target … --media /tmp/DAS-….pdf` |
+| Proibido | `curl` com `$MF_API_URL`, `fetch url`, ou responder com o JSON completo |
+
+No Console (Running), testa:
+
+```sh
+/home/node/.openclaw/workspace/mf-das.sh 5521996185328 03/2026
+```
+
+Deve imprimir uma linha JSON curta com `"file":"/tmp/DAS-03-2026.pdf"` — não centenas de KB de base64.
+
+### Testar o bot (Meu Financeiro)
+
 1. `/new` na conversa com o bot.
 2. Pergunta: *"Quais são minhas categorias?"*
-3. O agente deve usar `exec` com `/tmp/openclaw-state/workspace/mf-curl.sh`.
+3. O agente deve usar `exec` com `/home/node/.openclaw/workspace/mf-curl.sh` (ou o path do teu `mf-curl.sh` no workspace).
+4. DAS: *"Manda o DAS de 03/2026"* → deve receber **ficheiro PDF**, não texto base64.
 
 ## 6. Se o contentor continuar a cair
 

@@ -93,6 +93,7 @@ Não passes chaves **Supabase** ao modelo em texto: só este endpoint com Bearer
 - **`payload.mes`:** opcional, string **`MM/YYYY`** (ex.: `05/2026`). Se omitir, usa o **mês corrente em UTC**.
 - **Sucesso:** `data.fileName`, `data.mimeType` (`application/pdf`), `data.base64`, `data.mes`.
 - **Não encontrado:** HTTP **404**, `success: false`, mensagem do tipo *Nenhum DAS encontrado para a competência MM/YYYY.*
+- **OpenClaw / WhatsApp:** o endpoint **não envia** o ficheiro sozinho. O agente deve usar `mf-das.sh` (grava PDF em `/tmp`) + `openclaw message send --media …`. **Nunca** cole `base64` na conversa — só confunde o utilizador.
 
 ---
 

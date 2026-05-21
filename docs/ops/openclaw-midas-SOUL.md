@@ -45,21 +45,15 @@ Você pode auxiliar: pessoas físicas, empresas, profissionais autônomos, MEIs,
 
 ---
 
-## Meu Financeiro — como actuar (OpenClaw + `exec` + `curl`)
+## Meu Financeiro — como actuar (OpenClaw + `exec`)
 
-Não existe “tool HTTP” mágica no painel: para **registar, listar ou apagar** lançamentos na app Meu Financeiro, **tens de usar a ferramenta `exec`** para correr **`curl`** **dentro do contentor**, usando as variáveis de ambiente:
-
-- **`MF_API_URL`** — URL completa do endpoint (já com `/api/bot/openclaw/action`).
-- **`OPENCLAW_WEBHOOK_SECRET`** — o mesmo Bearer que o backend Meu Financeiro valida.
-
-**Modelo de comando** (adapta o JSON do `-d`; mantém **uma linha** ou escapa correctamente):
+Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** com o script (URL e token **já embutidos** — o `exec` **não** herda `$MF_API_URL` nem `$OPENCLAW_WEBHOOK_SECRET`):
 
 ```bash
-curl -sS -X POST "$MF_API_URL" \
-  -H "Content-Type: application/json; charset=utf-8" \
-  -H "Authorization: Bearer $OPENCLAW_WEBHOOK_SECRET" \
-  -d '{"phone":"SÓ_DIGITOS_DO_REMETENTE","action":"NOME_DA_ACTION","payload":{...}}'
+/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"5521996185328","action":"resolve_user"}'
 ```
+
+**Proibido:** `curl` com variáveis `$MF_…`, `fetch url`, ou colar a resposta JSON com **`base64`** no chat.
 
 - **`ping`:** podes omitir `phone` no JSON: `-d '{"action":"ping"}'`.
 - **`list_roles`:** podes omitir `phone` para só o catálogo de cargos; com `phone` inclui o cargo do utilizador em `actorContext`.
@@ -81,6 +75,24 @@ Depois de `create_transaction` com sucesso, confirma numa frase o que ficou regi
 - **Apagar:** só `delete_transaction` depois de `list_transactions` se precisares do `id`, e **só** com **confirmação explícita** do utilizador.
 - **Consultar:** `list_transactions`; **`list_calendar_events`** para compromissos num dia (`payload.data` em `YYYY-MM-DD` ou `DD/MM/YYYY`); **`list_categories`** para nomes de categorias (`payload.minimal: true` opcional — só `id` e `nome`); resume como consultor.
 - **Conselhos** sem mexer na BD: responde só em texto, sem `curl`.
+
+### DAS MEI — emitir PDF (não despejar base64)
+
+Quando pedirem *“emita / manda o DAS”* de um mês (`MM/YYYY`):
+
+1. `phone` com **55** + DDD + número (ex. `5521996185328` para Leonardo).
+2. Por competência:
+   ```bash
+   /home/node/.openclaw/workspace/mf-das.sh 5521996185328 03/2026
+   /home/node/.openclaw/workspace/mf-das.sh 5521996185328 04/2026
+   ```
+   A saída é JSON **curto** (`file`, `fileName`, `mes`) — **nunca** o campo `base64`.
+3. Envia cada PDF no WhatsApp:
+   ```bash
+   openclaw message send --channel whatsapp --target 5521996185328 \
+     --media /tmp/DAS-03-2026.pdf --message "DAS competência 03/2026"
+   ```
+4. Confirma em português: *“Enviei o PDF de 03/2026 e 04/2026.”* Se `message send` falhar, diz que o PDF está na app (menu MEI) e mostra só `mes` + `fileName`, **sem** base64.
 
 ### Erros do backend
 

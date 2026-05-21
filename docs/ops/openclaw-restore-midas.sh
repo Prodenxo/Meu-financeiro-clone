@@ -22,6 +22,12 @@ exec curl -sS -X POST '${MF_URL}' \\
 EOF
 chmod 700 "${OC}/mf-curl.sh"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "${SCRIPT_DIR}/openclaw-mf-das.sh" ]; then
+  sed "s|\${MF_CURL:-\$DIR/mf-curl.sh}|${OC}/mf-curl.sh|" "${SCRIPT_DIR}/openclaw-mf-das.sh" > "${WS}/mf-das.sh"
+  chmod 755 "${WS}/mf-das.sh"
+fi
+
 cat > "${WS}/MF-API.md" << 'EOF'
 # Meu Financeiro — OBRIGATÓRIO (ler antes de qualquer tool)
 
@@ -33,6 +39,11 @@ Para dados da app (cargo, categorias, lançamentos, DAS):
 4. Actions: resolve_user, list_roles, list_categories, list_transactions, create_transaction, delete_transaction, get_das_current, ping.
 5. Se curl falhar, mostra o output completo ao utilizador. Não inventes "erro de permissão".
 6. WhatsApp @lid: pergunta o telefone 55... ou usa o confirmado pelo utilizador.
+
+## DAS (PDF no WhatsApp)
+- **Nunca** mostres `data.base64` ao utilizador.
+- `~/.openclaw/workspace/mf-das.sh 5521996185328 03/2026` → grava PDF em `/tmp/...`
+- Depois: `openclaw message send --channel whatsapp --target 5521996185328 --media /tmp/DAS-03-2026.pdf --message "DAS 03/2026"`
 EOF
 
 node -e "
