@@ -164,21 +164,15 @@ export const resolveUserIdByPhone = async (rawPhone) => {
  */
 export const fetchOpenclawAccountSummary = async (userId) => {
   const admin = createSupabaseClient({ useServiceRole: true });
-  const { data: profile, error: profileErr } = await admin
-    .from('profiles')
-    .select('display_name, role')
-    .eq('id', userId)
-    .maybeSingle();
-  if (profileErr) throw badRequest(profileErr.message);
 
   let email = null;
-  let metaDisplay = null;
+  let displayName = null;
   try {
     const { data: authData, error: authErr } = await admin.auth.admin.getUserById(userId);
     if (!authErr && authData?.user) {
       email = authData.user.email ?? null;
       const meta = authData.user.user_metadata || {};
-      metaDisplay = meta.display_name || meta.full_name || null;
+      displayName = meta.display_name || meta.full_name || email || null;
     }
   } catch {
     /* auth opcional */
@@ -193,12 +187,9 @@ export const fetchOpenclawAccountSummary = async (userId) => {
     /* memberships opcional */
   }
 
-  const displayName =
-    String(profile?.display_name || metaDisplay || email || '').trim() || 'Utilizador';
-
   return {
     userId,
-    displayName,
+    displayName: String(displayName || '').trim() || 'Utilizador',
     empresaNome,
     email,
   };

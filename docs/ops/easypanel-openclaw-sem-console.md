@@ -238,9 +238,12 @@ Deve imprimir uma linha JSON curta com `"file":"/tmp/DAS-03-2026.pdf"` — não 
 Teste no Console (troca pelo telefone **do remetente**):
 
 ```sh
-"$WS/mf-curl.sh" '{"phone":"55XXXXXXXXXXX","action":"resolve_user"}'
-"$WS/mf-curl.sh" '{"phone":"55XXXXXXXXXXX","action":"get_das_current","payload":{"mes":"02/2026","includeBase64":true}}'
+# Troca 5521999999999 pelo teu número real (DDI 55, sem + e sem prefixo "SEU_")
+"$WS/mf-curl.sh" '{"phone":"5521999999999","action":"resolve_user"}'
+"$WS/mf-curl.sh" '{"phone":"5521999999999","action":"get_das_current","payload":{"mes":"02/2026","includeBase64":true}}'
 ```
+
+Se aparecer `column profiles.display_name does not exist`, o backend em produção está desatualizado — faz deploy da versão que lê o nome em `auth.users` (metadata), não em `profiles`.
 
 Confirma `dasAccount.displayName` na resposta antes de `mf-das-send.sh`.
 
