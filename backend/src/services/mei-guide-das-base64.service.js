@@ -70,3 +70,18 @@ export const getDasBase64 = async ({ userId, periodoApuracao }) => {
   }
   return data?.DAS || null;
 };
+
+/** Remove PDF armazenado (ex.: ficheiro de outra pessoa gravado por engano). */
+export const deleteDasBase64 = async ({ userId, periodoApuracao }) => {
+  if (!userId) throw badRequest('Usuário não informado');
+  const periodo = normalizePeriodo(periodoApuracao);
+  if (!periodo) throw badRequest('Período inválido');
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from(TABLE)
+    .delete()
+    .eq('user_id', userId)
+    .eq('periodo_apuracao', periodo.iso);
+  if (error) throw badRequest(error.message || 'Falha ao remover DAS armazenado');
+  return { deleted: true, periodoApuracao: periodo.raw };
+};

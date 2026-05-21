@@ -5,7 +5,12 @@ import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
 import * as categoriesService from './categories.service.js';
 import * as rbacCatalogService from './rbac-catalog.service.js';
-import { getDasBase64 } from './mei-guide-das-base64.service.js';
+import {
+  deleteDasBase64,
+  getDasBase64,
+  upsertDasBase64,
+} from './mei-guide-das-base64.service.js';
+import * as meiGuideService from './mei-guide.service.js';
 import * as calendarEventsService from './calendar-events.service.js';
 import { sendWhatsappMessage } from './n8n-whatsapp.service.js';
 import {
@@ -617,7 +622,8 @@ export const runOpenclawAction = async (input) => {
     if (
       action !== 'get_das_current' &&
       action !== 'get_das_payment_status' &&
-      action !== 'send_das_whatsapp'
+      action !== 'send_das_whatsapp' &&
+      action !== 'refresh_das_pdf'
     ) {
       return null;
     }
@@ -781,7 +787,43 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'refresh_das_pdf') {
+    const { display, periodoDigits } = resolveDasCompetencia();
+    try {
+      await deleteDasBase64({ userId: dasUserId, periodoApuracao: periodoDigits });
+    } catch {
+      /* linha pode não existir */
+    }
+    const guide = await meiGuideService.createGuide(dasUserId, {
+      cnpj: payload?.cnpj,
+      periodoApuracao: periodoDigits,
+      contribuinte: payload?.contribuinte,
+    });
+    if (!guide?.pdfBase64) {
+      throw notFound(`SERPRO não devolveu PDF para ${display}.`);
+    }
+    await upsertDasBase64({
+      userId: dasUserId,
+      periodoApuracao: periodoDigits,
+      pdfBase64: guide.pdfBase64,
+    });
+    const owner = dasSubject ? buildDasOwnerLabel(dasSubject.account) : '';
+    return {
+      ok: true,
+      message: `DAS ${display} regenerado na Receita e guardado (${owner}). Agora use mf-das-send.sh.`,
+      data: {
+        mes: display,
+        refreshed: true,
+        dasAccount: dasSubject?.account ?? null,
+        execCommand: destinationPhone
+          ? `/home/node/.openclaw/workspace/mf-das-send.sh ${destinationPhone} ${display}`
+          : null,
+        ...(dasSubject?.dataLinkDebug ?? linkDebug),
+      },
+    };
+  }
+
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_das_payment_status, get_das_current, send_das_whatsapp.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

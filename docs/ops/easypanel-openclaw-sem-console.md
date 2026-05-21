@@ -240,6 +240,25 @@ ls -la /home/node/.openclaw/workspace/mf-das.sh
 
 Deve imprimir uma linha JSON curta com `"file":"/tmp/DAS-03-2026.pdf"` — não centenas de KB de base64.
 
+### PDF com **nome de outra pessoa** mas `dasAccount` certo (ex. Fernando no JSON, Rodrigo no PDF)
+
+O JSON mostra **a tua conta** (`dasAccount.displayName`); o **ficheiro** em `DAS_mei` para esse mês foi gravado errado (PDF de outra pessoa). O WhatsApp manda esse ficheiro — por isso o nome dentro do PDF não bate com o JSON.
+
+**Corrigir no Console (após deploy com `refresh_das_pdf`):**
+
+```sh
+/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"5521996185328","action":"refresh_das_pdf","payload":{"mes":"02/2026"}}'
+/home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 02/2026
+```
+
+**Ou no Supabase** (apaga só fevereiro/2026 do teu `user_id`, depois gera de novo na app com Validar/Criar guia):
+
+```sql
+DELETE FROM "DAS_mei"
+WHERE user_id = '5004fbfd-9b15-4a67-b16d-d2939a5a8df4'
+  AND periodo_apuracao >= '2026-02-01' AND periodo_apuracao < '2026-03-01';
+```
+
 ### DAS com **nome de outra pessoa** (ex. pediu o seu e veio “Rodrigo”)
 
 | Causa | Correção |

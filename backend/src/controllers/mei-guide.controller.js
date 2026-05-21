@@ -9,6 +9,13 @@ export const createGuide = async (req, res, next) => {
       autorPedidoDados: req.body?.autorPedidoDados,
       contribuinte: req.body?.contribuinte
     });
+    if (data?.pdfBase64 && data?.id) {
+      await meiGuideDasBase64Service.upsertDasBase64({
+        userId: req.user.id,
+        periodoApuracao: data.id,
+        pdfBase64: data.pdfBase64,
+      });
+    }
     return sendSuccess(res, data, 'Guia MEI gerada');
   } catch (error) {
     return next(error);
