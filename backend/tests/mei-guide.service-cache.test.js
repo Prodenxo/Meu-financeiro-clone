@@ -119,26 +119,43 @@ test('mei-guide marca período como pago quando resposta vem sem PDF', async () 
   assert.equal(persistedPaid, items.length);
 });
 
-test('downloadGuide bloqueia download quando período já está pago no banco', async () => {
+test('downloadGuide devolve PDF armazenado quando período já está pago', async () => {
   const { downloadGuide } = await import('../src/services/mei-guide.service.js');
+  const stored = Buffer.from('%PDF-test').toString('base64');
   let createCalls = 0;
+
+  const file = await downloadGuide({
+    userId: 'user-4',
+    cnpj: '12345678000199',
+    periodoApuracao: '202601'
+  }, {
+    isCompetenciaPaidFn: async () => true,
+    getDasBase64Fn: async () => stored,
+    createGuideByCnpjFn: async () => {
+      createCalls += 1;
+      return null;
+    }
+  });
+
+  assert.equal(createCalls, 0);
+  assert.equal(file.filename, 'DAS-2026-01.pdf');
+  assert.equal(file.buffer.toString(), '%PDF-test');
+});
+
+test('downloadGuide bloqueia quando pago sem PDF armazenado', async () => {
+  const { downloadGuide } = await import('../src/services/mei-guide.service.js');
 
   await assert.rejects(
     () => downloadGuide({
-      userId: 'user-4',
+      userId: 'user-4b',
       cnpj: '12345678000199',
       periodoApuracao: '202601'
     }, {
       isCompetenciaPaidFn: async () => true,
-      createGuideByCnpjFn: async () => {
-        createCalls += 1;
-        return null;
-      }
+      getDasBase64Fn: async () => null
     }),
     /Período já consta como pago/
   );
-
-  assert.equal(createCalls, 0);
 });
 
 test('downloadGuide persiste pago quando SERPRO retorna período quitado', async () => {

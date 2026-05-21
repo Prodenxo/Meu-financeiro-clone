@@ -128,14 +128,16 @@ export async function fetchMeiPeriodsByCnpj(cnpj: string): Promise<MeiPeriod[]> 
 export async function downloadMeiGuide(
   cnpj: string | undefined,
   periodoApuracao: string,
-  contribuinte?: { numero: string; tipo: number }
+  contribuinte?: { numero: string; tipo: number },
+  options?: { forceRefresh?: boolean }
 ): Promise<{ blob: Blob; filename: string | null }> {
   const query = new URLSearchParams({
     ...(cnpj ? { cnpj } : {}),
     ...(contribuinte ? {
       contribuinteNumero: contribuinte.numero,
       contribuinteTipo: String(contribuinte.tipo)
-    } : {})
+    } : {}),
+    ...(options?.forceRefresh ? { forceRefresh: 'true' } : {})
   });
   return await apiClient.requestBlob(`/mei-guide/${encodeURIComponent(periodoApuracao)}/download?${query.toString()}`, {
     method: 'GET'

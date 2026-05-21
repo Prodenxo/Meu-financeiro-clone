@@ -28,6 +28,7 @@ import {
   markCompetenciaAsPaid,
   periodoApuracaoToCompetencia
 } from './mei-period-status.service.js';
+import { getDasBase64 } from './mei-guide-das-base64.service.js';
 import * as parcelamentoPdfService from './mei-guide-parcelamento-pdf.service.js';
 
 const require = createRequire(import.meta.url);
@@ -1377,22 +1378,37 @@ export const createGuide = async (userId, payload) => {
 
 export const downloadGuide = async (payload, dependencies = {}) => {
   ensureConfigured();
-  const { userId, cnpj, periodoApuracao, contribuinte } = payload || {};
+  const { userId, cnpj, periodoApuracao, contribuinte, forceRefresh } = payload || {};
   if (!periodoApuracao) throw badRequest('Período de apuração é obrigatório');
   const {
     isCompetenciaPaidFn = isCompetenciaPaid,
     markCompetenciaAsPaidFn = markCompetenciaAsPaid,
     createGuideFn = createGuide,
-    createGuideByCnpjFn = createGuideByCnpj
+    createGuideByCnpjFn = createGuideByCnpj,
+    getDasBase64Fn = getDasBase64
   } = dependencies;
+  const period = normalizePeriodoApuracao(periodoApuracao);
   const competencia = periodoApuracaoToCompetencia(periodoApuracao);
+  const wantsForceRefresh =
+    forceRefresh === true || String(forceRefresh || '').toLowerCase() === 'true';
 
   const cnpjFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
   const hasCert = userId ? hasUserCertificate(userId) : false;
 
-  if (userId && competencia) {
+  if (userId && competencia && !wantsForceRefresh) {
     const paidInCache = await isCompetenciaPaidFn({ userId, competencia });
     if (paidInCache) {
+      if (period) {
+        const storedBase64 = await getDasBase64Fn({ userId, periodoApuracao: period });
+        if (storedBase64 && String(storedBase64).trim()) {
+          const label = competencia.replace('-', '/');
+          return {
+            buffer: Buffer.from(storedBase64, 'base64'),
+            contentType: 'application/pdf',
+            filename: `DAS-${label.replace('/', '-')}.pdf`
+          };
+        }
+      }
       throw badRequest(PAID_PERIOD_BUSINESS_MESSAGE);
     }
   }

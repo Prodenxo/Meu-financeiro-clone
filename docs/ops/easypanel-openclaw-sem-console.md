@@ -2,6 +2,23 @@
 
 Quando o **Console do Serviço** mostra `container is not running`, não dá para colar comandos dentro do contentor. Configura tudo pelo **painel Easypanel** e por um **comando de arranque** que corre sozinho cada vez que o serviço sobe.
 
+## Backend Site: `Validar` / `Criar guia` → 404
+
+No repo actual existem `POST /api/mei-guide` e `POST /api/mei-guide/validate`. **404** na app = serviço **auto-back-meufinanceiro-site** com imagem antiga → **Redeploy** (Dockerfile.backend).
+
+Confirma no browser: `GET https://auto-back-meufinanceiro-site.4tnf3f.easypanel.host/`
+
+- **OK:** JSON com `"apiVersion": 2` e `"routes": { "meiGuide": "/api/mei-guide", ... }`
+- **Antigo:** só `{ "status": "ok", "service": "backend" }` → falta redeploy
+
+`POST .../api/mei-guide/validate` sem token deve dar **401**, não **404**.
+
+Após redeploy:
+
+- **Baixar Guia DAS** em mês **PAGO** deixa de dar 400: devolve o PDF já guardado em `DAS_mei`.
+- Para **substituir** PDF errado (ex. fevereiro com nome de outra pessoa): na app usa download com regeneração (`forceRefresh=true` na API) ou apaga a linha `DAS_mei` desse mês no Supabase e volta a emitir.
+- **Validar / Criar guia** continuam a precisar das rotas `POST /api/mei-guide*` (redeploy).
+
 ## 1. Variáveis no Easypanel (serviço OpenClaw → Environment)
 
 | Variável | Valor (exemplo) |
@@ -289,11 +306,21 @@ ls -la "$WS/mf-curl.sh"
 
 **4.** Instalação completa (`mf-das.sh`, `mf-das-send.sh`, `DAS-WHATSAPP.md`): abre no PC o ficheiro `Site/docs/ops/openclaw-console-fix-das-agent.sh`, **copia tudo**, cola no Console **de uma vez** e Enter. No fim deve listar `mf-curl.sh mf-das.sh mf-das-send.sh`.
 
-**5.** Teste:
+**5.** Teste — **qual é o MEU número?**
+
+No painel OpenClaw, ao receberes uma mensagem no WhatsApp, vês algo como `Nome (+5521999999999)`. Esse `5521999999999` (sem `+`) é o que vais usar em **todos** os comandos — não o número do exemplo do script de instalação.
 
 ```sh
-/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"TEU_55XXXXXXXX","action":"resolve_user"}'
+# 1) Quem é este telefone na app?
+/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"COLOCA_AQUI_O_TEU_55","action":"resolve_user"}'
+
+# 2) DAS de fevereiro/2026 — confere dasAccount antes de enviar
+/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"COLOCA_AQUI_O_TEU_55","action":"get_das_current","payload":{"mes":"02/2026","includeBase64":true}}'
 ```
+
+Se `resolve_user` disser **Rodrigo** mas tu és outra pessoa → o telefone no WhatsApp está ligado à conta errada em `n8n_link` (corrige no app/perfil ou pede ao admin).
+
+Se `resolve_user` disser **o teu nome** mas o PDF aberto ainda for do Rodrigo → o ficheiro guardado em `DAS_mei` para **02/2026** está errado; gera de novo o DAS desse mês na app (ou suporte).
 
 Se aparecer `column profiles.display_name does not exist`, o backend em produção está desatualizado — faz deploy da versão que lê o nome em `auth.users` (metadata), não em `profiles`.
 

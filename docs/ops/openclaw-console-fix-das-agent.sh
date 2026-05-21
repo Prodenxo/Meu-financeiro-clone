@@ -92,7 +92,9 @@ printf '%s\n' \
 
 echo "=== ficheiros ==="
 ls -la "$WS"/mf-*.sh "$WS"/*.md
-echo "=== teste download ==="
-"$WS/mf-das.sh" 5521996185328 03/2026
-echo "=== para testar WhatsApp, corre: ==="
-echo "$WS/mf-das-send.sh 5521996185328 03/2026"
+echo "=== teste (opcional) — troca pelo TEU telefone do painel OpenClaw ==="
+echo "mf-curl resolve_user:"
+echo "  $WS/mf-curl.sh '{\"phone\":\"55XXXXXXXXXXX\",\"action\":\"resolve_user\"}'"
+echo "mf-das + WhatsApp:"
+echo "  $WS/mf-das.sh 55XXXXXXXXXXX 02/2026"
+echo "  $WS/mf-das-send.sh 55XXXXXXXXXXX 02/2026"

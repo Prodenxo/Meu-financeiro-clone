@@ -487,10 +487,11 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'resolve_user') {
+    const account = await fetchOpenclawAccountSummary(userId);
     return {
       ok: true,
-      message: 'Utilizador encontrado',
-      data: { userId, actorContext, ...linkDebug },
+      message: `Conta ligada a este telefone: ${account.displayName}${account.empresaNome ? ` (${account.empresaNome})` : ''}.`,
+      data: { userId, account, actorContext, ...linkDebug },
     };
   }
 
