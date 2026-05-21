@@ -20,6 +20,7 @@ router.get('/periods', requireAuth, requireMeiEnabled, controller.listPeriods);
 router.get('/periods-by-cnpj', requireAuth, requireMeiEnabled, controller.listPeriodsByCnpj);
 router.get('/parcelamentos', requireAuth, requireMeiEnabled, controller.getParcelamentos);
 router.get('/parcelamentos/:numero/pdf', requireAuth, requireMeiEnabled, controller.getParcelamentoPdf);
+router.post('/:id/regenerate', requireAuth, requireMeiEnabled, controller.regenerateGuide);
 router.get('/:id/download', requireAuth, requireMeiEnabled, controller.downloadGuide);
 
 export default router;

@@ -106,6 +106,16 @@ export async function createMeiGuide(input: CreateMeiGuideInput): Promise<MeiGui
   return await apiClient.post<MeiGuideResponse>('/mei-guide', input);
 }
 
+export async function regenerateMeiGuide(
+  periodoApuracao: string,
+  input: CreateMeiGuideInput
+): Promise<MeiGuideResponse> {
+  return await apiClient.post<MeiGuideResponse>(
+    `/mei-guide/${encodeURIComponent(periodoApuracao)}/regenerate`,
+    input
+  );
+}
+
 export async function fetchMeiPeriods(
   cnpj: string,
   contribuinte?: { numero: string; tipo: number }

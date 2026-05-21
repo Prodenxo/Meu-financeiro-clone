@@ -109,6 +109,24 @@ export const isCompetenciaPaid = async ({ userId, competencia } = {}) => {
   return Boolean(data?.id);
 };
 
+/** Remove marcação local de pago (ex.: para buscar PDF de novo na Receita após apagar DAS_mei). */
+export const clearCompetenciaPaidStatus = async ({ userId, competencia } = {}) => {
+  const normalizedCompetencia = normalizeCompetencia(competencia);
+  if (!userId || !normalizedCompetencia) return { cleared: false };
+
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from(DAS_TABLE)
+    .delete()
+    .eq('user_id', userId)
+    .eq('competencia', normalizedCompetencia);
+
+  if (error) {
+    throw badRequest(error.message || 'Erro ao limpar status pago da competência');
+  }
+  return { cleared: true, competencia: normalizedCompetencia };
+};
+
 export const markCompetenciaAsPaid = async ({
   userId,
   competencia,

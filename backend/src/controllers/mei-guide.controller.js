@@ -22,6 +22,27 @@ export const createGuide = async (req, res, next) => {
   }
 };
 
+export const regenerateGuide = async (req, res, next) => {
+  try {
+    const { id } = req.params || {};
+    const data = await meiGuideService.regenerateDasPdf(req.user.id, {
+      cnpj: req.body?.cnpj,
+      periodoApuracao: id,
+      contribuinte: req.body?.contribuinte,
+    });
+    if (data?.pdfBase64 && data?.id) {
+      await meiGuideDasBase64Service.upsertDasBase64({
+        userId: req.user.id,
+        periodoApuracao: data.id,
+        pdfBase64: data.pdfBase64,
+      });
+    }
+    return sendSuccess(res, data, 'DAS regenerado na Receita e guardado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const downloadGuide = async (req, res, next) => {
   try {
     const { id } = req.params || {};

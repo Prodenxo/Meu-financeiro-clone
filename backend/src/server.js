@@ -100,6 +100,7 @@ app.get('/', (_req, res) => {
     routes: {
       meiGuide: '/api/mei-guide',
       meiGuideValidate: 'POST /api/mei-guide/validate',
+      meiGuideRegenerate: 'POST /api/mei-guide/:periodo/regenerate',
       openclaw: '/api/bot/openclaw/action',
     },
   });
