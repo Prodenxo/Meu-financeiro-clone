@@ -87,6 +87,23 @@ Não passes chaves **Supabase** ao modelo em texto: só este endpoint com Bearer
 
 ---
 
+## DAS MEI — status de pagamento (`get_das_payment_status`)
+
+- Consulta `das_mensal_status` (valores: **`pago`**, **`pendente`**, **`erro`**).
+- **`payload.mes`:** opcional, `MM/YYYY`. Se omitir, mês corrente UTC.
+- **Sucesso:** `message` em português + `data.status`, `data.isPaid`, `data.isPending`, `data.hasPdf`.
+- **`payload.refreshFromSerpro`:** `true` para revalidar na Receita (lento; opcional).
+
+```json
+{
+  "phone": "5548999999999",
+  "action": "get_das_payment_status",
+  "payload": { "mes": "03/2026" }
+}
+```
+
+---
+
 ## DAS MEI (`get_das_current`)
 
 - Tabela **`DAS_mei`**, campo **`DAS`** (base64 do PDF), filtro por **`user_id`** e **`periodo_apuracao`**.

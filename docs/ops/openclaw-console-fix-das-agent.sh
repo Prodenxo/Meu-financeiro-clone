@@ -26,7 +26,7 @@ const dir = __dirname;
 const phone = process.argv[2];
 const mes = process.argv[3];
 if (!phone || !mes) {
-  console.error('uso: node mf-das.js 5521996185328 03/2026');
+  console.error('uso: node mf-das.js TELEFONE_REMETENTE_55 03/2026');
   process.exit(1);
 }
 const curl = path.join(dir, 'mf-curl.sh');
@@ -49,7 +49,15 @@ if (!x.base64) {
 const fn = String(x.fileName || 'DAS.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
 const p = '/tmp/' + fn;
 fs.writeFileSync(p, Buffer.from(x.base64, 'base64'));
-console.log(JSON.stringify({ success: true, mes: x.mes, fileName: fn, file: p }));
+const acc = x.dasAccount || {};
+console.log(JSON.stringify({
+  success: true,
+  mes: x.mes,
+  fileName: fn,
+  file: p,
+  dasAccount: acc.displayName ? acc : null,
+  message: (r.message || '') + (acc.displayName ? ' Conta: ' + acc.displayName : ''),
+}));
 NODE_EOF
 printf '#!/bin/sh\nexec node "%s/mf-das.js" "$@"\n' "$WS" > "$WS/mf-das.sh"
 chmod +x "$WS/mf-das.js" "$WS/mf-das.sh"
@@ -72,12 +80,14 @@ printf '#!/bin/sh\nset -e\nWS="$(cd "$(dirname "$0")" && pwd)"\nexec "$WS/mf-das
 chmod +x "$WS/mf-send-das.sh"
 
 printf '%s\n' \
-  'DAS: só exec /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 MM/YYYY' \
-  'Proibido: curl, get_das_current, só mf-das.sh.' \
-  'Só diga enviado se JSON do exec tiver "whatsapp":"sent".' > "$WS/DAS-WHATSAPP.md"
+  'DAS: exec mf-das-send.sh com o TELEFONE DO REMETENTE deste chat (DDI 55).' \
+  'PROIBIDO usar 5521996185328 ou outro número de exemplo se não for o remetente.' \
+  'Confirme dasAccount.displayName no JSON antes de enviar.' \
+  'Proibido: curl manual, get_das_current no chat.' \
+  'Só diga enviado se JSON tiver "whatsapp":"sent".' > "$WS/DAS-WHATSAPP.md"
 
 printf '%s\n' \
-  'DAS: /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 03/2026' \
+  'DAS: mf-das-send.sh <telefone_remetente_55> MM/YYYY' \
   'Confirmar só com "whatsapp":"sent" no JSON.' > "$WS/MF-API.md"
 
 echo "=== ficheiros ==="

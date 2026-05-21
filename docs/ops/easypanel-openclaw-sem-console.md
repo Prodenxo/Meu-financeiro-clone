@@ -227,6 +227,23 @@ ls -la /home/node/.openclaw/workspace/mf-das.sh
 
 Deve imprimir uma linha JSON curta com `"file":"/tmp/DAS-03-2026.pdf"` — não centenas de KB de base64.
 
+### DAS com **nome de outra pessoa** (ex. pediu o seu e veio “Rodrigo”)
+
+| Causa | Correção |
+|-------|----------|
+| Agente usou **telefone de exemplo** (`5521996185328`) em vez do remetente do chat | No `exec` e no JSON, `phone` = número **de quem escreveu** (vês no painel OpenClaw). |
+| Admin pediu DAS de colaborador sem `subjectPhone` explícito | Utilizador comum: só o próprio telefone. Admin: `subjectPhone` só após `resolve_user` e mesma empresa. |
+| Backend antigo sem `dasAccount` | Faz **deploy** do backend; a API passa a devolver `dasAccount.displayName` — o bot deve confirmar antes de enviar. |
+
+Teste no Console (troca pelo telefone **do remetente**):
+
+```sh
+"$WS/mf-curl.sh" '{"phone":"55XXXXXXXXXXX","action":"resolve_user"}'
+"$WS/mf-curl.sh" '{"phone":"55XXXXXXXXXXX","action":"get_das_current","payload":{"mes":"02/2026","includeBase64":true}}'
+```
+
+Confirma `dasAccount.displayName` na resposta antes de `mf-das-send.sh`.
+
 ### Bot diz *“enviado com sucesso”* mas **PDF não chega** no WhatsApp
 
 | Causa frequente | O que ver no painel |

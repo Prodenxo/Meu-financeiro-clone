@@ -38,3 +38,19 @@ test('mei-das calcula competencia anterior no limite de janeiro', async () => {
   const januaryRef = new Date('2026-01-15T12:00:00.000Z');
   assert.equal(getPreviousCompetencia(januaryRef), '2025-12');
 });
+
+test('buildDasPaymentStatusMessage descreve pago e pendente', async () => {
+  const { buildDasPaymentStatusMessage } = await import('../src/services/mei-das.service.js');
+  assert.match(
+    buildDasPaymentStatusMessage({ status: 'pago', display: '03/2026' }),
+    /03\/2026.*pago/i,
+  );
+  assert.match(
+    buildDasPaymentStatusMessage({ status: 'pendente', display: '03/2026', hasPdf: true }),
+    /pendente de pagamento/i,
+  );
+  assert.match(
+    buildDasPaymentStatusMessage({ status: 'pendente', display: '03/2026', hasPdf: false }),
+    /não há guia PDF/i,
+  );
+});

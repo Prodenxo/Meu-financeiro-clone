@@ -1,10 +1,10 @@
 #!/bin/sh
 # Baixa DAS (PDF) via mf-curl.sh e grava em /tmp — NUNCA imprime base64 no stdout.
-# Uso: ./openclaw-mf-das.sh 5521996185328 03/2026
+# Uso: ./openclaw-mf-das.sh TELEFONE_DO_REMETENTE_55 03/2026
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 MF_CURL="${MF_CURL:-$DIR/mf-curl.sh}"
-PHONE="${1:?informe phone com DDI, ex. 5521996185328}"
+PHONE="${1:?informe o telefone de quem pediu (DDI 55, sem +)}"
 MES="${2:?informe competencia MM/YYYY, ex. 03/2026}"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
@@ -32,11 +32,13 @@ if (!b) {
 const fn = String(d.fileName || 'DAS.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
 const p = '/tmp/' + fn;
 fs.writeFileSync(p, Buffer.from(b, 'base64'));
+const acc = d.dasAccount || {};
 console.log(JSON.stringify({
   success: true,
   mes: d.mes,
   fileName: fn,
   file: p,
-  message: r.message || 'DAS encontrado',
+  dasAccount: acc.displayName ? acc : null,
+  message: (r.message || 'DAS encontrado') + (acc.displayName ? ' Conta: ' + acc.displayName + (acc.empresaNome ? ' (' + acc.empresaNome + ')' : '') + '.' : ''),
 }));
 " "$TMP"

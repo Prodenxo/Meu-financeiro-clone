@@ -6,7 +6,11 @@
 /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 MM/YYYY
 ```
 
-Substitui `5521996185328` pelo telefone com DDI **55** (sem `+`).
+Substitui `TELEFONE_DO_REMETENTE_55` pelo número **de quem está a escrever** neste chat (cabeçalho no painel OpenClaw, com DDI 55, sem `+`).
+
+**Nunca** uses números de exemplo da documentação se não forem o remetente actual.
+
+Antes de enviar: `mf-curl.sh` + `resolve_user` com esse telefone — confirma o nome. Depois `mf-das-send.sh` com o **mesmo** telefone.
 
 ## Proibido
 

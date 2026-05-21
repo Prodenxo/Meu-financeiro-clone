@@ -1,6 +1,6 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
-import { badRequest, notFound } from '../utils/errors.js';
+import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
 import * as categoriesService from './categories.service.js';
@@ -8,6 +8,10 @@ import * as rbacCatalogService from './rbac-catalog.service.js';
 import { getDasBase64 } from './mei-guide-das-base64.service.js';
 import * as calendarEventsService from './calendar-events.service.js';
 import { sendWhatsappMessage } from './n8n-whatsapp.service.js';
+import {
+  buildDasPaymentStatusMessage,
+  getDasPaymentStatusForUser,
+} from './mei-das.service.js';
 
 const MAX_LIST = 40;
 
@@ -152,6 +156,151 @@ export const resolveUserIdByPhoneDetailed = async (rawPhone) => {
 export const resolveUserIdByPhone = async (rawPhone) => {
   const r = await resolveUserIdByPhoneDetailed(rawPhone);
   return r.userId;
+};
+
+/**
+ * Nome/empresa para o agente confirmar que o DAS é da conta certa (não confundir utilizadores).
+ * @param {string} userId
+ */
+export const fetchOpenclawAccountSummary = async (userId) => {
+  const admin = createSupabaseClient({ useServiceRole: true });
+  const { data: profile, error: profileErr } = await admin
+    .from('profiles')
+    .select('display_name, role')
+    .eq('id', userId)
+    .maybeSingle();
+  if (profileErr) throw badRequest(profileErr.message);
+
+  let email = null;
+  let metaDisplay = null;
+  try {
+    const { data: authData, error: authErr } = await admin.auth.admin.getUserById(userId);
+    if (!authErr && authData?.user) {
+      email = authData.user.email ?? null;
+      const meta = authData.user.user_metadata || {};
+      metaDisplay = meta.display_name || meta.full_name || null;
+    }
+  } catch {
+    /* auth opcional */
+  }
+
+  let empresaNome = null;
+  try {
+    const actorCtx = await resolveActorMembershipsForUser(userId);
+    empresaNome =
+      actorCtx.memberships?.find((m) => m.empresaNome)?.empresaNome ?? null;
+  } catch {
+    /* memberships opcional */
+  }
+
+  const displayName =
+    String(profile?.display_name || metaDisplay || email || '').trim() || 'Utilizador';
+
+  return {
+    userId,
+    displayName,
+    empresaNome,
+    email,
+  };
+};
+
+/**
+ * Admin/superadmin pode ver DAS de outro telefone; utilizador comum só a própria conta.
+ */
+export const assertActorCanAccessDasForUser = async ({
+  actorUserId,
+  actorContext,
+  targetUserId,
+}) => {
+  if (actorUserId === targetUserId) return;
+
+  const isSuperadmin = Boolean(actorContext?.hasSuperadminCapability);
+  const isAdmin =
+    actorContext?.profileRole === 'admin' ||
+    (actorContext?.memberships || []).some((m) => m.role === 'admin');
+
+  if (isSuperadmin) return;
+
+  if (!isAdmin) {
+    throw forbidden(
+      'Só podes consultar ou enviar o DAS da tua própria conta. Usa no JSON o telefone WhatsApp de quem está a escrever (remetente do chat), não de outra pessoa.',
+    );
+  }
+
+  let targetCtx;
+  try {
+    targetCtx = await resolveActorMembershipsForUser(targetUserId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw forbidden(`Não foi possível validar o colaborador: ${msg}`);
+  }
+
+  const adminEmpresaIds = new Set(
+    (actorContext?.memberships || [])
+      .filter((m) => m.role === 'admin' && m.empresaId)
+      .map((m) => String(m.empresaId)),
+  );
+  const shared = (targetCtx?.memberships || []).some(
+    (m) => m.empresaId && adminEmpresaIds.has(String(m.empresaId)),
+  );
+  if (!shared) {
+    throw forbidden(
+      'Como administrador, só podes aceder ao DAS de colaboradores da mesma empresa. Usa subjectPhone só após confirmar empresa.',
+    );
+  }
+};
+
+/**
+ * Quem pediu o DAS (phone no body) vs de quem é o PDF (subjectPhone opcional).
+ * @returns {Promise<{ dataUserId: string, account: object, dataLinkDebug: object, accessedAsSelf: boolean }>}
+ */
+export const resolveDasDataSubject = async ({
+  actorUserId,
+  actorContext,
+  actorLinkDebug,
+  payload,
+}) => {
+  const subjectRaw =
+    payload?.subjectPhone ?? payload?.targetPhone ?? payload?.phoneAlvo ?? null;
+  const subjectTrim = subjectRaw === null || subjectRaw === undefined
+    ? ''
+    : String(subjectRaw).trim();
+
+  if (!subjectTrim) {
+    const account = await fetchOpenclawAccountSummary(actorUserId);
+    return {
+      dataUserId: actorUserId,
+      account,
+      dataLinkDebug: actorLinkDebug,
+      accessedAsSelf: true,
+    };
+  }
+
+  const subResolved = await resolveUserIdByPhoneDetailed(subjectTrim);
+  if (!subResolved.userId) {
+    throw notFound(
+      'Telefone indicado (subjectPhone) sem utilizador na app. O colaborador deve guardar o telefone no perfil.',
+    );
+  }
+
+  await assertActorCanAccessDasForUser({
+    actorUserId,
+    actorContext,
+    targetUserId: subResolved.userId,
+  });
+
+  const account = await fetchOpenclawAccountSummary(subResolved.userId);
+  return {
+    dataUserId: subResolved.userId,
+    account,
+    dataLinkDebug: {
+      subjectPhoneDigits: subResolved.phoneDigits,
+      subjectMatchedUserNumber: subResolved.matchedUserNumber,
+      actorPhoneDigits: actorLinkDebug.phoneDigits,
+      actorMatchedUserNumber: actorLinkDebug.matchedUserNumber,
+    },
+    accessedAsSelf: false,
+  };
 };
 
 const normalizeOpenclawRoleLabel = (role) => {
@@ -466,9 +615,34 @@ export const runOpenclawAction = async (input) => {
     return competencia;
   };
 
+  const buildDasOwnerLabel = (account) => {
+    const name = account?.displayName || 'Utilizador';
+    const emp = account?.empresaNome ? ` — ${account.empresaNome}` : '';
+    return `${name}${emp}`;
+  };
+
+  const resolveDasSubjectIfNeeded = async () => {
+    if (
+      action !== 'get_das_current' &&
+      action !== 'get_das_payment_status' &&
+      action !== 'send_das_whatsapp'
+    ) {
+      return null;
+    }
+    return resolveDasDataSubject({
+      actorUserId: userId,
+      actorContext,
+      actorLinkDebug: linkDebug,
+      payload,
+    });
+  };
+
+  const dasSubject = await resolveDasSubjectIfNeeded();
+  const dasUserId = dasSubject?.dataUserId ?? userId;
+
   if (action === 'get_das_current') {
     const { display, periodoDigits } = resolveDasCompetencia();
-    const pdfBase64 = await getDasBase64({ userId, periodoApuracao: periodoDigits });
+    const pdfBase64 = await getDasBase64({ userId: dasUserId, periodoApuracao: periodoDigits });
     if (!pdfBase64 || String(pdfBase64).trim() === '') {
       throw notFound(`Nenhum DAS encontrado para a competência ${display}.`);
     }
@@ -486,7 +660,7 @@ export const runOpenclawAction = async (input) => {
       let whatsapp = { whatsappStatus: 'not_requested' };
       if (deliverWhatsapp) {
         whatsapp = await trySendDasWhatsappWebhook({
-          userId,
+          userId: dasUserId,
           phone: destinationPhone,
           display,
           periodoDigits,
@@ -495,11 +669,12 @@ export const runOpenclawAction = async (input) => {
         });
       }
       const sent = whatsapp.whatsappStatus === 'sent';
+      const owner = dasSubject ? buildDasOwnerLabel(dasSubject.account) : null;
       return {
         ok: true,
         message: sent
-          ? `PDF DAS ${display} enviado no WhatsApp.`
-          : `DAS ${display} encontrado. Para enviar o PDF no WhatsApp, use action send_das_whatsapp ou exec mf-send-das.sh (não get_das_current com base64).`,
+          ? `PDF DAS ${display} enviado no WhatsApp (${owner}).`
+          : `DAS ${display} de ${owner}. Para enviar no WhatsApp use mf-send-das.sh com o telefone do remetente do chat.`,
         data: {
           fileName,
           mes: display,
@@ -508,39 +683,82 @@ export const runOpenclawAction = async (input) => {
           whatsappStatus: whatsapp.whatsappStatus,
           whatsappError: whatsapp.whatsappError ?? null,
           hint: whatsapp.hint ?? null,
+          dasAccount: dasSubject?.account ?? null,
+          accessedAsSelf: dasSubject?.accessedAsSelf ?? true,
           execCommand: destinationPhone
-            ? `/home/node/.openclaw/workspace/mf-send-das.sh ${destinationPhone} ${display}`
+            ? `/home/node/.openclaw/workspace/mf-das-send.sh ${destinationPhone} ${display}`
             : null,
           actorContext,
-          ...linkDebug,
+          ...(dasSubject?.dataLinkDebug ?? linkDebug),
         },
       };
     }
 
+    const owner = dasSubject ? buildDasOwnerLabel(dasSubject.account) : null;
     return {
       ok: true,
-      message: 'DAS encontrado',
+      message: `DAS encontrado (${owner}).`,
       data: {
         fileName,
         mimeType: 'application/pdf',
         base64: pdfBase64,
         mes: display,
+        dasAccount: dasSubject?.account ?? null,
+        accessedAsSelf: dasSubject?.accessedAsSelf ?? true,
         actorContext,
-        ...linkDebug,
+        ...(dasSubject?.dataLinkDebug ?? linkDebug),
+      },
+    };
+  }
+
+  if (action === 'get_das_payment_status') {
+    const { display, periodoDigits } = resolveDasCompetencia();
+    const competenciaIso = `${periodoDigits.slice(0, 4)}-${periodoDigits.slice(4, 6)}`;
+    const refreshFromSerpro =
+      payload?.refreshFromSerpro === true ||
+      String(payload?.refreshFromSerpro || '').toLowerCase() === 'true';
+    const statusInfo = await getDasPaymentStatusForUser({
+      userId: dasUserId,
+      competencia: competenciaIso,
+      refreshFromSerpro,
+    });
+    const owner = dasSubject ? buildDasOwnerLabel(dasSubject.account) : '';
+    const replyMessage = `${buildDasPaymentStatusMessage({
+      status: statusInfo.status,
+      display,
+      hasPdf: statusInfo.hasPdf,
+    })} Conta: ${owner}.`;
+    return {
+      ok: true,
+      message: replyMessage,
+      data: {
+        mes: display,
+        competencia: statusInfo.competencia,
+        status: statusInfo.status,
+        statusLabel: statusInfo.statusLabel,
+        hasPdf: statusInfo.hasPdf,
+        statusSource: statusInfo.statusSource,
+        updatedAt: statusInfo.updatedAt,
+        isPaid: statusInfo.status === 'pago',
+        isPending: statusInfo.status === 'pendente',
+        dasAccount: dasSubject?.account ?? null,
+        accessedAsSelf: dasSubject?.accessedAsSelf ?? true,
+        actorContext,
+        ...(dasSubject?.dataLinkDebug ?? linkDebug),
       },
     };
   }
 
   if (action === 'send_das_whatsapp') {
     const { display, periodoDigits } = resolveDasCompetencia();
-    const pdfBase64 = await getDasBase64({ userId, periodoApuracao: periodoDigits });
+    const pdfBase64 = await getDasBase64({ userId: dasUserId, periodoApuracao: periodoDigits });
     if (!pdfBase64 || String(pdfBase64).trim() === '') {
       throw notFound(`Nenhum DAS encontrado para a competência ${display}.`);
     }
     const fileName = `DAS-${display.replace('/', '-')}.pdf`;
     const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
     const whatsapp = await trySendDasWhatsappWebhook({
-      userId,
+      userId: dasUserId,
       phone: destinationPhone,
       display,
       periodoDigits,
@@ -548,25 +766,30 @@ export const runOpenclawAction = async (input) => {
       fileName,
     });
     const sent = whatsapp.whatsappStatus === 'sent';
+    const owner = dasSubject ? buildDasOwnerLabel(dasSubject.account) : '';
     return {
       ok: true,
       message: sent
-        ? `PDF DAS ${display} enviado no WhatsApp.`
-        : `DAS ${display} encontrado; envio WhatsApp: ${whatsapp.whatsappStatus}.`,
+        ? `PDF DAS ${display} enviado no WhatsApp (conta: ${owner}).`
+        : `DAS ${display} de ${owner}; envio WhatsApp: ${whatsapp.whatsappStatus}.`,
       data: {
         mes: display,
         fileName,
         whatsappStatus: whatsapp.whatsappStatus,
         whatsappError: whatsapp.whatsappError ?? null,
         hint: whatsapp.hint ?? null,
-        useOpenclawScript: sent ? null : '/home/node/.openclaw/workspace/mf-send-das.sh',
+        dasAccount: dasSubject?.account ?? null,
+        accessedAsSelf: dasSubject?.accessedAsSelf ?? true,
+        useOpenclawScript: sent
+          ? null
+          : `/home/node/.openclaw/workspace/mf-das-send.sh ${destinationPhone} ${display}`,
         actorContext,
-        ...linkDebug,
+        ...(dasSubject?.dataLinkDebug ?? linkDebug),
       },
     };
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_das_current, send_das_whatsapp.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_das_payment_status, get_das_current, send_das_whatsapp.`,
   );
 };

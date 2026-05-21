@@ -1,6 +1,7 @@
 #!/bin/sh
 # Baixa DAS + envia no WhatsApp. Saída curta para o agente (evita "couldn't generate a response").
-# Uso: mf-das-send.sh 5521996185328 03/2026
+# Uso: mf-das-send.sh TELEFONE_DO_REMETENTE_55 03/2026
+# O 1º argumento define DE QUEM é o PDF (via API). Tem de ser quem escreveu no chat.
 set -e
 WS="$(cd "$(dirname "$0")" && pwd)"
 PHONE="${1:?phone com DDI}"
@@ -23,4 +24,5 @@ if ! openclaw message send --channel whatsapp --target "$TARGET" --media "$FILE"
   exit 1
 fi
 
-echo "{\"success\":true,\"mes\":\"$MES\",\"file\":\"$FILE\",\"whatsapp\":\"sent\"}"
+ACCOUNT="$(echo "$OUT" | node -e "let j=JSON.parse(require('fs').readFileSync(0,'utf8'));const a=j.dasAccount||{};process.stdout.write(a.displayName||'')" 2>/dev/null || true)"
+echo "{\"success\":true,\"mes\":\"$MES\",\"file\":\"$FILE\",\"dasAccount\":\"$ACCOUNT\",\"whatsapp\":\"sent\"}"

@@ -110,6 +110,9 @@ exec: $WS/mf-das-send.sh 5521996185328 03/2026
 Só confirmar envio se JSON tiver "whatsapp":"sent".
 Proibido: curl, fetch, get_das_current, mf-das.sh sozinho.
 
+## Status pagamento DAS
+  $WS/mf-curl.sh '{"phone":"5521...","action":"get_das_payment_status","payload":{"mes":"03/2026"}}'
+
 ## Outras ações
   $WS/mf-curl.sh '{"phone":"5521...","action":"..."}'
 EOF
