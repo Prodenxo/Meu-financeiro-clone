@@ -7,7 +7,6 @@ import * as categoriesService from './categories.service.js';
 import * as rbacCatalogService from './rbac-catalog.service.js';
 import {
   deleteDasBase64,
-  getDasBase64,
   upsertDasBase64,
 } from './mei-guide-das-base64.service.js';
 import * as meiGuideService from './mei-guide.service.js';
@@ -641,23 +640,26 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'get_das_current') {
     const { display, periodoDigits } = resolveDasCompetencia();
+    let pdfResult;
     try {
-      await meiGuideService.assertDasPeriodoPermitidoParaEnvio(dasUserId, {
+      pdfResult = await meiGuideService.fetchDasPdfBase64ForUser(dasUserId, {
         periodoApuracao: periodoDigits,
         cnpj: payload?.cnpj,
         contribuinte: payload?.contribuinte,
       });
     } catch (err) {
       if (isPeriodoIndisponivelSerproError(err)) {
-        throw badRequest(err.message);
+        throw badRequest(err.message, {
+          code: 'MEI_DAS_PERIODO_INDISPONIVEL',
+          mes: display,
+          botHint:
+            'Neste mês a empresa ainda não era MEI optante (ex.: abertura em março). Informe o utilizador sem falar em erro de CNPJ.',
+        });
       }
       throw err;
     }
-    const pdfBase64 = await getDasBase64({ userId: dasUserId, periodoApuracao: periodoDigits });
-    if (!pdfBase64 || String(pdfBase64).trim() === '') {
-      throw notFound(`Nenhum DAS encontrado para a competência ${display}.`);
-    }
-    const fileName = `DAS-${display.replace('/', '-')}.pdf`;
+    const pdfBase64 = pdfResult.pdfBase64;
+    const fileName = pdfResult.fileName || `DAS-${display.replace('/', '-')}.pdf`;
     const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
     const includeBase64 =
       payload?.includeBase64 === true ||
@@ -762,23 +764,26 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'send_das_whatsapp') {
     const { display, periodoDigits } = resolveDasCompetencia();
+    let pdfResult;
     try {
-      await meiGuideService.assertDasPeriodoPermitidoParaEnvio(dasUserId, {
+      pdfResult = await meiGuideService.fetchDasPdfBase64ForUser(dasUserId, {
         periodoApuracao: periodoDigits,
         cnpj: payload?.cnpj,
         contribuinte: payload?.contribuinte,
       });
     } catch (err) {
       if (isPeriodoIndisponivelSerproError(err)) {
-        throw badRequest(err.message);
+        throw badRequest(err.message, {
+          code: 'MEI_DAS_PERIODO_INDISPONIVEL',
+          mes: display,
+          botHint:
+            'Neste mês a empresa ainda não era MEI optante. Informe o utilizador sem falar em erro de CNPJ.',
+        });
       }
       throw err;
     }
-    const pdfBase64 = await getDasBase64({ userId: dasUserId, periodoApuracao: periodoDigits });
-    if (!pdfBase64 || String(pdfBase64).trim() === '') {
-      throw notFound(`Nenhum DAS encontrado para a competência ${display}.`);
-    }
-    const fileName = `DAS-${display.replace('/', '-')}.pdf`;
+    const pdfBase64 = pdfResult.pdfBase64;
+    const fileName = pdfResult.fileName || `DAS-${display.replace('/', '-')}.pdf`;
     const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
     const whatsapp = await trySendDasWhatsappWebhook({
       userId: dasUserId,

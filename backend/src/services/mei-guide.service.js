@@ -31,6 +31,7 @@ import {
 import {
   deleteDasBase64,
   getDasBase64,
+  upsertDasBase64,
 } from './mei-guide-das-base64.service.js';
 import {
   deleteStoredDasPdf,
@@ -1581,6 +1582,39 @@ export const regenerateDasPdf = async (userId, payload) => {
     return await createGuide(userId, { cnpj, periodoApuracao: period, contribuinte });
   }
   return await createGuideByCnpj(userId, { cnpj, periodoApuracao: period });
+};
+
+/** Obtém PDF (cache → bucket → SERPRO). Usado pelo WhatsApp/OpenClaw e download. */
+export const fetchDasPdfBase64ForUser = async (userId, payload = {}) => {
+  const { periodoApuracao, cnpj, contribuinte } = payload || {};
+  const period = normalizePeriodoApuracao(periodoApuracao);
+  if (!period) {
+    throw badRequest('Período de apuração inválido');
+  }
+  const competencia = periodoApuracaoToCompetencia(period);
+  const label = competencia ? competencia.replace('-', '/') : period;
+  const fileName = `DAS-${String(label).replace('/', '-')}.pdf`;
+
+  const cached = userId ? await tryLoadLocalDasPdfBase64(userId, period) : null;
+  if (cached) {
+    return { pdfBase64: cached, fileName, source: 'cache' };
+  }
+
+  const file = await downloadGuide({
+    userId,
+    periodoApuracao: period,
+    cnpj,
+    contribuinte
+  });
+  const pdfBase64 = file.buffer.toString('base64');
+  if (userId) {
+    await upsertDasBase64({ userId, periodoApuracao: period, pdfBase64 });
+  }
+  return {
+    pdfBase64,
+    fileName: file.filename || fileName,
+    source: 'serpro'
+  };
 };
 
 export const downloadGuide = async (payload, dependencies = {}) => {

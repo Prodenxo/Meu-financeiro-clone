@@ -131,3 +131,6 @@ Se pediu **março e abril**, são **duas** execuções (`03/2026` e `04/2026`), 
 ### Erros do backend
 
 - Se disser que **não há utilizador** para o telefone: pede para **guardar o telefone no perfil** na app Meu Financeiro (`n8n_link`).
+- **`MEI_DAS_PERIODO_INDISPONIVEL`** ou mensagem de **não optante** / período indisponível na Receita: explica que **nesse mês a empresa ainda não era MEI** (ex.: abertura em março → jan/fev sem DAS). **Nunca** digas “erro no CNPJ” neste caso.
+- **`CNPJ do MEI inválido`** só quando a API devolver literalmente isso (certificado em falta ou CNPJ errado no perfil).
+- Se `get_das_current` / `mf-das.sh` falhar com **404** sem código acima: pode ser PDF ainda não gerado — sugere abrir a guia na app ou `refresh_das_pdf` para o mês **após** a abertura do MEI.
