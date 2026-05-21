@@ -11,7 +11,6 @@ import {
 import { useInRouterContext } from 'react-router-dom';
 import {
   downloadMeiGuide,
-  regenerateMeiGuide,
   downloadParcelamentoPdf,
   fetchMeiCertificateStatus,
   fetchMeiPeriods,
@@ -1871,35 +1870,12 @@ export default function GuidesMei() {
     const contribuinte = normalizedContribuinte && contribuinteTipo !== null
       ? { numero: normalizedContribuinte, tipo: contribuinteTipo }
       : undefined;
-    const tryFetch = async () => {
-      const { blob, filename } = await downloadMeiGuide(
-        normalizedContribuinte,
-        periodoApuracao,
-        contribuinte
-      );
-      triggerFileDownload(blob, filename || buildFilenameFromCompetencia(competencia || null));
-    };
-    try {
-      await tryFetch();
-    } catch (firstError) {
-      const msg = firstError instanceof Error ? firstError.message : '';
-      const periodRow = meiPeriods.find(
-        (p) => p.guideId === periodoApuracao || p.competencia?.replace('-', '') === periodoApuracao
-      );
-      if (
-        !normalizedContribuinte ||
-        contribuinteTipo === null ||
-        (!/pago|PDF|400/i.test(msg) && periodRow?.status !== 'pago')
-      ) {
-        throw firstError;
-      }
-      await regenerateMeiGuide(periodoApuracao, {
-        cnpj: normalizedContribuinte,
-        periodoApuracao,
-        contribuinte: { numero: normalizedContribuinte, tipo: contribuinteTipo },
-      });
-      await tryFetch();
-    }
+    const { blob, filename } = await downloadMeiGuide(
+      normalizedContribuinte,
+      periodoApuracao,
+      contribuinte
+    );
+    triggerFileDownload(blob, filename || buildFilenameFromCompetencia(competencia || null));
   };
 
   const handleCertificateUpload = async () => {
