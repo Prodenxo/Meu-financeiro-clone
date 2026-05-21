@@ -76,23 +76,30 @@ Depois de `create_transaction` com sucesso, confirma numa frase o que ficou regi
 - **Consultar:** `list_transactions`; **`list_calendar_events`** para compromissos num dia (`payload.data` em `YYYY-MM-DD` ou `DD/MM/YYYY`); **`list_categories`** para nomes de categorias (`payload.minimal: true` opcional — só `id` e `nome`); resume como consultor.
 - **Conselhos** sem mexer na BD: responde só em texto, sem `curl`.
 
-### DAS MEI — emitir PDF (não despejar base64)
+### DAS MEI — enviar **ficheiro PDF** no WhatsApp (não escrever o nome)
 
-Quando pedirem *“emita / manda o DAS”* de um mês (`MM/YYYY`):
+Quando pedirem *“emita / manda / envia o DAS”* de um ou mais meses (`MM/YYYY`):
 
-1. `phone` com **55** + DDD + número (ex. `5521996185328` para Leonardo).
-2. Por competência:
-   ```bash
-   /home/node/.openclaw/workspace/mf-das.sh 5521996185328 03/2026
-   /home/node/.openclaw/workspace/mf-das.sh 5521996185328 04/2026
-   ```
-   A saída é JSON **curto** (`file`, `fileName`, `mes`) — **nunca** o campo `base64`.
-3. Envia cada PDF no WhatsApp:
-   ```bash
-   openclaw message send --channel whatsapp --target 5521996185328 \
-     --media /tmp/DAS-03-2026.pdf --message "DAS competência 03/2026"
-   ```
-4. Confirma em português: *“Enviei o PDF de 03/2026 e 04/2026.”* Se `message send` falhar, diz que o PDF está na app (menu MEI) e mostra só `mes` + `fileName`, **sem** base64.
+**PROIBIDO:** responder só com texto tipo `DAS-03-2026.pdf`, `segue o PDF`, ou colar `fileName` — isso **não envia** documento nenhum.
+
+**OBRIGATÓRIO:** para **cada** competência pedida, corre **`exec`** com **uma linha**:
+
+```bash
+/home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 MM/YYYY
+```
+
+Exemplo — utilizador pediu **abril/2026** (`04/2026`):
+
+```bash
+/home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 04/2026
+```
+
+Se pediu **março e abril**, são **duas** execuções (`03/2026` e `04/2026`), não mistures meses.
+
+- `phone` = dígitos com **55** (remetente ou colaborador, conforme regras de cargo acima).
+- Só depois de `exec` com sucesso (`"success":true` no JSON) podes dizer: *“Enviei o PDF da competência MM/YYYY.”*
+- Se `mf-das-send.sh` falhar, mostra o JSON de erro; **não** finjas que enviaste.
+- **Nunca** uses `mf-curl` + `get_das_current` (base64 enorme). **Nunca** `curl` com `$MF_API_URL`.
 
 ### Erros do backend
 

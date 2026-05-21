@@ -41,16 +41,93 @@ Versão legível: [`easypanel-openclaw-bootstrap.sh`](./easypanel-openclaw-boots
 
 ### `mf-das.sh: not found` — instalar agora no Console
 
-Com o serviço **Running**, cola **todo** o bloco abaixo (uma vez). Usa as env `MF_API_URL` e `OPENCLAW_WEBHOOK_SECRET` do Easypanel:
+**Variáveis:** só no Easypanel → serviço OpenClaw → **Environment** (`MF_API_URL`, `OPENCLAW_WEBHOOK_SECRET`). Depois **Restart**. No Console: `echo $MF_API_URL` tem de mostrar URL (não vazio).
+
+Com o serviço **Running**, cola **todo** o bloco (evita o `node -e` gigante — quebra aspas e gera `/bin/sh: 1: phone`):
 
 ```sh
 WS=/home/node/.openclaw/workspace
 mkdir -p "$WS"
-test -n "$MF_API_URL" && test -n "$OPENCLAW_WEBHOOK_SECRET" || { echo ERRO: falta MF_API_URL ou OPENCLAW_WEBHOOK_SECRET; exit 1; }
-export WS MF_URL="$MF_API_URL" MF_SEC="$OPENCLAW_WEBHOOK_SECRET"
-node -e "const fs=require('fs'),path=require('path'),d=process.env.WS,u=process.env.MF_URL,s=process.env.MF_SEC,curl=path.join(d,'mf-curl.sh');fs.writeFileSync(curl,'#!/bin/sh\nexec curl -sS -X POST '+JSON.stringify(u)+' -H '+JSON.stringify('Content-Type: application/json; charset=utf-8')+' -H '+JSON.stringify('Authorization: Bearer '+s)+' -d \"\$1\"\n',{mode:0o755});const das='#!/bin/sh\nset -e\nMF_CURL='+JSON.stringify(curl)+'\nPHONE=\"${1:?phone}\"\nMES=\"${2:?MM/YYYY}\"\nTMP=\"$(mktemp)\";trap \"rm -f \"$TMP\"\" EXIT\n\"$MF_CURL\" \"{\\\"phone\\\":\\\"$PHONE\\\",\\\"action\\\":\\\"get_das_current\\\",\\\"payload\\\":{\\\"mes\\\":\\\"$MES\\\"}}\" > \"$TMP\"\nnode -e \"const fs=require(\\\"fs\\\");const r=JSON.parse(fs.readFileSync(process.argv[1],\\\"utf8\\\"));if(!r.success){console.log(JSON.stringify(r));process.exit(1);}const x=r.data||{};if(!x.base64)process.exit(1);const fn=String(x.fileName||\\\"DAS.pdf\\\").replace(/[^a-zA-Z0-9._-]/g,\\\"_\\\");const p=\\\"/tmp/\\\"+fn;fs.writeFileSync(p,Buffer.from(x.base64,\\\"base64\\\"));console.log(JSON.stringify({success:true,mes:x.mes,file:p}));\" \"$TMP\"\n';fs.writeFileSync(path.join(d,'mf-das.sh'),das,{mode:0o755});console.log('OK',curl,path.join(d,'mf-das.sh'));"
-ls -la "$WS/mf-curl.sh" "$WS/mf-das.sh"
+
+# 1) mf-curl (se ainda não existir)
+if [ ! -x "$WS/mf-curl.sh" ]; then
+  test -n "$MF_API_URL" && test -n "$OPENCLAW_WEBHOOK_SECRET" || { echo ERRO: falta MF_API_URL ou OPENCLAW_WEBHOOK_SECRET no Easypanel Environment; exit 1; }
+  printf '%s\n' '#!/bin/sh' "exec curl -sS -X POST '$MF_API_URL' \\" \
+    "-H 'Content-Type: application/json; charset=utf-8' \\" \
+    "-H 'Authorization: Bearer $OPENCLAW_WEBHOOK_SECRET' \\" \
+    '-d "$1"' > "$WS/mf-curl.sh"
+  chmod +x "$WS/mf-curl.sh"
+fi
+
+# 2) parser PDF (ficheiro separado — sem aspas aninhadas)
+cat > "$WS/mf-das-parse.js" << 'NODE_EOF'
+const fs = require('fs');
+const raw = fs.readFileSync(process.argv[1], 'utf8');
+let r;
+try { r = JSON.parse(raw); } catch (e) {
+  console.error(raw.slice(0, 500));
+  process.exit(1);
+}
+if (!r.success) {
+  console.log(raw);
+  process.exit(1);
+}
+const x = r.data || {};
+if (!x.base64) {
+  console.log(JSON.stringify({ success: false, message: 'sem PDF' }));
+  process.exit(1);
+}
+const fn = String(x.fileName || 'DAS.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+const p = '/tmp/' + fn;
+fs.writeFileSync(p, Buffer.from(x.base64, 'base64'));
+console.log(JSON.stringify({ success: true, mes: x.mes, fileName: fn, file: p }));
+NODE_EOF
+
+# 3) mf-das.js (um ficheiro só — evita mf-das.sh corrompido)
+cat > "$WS/mf-das.js" << 'NODE_EOF'
+#!/usr/bin/env node
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const dir = __dirname;
+const phone = process.argv[2];
+const mes = process.argv[3];
+if (!phone || !mes) {
+  console.error('uso: node mf-das.js 5521996185328 03/2026');
+  process.exit(1);
+}
+const curl = path.join(dir, 'mf-curl.sh');
+const body = JSON.stringify({ phone, action: 'get_das_current', payload: { mes } });
+const raw = execFileSync(curl, [body], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+let r;
+try { r = JSON.parse(raw); } catch (e) {
+  console.error(raw.slice(0, 500));
+  process.exit(1);
+}
+if (!r.success) {
+  console.log(raw);
+  process.exit(1);
+}
+const x = r.data || {};
+if (!x.base64) {
+  console.log(JSON.stringify({ success: false, message: 'sem PDF' }));
+  process.exit(1);
+}
+const fn = String(x.fileName || 'DAS.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+const p = '/tmp/' + fn;
+fs.writeFileSync(p, Buffer.from(x.base64, 'base64'));
+console.log(JSON.stringify({ success: true, mes: x.mes, fileName: fn, file: p }));
+NODE_EOF
+printf '#!/bin/sh\nexec node "%s/mf-das.js" "$@"\n' "$WS" > "$WS/mf-das.sh"
+chmod +x "$WS/mf-das.js" "$WS/mf-das.sh"
+rm -f "$WS/mf-das-parse.js"
+
+ls -la "$WS/mf-curl.sh" "$WS/mf-das.sh" "$WS/mf-das.js"
+head -n 3 "$WS/mf-das.sh"
+
+# Uma linha por comando (Enter entre cada uma):
 "$WS/mf-das.sh" 5521996185328 03/2026
+"$WS/mf-das.sh" 5521996185328 04/2026
 ```
 
 Se a última linha devolver JSON com `"file":"/tmp/DAS-03-2026.pdf"`, está pronto. No WhatsApp: `/new` e pede o DAS outra vez.
@@ -116,12 +193,68 @@ ls -la /home/node/.openclaw/workspace/mf-das.sh
 
 Deve imprimir uma linha JSON curta com `"file":"/tmp/DAS-03-2026.pdf"` — não centenas de KB de base64.
 
+### Agente: `couldn't generate a response` ao pedir DAS
+
+Mensagem do OpenClaw: *"agent couldn't generate a response. Some tool actions may have already been executed"*.
+
+| Causa | O que fazer |
+|-------|-------------|
+| **Saída gigante no `exec`** | Agente usou `mf-curl` + `get_das_current` (base64) → estoura o modelo. **Proibido.** Usar só `mf-das.sh` ou `mf-das-send.sh`. |
+| **WhatsApp desligado** | `message send` falha; ferramenta correu mas o modelo não gera texto. Confirma **Conectado: Sim** no painel. |
+| **Sessão poluída** | No WhatsApp: **`/new`** e pede de novo. |
+| **PDF já enviado** | Verifica o chat — a nota diz que tools **podem** ter corrido antes do erro. |
+
+**Script recomendado para o agente** (uma linha, saída mínima — instala no Console):
+
+```sh
+WS=/home/node/.openclaw/workspace
+cat > "$WS/mf-das-send.sh" << 'SEND_EOF'
+#!/bin/sh
+set -e
+WS="$(cd "$(dirname "$0")" && pwd)"
+PHONE="${1:?phone}"
+MES="${2:?mes}"
+TARGET="${3:-$PHONE}"
+OUT="$("$WS/mf-das.sh" "$PHONE" "$MES")"
+FILE="$(echo "$OUT" | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).file")"
+openclaw message send --channel whatsapp --target "$TARGET" --media "$FILE" --message "DAS $MES"
+echo "{\"success\":true,\"mes\":\"$MES\",\"file\":\"$FILE\"}"
+SEND_EOF
+chmod +x "$WS/mf-das-send.sh"
+```
+
+Atualiza `MF-API.md`:
+
+```sh
+cat > /home/node/.openclaw/workspace/MF-API.md << 'EOF'
+# Meu Financeiro — OBRIGATÓRIO
+
+## DAS = ficheiro PDF no WhatsApp (não texto com nome do ficheiro)
+PROIBIDO responder: "DAS-03-2026.pdf", "segue em anexo" sem exec, ou só fileName.
+OBRIGATÓRIO: exec para CADA mês pedido (MM/YYYY que o utilizador disse):
+  /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 04/2026
+Pediu abril → 04/2026. Pediu março → 03/2026. Dois meses → duas linhas exec.
+Só confirmar envio depois de success:true no JSON do script.
+
+## Outras ações
+  /home/node/.openclaw/workspace/mf-curl.sh '{"phone":"5521...","action":"..."}'
+
+NUNCA: curl $MF_API_URL, fetch url, get_das_current via mf-curl, base64 no chat.
+EOF
+```
+
+Teste manual:
+
+```sh
+/home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 03/2026
+```
+
 ### Testar o bot (Meu Financeiro)
 
-1. `/new` na conversa com o bot.
-2. Pergunta: *"Quais são minhas categorias?"*
-3. O agente deve usar `exec` com `/home/node/.openclaw/workspace/mf-curl.sh` (ou o path do teu `mf-curl.sh` no workspace).
-4. DAS: *"Manda o DAS de 03/2026"* → deve receber **ficheiro PDF**, não texto base64.
+1. **`/new`** na conversa (obrigatório após erro).
+2. Pergunta: *"Envia o DAS de 03/2026 e 04/2026"*.
+3. O agente deve correr **só** `mf-das-send.sh` (duas vezes), **não** `get_das_current` via `mf-curl`.
+4. Deves receber **PDF no WhatsApp**, não JSON nem base64.
 
 ## 6. Se o contentor continuar a cair
 

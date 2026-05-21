@@ -1,57 +1,75 @@
 #!/bin/sh
-# Cola no Console Easypanel (serviço OpenClaw, status Running).
-# Requer MF_API_URL e OPENCLAW_WEBHOOK_SECRET nas variáveis do contentor.
+# Console Easypanel — serviço OpenClaw RUNNING.
+# Variáveis: Easypanel → Environment (MF_API_URL, OPENCLAW_WEBHOOK_SECRET), depois Restart.
 
 set -e
 WS=/home/node/.openclaw/workspace
 mkdir -p "$WS"
 
-if [ -z "$MF_API_URL" ] || [ -z "$OPENCLAW_WEBHOOK_SECRET" ]; then
-  echo "ERRO: MF_API_URL e OPENCLAW_WEBHOOK_SECRET têm de estar definidos no Easypanel → Environment"
-  exit 1
+if [ ! -x "$WS/mf-curl.sh" ]; then
+  test -n "$MF_API_URL" && test -n "$OPENCLAW_WEBHOOK_SECRET" || {
+    echo "ERRO: defina MF_API_URL e OPENCLAW_WEBHOOK_SECRET no Easypanel → Environment → Restart"
+    exit 1
+  }
+  printf '%s\n' '#!/bin/sh' "exec curl -sS -X POST '$MF_API_URL' \\" \
+    "-H 'Content-Type: application/json; charset=utf-8' \\" \
+    "-H 'Authorization: Bearer $OPENCLAW_WEBHOOK_SECRET' \\" \
+    '-d "$1"' > "$WS/mf-curl.sh"
+  chmod +x "$WS/mf-curl.sh"
+  echo "OK: mf-curl.sh criado"
+else
+  echo "OK: mf-curl.sh já existe"
 fi
 
-export WS MF_URL="$MF_API_URL" MF_SEC="$OPENCLAW_WEBHOOK_SECRET"
+rm -f "$WS/mf-das-parse.js"
 
-node -e "
+cat > "$WS/mf-das.js" << 'NODE_EOF'
+#!/usr/bin/env node
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const d = process.env.WS;
-const url = process.env.MF_URL;
-const sec = process.env.MF_SEC;
-const curl = path.join(d, 'mf-curl.sh');
-const sh = '#!/bin/sh\n'
-  + 'exec curl -sS -X POST ' + JSON.stringify(url)
-  + ' -H ' + JSON.stringify('Content-Type: application/json; charset=utf-8')
-  + ' -H ' + JSON.stringify('Authorization: Bearer ' + sec)
-  + ' -d \"\$1\"\n';
-fs.writeFileSync(curl, sh, { mode: 0o755 });
-const das = '#!/bin/sh\nset -e\n'
-  + 'MF_CURL=\"' + curl + '\"\n'
-  + 'PHONE=\"\${1:?phone 5521996185328}\"\n'
-  + 'MES=\"\${2:?MM/YYYY}\"\n'
-  + 'TMP=\"\$(mktemp)\"; trap \"rm -f \\\"\$TMP\\\"\" EXIT\n'
-  + '\"\$MF_CURL\" \"{\\\"phone\\\":\\\"\$PHONE\\\",\\\"action\\\":\\\"get_das_current\\\",\\\"payload\\\":{\\\"mes\\\":\\\"\$MES\\\"}}\" > \"\$TMP\"\n'
-  + 'node -e \"const fs=require(\\\"fs\\\");const r=JSON.parse(fs.readFileSync(process.argv[1],\\\"utf8\\\"));'
-  + 'if(!r.success){console.log(JSON.stringify(r));process.exit(1);}const x=r.data||{};'
-  + 'if(!x.base64){console.log(JSON.stringify({success:false,message:\\\"sem PDF\\\"}));process.exit(1);}'
-  + 'const fn=String(x.fileName||\\\"DAS.pdf\\\").replace(/[^a-zA-Z0-9._-]/g,\\\"_\\\");'
-  + 'const p=\\\"/tmp/\\\"+fn;fs.writeFileSync(p,Buffer.from(x.base64,\\\"base64\\\"));'
-  + 'console.log(JSON.stringify({success:true,mes:x.mes,fileName:fn,file:p}));\" \"\$TMP\"\n';
-fs.writeFileSync(path.join(d, 'mf-das.sh'), das, { mode: 0o755 });
-fs.writeFileSync(path.join(d, 'MF-API.md'),
-  '# Meu Financeiro\n'
-  + 'SEMPRE: ' + curl + ' JSON numa linha\n'
-  + 'DAS: ' + path.join(d, 'mf-das.sh') + ' 5521996185328 03/2026\n'
-  + 'Depois: openclaw message send --channel whatsapp --target 5521996185328 --media /tmp/DAS-03-2026.pdf\n'
-  + 'NUNCA curl com $MF_API_URL. NUNCA mostrar base64.\n'
-);
-console.log('OK:', curl);
-console.log('OK:', path.join(d, 'mf-das.sh'));
-"
+const dir = __dirname;
+const phone = process.argv[2];
+const mes = process.argv[3];
+if (!phone || !mes) {
+  console.error('uso: node mf-das.js 5521996185328 03/2026');
+  process.exit(1);
+}
+const curl = path.join(dir, 'mf-curl.sh');
+const body = JSON.stringify({ phone, action: 'get_das_current', payload: { mes } });
+const raw = execFileSync(curl, [body], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+let r;
+try { r = JSON.parse(raw); } catch (e) {
+  console.error(raw.slice(0, 500));
+  process.exit(1);
+}
+if (!r.success) {
+  console.log(raw);
+  process.exit(1);
+}
+const x = r.data || {};
+if (!x.base64) {
+  console.log(JSON.stringify({ success: false, message: 'sem PDF' }));
+  process.exit(1);
+}
+const fn = String(x.fileName || 'DAS.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+const p = '/tmp/' + fn;
+fs.writeFileSync(p, Buffer.from(x.base64, 'base64'));
+console.log(JSON.stringify({ success: true, mes: x.mes, fileName: fn, file: p }));
+NODE_EOF
 
-echo "--- ping ---"
-"$WS/mf-curl.sh" '{"action":"ping"}' | head -c 200
-echo ""
-echo "--- DAS 03/2026 (JSON curto) ---"
+printf '#!/bin/sh\nexec node "%s/mf-das.js" "$@"\n' "$WS" > "$WS/mf-das.sh"
+chmod +x "$WS/mf-das.js" "$WS/mf-das.sh"
+
+cat > "$WS/MF-API.md" << EOF
+# Meu Financeiro
+- API: $WS/mf-curl.sh '{"phone":"5521...","action":"..."}'
+- DAS: $WS/mf-das.sh 5521996185328 03/2026  (grava PDF em /tmp, JSON curto na saída)
+- Envio WA: openclaw message send --channel whatsapp --target 5521996185328 --media /tmp/DAS-03-2026.pdf
+- NUNCA curl com \$MF_API_URL nem mostrar base64
+EOF
+
+echo "--- DAS 03/2026 ---"
 "$WS/mf-das.sh" 5521996185328 03/2026
+echo "--- DAS 04/2026 ---"
+"$WS/mf-das.sh" 5521996185328 04/2026
