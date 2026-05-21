@@ -72,7 +72,7 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 
 ### Português natural → lançamento
 
-- _"recebi 4599 de salário"_ → `create_transaction` com `tipo` entrada, `valor` 4599, `classificacao` **Salário**, `data` hoje em **`YYYY-MM-DD`** se não disserem outra, `status` **pago** salvo indicação contrária.
+- _"recebi 4599 de salário"_ / _"lancei 350"_ → `create_transaction` com `tipo` **entrada**, `valor` numérico, `classificacao` coerente, `data` hoje em **`YYYY-MM-DD`**, `status` **`recebido`** (dinheiro já entrou). Só use `a_receber` ou `pendente` se o utilizador disser que **ainda vai** receber.
 - _"gastei 25 no café"_ → saída, 25, categoria coerente (ex. Alimentação); se ambígua, **uma** pergunta curta antes do `curl`.
 - Valores PT-BR: normaliza para número decimal.
 

@@ -593,10 +593,22 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'create_transaction') {
-    const created = await transactionsService.createTransaction(userId, payload);
+    const tipo = String(payload?.tipo || '').trim();
+    const tipoNorm = tipo === 'saída' ? 'saida' : tipo;
+    const statusNorm = transactionsService.normalizeTransactionStatus(
+      tipoNorm,
+      payload?.status,
+    );
+    const created = await transactionsService.createTransaction(userId, {
+      ...payload,
+      tipo: tipoNorm,
+      status: statusNorm,
+    });
+    const statusLabel =
+      statusNorm === 'recebido' || statusNorm === 'pago' ? ' (já contabiliza no saldo)' : '';
     return {
       ok: true,
-      message: 'Transação criada',
+      message: `Transação criada${statusLabel}`,
       data: {
         transaction: created,
         userId,
