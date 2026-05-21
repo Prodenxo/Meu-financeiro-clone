@@ -74,7 +74,12 @@ if (!r.success) {
 }
 const x = r.data || {};
 if (!x.base64) {
-  console.log(JSON.stringify({ success: false, message: 'sem PDF' }));
+  console.log(JSON.stringify({
+    success: false,
+    message: x.includeBase64 === false ? 'API sem base64 (falta includeBase64:true no mf-das.js)' : 'sem PDF na API',
+    apiMessage: r.message,
+    hint: x.execCommand || 'use mf-send-das.sh',
+  }));
   process.exit(1);
 }
 const fn = String(x.fileName || 'DAS.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -97,7 +102,7 @@ if (!phone || !mes) {
   process.exit(1);
 }
 const curl = path.join(dir, 'mf-curl.sh');
-const body = JSON.stringify({ phone, action: 'get_das_current', payload: { mes } });
+const body = JSON.stringify({ phone, action: 'get_das_current', payload: { mes, includeBase64: true } });
 const raw = execFileSync(curl, [body], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 let r;
 try { r = JSON.parse(raw); } catch (e) {
@@ -110,7 +115,12 @@ if (!r.success) {
 }
 const x = r.data || {};
 if (!x.base64) {
-  console.log(JSON.stringify({ success: false, message: 'sem PDF' }));
+  console.log(JSON.stringify({
+    success: false,
+    message: x.includeBase64 === false ? 'API sem base64 (falta includeBase64:true no mf-das.js)' : 'sem PDF na API',
+    apiMessage: r.message,
+    hint: x.execCommand || 'use mf-send-das.sh',
+  }));
   process.exit(1);
 }
 const fn = String(x.fileName || 'DAS.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -131,6 +141,30 @@ head -n 3 "$WS/mf-das.sh"
 ```
 
 Se a última linha devolver JSON com `"file":"/tmp/DAS-03-2026.pdf"`, está pronto. No WhatsApp: `/new` e pede o DAS outra vez.
+
+### `{"success":false,"message":"sem PDF"}` ao correr `mf-das.sh`
+
+O backend em produção **já não manda base64** em `get_das_current` **sem** `"includeBase64":true`. O `mf-das.js` antigo no contentor pedia só `{ mes }` → a API responde OK mas **sem PDF** → o script diz `sem PDF` e **nada vai para o WhatsApp**.
+
+**Correção rápida no Console (serviço OpenClaw):**
+
+```sh
+WS=/home/node/.openclaw/workspace
+sed -i 's/payload: { mes }/payload: { mes, includeBase64: true }/' "$WS/mf-das.js"
+grep includeBase64 "$WS/mf-das.js"
+"$WS/mf-das.sh" 5521996185328 03/2026
+"$WS/mf-das-send.sh" 5521996185328 03/2026
+```
+
+A segunda linha deve imprimir `{"success":true,...,"file":"/tmp/DAS-03-2026.pdf"}` e a terceira deve **entregar o PDF no WhatsApp**.
+
+**Diagnóstico (primeiros 400 caracteres da API):**
+
+```sh
+"$WS/mf-curl.sh" '{"phone":"5521996185328","action":"get_das_current","payload":{"mes":"03/2026","includeBase64":true}}' | head -c 400
+```
+
+Se com `includeBase64:true` ainda falhar, o DAS não está na base para essa competência/utilizador (mensagem da API tipo *Nenhum DAS encontrado*).
 
 Ficheiro equivalente no repo: [`easypanel-console-install-mf.sh`](./easypanel-console-install-mf.sh).
 

@@ -49,7 +49,12 @@ if (!r.success) {
 }
 const x = r.data || {};
 if (!x.base64) {
-  console.log(JSON.stringify({ success: false, message: 'sem PDF' }));
+  console.log(JSON.stringify({
+    success: false,
+    message: x.includeBase64 === false ? 'API sem base64 (atualize mf-das.js com includeBase64:true)' : 'sem PDF na API',
+    apiMessage: r.message,
+    hint: x.execCommand || null,
+  }));
   process.exit(1);
 }
 const fn = String(x.fileName || 'DAS.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
