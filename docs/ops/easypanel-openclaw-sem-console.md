@@ -256,7 +256,44 @@ Ou **sem variável** (copia/cola seguro):
 | Erro no console | Causa |
 |-----------------|--------|
 | `/mf-curl.sh: not found` | `$WS` vazio — falta `WS=/home/node/.openclaw/workspace` **antes** do comando |
-| `mf-curl.sh: not found` (sem `/` no início) | Script não instalado — corre `openclaw-console-fix-das-agent.sh` |
+| `Instala scripts: openclaw-console-fix-das-agent.sh` | `mf-curl.sh` **não existe** no volume — instalação abaixo |
+
+### Instalar `mf-curl.sh` e restantes scripts (Console OpenClaw)
+
+**1.** Easypanel → serviço **OpenClaw** → **Environment** → confirma e **Restart**:
+
+- `MF_API_URL` = URL do backend, ex. `https://auto-back-meufinanceiro-site....easypanel.host/api/bot/openclaw/action`
+- `OPENCLAW_WEBHOOK_SECRET` = mesmo valor do backend
+
+**2.** No Console, verifica se as variáveis chegaram ao contentor:
+
+```sh
+echo "URL=${MF_API_URL:-VAZIO}"
+echo "SECRET=${OPENCLAW_WEBHOOK_SECRET:+definido}"
+```
+
+Se `VAZIO`, corrige no Easypanel e **Restart** antes de continuar.
+
+**3.** Instalação mínima (só `mf-curl` — sem heredoc):
+
+```sh
+WS=/home/node/.openclaw/workspace
+mkdir -p "$WS"
+printf '%s\n' '#!/bin/sh' "exec curl -sS -X POST '$MF_API_URL' \\" \
+  "-H 'Content-Type: application/json; charset=utf-8' \\" \
+  "-H 'Authorization: Bearer $OPENCLAW_WEBHOOK_SECRET' \\" \
+  '-d "$1"' > "$WS/mf-curl.sh"
+chmod +x "$WS/mf-curl.sh"
+ls -la "$WS/mf-curl.sh"
+```
+
+**4.** Instalação completa (`mf-das.sh`, `mf-das-send.sh`, `DAS-WHATSAPP.md`): abre no PC o ficheiro `Site/docs/ops/openclaw-console-fix-das-agent.sh`, **copia tudo**, cola no Console **de uma vez** e Enter. No fim deve listar `mf-curl.sh mf-das.sh mf-das-send.sh`.
+
+**5.** Teste:
+
+```sh
+/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"TEU_55XXXXXXXX","action":"resolve_user"}'
+```
 
 Se aparecer `column profiles.display_name does not exist`, o backend em produção está desatualizado — faz deploy da versão que lê o nome em `auth.users` (metadata), não em `profiles`.
 
