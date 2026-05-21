@@ -181,8 +181,8 @@ A API **funcionou** (`"message":"DAS encontrado"`), mas o agente mostrou `data.b
 | Correção | Ação |
 |----------|------|
 | Scripts | Deploy com bootstrap que cria `mf-curl.sh` + **`mf-das.sh`** + `MF-API.md` (ver `easypanel-openclaw-bootstrap.sh`) |
-| Agente | Deve correr `mf-das.sh 5521996185328 03/2026` e depois `openclaw message send --channel whatsapp --target … --media /tmp/DAS-….pdf` |
-| Proibido | `curl` com `$MF_API_URL`, `fetch url`, ou responder com o JSON completo |
+| Agente | **Uma linha:** `mf-send-das.sh 5521996185328 03/2026` (tenta `send_das_whatsapp` no backend; se não houver n8n, usa `openclaw message send --media`) |
+| Proibido | `curl` com `$MF_API_URL`, `fetch url`, `[[MEDIA:]]`, texto com nome do PDF, ou `get_das_current` via `mf-curl` |
 
 Se `mf-das.sh` não existir, segue a secção **`mf-das.sh: not found`** acima antes de testar.
 
@@ -231,11 +231,12 @@ cat > /home/node/.openclaw/workspace/MF-API.md << 'EOF'
 
 ## DAS = ficheiro PDF no WhatsApp (não texto com nome do ficheiro)
 PROIBIDO responder: "DAS-03-2026.pdf", "segue em anexo", `[[MEDIA: DAS-04-2026.pdf]]`, ou linha `MEDIA:/tmp/...` no texto.
-No WhatsApp do OpenClaw, **MEDIA: / [[MEDIA:]] na resposta do agente NÃO envia ficheiro** (bug conhecido). Só `exec` + `mf-das-send.sh` (usa `openclaw message send --media` por baixo).
+No WhatsApp do OpenClaw, **MEDIA: / [[MEDIA:]] na resposta do agente NÃO envia ficheiro** (bug conhecido). Só `exec` + script.
 OBRIGATÓRIO: exec para CADA mês pedido (MM/YYYY que o utilizador disse):
-  /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 04/2026
+  /home/node/.openclaw/workspace/mf-send-das.sh 5521996185328 04/2026
+(`mf-send-das.sh` tenta `send_das_whatsapp` no backend; se `skipped_no_webhook`, chama `mf-das-send.sh` automaticamente.)
 Pediu abril → 04/2026. Pediu março → 03/2026. Dois meses → duas linhas exec.
-Só confirmar envio depois de success:true no JSON do script.
+Só confirmar envio depois de `success:true` no JSON do script.
 
 ## Outras ações
   /home/node/.openclaw/workspace/mf-curl.sh '{"phone":"5521...","action":"..."}'
@@ -254,7 +255,7 @@ Teste manual:
 
 1. **`/new`** na conversa (obrigatório após erro).
 2. Pergunta: *"Envia o DAS de 03/2026 e 04/2026"*.
-3. O agente deve correr **só** `mf-das-send.sh` (duas vezes), **não** `get_das_current` via `mf-curl`.
+3. O agente deve correr **só** `mf-send-das.sh` (duas vezes), **não** `get_das_current` via `mf-curl`.
 4. Deves receber **PDF no WhatsApp**, não JSON nem base64.
 
 ## 6. Se o contentor continuar a cair

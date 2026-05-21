@@ -67,16 +67,38 @@ const mfApi = [
   '   ' + path.join(dir, 'mf-das.sh') + ' 5521996185328 03/2026',
   '   ```',
   '   (resposta curta JSON: `file`, `fileName`, `mes`)',
-  '3. Envia o PDF no WhatsApp:',
+  '3. **Uma linha** (recomendado — tenta n8n; senão `openclaw message send --media`):',
   '   ```bash',
-  '   openclaw message send --channel whatsapp --target 5521996185328 --media /tmp/DAS-03-2026.pdf --message \"DAS 03/2026\"',
+  '   ' + path.join(dir, 'mf-send-das.sh') + ' 5521996185328 03/2026',
   '   ```',
-  '4. Responde em português: *\"Enviei o PDF da competência MM/YYYY.\"* — não coles base64.',
+  '4. PROIBIDO: texto \"DAS-03-2026.pdf\", `[[MEDIA:]]`, `get_das_current` via mf-curl, base64 no chat.',
+  '5. Responda só: *\"Enviei o PDF da competência MM/YYYY.\"* após `success:true` no JSON do script.',
   '',
   '## Actions',
-  'resolve_user, list_roles, list_categories, list_transactions, create_transaction, delete_transaction, get_das_current, ping',
+  'resolve_user, list_roles, list_categories, list_transactions, create_transaction, delete_transaction, send_das_whatsapp, get_das_current, ping',
 ].join('\\n');
 fs.writeFileSync(path.join(dir, 'MF-API.md'), mfApi);
+if (!fs.existsSync(path.join(dir, 'mf-das-send.sh'))) {
+  const sendSh = '#!/bin/sh\\nset -e\\nWS=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\\n'
+    + 'PHONE=\"${1:?phone}\"\\nMES=\"${2:?MM/YYYY}\"\\nTARGET=\"${3:-$PHONE}\"\\n'
+    + 'OUT=\"$(\"$WS/mf-das.sh\" \"$PHONE\" \"$MES\")\"\\n'
+    + 'FILE=\"$(echo \"$OUT\" | node -e \"let j=JSON.parse(require(\\'fs\\').readFileSync(0,\\'utf8\\'));if(!j.file)process.exit(1);process.stdout.write(j.file)\")\"\\n'
+    + 'openclaw message send --channel whatsapp --target \"$TARGET\" --media \"$FILE\" --message \"DAS $MES\"\\n'
+    + 'echo \"{\\\\\"success\\\\\":true,\\\\\"mes\\\\\":\\\\\"$MES\\\\\",\\\\\"file\\\\\":\\\\\"$FILE\\\\\",\\\\\"whatsapp\\\\\":\\\\\"sent\\\\\"}\"\\n';
+  fs.writeFileSync(path.join(dir, 'mf-das-send.sh'), sendSh, { mode: 0o755 });
+}
+if (!fs.existsSync(path.join(dir, 'mf-send-das.sh'))) {
+  const mfSend = '#!/bin/sh\\nset -e\\nWS=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\\n'
+    + 'PHONE=\"${1:?phone}\"\\nMES=\"${2:?MM/YYYY}\"\\nTMP=\"$(mktemp)\"; trap \\'rm -f \"$TMP\"\\' EXIT\\n'
+    + '\"$WS/mf-curl.sh\" \"{\\\\\"phone\\\\\":\\\\\"$PHONE\\\\\",\\\\\"action\\\\\":\\\\\"send_das_whatsapp\\\\\",\\\\\"payload\\\\\":{\\\\\"mes\\\\\":\\\\\"$MES\\\\\"}}\" > \"$TMP\"\\n'
+    + 'node -e \"const fs=require(\\'fs\\');const r=JSON.parse(fs.readFileSync(process.argv[1],\\'utf8\\'));'
+    + 'if(!r.success){console.log(JSON.stringify(r));process.exit(1);}const d=r.data||{};const st=d.whatsappStatus||\\'\\';'
+    + 'if(st===\\'sent\\'){console.log(JSON.stringify({success:true,mes:d.mes,fileName:d.fileName,whatsapp:\\'sent\\'}));process.exit(0);}'
+    + 'if(st===\\'skipped_no_webhook\\'||st===\\'failed\\'||st===\\'skipped_no_phone\\')process.exit(42);'
+    + 'console.log(JSON.stringify(r));process.exit(1);\" \"$TMP\" && exit 0\\n'
+    + 'EC=$?; [ \"$EC\" = \"42\" ] && exec \"$WS/mf-das-send.sh\" \"$PHONE\" \"$MES\"; exit \"$EC\"\\n';
+  fs.writeFileSync(path.join(dir, 'mf-send-das.sh'), mfSend, { mode: 0o755 });
+}
 " STATE="$STATE" MF_URL="$MF_URL" MF_SECRET="$MF_SECRET"
 
 CFG="$STATE/openclaw.json"

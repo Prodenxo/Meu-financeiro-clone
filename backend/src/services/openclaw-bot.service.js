@@ -1,4 +1,5 @@
 import { createSupabaseClient } from '../config/supabase.js';
+import { env } from '../config/env.js';
 import { badRequest, notFound } from '../utils/errors.js';
 import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
@@ -6,6 +7,7 @@ import * as categoriesService from './categories.service.js';
 import * as rbacCatalogService from './rbac-catalog.service.js';
 import { getDasBase64 } from './mei-guide-das-base64.service.js';
 import * as calendarEventsService from './calendar-events.service.js';
+import { sendWhatsappMessage } from './n8n-whatsapp.service.js';
 
 const MAX_LIST = 40;
 
@@ -36,6 +38,60 @@ export const mesCompetenciaAtualUtc = () => {
   const display = `${String(month).padStart(2, '0')}/${year}`;
   const periodoDigits = `${year}${String(month).padStart(2, '0')}`;
   return { display, periodoDigits };
+};
+
+/** Telefone destino WhatsApp (55 + dígitos) a partir do lookup OpenClaw. */
+export const resolveOpenclawWhatsappPhone = (phoneDigits, matchedUserNumber) => {
+  const raw = String(matchedUserNumber || phoneDigits || '').replace(/\D/g, '');
+  if (!raw) return '';
+  if (raw.startsWith('55')) return raw;
+  return `55${raw}`;
+};
+
+/**
+ * Envia DAS via webhook n8n/Z-API. Não lança: devolve status para resposta curta ao agente.
+ * @returns {Promise<{ whatsappStatus: string, whatsappError?: string, hint?: string }>}
+ */
+export const trySendDasWhatsappWebhook = async ({
+  userId,
+  phone,
+  display,
+  periodoDigits,
+  pdfBase64,
+  fileName,
+}) => {
+  const webhookUrl = (env.N8N_WHATSAPP_WEBHOOK_URL || '').trim();
+  if (!webhookUrl) {
+    return {
+      whatsappStatus: 'skipped_no_webhook',
+      hint: 'Configure N8N_WHATSAPP_WEBHOOK_URL no backend ou use mf-das-send.sh no OpenClaw.',
+    };
+  }
+  if (!phone) {
+    return { whatsappStatus: 'skipped_no_phone' };
+  }
+  if (!pdfBase64) {
+    return { whatsappStatus: 'skipped_no_pdf' };
+  }
+  const year = periodoDigits.slice(0, 4);
+  const month = periodoDigits.slice(4, 6);
+  const payload = {
+    userId,
+    phone,
+    competencia: `${year}-${month}`,
+    periodoApuracao: periodoDigits,
+    fileName,
+    pdfBase64,
+    source: 'openclaw_bot',
+    message: `Segue o DAS MEI da competência ${display}.`,
+  };
+  try {
+    await sendWhatsappMessage(payload);
+    return { whatsappStatus: 'sent' };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { whatsappStatus: 'failed', whatsappError: msg };
+  }
 };
 
 /**
@@ -398,18 +454,20 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
-  if (action === 'get_das_current') {
+  const resolveDasCompetencia = () => {
     const rawMes = payload?.mes;
-    let competencia;
     if (rawMes === undefined || rawMes === null || String(rawMes).trim() === '') {
-      competencia = mesCompetenciaAtualUtc();
-    } else {
-      competencia = parseMesCompetenciaMmYyyy(rawMes);
-      if (!competencia) {
-        throw badRequest('mes inválido; use MM/YYYY, ex.: 05/2026');
-      }
+      return mesCompetenciaAtualUtc();
     }
-    const { display, periodoDigits } = competencia;
+    const competencia = parseMesCompetenciaMmYyyy(rawMes);
+    if (!competencia) {
+      throw badRequest('mes inválido; use MM/YYYY, ex.: 05/2026');
+    }
+    return competencia;
+  };
+
+  if (action === 'get_das_current') {
+    const { display, periodoDigits } = resolveDasCompetencia();
     const pdfBase64 = await getDasBase64({ userId, periodoApuracao: periodoDigits });
     if (!pdfBase64 || String(pdfBase64).trim() === '') {
       throw notFound(`Nenhum DAS encontrado para a competência ${display}.`);
@@ -429,7 +487,42 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'send_das_whatsapp') {
+    const { display, periodoDigits } = resolveDasCompetencia();
+    const pdfBase64 = await getDasBase64({ userId, periodoApuracao: periodoDigits });
+    if (!pdfBase64 || String(pdfBase64).trim() === '') {
+      throw notFound(`Nenhum DAS encontrado para a competência ${display}.`);
+    }
+    const fileName = `DAS-${display.replace('/', '-')}.pdf`;
+    const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+    const whatsapp = await trySendDasWhatsappWebhook({
+      userId,
+      phone: destinationPhone,
+      display,
+      periodoDigits,
+      pdfBase64,
+      fileName,
+    });
+    const sent = whatsapp.whatsappStatus === 'sent';
+    return {
+      ok: true,
+      message: sent
+        ? `PDF DAS ${display} enviado no WhatsApp.`
+        : `DAS ${display} encontrado; envio WhatsApp: ${whatsapp.whatsappStatus}.`,
+      data: {
+        mes: display,
+        fileName,
+        whatsappStatus: whatsapp.whatsappStatus,
+        whatsappError: whatsapp.whatsappError ?? null,
+        hint: whatsapp.hint ?? null,
+        useOpenclawScript: sent ? null : '/home/node/.openclaw/workspace/mf-send-das.sh',
+        actorContext,
+        ...linkDebug,
+      },
+    };
+  }
+
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_das_current.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_das_current, send_das_whatsapp.`,
   );
 };

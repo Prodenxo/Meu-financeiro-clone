@@ -61,15 +61,61 @@ NODE_EOF
 printf '#!/bin/sh\nexec node "%s/mf-das.js" "$@"\n' "$WS" > "$WS/mf-das.sh"
 chmod +x "$WS/mf-das.js" "$WS/mf-das.sh"
 
+cat > "$WS/mf-das-send.sh" << 'SEND_EOF'
+#!/bin/sh
+set -e
+WS="$(cd "$(dirname "$0")" && pwd)"
+PHONE="${1:?phone}"
+MES="${2:?MM/YYYY}"
+TARGET="${3:-$PHONE}"
+OUT="$("$WS/mf-das.sh" "$PHONE" "$MES")"
+FILE="$(echo "$OUT" | node -e "let j=JSON.parse(require('fs').readFileSync(0,'utf8'));if(!j.file)process.exit(1);process.stdout.write(j.file)")"
+openclaw message send --channel whatsapp --target "$TARGET" --media "$FILE" --message "DAS $MES"
+echo "{\"success\":true,\"mes\":\"$MES\",\"file\":\"$FILE\",\"whatsapp\":\"sent\"}"
+SEND_EOF
+chmod +x "$WS/mf-das-send.sh"
+
+cat > "$WS/mf-send-das.sh" << 'MF_SEND_EOF'
+#!/bin/sh
+set -e
+WS="$(cd "$(dirname "$0")" && pwd)"
+PHONE="${1:?phone com DDI 55}"
+MES="${2:?MM/YYYY}"
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+"$WS/mf-curl.sh" "{\"phone\":\"$PHONE\",\"action\":\"send_das_whatsapp\",\"payload\":{\"mes\":\"$MES\"}}" > "$TMP"
+node -e "
+const fs=require('fs');
+const r=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
+if(!r.success){console.log(JSON.stringify(r));process.exit(1);}
+const d=r.data||{};
+const st=d.whatsappStatus||'';
+if(st==='sent'){console.log(JSON.stringify({success:true,mes:d.mes,fileName:d.fileName,whatsapp:'sent'}));process.exit(0);}
+if(st==='skipped_no_webhook'||st==='failed'||st==='skipped_no_phone')process.exit(42);
+console.log(JSON.stringify(r));process.exit(1);
+" "$TMP" && exit 0
+EC=$?
+[ "$EC" = "42" ] && exec "$WS/mf-das-send.sh" "$PHONE" "$MES"
+exit "$EC"
+MF_SEND_EOF
+chmod +x "$WS/mf-send-das.sh"
+
 cat > "$WS/MF-API.md" << EOF
-# Meu Financeiro
-- API: $WS/mf-curl.sh '{"phone":"5521...","action":"..."}'
-- DAS: $WS/mf-das.sh 5521996185328 03/2026  (grava PDF em /tmp, JSON curto na saída)
-- Envio WA: openclaw message send --channel whatsapp --target 5521996185328 --media /tmp/DAS-03-2026.pdf
-- NUNCA curl com \$MF_API_URL nem mostrar base64
+# Meu Financeiro — OBRIGATÓRIO
+
+## DAS = PDF no WhatsApp (não texto)
+PROIBIDO: "DAS-03-2026.pdf", [[MEDIA:]], get_das_current via mf-curl, base64 no chat.
+OBRIGATÓRIO exec (cada mês pedido):
+  $WS/mf-send-das.sh 5521996185328 04/2026
+Responda só após success:true: "Enviei o PDF da competência MM/YYYY."
+
+## Outras ações
+  $WS/mf-curl.sh '{"phone":"5521...","action":"..."}'
 EOF
 
 echo "--- DAS 03/2026 ---"
 "$WS/mf-das.sh" 5521996185328 03/2026
 echo "--- DAS 04/2026 ---"
 "$WS/mf-das.sh" 5521996185328 04/2026
+echo "--- Envio WhatsApp (teste manual) ---"
+echo "Corre: $WS/mf-send-das.sh 5521996185328 04/2026"
