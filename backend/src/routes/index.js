@@ -13,6 +13,7 @@ import empresaInvitesRoutes from './empresa-invites.routes.js';
 import cronRoutes from './cron.routes.js';
 import openclawRoutes from './openclaw.routes.js';
 import zapiRoutes from './zapi.routes.js';
+import internalAccessRequestsRoutes from './internal-access-requests.routes.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -30,4 +31,5 @@ router.use('/recorrencias', recorrenciasRoutes);
 router.use('/cron', cronRoutes);
 router.use('/bot', openclawRoutes);
 router.use('/webhooks/zapi', zapiRoutes);
+router.use('/internal/access-requests', internalAccessRequestsRoutes);
 export default router;
