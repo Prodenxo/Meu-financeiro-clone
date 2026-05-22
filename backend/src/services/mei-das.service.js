@@ -6,6 +6,8 @@ import * as usersService from './users.service.js';
 import * as meiGuideService from './mei-guide.service.js';
 import { getCertificateDocument } from './mei-certificate-store.js';
 import { sendWhatsappMessage } from './n8n-whatsapp.service.js';
+import { getDasBase64 } from './mei-guide-das-base64.service.js';
+import { isCompetenciaPaid } from './mei-period-status.service.js';
 
 const DAS_BUCKET = 'mei-das-pdfs';
 const DAS_TABLE = 'das_mensal_status';
@@ -704,6 +706,105 @@ export const listAdminCompanyPendingDas = async (accessToken, competenciaInput) 
     competencia: competenciaInput,
     status: 'pendente'
   });
+};
+
+/**
+ * Mensagem curta para bot/WhatsApp conforme status do DAS.
+ * @param {{ status: string, display: string, hasPdf?: boolean }} input
+ */
+export const buildDasPaymentStatusMessage = ({ status, display, hasPdf = false }) => {
+  const mes = String(display || '').trim();
+  if (status === 'pago') {
+    return `O DAS MEI da competência ${mes} está pago.`;
+  }
+  if (status === 'pendente') {
+    const extra = hasPdf
+      ? ' A guia PDF já está disponível; falta efetuar o pagamento.'
+      : ' Ainda não há guia PDF guardada para esta competência.';
+    return `O DAS MEI da competência ${mes} está pendente de pagamento.${extra}`;
+  }
+  if (status === 'erro') {
+    return `Houve um problema ao registrar o DAS da competência ${mes}. Consulte na app Meu Financeiro.`;
+  }
+  return `Não foi possível confirmar o status do DAS ${mes}. Consulte na app Meu Financeiro.`;
+};
+
+/**
+ * Consulta status de pagamento do DAS (tabela `das_mensal_status` + cache de competência paga).
+ * @param {{ userId: string, competencia: string, refreshFromSerpro?: boolean }} input
+ * competencia: `YYYY-MM` (ex. `2026-03`)
+ */
+export const getDasPaymentStatusForUser = async ({
+  userId,
+  competencia,
+  refreshFromSerpro = false,
+}) => {
+  if (!userId) {
+    throw badRequest('Usuário não informado para consulta de status do DAS');
+  }
+  const resolved = normalizeCompetencia(competencia);
+
+  const supabase = getServiceRoleClient();
+  const { data: row, error } = await supabase
+    .from(DAS_TABLE)
+    .select('status, competencia, updated_at, error_message')
+    .eq('user_id', userId)
+    .eq('competencia', resolved)
+    .maybeSingle();
+
+  if (error) {
+    throw badRequest(error.message || 'Erro ao consultar status do DAS');
+  }
+
+  let status = row?.status ? normalizeStatus(row.status) : null;
+  let statusSource = row?.status ? 'das_mensal_status' : 'none';
+
+  if (await isCompetenciaPaid({ userId, competencia: resolved })) {
+    status = 'pago';
+    statusSource = 'competencia_paga';
+  }
+
+  if (refreshFromSerpro && status !== 'pago') {
+    try {
+      const document = await getCertificateDocument(userId);
+      const cnpj = normalizeDoc(document);
+      if (cnpj.length === 14) {
+        const serproStatus = await resolveStatusFromSerpro(userId, cnpj, resolved);
+        status = normalizeStatus(serproStatus);
+        statusSource = 'serpro_periodos';
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[mei-das] refreshFromSerpro ignorado', { userId, competencia: resolved, message: msg });
+    }
+  }
+
+  if (!status) {
+    status = 'pendente';
+    if (statusSource === 'none') statusSource = 'default_pendente';
+  }
+
+  const periodoApuracao = competenciaToPeriodoApuracao(resolved);
+  let hasPdf = false;
+  try {
+    const pdfBase64 = await getDasBase64({ userId, periodoApuracao });
+    hasPdf = Boolean(pdfBase64 && String(pdfBase64).trim());
+  } catch {
+    hasPdf = false;
+  }
+
+  const statusLabel =
+    status === 'pago' ? 'pago' : status === 'pendente' ? 'pendente de pagamento' : 'erro';
+
+  return {
+    competencia: resolved,
+    status,
+    statusLabel,
+    hasPdf,
+    statusSource,
+    updatedAt: row?.updated_at ?? null,
+    errorMessage: row?.error_message ?? null,
+  };
 };
 
 export const reprocessDasForAdmin = async (accessToken, payload = {}) => {

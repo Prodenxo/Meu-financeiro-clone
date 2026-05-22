@@ -20,7 +20,7 @@ export interface MeiGuideResponse {
 
 export interface MeiPeriod {
   competencia: string;
-  status: 'pago' | 'a_pagar' | 'erro';
+  status: 'pago' | 'a_pagar' | 'erro' | 'indisponivel';
   guideId?: string | null;
   errorMessage?: string | null;
 }
@@ -104,6 +104,16 @@ export async function fetchParcelamentos(
 
 export async function createMeiGuide(input: CreateMeiGuideInput): Promise<MeiGuideResponse> {
   return await apiClient.post<MeiGuideResponse>('/mei-guide', input);
+}
+
+export async function regenerateMeiGuide(
+  periodoApuracao: string,
+  input: CreateMeiGuideInput
+): Promise<MeiGuideResponse> {
+  return await apiClient.post<MeiGuideResponse>(
+    `/mei-guide/${encodeURIComponent(periodoApuracao)}/regenerate`,
+    input
+  );
 }
 
 export async function fetchMeiPeriods(

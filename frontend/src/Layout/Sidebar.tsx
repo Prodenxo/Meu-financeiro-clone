@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Home, List, Grid3x3, Calendar, Settings, Wallet, FileText, LayoutDashboard } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
+import { canAccessMeiArea } from '../lib/meiAccess';
 
 interface SidebarProps {
   expanded: boolean;
@@ -10,9 +11,7 @@ interface SidebarProps {
 export default function Sidebar({ expanded }: SidebarProps) {
   const location = useLocation();
   const { mei, role } = useAuthStore();
-  const canAccessMeiArea = role === 'superadmin'
-    || role === 'admin'
-    || (role === 'usuario' && mei !== false);
+  const showMeiNav = canAccessMeiArea(role, mei);
   const adminPanelItem = {
     path: '/settings/usuarios-dados',
     label: 'Painel Admin',
@@ -26,7 +25,7 @@ export default function Sidebar({ expanded }: SidebarProps) {
     { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
     { path: '/categorias', label: 'Categorias', icon: Grid3x3 },
     { path: '/agenda', label: 'Agenda', icon: Calendar },
-    ...(canAccessMeiArea ? [{ path: '/guias-mei', label: 'Mei Infinito', icon: FileText }] : []),
+    ...(showMeiNav ? [{ path: '/guias-mei', label: 'Meu MEI', icon: FileText }] : []),
     { path: '/settings', label: 'Configurações', icon: Settings },
   ];
 

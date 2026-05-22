@@ -2,12 +2,15 @@ import { useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { hasRole } from './lib/roles';
+import { canAccessMeiArea } from './lib/meiAccess';
 import { useThemeStore } from './store/themeStore';
 import Login from './pages/Login';
 import LoginOnly from './pages/LoginOnly';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import Privacidade from './pages/Privacidade';
+import Termos from './pages/Termos';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
 import Orcamentos from './pages/Orcamentos';
@@ -107,10 +110,18 @@ function GoogleOAuthCallback() {
 }
 
 export function AppRoutes() {
+  const location = useLocation();
   const { user, role, mei } = useAuthStore();
-  const canAccessMeiArea = role === 'superadmin'
-    || role === 'admin'
-    || (role === 'usuario' && mei !== false);
+  const showMeiNav = canAccessMeiArea(role, mei);
+
+  // Rotas legais: sempre públicas (evita catch-all → /login)
+  const legalPath = location.pathname.replace(/\/$/, '') || '/';
+  if (legalPath === '/privacidade') {
+    return <Privacidade />;
+  }
+  if (legalPath === '/termos') {
+    return <Termos />;
+  }
 
   return (
     <>
@@ -120,7 +131,9 @@ export function AppRoutes() {
         {/* Rotas públicas sempre acessíveis */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        
+        <Route path="/privacidade" element={<Privacidade />} />
+        <Route path="/termos" element={<Termos />} />
+
         {!user ? (
           <>
             <Route path="/login" element={<Login />} />
@@ -143,7 +156,7 @@ export function AppRoutes() {
                   <Route
                     path="/guias-mei"
                     element={
-                      canAccessMeiArea ? (
+                      showMeiNav ? (
                         <GuidesMei />
                       ) : (
                         <Navigate to="/" replace state={{ accessBlock: 'mei-required' as const }} />
@@ -153,7 +166,7 @@ export function AppRoutes() {
                   <Route
                     path="/mei-catalogo/clientes"
                     element={
-                      canAccessMeiArea ? (
+                      showMeiNav ? (
                         <MeiCatalogoClientes />
                       ) : (
                         <Navigate to="/" replace state={{ accessBlock: 'mei-required' as const }} />
@@ -163,7 +176,7 @@ export function AppRoutes() {
                   <Route
                     path="/mei-catalogo/servicos-produtos"
                     element={
-                      canAccessMeiArea ? (
+                      showMeiNav ? (
                         <MeiCatalogoServicosProdutos />
                       ) : (
                         <Navigate to="/" replace state={{ accessBlock: 'mei-required' as const }} />

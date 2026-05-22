@@ -8,6 +8,7 @@ import BottomNavigation from '../components/BottomNavigation';
 import UpdatesPanel from '../components/UpdatesPanel';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
+import { canAccessMeiArea } from '../lib/meiAccess';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { displayName, mei, role, isImpersonating, stopImpersonating } = useAuthStore();
@@ -15,9 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [quickLinksOpen, setQuickLinksOpen] = useState(false);
-  const canAccessMeiArea = role === 'superadmin'
-    || role === 'admin'
-    || (role === 'usuario' && mei !== false);
+  const showMeiNav = canAccessMeiArea(role, mei);
 
   const handleStopImpersonating = async () => {
     try {
@@ -79,9 +78,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Link to="/agenda" className="planner-button-secondary-compact">
               Agenda
             </Link>
-            {canAccessMeiArea ? (
+            {showMeiNav ? (
               <Link to="/guias-mei" className="planner-button-secondary-compact">
-                Mei Infinito
+                Meu MEI
               </Link>
             ) : null}
           </div>

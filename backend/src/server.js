@@ -93,7 +93,17 @@ app.get('/health', (_req, res) => {
 });
 
 app.get('/', (_req, res) => {
-  res.json({ status: 'ok', service: 'backend' });
+  res.json({
+    status: 'ok',
+    service: 'backend',
+    apiVersion: 2,
+    routes: {
+      meiGuide: '/api/mei-guide',
+      meiGuideValidate: 'POST /api/mei-guide/validate',
+      meiGuideRegenerate: 'POST /api/mei-guide/:periodo/regenerate',
+      openclaw: '/api/bot/openclaw/action',
+    },
+  });
 });
 
 app.use('/api', routes);

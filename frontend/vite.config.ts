@@ -7,11 +7,12 @@ import { fileURLToPath } from 'url';
 const __viteDirname = dirname(fileURLToPath(import.meta.url));
 
 // Rotas críticas que precisam de arquivos HTML físicos
+// privacidade/termos: HTML estático em public/*.html — não sobrescrever com cópia do index (SPA)
 const criticalRoutes = [
   'reset-password',
   'forgot-password',
   'login',
-  'register'
+  'register',
 ];
 const isVitest = process.env.VITEST === 'true';
 
@@ -25,6 +26,17 @@ export default defineConfig({
     : undefined,
   plugins: [
     react(),
+    {
+      name: 'legal-static-routes-dev',
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          const url = req.url?.split('?')[0] ?? '';
+          if (url === '/privacidade' || url === '/privacidade/') req.url = '/privacidade.html';
+          if (url === '/termos' || url === '/termos/') req.url = '/termos.html';
+          next();
+        });
+      },
+    },
     {
       name: 'copy-redirects',
       closeBundle() {

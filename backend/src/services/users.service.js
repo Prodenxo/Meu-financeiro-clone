@@ -132,6 +132,27 @@ const normalizeLimitInput = (value, fieldName) => {
   return numeric;
 };
 
+/** max_mei: 0 = módulo MEI desligado; inteiro >= 1 = quantidade de vagas. */
+const normalizeMaxMeiInput = (value, fieldName = 'max_mei') => {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return 0;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || !Number.isInteger(numeric)) {
+    throw badRequest(`${fieldName} deve ser um inteiro valido`);
+  }
+  if (numeric < 0) {
+    throw badRequest(`${fieldName} deve ser maior ou igual a 0`);
+  }
+  return numeric;
+};
+
+const normalizeMaxMeiStored = (value) => {
+  if (value === undefined || value === null) return 0;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return 0;
+  return Math.trunc(numeric);
+};
+
 // max_usuarios_nao_mei nunca teve "0" como estado intencional — o frontend sempre
 // exibiu 0 como ILIMITADO, mas o backend tratava como limite zero e bloqueava tudo.
 // Aqui sanitizamos 0 → null para garantir a única semântica suportada: null = ilimitado.
@@ -166,7 +187,7 @@ const buildEmpresaPayload = (input = {}, { requireName = false } = {}) => {
   }
 
   if (Object.prototype.hasOwnProperty.call(input, 'max_mei')) {
-    payload.max_mei = normalizeLimitInput(input.max_mei, 'max_mei');
+    payload.max_mei = normalizeMaxMeiInput(input.max_mei, 'max_mei');
   }
   if (Object.prototype.hasOwnProperty.call(input, 'max_usuarios_nao_mei')) {
     payload.max_usuarios_nao_mei = normalizeNaoMeiLimitInput(
@@ -215,7 +236,7 @@ const getEmpresaLimits = async (adminClient, empresaId) => {
   if (!data?.id) throw badRequest('Empresa nao encontrada');
 
   return {
-    maxMei: normalizeLimitValue(data.max_mei),
+    maxMei: normalizeMaxMeiStored(data.max_mei),
     maxNaoMei: normalizeLimitValue(data.max_usuarios_nao_mei)
   };
 };
@@ -244,7 +265,7 @@ const countActiveUsersByMei = async (adminClient, { empresaId, mei, ignoreUserId
 
 /**
  * Sincroniza o módulo MEI para empresas que já possuem vínculos MEI ativos,
- * mas ainda estão com `max_mei` em 0 (desligado). Ignora `max_mei` NULL (ilimitado).
+ * mas ainda estão com `max_mei` em 0 (desligado).
  */
 const syncEmpresasMeiActivation = async (adminClient, scopedEmpresaIds = []) => {
   let meiLinksQuery = adminClient
@@ -281,9 +302,7 @@ const syncEmpresasMeiActivation = async (adminClient, scopedEmpresaIds = []) => 
   const fixedMaxMeiByEmpresa = new Map();
   const updates = (empresasData || [])
     .filter((empresa) => {
-      // max_mei NULL = ilimitado (API); não tratar como «desligado» nem auto-subir limite.
-      if (empresa.max_mei === null) return false;
-      const current = normalizeLimitValue(empresa.max_mei) || 0;
+      const current = normalizeMaxMeiStored(empresa.max_mei);
       return current <= 0 && (meiCountByEmpresa.get(empresa.id) || 0) > 0;
     })
     .map(async (empresa) => {
@@ -328,10 +347,8 @@ const mergeStripeContractedMeiIntoEmpresaLimits = async (adminClient, empresas) 
 
   const updatePromises = [];
   const merged = list.map((e) => {
-    // Ilimitado explícito (NULL): não sobrescrever com soma Stripe na listagem.
-    if (e.max_mei === null) return e;
     const stripeSum = sumByEmpresa.get(e.id) || 0;
-    const dbMax = normalizeLimitValue(e.max_mei) ?? 0;
+    const dbMax = normalizeMaxMeiStored(e.max_mei);
     const nextMax = Math.max(dbMax, stripeSum);
     if (stripeSum > 0 && nextMax !== dbMax) {
       updatePromises.push(
@@ -355,7 +372,11 @@ export const ensureEmpresaCapacity = async (adminClient, { empresaId, mei, ignor
   const { maxMei, maxNaoMei } = await getEmpresaLimits(adminClient, empresaId);
   const limit = mei ? maxMei : maxNaoMei;
 
-  if (isUnlimitedLimit(limit)) return;
+  if (mei && limit <= 0) {
+    throw badRequest('Modulo MEI desativado para esta empresa');
+  }
+
+  if (!mei && isUnlimitedLimit(limit)) return;
   // Para max_usuarios_nao_mei, 0 legado é tratado como ilimitado (migration 20260514120000
   // limpou registros existentes; este guard cobre qualquer 0 residual). max_mei mantém
   // 0 = módulo desligado, então o caminho continua válido para esse caso.

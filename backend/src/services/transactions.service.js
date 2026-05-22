@@ -6,6 +6,31 @@ const normalizeTipo = (tipo) => {
   return tipo === 'saída' ? 'saida' : tipo;
 };
 
+/** Entrada realizada → recebido; saída realizada → pago (alinha app + saldo geral). */
+export const normalizeTransactionStatus = (tipo, status) => {
+  const tipoNorm = normalizeTipo(tipo);
+  const raw = String(status || '').trim().toLowerCase();
+  if (tipoNorm === 'entrada') {
+    if (raw === 'a_receber' || raw === 'pendente') return raw;
+    if (!raw || raw === 'pago' || raw === 'recebido') return 'recebido';
+    return raw;
+  }
+  if (raw === 'a_pagar' || raw === 'pendente') return raw;
+  if (!raw || raw === 'recebido') return 'pago';
+  return raw || 'pago';
+};
+
+const resolveDefaultContaId = async (dbClient, userId, explicitContaId) => {
+  if (explicitContaId) return explicitContaId;
+  const { data, error } = await dbClient
+    .from('contas_financeiras')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('ativo', true);
+  if (error || !Array.isArray(data) || data.length !== 1) return null;
+  return data[0]?.id ?? null;
+};
+
 const shouldRetryTipo = (errorMessage, tipoValue) => {
   if (tipoValue !== 'saída') return false;
   const msg = (errorMessage || '').toLowerCase();
@@ -27,27 +52,31 @@ export const listTransactions = async (userId) => {
 };
 
 export const createTransaction = async (userId, payload) => {
-  const { tipo, valor, classificacao, data, status, obs } = payload || {};
+  const { tipo, valor, classificacao, data, status, obs, conta_id: contaIdRaw } = payload || {};
   const tipoNormalizado = normalizeTipo(tipo);
 
-  if (!tipoNormalizado || !valor || !classificacao || !data || !status) {
-    throw badRequest('Campos obrigatórios: tipo, valor, classificacao, data, status');
+  if (!tipoNormalizado || !valor || !classificacao || !data) {
+    throw badRequest('Campos obrigatórios: tipo, valor, classificacao, data');
   }
 
+  const statusNormalizado = normalizeTransactionStatus(tipoNormalizado, status || 'recebido');
   const dbClient = createSupabaseClient({ useServiceRole: true });
+  const contaId = await resolveDefaultContaId(dbClient, userId, contaIdRaw || null);
 
   const tryInsert = async (tipoToUse) => {
+    const row = {
+      tipo: tipoToUse,
+      valor,
+      classificacao,
+      data,
+      status: statusNormalizado,
+      obs: obs || null,
+      user_id: userId,
+    };
+    if (contaId) row.conta_id = contaId;
     return await dbClient
       .from('lancamentos_id')
-      .insert([{
-        tipo: tipoToUse,
-        valor,
-        classificacao,
-        data,
-        status,
-        obs: obs || null,
-        user_id: userId
-      }])
+      .insert([row])
       .select()
       .single();
   };

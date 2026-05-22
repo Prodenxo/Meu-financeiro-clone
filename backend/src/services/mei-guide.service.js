@@ -28,6 +28,25 @@ import {
   markCompetenciaAsPaid,
   periodoApuracaoToCompetencia
 } from './mei-period-status.service.js';
+import {
+  deleteDasBase64,
+  getDasBase64,
+  upsertDasBase64,
+} from './mei-guide-das-base64.service.js';
+import {
+  deleteStoredDasPdf,
+  downloadStoredDasPdfBuffer,
+} from './mei-guide-storage.service.js';
+import { clearCompetenciaPaidStatus } from './mei-period-status.service.js';
+import {
+  assertSerproDasPeriodoDisponivel,
+  competenciaLabelFromPeriod,
+  isPeriodoIndisponivelSerproError,
+  isPeriodoIndisponivelSerproMessage,
+  periodoIndisponivelError
+} from './mei-guide-serpro-period-guard.js';
+
+const MEI_DAS_PAID_NO_PDF_CODE = 'MEI_DAS_PAID_NO_PDF';
 import * as parcelamentoPdfService from './mei-guide-parcelamento-pdf.service.js';
 
 const require = createRequire(import.meta.url);
@@ -275,7 +294,10 @@ const normalizePeriodoApuracao = (periodo, mes, ano) => {
   return null;
 };
 
-const PAID_PERIOD_BUSINESS_MESSAGE = 'Período já consta como pago. Não é necessário emitir nova guia.';
+const PAID_PERIOD_BUSINESS_MESSAGE =
+  'Este mês já está pago na Receita e ela não devolveu um novo PDF aqui. Abra o PGMEI (gov.br) → competência 02/2026 → comprovante/DAS, ou peça suporte para reimportar o arquivo.';
+const paidPeriodNoPdfError = () =>
+  badRequest(PAID_PERIOD_BUSINESS_MESSAGE, { code: MEI_DAS_PAID_NO_PDF_CODE });
 const HISTORICO_DAS_ERROR_FALLBACK = 'Falha técnica ao consultar período no Serpro.';
 const SERPRO_PAID_ERROR_PATTERNS = [
   /j[aá]\s*est[aá]\s*pago/i,
@@ -305,6 +327,7 @@ const isPeriodoSemPdfError = (error) => {
 };
 
 const shouldMarkCompetenciaAsPaid = (error) => {
+  if (isPeriodoIndisponivelSerproError(error)) return false;
   return isPeriodoPagoSerproError(error) || isPeriodoSemPdfError(error);
 };
 
@@ -389,6 +412,36 @@ const clearUserCaches = (userId) => {
 };
 
 const hasUserCertificate = (userId) => Boolean(getUserCert(userId));
+
+/** Certificado na sessão ou persistido no Supabase (carrega PFX se necessário). */
+export const userHasMeiCertificate = async (userId) => {
+  if (!userId) return false;
+  await ensureUserCertLoaded(userId);
+  if (hasUserCertificate(userId)) return true;
+  try {
+    const doc = await getCertificateDocument(userId);
+    return Boolean(doc && validateDoc(normalizeDoc(doc)));
+  } catch {
+    return false;
+  }
+};
+
+const resolveMeiCnpjForUser = async (userId, cnpj) => {
+  const fromPayload = normalizeDoc(cnpj || '');
+  if (validateDoc(fromPayload)) return fromPayload;
+  if (!userId) return '';
+  await ensureUserCertLoaded(userId);
+  const fromCache = normalizeDoc(getUserCertDocument(userId) || '');
+  if (validateDoc(fromCache)) return fromCache;
+  try {
+    const doc = await getCertificateDocument(userId);
+    const fromDb = normalizeDoc(doc || '');
+    if (validateDoc(fromDb)) return fromDb;
+  } catch {
+    /* ignora */
+  }
+  return '';
+};
 
 /** Carrega certificado do banco para o cache quando não está em memória. */
 const ensureUserCertLoaded = async (userId) => {
@@ -1283,6 +1336,158 @@ export const getSerproTokenForFrontend = async () => {
   };
 };
 
+const looksLikePdfBase64 = (value) => {
+  const text = String(value || '').trim();
+  if (text.length < 80) return null;
+  if (!/^%PDF/i.test(text) && !/^[A-Za-z0-9+/=\r\n]+$/.test(text.slice(0, 120))) return null;
+  return text;
+};
+
+const findPdfBase64Deep = (value, depth = 0) => {
+  if (!value || depth > 8) return null;
+  if (typeof value === 'string') return looksLikePdfBase64(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findPdfBase64Deep(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof value !== 'object') return null;
+  for (const key of ['pdf', 'PDF', 'pdfBase64', 'arquivo', 'guia', 'das', 'documento']) {
+    const found = looksLikePdfBase64(value[key]);
+    if (found) return found;
+  }
+  for (const nested of Object.values(value)) {
+    const found = findPdfBase64Deep(nested, depth + 1);
+    if (found) return found;
+  }
+  return null;
+};
+
+const extractDasPdfBase64FromSerproResponse = (response) => {
+  const dados = parseSerproDados(response?.dados);
+  return (
+    findPdfBase64Deep(dados)
+    || findPdfBase64Deep(response?.raw)
+    || findPdfBase64Deep(response)
+    || null
+  );
+};
+
+/** PDF já guardado (DAS_mei ou bucket) — não chama a Receita. */
+const tryLoadLocalDasPdfBase64 = async (userId, period) => {
+  if (!userId || !period) return null;
+  const competencia = periodoApuracaoToCompetencia(period);
+  try {
+    const stored = await getDasBase64({ userId, periodoApuracao: period });
+    if (stored && String(stored).trim()) return String(stored).trim();
+  } catch {
+    /* ignora */
+  }
+  const buffer = await downloadStoredDasPdfBuffer({
+    userId,
+    competencia,
+    periodoApuracao: period
+  });
+  if (buffer?.length) return buffer.toString('base64');
+  return null;
+};
+
+/** Emitir na SERPRO; se vier sem PDF, tenta Consultar (segunda via / período quitado). */
+const fetchDasPdfFromSerpro = async ({
+  contratanteNumero,
+  autorPedidoNumero,
+  contribuinteNumero,
+  periodoApuracao
+}) => {
+  const period = normalizePeriodoApuracao(periodoApuracao);
+  if (!period) {
+    throw badRequest('Período de apuração inválido');
+  }
+  const competenciaLabel = competenciaLabelFromPeriod(period);
+  const serproParams = {
+    contratanteNumero,
+    autorPedidoNumero,
+    contribuinteNumero,
+    idSistema: 'PGMEI',
+    idServico: 'GERARDASPDF21',
+    dados: { periodoApuracao: period },
+    versaoSistema: '1.0'
+  };
+
+  let lastError = null;
+  try {
+    const emitResponse = await emitirServico(serproParams);
+    assertSerproDasPeriodoDisponivel(emitResponse, competenciaLabel);
+    const pdfBase64 = extractDasPdfBase64FromSerproResponse(emitResponse);
+    if (pdfBase64) {
+      return { pdfBase64, period, status: emitResponse?.status || 'gerado' };
+    }
+    const serproHint = assertSerproDasPeriodoDisponivel(emitResponse, competenciaLabel);
+    lastError = new Error(serproHint || 'PDF do DAS não retornado');
+  } catch (error) {
+    if (isPeriodoIndisponivelSerproError(error)) throw error;
+    lastError = error;
+  }
+
+  try {
+    const consultResponse = await consultarServico({
+      contratanteNumero,
+      autorPedidoNumero,
+      contribuinteNumero,
+      idSistema: serproParams.idSistema,
+      idServico: serproParams.idServico,
+      dados: serproParams.dados
+    });
+    assertSerproDasPeriodoDisponivel(consultResponse, competenciaLabel);
+    const pdfBase64 = extractDasPdfBase64FromSerproResponse(consultResponse);
+    if (pdfBase64) {
+      return { pdfBase64, period, status: consultResponse?.status || 'consultado' };
+    }
+  } catch (error) {
+    if (isPeriodoIndisponivelSerproError(error)) throw error;
+    if (lastError) {
+      if (shouldMarkCompetenciaAsPaid(lastError)) {
+        throw paidPeriodNoPdfError();
+      }
+      throw lastError;
+    }
+    if (shouldMarkCompetenciaAsPaid(error)) {
+      throw paidPeriodNoPdfError();
+    }
+    throw error;
+  }
+
+  if (lastError) {
+    if (isPeriodoIndisponivelSerproMessage(String(lastError?.message || ''))) {
+      throw periodoIndisponivelError(lastError.message, competenciaLabel);
+    }
+    if (shouldMarkCompetenciaAsPaid(lastError)) {
+      throw paidPeriodNoPdfError();
+    }
+    throw badRequest(
+      lastError?.message || 'A Receita Federal não devolveu o PDF do DAS para este período.'
+    );
+  }
+  throw badRequest('A Receita Federal não devolveu o PDF do DAS para este período.');
+};
+
+const tryStoredDasPdfFile = async ({ userId, competencia, periodoApuracao, period }) => {
+  const buffer = await downloadStoredDasPdfBuffer({
+    userId,
+    competencia,
+    periodoApuracao: period || periodoApuracao
+  });
+  if (!buffer?.length) return null;
+  const label = competencia ? competencia.replace('-', '/') : period;
+  return {
+    buffer,
+    contentType: 'application/pdf',
+    filename: label ? `DAS-${String(label).replace('/', '-')}.pdf` : `das-mei-${period}.pdf`
+  };
+};
+
 /** Gera DAS MEI pelo CNPJ (fluxo contador/procurador), sem certificado do cliente. */
 export const createGuideByCnpj = async (userId, payload) => {
   ensureConfigured();
@@ -1298,31 +1503,33 @@ export const createGuideByCnpj = async (userId, payload) => {
   if (!contratanteNumero) {
     throw badRequest('Contratante Serpro não configurado');
   }
+
   const period = normalizePeriodoApuracao(periodoApuracao, mes, ano);
   if (!period) {
     throw badRequest('Período de apuração inválido');
   }
 
-  const response = await emitirServico({
+  const localPdf = userId ? await tryLoadLocalDasPdfBase64(userId, period) : null;
+  if (localPdf) {
+    return {
+      id: period,
+      status: 'armazenado',
+      pdfBase64: localPdf,
+      filename: `das-mei-${period}.pdf`,
+      contentType: 'application/pdf'
+    };
+  }
+
+  const { pdfBase64, status } = await fetchDasPdfFromSerpro({
     contratanteNumero,
     autorPedidoNumero: contratanteNumero,
     contribuinteNumero: cnpjNumerico,
-    idSistema: 'PGMEI',
-    idServico: 'GERARDASPDF21',
-    dados: { periodoApuracao: period },
-    versaoSistema: '1.0'
+    periodoApuracao: period
   });
-  const dados = parseSerproDados(response?.dados);
-  const das = Array.isArray(dados) ? dados[0] : dados;
-  const pdfBase64 = das?.pdf;
-
-  if (!pdfBase64) {
-    throw notFound('PDF do DAS não retornado');
-  }
 
   return {
     id: period,
-    status: response?.status || 'gerado',
+    status,
     pdfBase64,
     filename: `das-mei-${period}.pdf`,
     contentType: 'application/pdf'
@@ -1347,31 +1554,97 @@ export const createGuide = async (userId, payload) => {
     throw badRequest('Período de apuração inválido');
   }
 
+  const localPdf = await tryLoadLocalDasPdfBase64(userId, period);
+  if (localPdf) {
+    return {
+      id: period,
+      status: 'armazenado',
+      pdfBase64: localPdf,
+      filename: `das-mei-${period}.pdf`,
+      contentType: 'application/pdf'
+    };
+  }
+
   const cnpjNumerico = normalizeDoc(contrib.numero);
   const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || cnpjNumerico);
-  const response = await emitirServico({
+  const { pdfBase64, status } = await fetchDasPdfFromSerpro({
     contratanteNumero,
     autorPedidoNumero: autorNumero,
     contribuinteNumero: cnpjNumerico,
-    idSistema: 'PGMEI',
-    idServico: 'GERARDASPDF21',
-    dados: { periodoApuracao: period },
-    versaoSistema: '1.0'
+    periodoApuracao: period
   });
-  const dados = parseSerproDados(response?.dados);
-  const das = Array.isArray(dados) ? dados[0] : dados;
-  const pdfBase64 = das?.pdf;
-
-  if (!pdfBase64) {
-    throw notFound('PDF do DAS não retornado');
-  }
 
   return {
     id: period,
-    status: response?.status || 'gerado',
+    status,
     pdfBase64,
     filename: `das-mei-${period}.pdf`,
     contentType: 'application/pdf'
+  };
+};
+
+/** Apaga PDF/status local e busca de novo na Receita (após DAS errado removido do Supabase). */
+export const regenerateDasPdf = async (userId, payload) => {
+  const { cnpj, periodoApuracao, mes, ano, contribuinte } = payload || {};
+  const period = normalizePeriodoApuracao(periodoApuracao, mes, ano);
+  if (!period) {
+    throw badRequest('Período de apuração inválido');
+  }
+  const competencia = periodoApuracaoToCompetencia(period);
+  try {
+    await deleteDasBase64({ userId, periodoApuracao: period });
+  } catch {
+    /* linha pode não existir */
+  }
+  try {
+    await deleteStoredDasPdf({ userId, competencia, periodoApuracao: period });
+  } catch {
+    /* ignora */
+  }
+  if (competencia) {
+    try {
+      await clearCompetenciaPaidStatus({ userId, competencia });
+    } catch {
+      /* ignora */
+    }
+  }
+  if (userId && (await userHasMeiCertificate(userId))) {
+    return await createGuide(userId, { cnpj, periodoApuracao: period, contribuinte });
+  }
+  return await createGuideByCnpj(userId, { cnpj, periodoApuracao: period });
+};
+
+/** Obtém PDF (cache → bucket → SERPRO). Usado pelo WhatsApp/OpenClaw e download. */
+export const fetchDasPdfBase64ForUser = async (userId, payload = {}) => {
+  const { periodoApuracao, cnpj, contribuinte } = payload || {};
+  const period = normalizePeriodoApuracao(periodoApuracao);
+  if (!period) {
+    throw badRequest('Período de apuração inválido');
+  }
+  const competencia = periodoApuracaoToCompetencia(period);
+  const label = competencia ? competencia.replace('-', '/') : period;
+  const fileName = `DAS-${String(label).replace('/', '-')}.pdf`;
+
+  const cached = userId ? await tryLoadLocalDasPdfBase64(userId, period) : null;
+  if (cached) {
+    return { pdfBase64: cached, fileName, source: 'cache' };
+  }
+
+  const cnpjResolved = await resolveMeiCnpjForUser(userId, cnpj);
+  const file = await downloadGuide({
+    userId,
+    periodoApuracao: period,
+    cnpj: cnpjResolved || cnpj,
+    contribuinte
+  });
+  const pdfBase64 = file.buffer.toString('base64');
+  if (userId) {
+    await upsertDasBase64({ userId, periodoApuracao: period, pdfBase64 });
+  }
+  return {
+    pdfBase64,
+    fileName: file.filename || fileName,
+    source: 'serpro'
   };
 };
 
@@ -1383,17 +1656,32 @@ export const downloadGuide = async (payload, dependencies = {}) => {
     isCompetenciaPaidFn = isCompetenciaPaid,
     markCompetenciaAsPaidFn = markCompetenciaAsPaid,
     createGuideFn = createGuide,
-    createGuideByCnpjFn = createGuideByCnpj
+    createGuideByCnpjFn = createGuideByCnpj,
+    getDasBase64Fn = getDasBase64
   } = dependencies;
+  const period = normalizePeriodoApuracao(periodoApuracao);
   const competencia = periodoApuracaoToCompetencia(periodoApuracao);
 
   const cnpjFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
-  const hasCert = userId ? hasUserCertificate(userId) : false;
+  const hasCert = userId ? await userHasMeiCertificate(userId) : false;
 
-  if (userId && competencia) {
+  if (userId && competencia && period) {
+    const storedBase64 = await getDasBase64Fn({ userId, periodoApuracao: period });
+    if (storedBase64 && String(storedBase64).trim()) {
+      const label = competencia.replace('-', '/');
+      return {
+        buffer: Buffer.from(storedBase64, 'base64'),
+        contentType: 'application/pdf',
+        filename: `DAS-${label.replace('/', '-')}.pdf`
+      };
+    }
+    const fromStorage = await tryStoredDasPdfFile({ userId, competencia, periodoApuracao, period });
+    if (fromStorage) return fromStorage;
+    /* Sem PDF local — tenta SERPRO abaixo (pago ou não) */
+  } else if (userId && competencia) {
     const paidInCache = await isCompetenciaPaidFn({ userId, competencia });
-    if (paidInCache) {
-      throw badRequest(PAID_PERIOD_BUSINESS_MESSAGE);
+    if (paidInCache && !period) {
+      throw paidPeriodNoPdfError();
     }
   }
 
@@ -1418,7 +1706,7 @@ export const downloadGuide = async (payload, dependencies = {}) => {
         source: 'download_serpro',
         markCompetenciaAsPaidFn
       });
-      throw badRequest(PAID_PERIOD_BUSINESS_MESSAGE);
+      throw paidPeriodNoPdfError();
     }
     return await ensureDownloadBuffer(guide, userId, {
       autorPedidoDados: contrib,
@@ -1443,12 +1731,25 @@ export const downloadGuide = async (payload, dependencies = {}) => {
         source: 'download_serpro',
         markCompetenciaAsPaidFn
       });
-      throw badRequest(PAID_PERIOD_BUSINESS_MESSAGE);
+      throw paidPeriodNoPdfError();
     }
     return await ensureDownloadBuffer(guide, userId, null);
   }
 
-  throw badRequest('Envie o certificado do cliente ou informe o CNPJ do MEI para baixar a guia');
+  if (userId) {
+    const hasPersisted = await userHasMeiCertificate(userId);
+    if (hasPersisted) {
+      throw badRequest(
+        'Não foi possível usar o certificado MEI desta conta. Reabra a app e reenvie o certificado A1 (Certificado e DAS).',
+        { code: 'MEI_CERT_LOAD_FAILED' }
+      );
+    }
+    throw badRequest(
+      'Certificado MEI não cadastrado na conta. Cadastre o certificado A1 na app Meu Financeiro (aba Certificado e DAS).',
+      { code: 'MEI_CERT_MISSING' }
+    );
+  }
+  throw badRequest('Informe o CNPJ do MEI para baixar a guia');
 };
 
 const buildRecentCompetencias = (count = 12, includeCurrent = false) => {
@@ -1512,6 +1813,15 @@ const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
         guideId: period
       });
     } catch (error) {
+      if (isPeriodoIndisponivelSerproError(error)) {
+        items.push({
+          competencia,
+          status: 'indisponivel',
+          guideId: period,
+          errorMessage: String(error?.message || 'Período indisponível para DAS MEI').slice(0, 220)
+        });
+        continue;
+      }
       if (!shouldMarkCompetenciaAsPaid(error)) {
         items.push({
           competencia,
@@ -1831,6 +2141,57 @@ export const getOrDownloadParcelamentoPdf = async (userId, payload) => {
   throw notFound('PDF não disponível para este parcelamento');
 };
 
+/** Bloqueia envio/consulta de DAS quando a Receita indica período indisponível (ex.: não optante). */
+export const assertDasPeriodoPermitidoParaEnvio = async (userId, payload) => {
+  ensureConfigured();
+  const { cnpj, periodoApuracao, contribuinte } = payload || {};
+  const period = normalizePeriodoApuracao(periodoApuracao);
+  if (!period) {
+    throw badRequest('Período de apuração inválido');
+  }
+  const competenciaLabel = competenciaLabelFromPeriod(period);
+
+  let contratanteNumero;
+  let autorPedidoNumero;
+  let contribuinteNumero;
+
+  if (userId && hasUserCertificate(userId)) {
+    await ensureClientCertificate(userId);
+    const contrib = resolveContribuinte(userId, contribuinte, cnpj);
+    contribuinteNumero = normalizeDoc(contrib.numero);
+    autorPedidoNumero = contribuinteNumero;
+    contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || contribuinteNumero);
+  } else {
+    contribuinteNumero = normalizeDoc(cnpj);
+    if (!validateDoc(contribuinteNumero)) {
+      throw badRequest('CNPJ do MEI inválido');
+    }
+    contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO);
+    if (!contratanteNumero) {
+      throw badRequest('Contratante Serpro não configurado');
+    }
+    autorPedidoNumero = contratanteNumero;
+  }
+
+  try {
+    const emitResponse = await emitirServico({
+      contratanteNumero,
+      autorPedidoNumero,
+      contribuinteNumero,
+      idSistema: 'PGMEI',
+      idServico: 'GERARDASPDF21',
+      dados: { periodoApuracao: period },
+      versaoSistema: '1.0'
+    });
+    assertSerproDasPeriodoDisponivel(emitResponse, competenciaLabel);
+  } catch (error) {
+    if (isPeriodoIndisponivelSerproError(error)) {
+      throw error;
+    }
+    /* Falha técnica na sonda: não bloqueia leitura de PDF já armazenado em outro fluxo */
+  }
+};
+
 export const validateGuide = async (userId, payload) => {
   ensureConfigured();
   const { cnpj, periodoApuracao, mes, ano } = payload || {};
@@ -1846,23 +2207,26 @@ export const validateGuide = async (userId, payload) => {
   const hasCert = userId ? hasUserCertificate(userId) : false;
   if (hasCert) {
     await ensureClientCertificate(userId);
-    await createGuide(userId, {
-      cnpj: cnpjNumerico,
-      periodoApuracao: period
-    });
+    const certDoc = getUserCertDocument(userId);
+    if (certDoc && normalizeDoc(certDoc) !== cnpjNumerico) {
+      return {
+        valid: true,
+        message:
+          'CNPJ informado difere do certificado. Use o CNPJ do certificado ou regenere com Criar Guia.'
+      };
+    }
     return {
       valid: true,
-      message: 'CNPJ e certificado validados com sucesso.'
+      message: 'CNPJ e certificado OK. Use Criar Guia ou Baixar para obter o PDF deste mês.'
     };
   }
 
-  await createGuideByCnpj(userId, {
-    cnpj: cnpjNumerico,
-    periodoApuracao: period
-  });
+  if (!normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO)) {
+    throw badRequest('Procurador Serpro não configurado para validar sem certificado.');
+  }
 
   return {
     valid: true,
-    message: 'CNPJ validado com sucesso.'
+    message: 'CNPJ válido. Envie o certificado ou use Criar Guia (procurador Serpro).'
   };
 };

@@ -5,6 +5,8 @@ import {
   buildPhoneLookupCandidates,
   parseMesCompetenciaMmYyyy,
   mesCompetenciaAtualUtc,
+  resolveOpenclawWhatsappPhone,
+  assertActorCanAccessDasForUser,
 } from '../src/services/openclaw-bot.service.js';
 
 test('normalizeWhatsappPhoneDigits remove não dígitos e sufixo @', () => {
@@ -43,4 +45,37 @@ test('mesCompetenciaAtualUtc devolve display e periodoDigits coerentes', () => {
   assert.match(r.periodoDigits, /^\d{6}$/);
   const parsed = parseMesCompetenciaMmYyyy(r.display);
   assert.deepEqual(parsed?.periodoDigits, r.periodoDigits);
+});
+
+test('resolveOpenclawWhatsappPhone normaliza DDI 55', () => {
+  assert.equal(resolveOpenclawWhatsappPhone('21996185328', '5521996185328'), '5521996185328');
+  assert.equal(resolveOpenclawWhatsappPhone('5521996185328', null), '5521996185328');
+  assert.equal(resolveOpenclawWhatsappPhone('', ''), '');
+});
+
+test('assertActorCanAccessDasForUser bloqueia utilizador comum a ver DAS alheio', async () => {
+  await assert.rejects(
+    () =>
+      assertActorCanAccessDasForUser({
+        actorUserId: 'user-a',
+        actorContext: {
+          memberships: [{ role: 'usuario', empresaId: 'emp-1', empresaNome: 'A' }],
+          hasActiveMembership: true,
+          profileRole: 'usuario',
+          hasSuperadminCapability: false,
+        },
+        targetUserId: 'user-b',
+      }),
+    /Só podes consultar/,
+  );
+});
+
+test('assertActorCanAccessDasForUser permite mesma conta', async () => {
+  await assert.doesNotReject(() =>
+    assertActorCanAccessDasForUser({
+      actorUserId: 'user-a',
+      actorContext: { memberships: [], hasSuperadminCapability: false },
+      targetUserId: 'user-a',
+    }),
+  );
 });

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 export default function LoginOnly() {
@@ -100,7 +100,14 @@ export default function LoginOnly() {
           </form>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-8 text-center">
             Ao clicar em Entrar, você concorda com nossa{' '}
-            <span className="underline cursor-pointer">Política de Privacidade</span>.
+            <Link to="/privacidade" className="underline text-blue-600 hover:text-blue-700 dark:text-blue-400">
+              Política de Privacidade
+            </Link>{' '}
+            e os{' '}
+            <Link to="/termos" className="underline text-blue-600 hover:text-blue-700 dark:text-blue-400">
+              Termos de Uso
+            </Link>
+            .
           </p>
         </div>
       </div>

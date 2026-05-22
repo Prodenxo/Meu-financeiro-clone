@@ -1,9 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { Home, List, Grid3x3, Settings, Wallet, LayoutDashboard } from 'lucide-react';
+import { Home, List, Grid3x3, Settings, Wallet, LayoutDashboard, FileText } from 'lucide-react';
 import { useThemeStore } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
+import { canAccessMeiArea } from '../lib/meiAccess';
 
 type BottomNavItem = {
   path: string;
@@ -16,14 +17,19 @@ type BottomNavItem = {
 export default function BottomNavigation() {
   const location = useLocation();
   const { isDarkMode } = useThemeStore();
-  const { role } = useAuthStore();
+  const { role, mei } = useAuthStore();
   const showAdminPanel = hasRole(role, ['admin']);
+  const showMeiTab = canAccessMeiArea(role, mei);
+
+  const fourthTab: BottomNavItem = showMeiTab
+    ? { path: '/guias-mei', label: 'Meu MEI', icon: FileText, ariaLabel: 'Meu MEI — notas e guias' }
+    : { path: '/categorias', label: 'Categorias', icon: Grid3x3 };
 
   const baseNavItems: BottomNavItem[] = [
     { path: '/', label: 'Início', icon: Home },
     { path: '/transacoes', label: 'Transações', icon: List },
     { path: '/orcamentos', label: 'Orçamentos', icon: Wallet },
-    { path: '/categorias', label: 'Categorias', icon: Grid3x3 },
+    fourthTab,
   ];
   const maisItem: BottomNavItem = {
     path: '/settings',
@@ -60,6 +66,9 @@ export default function BottomNavigation() {
         return false;
       }
       return location.pathname.startsWith('/settings');
+    }
+    if (path === '/guias-mei') {
+      return location.pathname === '/guias-mei';
     }
     return location.pathname.startsWith(path);
   };

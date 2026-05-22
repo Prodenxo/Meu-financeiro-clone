@@ -1685,24 +1685,6 @@ export default function Transactions() {
               Despesas
             </button>
             </div>
-            <div className="relative ml-auto shrink-0 md:hidden" ref={recMenuMobileRef}>
-              <button
-                type="button"
-                className="planner-button-secondary inline-flex items-center gap-1.5 px-3 py-2 text-sm"
-                aria-expanded={recMenu.open && recMenu.source === 'mobile'}
-                aria-haspopup="dialog"
-                onClick={() => toggleRecMenu('mobile')}
-              >
-                <Repeat size={16} />
-                Recorrências
-                <ChevronDown
-                  size={14}
-                  className={`transition-transform ${recMenu.open && recMenu.source === 'mobile' ? 'rotate-180' : ''}`}
-                  aria-hidden
-                />
-              </button>
-              {recMenu.open && recMenu.source === 'mobile' && renderRecorrenciasPanel('mobile')}
-            </div>
           </div>
         </div>
 
@@ -1715,24 +1697,6 @@ export default function Transactions() {
             <Download size={18} />
             Exportar Excel
           </button>
-          <div className="relative" ref={recMenuDesktopRef}>
-            <button
-              type="button"
-              className="planner-button-secondary flex items-center gap-2"
-              aria-expanded={recMenu.open && recMenu.source === 'desktop'}
-              aria-haspopup="dialog"
-              onClick={() => toggleRecMenu('desktop')}
-            >
-              <Repeat size={18} />
-              Recorrências
-              <ChevronDown
-                size={16}
-                className={`transition-transform ${recMenu.open && recMenu.source === 'desktop' ? 'rotate-180' : ''}`}
-                aria-hidden
-              />
-            </button>
-            {recMenu.open && recMenu.source === 'desktop' && renderRecorrenciasPanel('desktop')}
-          </div>
           <button
             className="planner-button"
             onClick={() => { setSaveValidationError(null); setSaveApiError(null); setModalOpen(true); }}
