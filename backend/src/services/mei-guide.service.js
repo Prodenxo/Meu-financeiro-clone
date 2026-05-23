@@ -1916,16 +1916,40 @@ const MODALIDADE_TO_IDSISTEMA = Object.fromEntries(
 const normalizeParcelamentoItem = (item, modalidade) => {
   if (!item || typeof item !== 'object') return null;
   const numero = item.numero ?? item.numeroParcelamento ?? item.numero_parcelamento;
-  const dataPedido = item.dataPedido ?? item.data_pedido ?? item.dataPedidoPedido;
-  const situacao = item.situacao ?? item.situacaoParcelamento;
-  const dataSituacao = item.dataSituacao ?? item.data_situacao ?? item.dataSituacaoParcelamento;
+  const dataPedido =
+    item.dataPedido ??
+    item.data_pedido ??
+    item.dataPedidoPedido ??
+    item.dataDoPedido ??
+    item.data_do_pedido;
+  const situacao = item.situacao ?? item.situacaoParcelamento ?? item.situacaoPedido;
+  const dataSituacao =
+    item.dataSituacao ??
+    item.data_situacao ??
+    item.dataSituacaoParcelamento ??
+    item.dataDaSituacao ??
+    item.data_da_situacao;
+  // Item sem numero não é um parcelamento válido
+  if (numero == null) return null;
   return {
-    numero: numero != null ? String(numero) : undefined,
+    numero: String(numero),
     dataPedido: dataPedido != null ? String(dataPedido) : undefined,
     situacao: situacao != null ? String(situacao) : undefined,
     dataSituacao: dataSituacao != null ? String(dataSituacao) : undefined,
     modalidade: modalidade || undefined
   };
+};
+
+/** Extrai a lista de pedidos de parcelamento independentemente do formato (array direto ou objeto com lista/parcelamentos/pedidos). */
+const extractParcelamentoList = (raw) => {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === 'object') {
+    if (Array.isArray(raw.lista)) return raw.lista;
+    if (Array.isArray(raw.parcelamentos)) return raw.parcelamentos;
+    if (Array.isArray(raw.pedidos)) return raw.pedidos;
+    if (Array.isArray(raw.pedidosParcelamento)) return raw.pedidosParcelamento;
+  }
+  return [];
 };
 
 /** Extrai o primeiro período AAAAMM da resposta de Consultar Parcelamento (detalhesConsolidacao ou demonstrativoPagamentos). */
@@ -2049,23 +2073,35 @@ export const listParcelamentos = async (userId, payload) => {
   );
 
   const parcelamentos = [];
+  const modalidadesStatus = [];
   for (let i = 0; i < results.length; i++) {
     const settled = results[i];
-    const { modalidade } = PARCELAMENTO_MODALIDADES[i];
+    const { modalidade, idSistema, idServico } = PARCELAMENTO_MODALIDADES[i];
     if (settled.status === 'rejected') {
-      if (env.NODE_ENV !== 'production') {
-        console.warn('[mei-guide] parcelamentos modalidade falhou:', modalidade, settled.reason?.message);
-      }
+      const errMsg = settled.reason?.message || 'erro desconhecido';
+      console.warn('[mei-guide] parcelamentos modalidade falhou:', modalidade, idSistema, idServico, errMsg);
+      modalidadesStatus.push({ modalidade, idSistema, idServico, status: 'error', erro: errMsg });
       continue;
     }
     const raw = settled.value?.dados;
-    const list = Array.isArray(raw)
-      ? raw
-      : (raw && Array.isArray(raw.lista) ? raw.lista : (raw && raw.parcelamentos ? raw.parcelamentos : []));
+    if (env.NODE_ENV !== 'production') {
+      console.info('[mei-guide] parcelamentos modalidade raw:', modalidade, JSON.stringify(raw)?.slice(0, 500));
+    }
+    const list = extractParcelamentoList(raw);
+    const before = parcelamentos.length;
     for (const item of list) {
       const normalized = normalizeParcelamentoItem(item, modalidade);
       if (normalized) parcelamentos.push(normalized);
     }
+    const added = parcelamentos.length - before;
+    modalidadesStatus.push({
+      modalidade,
+      idSistema,
+      idServico,
+      status: added > 0 ? 'ok' : (list.length === 0 ? 'empty' : 'no_match'),
+      itensBrutos: list.length,
+      itensNormalizados: added,
+    });
   }
 
   const resumoPorModalidade = {};
@@ -2093,7 +2129,8 @@ export const listParcelamentos = async (userId, payload) => {
   return {
     parcelamentos,
     modalidadesConsultadas: PARCELAMENTO_MODALIDADES.length,
-    resumoPorModalidade
+    resumoPorModalidade,
+    modalidadesStatus
   };
 };
 
