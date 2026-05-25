@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getServiceRoleClient } from '../config/supabase.js';
 import { badRequest, unauthorized } from '../utils/errors.js';
 import { normalizeEnvSecret } from '../config/env.js';
+import { buildAccessRequestReport } from '../services/access-request-report.service.js';
 
 const router = Router();
 
@@ -21,6 +22,12 @@ const normalizeText = (value) => {
   if (value == null) return null;
   const s = String(value).trim();
   return s || null;
+};
+
+const fetchActorEmail = async (sb, actorUserId) => {
+  if (!actorUserId) return null;
+  const { data } = await sb.auth.admin.getUserById(actorUserId);
+  return data?.user?.email ?? null;
 };
 
 const requireInternalSecret = (req, _res, next) => {
@@ -139,9 +146,25 @@ router.post('/manage', requireInternalSecret, async (req, res, next) => {
       return res.json({ requests });
     }
 
+    // REPORT: histórico derivado de empresas + auth metadata (sem tabela de auditoria)
+    if (action === 'report') {
+      const limit = Math.min(Math.max(Number(req.body?.limit) || 200, 1), 500);
+      const eventType = normalizeText(req.body?.eventType);
+
+      let { entries } = await buildAccessRequestReport(limit);
+      if (eventType && ['submitted', 'approved'].includes(eventType)) {
+        entries = entries.filter((e) => e.eventType === eventType);
+      }
+
+      return res.json({ entries });
+    }
+
     // APPROVE: ativa o vínculo e a empresa
     if (action === 'approve') {
       if (!userId) return next(badRequest('userId obrigatório para approve'));
+
+      const actorEmail = await fetchActorEmail(sb, actorUserId);
+      const approvedAt = new Date().toISOString();
 
       await sb
         .from('role_x_user_x_empresa')
@@ -154,6 +177,17 @@ router.post('/manage', requireInternalSecret, async (req, res, next) => {
         .update({ status: 'active' })
         .eq('requested_by', userId)
         .eq('status', 'pending');
+
+      const { data: authData } = await sb.auth.admin.getUserById(userId);
+      const prevMeta = authData?.user?.user_metadata ?? {};
+      await sb.auth.admin.updateUserById(userId, {
+        user_metadata: {
+          ...prevMeta,
+          access_approved_at: approvedAt,
+          access_approved_by: actorUserId,
+          access_approved_by_email: actorEmail,
+        },
+      });
 
       return res.json({ ok: true });
     }

@@ -56,6 +56,13 @@ router.get('/mei-guide/:userId/download/:periodoApuracao', requireAuth, requireA
 router.post('/mei-guide/:userId/send-whatsapp', requireAuth, requireAdmin, controller.sendAdminMeiWhatsapp);
 
 router.get(
+  '/access-requests/report',
+  requireAuth,
+  requireSuperAdmin,
+  controller.getAccessRequestsReport,
+);
+
+router.get(
   '/billing/stripe/subscription-lines',
   requireAuth,
   requireSuperAdmin,

@@ -9,6 +9,7 @@ import * as n8nWhatsappService from '../services/n8n-whatsapp.service.js';
 import { badRequest, forbidden } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
+import { buildAccessRequestReport } from '../services/access-request-report.service.js';
 
 let meiDasServiceRef = meiDasService;
 let meiGuideServiceRef = meiGuideService;
@@ -445,6 +446,20 @@ export const sendAdminMeiWhatsapp = async (req, res, next) => {
     };
     const webhook = await n8nWhatsappServiceRef.sendWhatsappMessage(payload);
     return sendSuccess(res, { sent: true, webhook }, 'Envio para WhatsApp solicitado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getAccessRequestsReport = async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query?.limit) || 200, 1), 500);
+    const eventType = String(req.query?.eventType || '').trim().toLowerCase();
+    let { entries } = await buildAccessRequestReport(limit);
+    if (eventType && ['submitted', 'approved'].includes(eventType)) {
+      entries = entries.filter((e) => e.eventType === eventType);
+    }
+    return sendSuccess(res, { entries });
   } catch (error) {
     return next(error);
   }
