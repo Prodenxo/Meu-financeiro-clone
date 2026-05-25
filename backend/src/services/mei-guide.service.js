@@ -1484,7 +1484,6 @@ export const removeCertificate = async (userId) => {
 export const getCertificateStatus = async (userId) => {
   await ensureUserCertLoaded(userId);
   const userCert = getUserCert(userId);
-  const hasCert = Boolean(userCert);
   const docFromCache = getUserCertDocument(userId);
   let docFromDb = null;
   let certValidFromDb = null;
@@ -1517,10 +1516,14 @@ export const getCertificateStatus = async (userId) => {
   } catch {
     documentosAtivos = null;
   }
+  const docResolved = docFromCache || docFromDb || null;
+  const hasCert =
+    Boolean(userCert) ||
+    (await userHasMeiCertificate(userId).catch(() => false));
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
-    documento: docFromCache || docFromDb || null,
+    documento: docResolved,
     certValidFrom: certValidFrom || null,
     certValidTo: certValidTo || null,
     nfseEmitente,
@@ -2362,10 +2365,14 @@ function extractListaParcelasImpressao(dados) {
   const root = parseSerproDados(dados) ?? dados;
   const raw =
     (root && typeof root === 'object' && !Array.isArray(root)
-      ? root.listaParcela
+      ? root.listaParcelas
+        ?? root.lista_parcelas
+        ?? root.listaParcela
         ?? root.lista_parcela
         ?? root.parcelas
         ?? root.lista
+        ?? root.parcelamento?.listaParcelas
+        ?? root.parcelamento?.lista_parcelas
         ?? root.parcelamento?.listaParcela
         ?? root.parcelamento?.lista_parcela
       : null) ?? (Array.isArray(root) ? root : null);
@@ -2425,25 +2432,41 @@ async function fetchParcelasListaImpressaoSerpro({
   return parcelas;
 }
 
-/** Parcelas ainda não arrecadadas no demonstrativo do pedido (OBTERPARC204). */
-function extractParcelasDemonstrativoEmAberto(dados) {
+/** Linhas do demonstrativo de pagamentos do pedido (todas as competências). */
+function extractDemonstrativoParcelasStatus(dados) {
   const root = parseSerproDados(dados) ?? dados;
   if (!root || typeof root !== 'object') return [];
   const parcelamento = root.parcelamento ?? root;
   const dem = parcelamento.demonstrativoPagamentos ?? parcelamento.demonstrativo_pagamentos;
   if (!Array.isArray(dem)) return [];
-  const open = [];
+  const byPeriod = new Map();
   for (const row of dem) {
     const mes = row?.mesDaParcela ?? row?.mes_da_parcela;
     if (mes == null) continue;
+    const n = Number(mes);
+    if (!Number.isFinite(n) || n < 100000) continue;
     const arrecadacao = row?.dataDeArrecadacao ?? row?.data_de_arrecadacao;
     const valorPago = row?.valorPago ?? row?.valor_pago;
     const pago =
       (arrecadacao != null && Number(arrecadacao) > 0)
       || (valorPago != null && Number(valorPago) > 0);
-    if (!pago) open.push(Number(mes));
+    byPeriod.set(n, {
+      periodoApuracao: String(n),
+      pago,
+      valorPago: valorPago != null && Number.isFinite(Number(valorPago)) ? Number(valorPago) : undefined,
+      dataArrecadacao: arrecadacao != null ? String(arrecadacao) : undefined
+    });
   }
-  return [...new Set(open)].filter((n) => Number.isFinite(n) && n >= 100000).sort((a, b) => b - a);
+  return [...byPeriod.values()].sort(
+    (a, b) => Number(b.periodoApuracao) - Number(a.periodoApuracao)
+  );
+}
+
+/** Parcelas ainda não arrecadadas no demonstrativo do pedido (OBTERPARC204). */
+function extractParcelasDemonstrativoEmAberto(dados) {
+  return extractDemonstrativoParcelasStatus(dados)
+    .filter((r) => !r.pago)
+    .map((r) => Number(r.periodoApuracao));
 }
 
 const buildParcelasCandidatasRecentes = (quantidade = 8) => {
@@ -2457,6 +2480,99 @@ const buildParcelasCandidatasRecentes = (quantidade = 8) => {
 };
 
 /**
+ * Parcelas (AAAAMM) disponíveis para emissão de DAS de um pedido de parcelamento.
+ * Ordem: mais recente primeiro.
+ */
+async function resolveParcelasParaPedido({
+  config,
+  userId,
+  numero,
+  contribNumero,
+  contratanteNumero,
+  autorNumero
+}) {
+  const contribuinteTipo =
+    normalizeDocTypeNumber(null, contribNumero) || getDocType(contribNumero);
+  const autorTipo =
+    normalizeDocTypeNumber(null, autorNumero) || getDocType(autorNumero);
+
+  const consultResult = await consultarServico({
+    contratanteNumero,
+    autorPedidoNumero: autorNumero,
+    contribuinteNumero: contribNumero,
+    idSistema: config.consultar.idSistema,
+    idServico: config.consultar.idServico,
+    dados: { numeroParcelamento: Number(numero) || numero },
+    userId,
+    contribuinteTipo,
+    autorTipo
+  });
+
+  let parcelasLista = [];
+  try {
+    parcelasLista = await fetchParcelasListaImpressaoSerpro({
+      config,
+      contratanteNumero,
+      autorNumero,
+      contribNumero,
+      userId,
+      contribuinteTipo,
+      autorTipo
+    });
+  } catch {
+    parcelasLista = [];
+  }
+
+  const demonstrativoRows = extractDemonstrativoParcelasStatus(consultResult?.dados);
+  const demonstrativoMap = new Map(
+    demonstrativoRows.map((r) => [Number(r.periodoApuracao), r])
+  );
+  const listaSet = new Set(parcelasLista.map(Number));
+
+  /** Só demonstrativo do pedido + fila de impressão da Receita (sem dívidas antigas da consolidação). */
+  const numerosReais = [...new Set([...parcelasLista, ...demonstrativoMap.keys()])]
+    .filter((n) => Number.isFinite(n) && n >= 100000)
+    .sort((a, b) => b - a);
+
+  if (env.NODE_ENV !== 'production') {
+    console.info(
+      '[mei-guide] parcelas pedido=',
+      numero,
+      'demonstrativo:',
+      demonstrativoRows.map((r) => `${r.periodoApuracao}${r.pago ? ':pago' : ':aberto'}`).join(', ')
+        || '(vazio)',
+      'lista:',
+      parcelasLista.join(', ') || '(vazio)'
+    );
+  }
+
+  return numerosReais.map((periodoApuracao) => {
+    const periodo = String(periodoApuracao);
+    const n = Number(periodo);
+    const dem = demonstrativoMap.get(n);
+    const pago = dem?.pago === true;
+    const emAberto = dem ? !pago : false;
+    const liberadaParaImpressao = listaSet.has(n);
+    let situacaoParcela = 'indisponivel';
+    if (pago) situacaoParcela = 'pago';
+    else if (emAberto) situacaoParcela = 'a_pagar';
+    else if (liberadaParaImpressao) situacaoParcela = 'liberada';
+    if (situacaoParcela === 'indisponivel') return null;
+
+    return {
+      periodoApuracao: periodo,
+      label: competenciaLabelFromPeriod(periodo) || periodo,
+      pago,
+      emAberto,
+      liberadaParaImpressao,
+      situacaoParcela,
+      valor: dem?.valorPago,
+      dataArrecadacao: dem?.dataArrecadacao
+    };
+  }).filter(Boolean);
+}
+
+/**
  * Obtém PDF do parcelamento via SERPRO (Consultar Parcelamento -> Emitir DAS) e persiste em parcelamento_pdfs.
  * @param {{ quiet?: boolean }} [options] — quiet: só loga falha (background na listagem).
  */
@@ -2467,7 +2583,8 @@ async function fetchAndStoreParcelamentoPdf(
     modalidade,
     contribNumero,
     contratanteNumero,
-    autorNumero
+    autorNumero,
+    parcelaParaEmitir
   },
   options = {}
 ) {
@@ -2499,56 +2616,36 @@ async function fetchAndStoreParcelamentoPdf(
       normalizeDocTypeNumber(null, contribNumero) || getDocType(contribNumero);
     const autorTipo =
       normalizeDocTypeNumber(null, autorNumero) || getDocType(autorNumero);
-    const consultResult = await consultarServico({
-      contratanteNumero,
-      autorPedidoNumero: autorNumero,
-      contribuinteNumero: contribNumero,
-      idSistema: config.consultar.idSistema,
-      idServico: config.consultar.idServico,
-      dados: { numeroParcelamento: Number(numero) || numero },
-      userId,
-      contribuinteTipo,
-      autorTipo
-    });
 
-    let parcelasLista = [];
-    try {
-      parcelasLista = await fetchParcelasListaImpressaoSerpro({
+    let parcelasParaEmitir;
+    if (parcelaParaEmitir != null && String(parcelaParaEmitir).trim() !== '') {
+      const period = normalizePeriodoApuracao(parcelaParaEmitir);
+      if (!period) {
+        logFail('Período da parcela inválido (use AAAAMM, ex.: 202602)');
+        return;
+      }
+      parcelasParaEmitir = [Number(period)];
+    } else {
+      const parcelasDisponiveis = await resolveParcelasParaPedido({
         config,
-        contratanteNumero,
-        autorNumero,
-        contribNumero,
         userId,
-        contribuinteTipo,
-        autorTipo
+        numero,
+        contribNumero,
+        contratanteNumero,
+        autorNumero
       });
-    } catch (listErr) {
       if (env.NODE_ENV !== 'production') {
-        console.warn(
-          '[mei-guide] parcelamento PDF: lista parcelas impressão ignorada:',
-          listErr?.message || listErr
+        console.info(
+          '[mei-guide] parcelamento PDF candidatos pedido=',
+          numero,
+          parcelasDisponiveis.map((p) => p.periodoApuracao).join(', ') || '(vazio)'
         );
       }
+      parcelasParaEmitir = parcelasDisponiveis
+        .map((p) => Number(p.periodoApuracao))
+        .filter((n) => Number.isFinite(n))
+        .slice(0, 8);
     }
-
-    const demonstrativoAberto = extractParcelasDemonstrativoEmAberto(consultResult?.dados);
-    if (env.NODE_ENV !== 'production') {
-      console.info(
-        '[mei-guide] parcelamento PDF candidatos pedido=',
-        numero,
-        'lista=',
-        parcelasLista.join(', ') || '(vazio)',
-        'demonstrativoAberto=',
-        demonstrativoAberto.join(', ') || '(vazio)'
-      );
-    }
-
-    /** Não usar detalhesConsolidacao (dívida antiga) — só lista impressão, demonstrativo em aberto ou meses recentes. */
-    let parcelasParaEmitir = parcelasLista.length > 0 ? parcelasLista : demonstrativoAberto;
-    if (!parcelasParaEmitir.length) {
-      parcelasParaEmitir = buildParcelasCandidatasRecentes(8);
-    }
-    parcelasParaEmitir = [...new Set(parcelasParaEmitir)].sort((a, b) => b - a).slice(0, 8);
 
     if (!parcelasParaEmitir.length) {
       logFail('Receita não retornou parcela disponível para emissão do DAS');
@@ -2776,11 +2873,14 @@ export const listParcelamentos = async (userId, payload) => {
   };
 };
 
-export const getOrDownloadParcelamentoPdf = async (userId, payload) => {
+export const listParcelamentoParcelas = async (userId, payload) => {
   ensureConfigured();
   const { numero, cnpj, modalidade, contribuinte } = payload || {};
   if (!numero || String(numero).trim() === '') {
     throw badRequest('Número do parcelamento é obrigatório');
+  }
+  if (!modalidade) {
+    throw badRequest('Modalidade do parcelamento é obrigatória');
   }
   const docFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
   if (!docFromRequest) {
@@ -2788,11 +2888,47 @@ export const getOrDownloadParcelamentoPdf = async (userId, payload) => {
   }
   const parties = await resolveParcelamentoSerproParties(userId, contribuinte, cnpj);
   const { contribNumero, autorPedidoNumero, contratanteNumero } = parties;
-
-  let data = await parcelamentoPdfService.getParcelamentoPdf({
+  const idSistema = MODALIDADE_TO_IDSISTEMA[modalidade];
+  const config = idSistema ? PARCELAMENTO_PDF_SERPRO[idSistema] : null;
+  if (!config?.consultar || !config.emitir) {
+    throw badRequest(
+      modalidade
+        ? `Parcelas não configuradas para a modalidade ${modalidade}`
+        : 'Modalidade do parcelamento inválida'
+    );
+  }
+  const parcelas = await resolveParcelasParaPedido({
+    config,
     userId,
-    numeroParcelamento: String(numero).trim()
+    numero: String(numero).trim(),
+    contribNumero,
+    contratanteNumero,
+    autorNumero: autorPedidoNumero
   });
+  return { parcelas };
+};
+
+export const getOrDownloadParcelamentoPdf = async (userId, payload) => {
+  ensureConfigured();
+  const { numero, cnpj, modalidade, contribuinte, parcela, periodoApuracao } = payload || {};
+  if (!numero || String(numero).trim() === '') {
+    throw badRequest('Número do parcelamento é obrigatório');
+  }
+  const parcelaEscolhida = normalizePeriodoApuracao(parcela || periodoApuracao);
+  const docFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
+  if (!docFromRequest) {
+    await ensureClientCertificate(userId);
+  }
+  const parties = await resolveParcelamentoSerproParties(userId, contribuinte, cnpj);
+  const { contribNumero, autorPedidoNumero, contratanteNumero } = parties;
+
+  let data = null;
+  if (!parcelaEscolhida) {
+    data = await parcelamentoPdfService.getParcelamentoPdf({
+      userId,
+      numeroParcelamento: String(numero).trim()
+    });
+  }
 
   if (!data?.pdf_base64) {
     if (!modalidade) {
@@ -2804,7 +2940,8 @@ export const getOrDownloadParcelamentoPdf = async (userId, payload) => {
       modalidade,
       contribNumero,
       contratanteNumero,
-      autorNumero: autorPedidoNumero
+      autorNumero: autorPedidoNumero,
+      parcelaParaEmitir: parcelaEscolhida || undefined
     });
     data = await parcelamentoPdfService.getParcelamentoPdf({
       userId,

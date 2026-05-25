@@ -187,6 +187,25 @@ export const getParcelamentos = async (req, res, next) => {
   }
 };
 
+export const getParcelamentoParcelas = async (req, res, next) => {
+  try {
+    const { numero } = req.params || {};
+    const contribuinte = req.query?.contribuinteNumero ? {
+      numero: req.query.contribuinteNumero,
+      tipo: req.query.contribuinteTipo
+    } : null;
+    const data = await meiGuideService.listParcelamentoParcelas(req.user.id, {
+      numero,
+      cnpj: req.query?.cnpj,
+      modalidade: req.query?.modalidade,
+      contribuinte
+    });
+    return sendSuccess(res, data, 'Parcelas do parcelamento listadas');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const getParcelamentoPdf = async (req, res, next) => {
   try {
     const { numero } = req.params || {};
@@ -198,6 +217,8 @@ export const getParcelamentoPdf = async (req, res, next) => {
       numero,
       cnpj: req.query?.cnpj,
       modalidade: req.query?.modalidade,
+      parcela: req.query?.parcela,
+      periodoApuracao: req.query?.periodoApuracao,
       contribuinte
     });
     res.setHeader('Content-Type', file.contentType || 'application/pdf');
