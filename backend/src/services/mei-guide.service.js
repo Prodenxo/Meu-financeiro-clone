@@ -229,6 +229,15 @@ const toIsoOrNull = (value) => {
   }
 };
 
+/** Nome do titular no CN ICP-Brasil (ex.: "65 805 583 RAZAO:65805583000173"). */
+const extractHolderNameFromCn = (cnValue) => {
+  const cn = String(cnValue || '').trim();
+  if (!cn) return '';
+  const beforeColon = cn.includes(':') ? cn.split(':')[0] : cn;
+  const name = beforeColon.replace(/^[\d\s./-]+/, '').trim();
+  return name || beforeColon.trim();
+};
+
 const extractCertInfo = (cert) => {
   const subjectAttrs = cert.subject?.attributes || [];
   const subjectValues = subjectAttrs
@@ -237,6 +246,7 @@ const extractCertInfo = (cert) => {
   const cnpjMatches = subjectValues
     .flatMap((value) => value.match(/\d{14}/g) || []);
   const cnValue = subjectAttrs.find((attr) => attr.shortName === 'CN')?.value || '';
+  const holderName = extractHolderNameFromCn(cnValue);
   const cnCnpj = String(cnValue).match(/:(\d{14})/)?.[1] || null;
   const cnpjFromSan = extractDocFromSubjectAltName(cert);
   const cnpjFromSubject = Array.from(new Set(cnpjMatches));
@@ -253,6 +263,7 @@ const extractCertInfo = (cert) => {
     cnpjFromSan,
     cnpjFromSubject,
     cnpjFromCN: cnCnpj,
+    holderName,
     subject: subjectAttrs,
     serialNumber: cert.serialNumber,
     validFrom,
@@ -370,6 +381,8 @@ const persistPaidCompetenciaSafely = async ({
 
 const tokenCache = new Map();
 const procuradorTokenCache = new Map();
+/** Evita 8 POSTs simultâneos em Apoiar quando listParcelamentos consulta modalidades em paralelo. */
+const procuradorTokenInFlight = new Map();
 const certInfoCache = new Map();
 const userCertCache = new Map();
 
@@ -592,15 +605,28 @@ const getAutenticaProcuradorUrl = () => {
   return '';
 };
 
+/**
+ * Tag XML `<destinatario papel="contratante">` — NI deve ser o mesmo `contratante` do JSON Apoiar
+ * (erro AUTENTICAPROCURADOR-012 se divergir de SERPRO_CONTRATANTE_NUMERO).
+ */
+const resolveTermoDestinatario = () => {
+  const numero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO);
+  const nome = String(env.SERPRO_CONTRATANTE_NOME || '').trim();
+  const tipo =
+    getDocTypeLabel(env.SERPRO_CONTRATANTE_TIPO || numero) || env.SERPRO_DESTINATARIO_TIPO || 'PJ';
+  return { numero, nome, tipo };
+};
+
 const getAutenticaProcuradorCacheKey = (userId, authContext) => {
   const autor = authContext?.autorPedidoDados || {};
   const contribuinte = authContext?.contribuinte || {};
   const autorTipo = normalizeDocTypeNumber(autor.tipo, autor.numero);
   const contribTipo = normalizeDocTypeNumber(contribuinte.tipo, contribuinte.numero);
+  const dest = resolveTermoDestinatario();
   return [
     `autor:${normalizeDoc(autor.numero || '')}:${autorTipo || ''}`,
     `contribuinte:${normalizeDoc(contribuinte.numero || '')}:${contribTipo || ''}`,
-    `destinatario:${env.SERPRO_DESTINATARIO_NUMERO || ''}:${env.SERPRO_DESTINATARIO_TIPO || ''}`
+    `destinatario:${dest.numero || ''}:${dest.tipo || ''}`
   ].join('|');
 };
 
@@ -616,7 +642,7 @@ const AUTORIZACAO_TERMO = 'Autorizo a empresa CONTRATANTE, identificada neste te
 const AUTORIZACAO_AVISO = 'O acesso a estas informações foi autorizado pelo próprio PROCURADOR ou OUTORGADO DO CONTRIBUINTE, responsável pela informação, via assinatura digital. É dever do destinatário da autorização e consumidor deste acesso observar a adoção de base legal para o tratamento dos dados recebidos conforme artigos 7º ou 11º da LGPD (Lei n.º 13.709, de 14 de agosto de 2018), aos direitos do titular dos dados (art. 9º, 17 e 18, da LGPD) e aos princípios que norteiam todos os tratamentos de dados no Brasil (art. 6º, da LGPD).';
 const AUTORIZACAO_FINALIDADE = 'A finalidade única e exclusiva desse TERMO DE AUTORIZAÇÃO, é garantir que o CONTRATANTE apresente a API INTEGRA CONTADOR esse consentimento do PROCURADOR ou OUTORGADO DO CONTRIBUINTE assinado digitalmente, para que possa realizar as requisições dos serviços web da API INTEGRA CONTADOR em nome do AUTOR PEDIDO DE DADOS (PROCURADOR ou OUTORGADO DO CONTRIBUINTE).';
 
-const buildAutorizacaoXml = (authContext) => {
+const buildAutorizacaoXml = (authContext, options = {}) => {
   const autor = authContext?.autorPedidoDados || {};
   const autorNumero = normalizeDoc(
     autor.numero || env.SERPRO_AUTOR_NUMERO || env.SERPRO_CONTRATANTE_NUMERO
@@ -625,13 +651,18 @@ const buildAutorizacaoXml = (authContext) => {
     autor.tipo || env.SERPRO_AUTOR_TIPO || env.SERPRO_CONTRATANTE_TIPO || autorNumero
   );
 
-  const destinatarioNumero = normalizeDoc(env.SERPRO_DESTINATARIO_NUMERO);
-  const destinatarioNome = env.SERPRO_DESTINATARIO_NOME || '';
-  const destinatarioTipo = env.SERPRO_DESTINATARIO_TIPO || 'PJ';
-  const assinadoPorNome = env.SERPRO_ASSINADO_POR_NOME || '';
+  const { numero: destinatarioNumero, nome: destinatarioNome, tipo: destinatarioTipo } =
+    resolveTermoDestinatario();
+  const assinadoPorNome =
+    options.assinadoPorNome || env.SERPRO_ASSINADO_POR_NOME || '';
 
-  if (!destinatarioNumero || !destinatarioNome) {
-    throw badRequest('Destinatário não configurado para autenticação do procurador');
+  if (!destinatarioNumero) {
+    throw badRequest('SERPRO_CONTRATANTE_NUMERO não configurado para o termo de autorização');
+  }
+  if (!destinatarioNome) {
+    throw badRequest(
+      'SERPRO_CONTRATANTE_NOME não configurado (razão social do CNPJ contratante no XML do termo)'
+    );
   }
   if (!assinadoPorNome) {
     throw badRequest('Nome do assinante não configurado para autenticação do procurador');
@@ -709,26 +740,43 @@ const extractPfxKeyAndCert = (pfxBuffer, passphrase) => {
 
 const signAutorizacaoXml = (xml, pfxBuffer, passphrase) => {
   const { privateKeyPem, certificatePem } = extractPfxKeyAndCert(pfxBuffer, passphrase);
+  const x509B64 = certificatePem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s+/g, '');
+  const xmlCompact = String(xml || '').replace(/>\s+</g, '><').trim();
   const sig = new SignedXml();
   sig.signatureAlgorithm = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256';
   sig.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
+  // Serpro/eSocial: Reference URI="" (documento inteiro), não URI="#_0".
   sig.addReference({
-    xpath: "/*",
+    xpath: '/*',
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
       'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
     ],
-    digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256'
+    digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
+    isEmptyUri: true
   });
   sig.privateKey = privateKeyPem;
-  sig.keyInfoProvider = {
-    getKeyInfo: () => `<X509Data><X509Certificate>${certificatePem.replace(/-----(BEGIN|END) CERTIFICATE-----|\\s+/g, '')}</X509Certificate></X509Data>`
-  };
-  sig.computeSignature(xml, { location: { reference: "/*", action: 'append' } });
-  return sig.getSignedXml();
+  // xml-crypto v6: getKeyInfoContent (não usar keyInfoProvider legado + publicCert — duplica X509Data).
+  sig.getKeyInfoContent = () =>
+    `<X509Data><X509Certificate>${x509B64}</X509Certificate></X509Data>`;
+  sig.computeSignature(xmlCompact, {
+    location: { reference: '/*', action: 'append' }
+  });
+  const signed = sig.getSignedXml();
+  if (env.NODE_ENV !== 'production') {
+    const x509DataCount = (signed.match(/<(?:\w+:)?X509Data\b/gi) || []).length;
+    const keyInfoCount = (signed.match(/<(?:\w+:)?KeyInfo\b/gi) || []).length;
+    if (!/<Reference[^>]*URI=""/.test(signed)) {
+      console.warn('[mei-guide] Assinatura XML sem Reference URI="" — Serpro pode rejeitar');
+    }
+    if (x509DataCount !== 1 || keyInfoCount !== 1) {
+      console.warn('[mei-guide] Assinatura XML KeyInfo/X509Data', { keyInfoCount, x509DataCount });
+    }
+  }
+  return signed;
 };
 
-const getAutenticaProcuradorToken = async (userId, authContext) => {
+const fetchAutenticaProcuradorTokenOnce = async (userId, authContext) => {
   const url = getAutenticaProcuradorUrl();
   if (!url) {
     throw badRequest('Endpoint Autentica Procurador não configurado');
@@ -741,7 +789,8 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
   const contrib = authContext?.contribuinte || {};
   const resolvedAuthContext = {
     ...(authContext || {}),
-    autorPedidoDados: contrib
+    contribuinte: contrib,
+    autorPedidoDados: authContext?.autorPedidoDados ?? contrib
   };
 
   const cacheKey = getAutenticaProcuradorCacheKey(userId, resolvedAuthContext);
@@ -758,7 +807,10 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
     throw badRequest('Certificado Serpro não configurado para o procurador');
   }
 
-  const xml = buildAutorizacaoXml(resolvedAuthContext);
+  const assinadoPorNomeCert = context.cert?.certInfo?.holderName || '';
+  const xml = buildAutorizacaoXml(resolvedAuthContext, {
+    assinadoPorNome: assinadoPorNomeCert || undefined
+  });
   const signedXml = signAutorizacaoXml(xml, pfx, passphrase);
   const encoded = Buffer.from(signedXml, 'utf-8').toString('base64');
 
@@ -808,10 +860,16 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
   };
 
   if (env.NODE_ENV !== 'production') {
+    const termoDest = resolveTermoDestinatario();
+    const contratanteJson = normalizeDoc(requestBody.contratante?.numero || '');
     console.info('[mei-guide] AutenticaProcurador payload', {
       contratante: requestBody.contratante,
       autorPedidoDados: requestBody.autorPedidoDados,
       contribuinte: requestBody.contribuinte,
+      destinatarioXmlContratante: termoDest.numero,
+      destinatarioXmlNome: termoDest.nome ? `${termoDest.nome.slice(0, 40)}…` : '(vazio)',
+      contratanteAlinhado: contratanteJson === termoDest.numero,
+      assinadoPorNome: assinadoPorNomeCert || env.SERPRO_ASSINADO_POR_NOME || '(env)',
       pedidoDados: {
         idSistema: requestBody.pedidoDados.idSistema,
         idServico: requestBody.pedidoDados.idServico,
@@ -829,14 +887,65 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
     body: JSON.stringify(requestBody)
   }, tlsConfig);
 
+  const persistProcuradorToken = async (token) => {
+    procuradorTokenCache.set(cacheKey, {
+      token,
+      expiresAt: getNextMidnight()
+    });
+    const autorCacheKey = normalizeDoc(resolvedAuthContext?.autorPedidoDados?.numero);
+    if (autorCacheKey) {
+      const { armazenarTokenNoCache } = await import('./gestao/authProcurador.service.js');
+      armazenarTokenNoCache(`procurador_token_${autorCacheKey}`, token);
+    }
+    return token;
+  };
+
+  const getTokenFromEtagHeader = (etagValue) => {
+    if (!etagValue) return null;
+    const cleaned = String(etagValue).replace(/"/g, '');
+    if (cleaned.startsWith('autenticar_procurador_token:')) {
+      return cleaned.split(':')[1] || null;
+    }
+    return null;
+  };
+
+  const resolveTokenFromEtagOrCache = async () => {
+    const etagToken = getTokenFromEtagHeader(response.headers.get('etag'));
+    if (etagToken) return etagToken;
+    const { obterTokenProcurador } = await import('./gestao/authProcurador.service.js');
+    const legado = obterTokenProcurador(autorNumero);
+    if (legado) return legado;
+    const cached = procuradorTokenCache.get(cacheKey);
+    if (cached?.token && cached.expiresAt > Date.now() + 60000) {
+      return cached.token;
+    }
+    return null;
+  };
+
+  /** 304 = termo já aceito; token vem no ETag ou no cache (mesmo fluxo do auth-procurador). */
+  if (response.status === 304) {
+    const token = await resolveTokenFromEtagOrCache();
+    if (!token) {
+      throw badRequest(
+        'Termo já aceito pela SERPRO (304), mas o token não foi encontrado. Clique em Atualizar lista novamente.'
+      );
+    }
+    if (env.NODE_ENV !== 'production') {
+      console.info('[mei-guide] AutenticaProcurador 304 — token reutilizado (ETag/cache)');
+    }
+    return persistProcuradorToken(token);
+  }
+
   if (!response.ok) {
-    const message = await parseErrorMessage(response);
+    const { message, bodyRaw } = await parseSerproErrorResponse(response);
     if (env.NODE_ENV !== 'production') {
       console.warn('[mei-guide] AutenticaProcurador error', {
         status: response.status,
         url,
         contentType: response.headers.get('content-type') || '',
-        message
+        message,
+        mensagens: typeof bodyRaw === 'object' ? bodyRaw?.mensagens : null,
+        responseId: typeof bodyRaw === 'object' ? bodyRaw?.responseId : null
       });
     }
     logSerproError('autentica-procurador', {
@@ -844,10 +953,27 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
       url,
       message
     });
-    throw badRequest(message || 'Erro ao autenticar procurador');
+    const hint =
+      response.status === 403
+        ? 'Termo recusado (403). O CNPJ em <destinatario papel="contratante"> deve ser SERPRO_CONTRATANTE_NUMERO (e SERPRO_CONTRATANTE_NOME). URI="" na assinatura, um X509Data (EndCertOnly), certificado A1 do contribuinte em assinadoPor.'
+        : '';
+    throw badRequest(
+      [message || 'Erro ao autenticar termo de autorização', hint].filter(Boolean).join(' ')
+    );
   }
 
-  const payload = await response.json();
+  const etagToken = getTokenFromEtagHeader(response.headers.get('etag'));
+  if (etagToken) {
+    return persistProcuradorToken(etagToken);
+  }
+
+  const responseText = await readHttpResponseText(response);
+  const payload = parseJsonFromResponseText(responseText);
+  if (!payload) {
+    throw badRequest(
+      `SERPRO retornou resposta vazia no termo de autorização (HTTP ${response.status}). Aguarde alguns segundos e clique em Atualizar lista.`
+    );
+  }
   const parsedDados = (() => {
     if (!payload?.dados) return null;
     if (Array.isArray(payload.dados)) return payload.dados[0] || null;
@@ -870,12 +996,26 @@ const getAutenticaProcuradorToken = async (userId, authContext) => {
     throw badRequest('Token do procurador não retornado');
   }
 
-  procuradorTokenCache.set(cacheKey, {
-    token,
-    expiresAt: getNextMidnight()
-  });
+  return persistProcuradorToken(token);
+};
 
-  return token;
+const getAutenticaProcuradorToken = async (userId, authContext) => {
+  const contrib = authContext?.contribuinte || {};
+  const cacheKey = getAutenticaProcuradorCacheKey(userId, {
+    ...(authContext || {}),
+    contribuinte: contrib,
+    autorPedidoDados: authContext?.autorPedidoDados ?? contrib
+  });
+  const inflight = procuradorTokenInFlight.get(cacheKey);
+  if (inflight) return inflight;
+
+  const promise = fetchAutenticaProcuradorTokenOnce(userId, authContext);
+  procuradorTokenInFlight.set(cacheKey, promise);
+  try {
+    return await promise;
+  } finally {
+    procuradorTokenInFlight.delete(cacheKey);
+  }
 };
 
 const getSerproTokenWithoutCert = async () => {
@@ -908,6 +1048,26 @@ const getSerproTokenWithoutCert = async () => {
   }
 
   return { accessToken, jwtToken };
+};
+
+/** Termo Integra Contador (ex.: ICGERENCIADOR-019 quando autor ≠ contratante). */
+export const obterAutenticaProcuradorTokenSerpro = async (userId, params = {}) => {
+  const contribNumero = normalizeDoc(params.contribuinteNumero);
+  const autorNumero = normalizeDoc(params.autorPedidoNumero ?? contribNumero);
+  if (!userId || !contribNumero || !validateDoc(contribNumero)) {
+    throw badRequest('Dados inválidos para termo de autorização Serpro');
+  }
+  if (!validateDoc(autorNumero)) {
+    throw badRequest('Autor do pedido inválido para termo Serpro');
+  }
+  const contribTipo =
+    normalizeDocTypeNumber(params.contribuinteTipo, contribNumero) || getDocType(contribNumero);
+  const autorTipo =
+    normalizeDocTypeNumber(params.autorTipo, autorNumero) || getDocType(autorNumero);
+  return getAutenticaProcuradorToken(userId, {
+    contribuinte: { numero: contribNumero, tipo: contribTipo },
+    autorPedidoDados: { numero: autorNumero, tipo: autorTipo }
+  });
 };
 
 const buildHeaders = async (userId, authContext) => {
@@ -946,14 +1106,58 @@ const buildDownloadUrl = (id) => {
   return `${getBaseUrl()}${path}`;
 };
 
-const parseErrorMessage = async (response) => {
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    const payload = await response.json();
-    return payload?.message || payload?.error || response.statusText;
+const readHttpResponseText = async (response) => {
+  try {
+    return String(await response.text());
+  } catch {
+    return '';
   }
-  const text = await response.text();
-  return text || response.statusText;
+};
+
+const parseJsonFromResponseText = (text) => {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+};
+
+const extractSerproMessageFromPayload = (payload, statusText = '') => {
+  if (payload == null) return statusText || '';
+  if (typeof payload === 'string') return payload.trim() || statusText || '';
+  let mensagemSerpro = '';
+  const m = payload.mensagens;
+  if (Array.isArray(m) && m.length > 0) {
+    mensagemSerpro = m
+      .map((item) =>
+        typeof item === 'string' ? item : (item?.texto ?? item?.mensagem ?? item?.descricao ?? '')
+      )
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+  } else if (typeof m === 'string') {
+    mensagemSerpro = (m || '').trim();
+  }
+  return payload.message || payload.error || mensagemSerpro || statusText || '';
+};
+
+const parseSerproErrorResponse = async (response) => {
+  const text = await readHttpResponseText(response);
+  const bodyRaw = parseJsonFromResponseText(text);
+  const status = response.status || 0;
+  const message =
+    extractSerproMessageFromPayload(bodyRaw, response.statusText) ||
+    text.trim() ||
+    response.statusText ||
+    (status ? `Erro HTTP ${status} na SERPRO` : 'Erro na SERPRO');
+  return { message, bodyRaw: bodyRaw ?? text };
+};
+
+const parseErrorMessage = async (response) => {
+  const { message } = await parseSerproErrorResponse(response);
+  return message;
 };
 
 const logSerproError = (context, { status, url, message }) => {
@@ -1354,7 +1558,17 @@ const findPdfBase64Deep = (value, depth = 0) => {
     return null;
   }
   if (typeof value !== 'object') return null;
-  for (const key of ['pdf', 'PDF', 'pdfBase64', 'arquivo', 'guia', 'das', 'documento']) {
+  for (const key of [
+    'docArrecadacaoPdfB64',
+    'doc_arrecadacao_pdf_b64',
+    'pdf',
+    'PDF',
+    'pdfBase64',
+    'arquivo',
+    'guia',
+    'das',
+    'documento'
+  ]) {
     const found = looksLikePdfBase64(value[key]);
     if (found) return found;
   }
@@ -1396,10 +1610,13 @@ const tryLoadLocalDasPdfBase64 = async (userId, period) => {
 
 /** Emitir na SERPRO; se vier sem PDF, tenta Consultar (segunda via / período quitado). */
 const fetchDasPdfFromSerpro = async ({
+  userId = null,
   contratanteNumero,
   autorPedidoNumero,
   contribuinteNumero,
-  periodoApuracao
+  periodoApuracao,
+  contribuinteTipo = null,
+  autorTipo = null
 }) => {
   const period = normalizePeriodoApuracao(periodoApuracao);
   if (!period) {
@@ -1413,7 +1630,10 @@ const fetchDasPdfFromSerpro = async ({
     idSistema: 'PGMEI',
     idServico: 'GERARDASPDF21',
     dados: { periodoApuracao: period },
-    versaoSistema: '1.0'
+    versaoSistema: '1.0',
+    userId,
+    contribuinteTipo,
+    autorTipo
   };
 
   let lastError = null;
@@ -1568,10 +1788,13 @@ export const createGuide = async (userId, payload) => {
   const cnpjNumerico = normalizeDoc(contrib.numero);
   const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || cnpjNumerico);
   const { pdfBase64, status } = await fetchDasPdfFromSerpro({
+    userId,
     contratanteNumero,
     autorPedidoNumero: autorNumero,
     contribuinteNumero: cnpjNumerico,
-    periodoApuracao: period
+    periodoApuracao: period,
+    contribuinteTipo: contrib.tipo,
+    autorTipo: contrib.tipo
   });
 
   return {
@@ -1767,6 +1990,67 @@ const buildRecentCompetencias = (count = 12, includeCurrent = false) => {
   return competencias;
 };
 
+const resolvePeriodItemFromSerpro = async ({
+  userId,
+  competencia,
+  cnpj,
+  contribuinte,
+  useCertificate,
+  paidCompetencias,
+  documentoFiscal,
+  createGuideFn,
+  createGuideByCnpjFn,
+  markCompetenciaAsPaidFn
+}) => {
+  const period = normalizePeriodoApuracao(competencia);
+  if (!period) return null;
+  if (paidCompetencias.has(competencia)) {
+    return { competencia, status: 'pago', guideId: period };
+  }
+
+  try {
+    if (useCertificate) {
+      await createGuideFn(userId, {
+        cnpj,
+        periodoApuracao: period,
+        contribuinte
+      });
+    } else {
+      await createGuideByCnpjFn(userId, {
+        cnpj,
+        periodoApuracao: period
+      });
+    }
+    return { competencia, status: 'a_pagar', guideId: period };
+  } catch (error) {
+    if (isPeriodoIndisponivelSerproError(error)) {
+      return {
+        competencia,
+        status: 'indisponivel',
+        guideId: period,
+        errorMessage: String(error?.message || 'Período indisponível para DAS MEI').slice(0, 220)
+      };
+    }
+    if (!shouldMarkCompetenciaAsPaid(error)) {
+      return {
+        competencia,
+        status: 'erro',
+        guideId: period,
+        errorMessage: getPeriodHistoryErrorMessage(error)
+      };
+    }
+    paidCompetencias.add(competencia);
+    await persistPaidCompetenciaSafely({
+      userId,
+      competencia,
+      documentoFiscal,
+      source: 'consulta_serpro',
+      markCompetenciaAsPaidFn
+    });
+    return { competencia, status: 'pago', guideId: period };
+  }
+};
+
 const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
   const { cnpj, contribuinte, useCertificate = false } = options;
   const {
@@ -1776,74 +2060,32 @@ const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
     createGuideByCnpjFn = createGuideByCnpj
   } = dependencies;
   const competencias = buildRecentCompetencias(12, false);
-  const items = [];
   const paidCompetencias = userId
     ? new Set(await listPaidCompetenciasFn({ userId, competencias }))
     : new Set();
   const documentoFiscal = normalizeDocumentoFiscalForStatus(cnpj || contribuinte?.numero);
+  const items = [];
 
-  for (const competencia of competencias) {
-    const period = normalizePeriodoApuracao(competencia);
-    if (!period) continue;
-    if (paidCompetencias.has(competencia)) {
-      items.push({
-        competencia,
-        status: 'pago',
-        guideId: period
-      });
-      continue;
-    }
-
-    try {
-      if (useCertificate) {
-        await createGuideFn(userId, {
-          cnpj,
-          periodoApuracao: period,
-          contribuinte
-        });
-      } else {
-        await createGuideByCnpjFn(userId, {
-          cnpj,
-          periodoApuracao: period
-        });
-      }
-      items.push({
-        competencia,
-        status: 'a_pagar',
-        guideId: period
-      });
-    } catch (error) {
-      if (isPeriodoIndisponivelSerproError(error)) {
-        items.push({
+  for (let i = 0; i < competencias.length; i += PERIODS_SERPRO_CONCURRENCY) {
+    const chunk = competencias.slice(i, i + PERIODS_SERPRO_CONCURRENCY);
+    const chunkItems = await Promise.all(
+      chunk.map((competencia) =>
+        resolvePeriodItemFromSerpro({
+          userId,
           competencia,
-          status: 'indisponivel',
-          guideId: period,
-          errorMessage: String(error?.message || 'Período indisponível para DAS MEI').slice(0, 220)
-        });
-        continue;
-      }
-      if (!shouldMarkCompetenciaAsPaid(error)) {
-        items.push({
-          competencia,
-          status: 'erro',
-          guideId: period,
-          errorMessage: getPeriodHistoryErrorMessage(error)
-        });
-        continue;
-      }
-      paidCompetencias.add(competencia);
-      await persistPaidCompetenciaSafely({
-        userId,
-        competencia,
-        documentoFiscal,
-        source: 'consulta_serpro',
-        markCompetenciaAsPaidFn
-      });
-      items.push({
-        competencia,
-        status: 'pago',
-        guideId: period
-      });
+          cnpj,
+          contribuinte,
+          useCertificate,
+          paidCompetencias,
+          documentoFiscal,
+          createGuideFn,
+          createGuideByCnpjFn,
+          markCompetenciaAsPaidFn
+        })
+      )
+    );
+    for (const row of chunkItems) {
+      if (row) items.push(row);
     }
   }
 
@@ -1865,12 +2107,17 @@ export const listPeriods = async (userId, payload) => {
   const contrib = resolveContribuinte(userId, contribuinte, cnpj);
   const autor = contrib;
   const cnpjNumerico = normalizeDoc(contrib.numero);
+  const cacheKey = getPeriodsListCacheKey(userId, cnpjNumerico, true);
+  const cached = readPeriodsListCache(cacheKey);
+  if (cached) return cached;
 
-  return await buildPeriodsFromPdf(userId, {
+  const data = await buildPeriodsFromPdf(userId, {
     cnpj: cnpjNumerico,
     contribuinte: autor,
     useCertificate: true
   });
+  writePeriodsListCache(cacheKey, data);
+  return data;
 };
 
 export const listPeriodsByCnpj = async (userId, payload) => {
@@ -1879,21 +2126,55 @@ export const listPeriodsByCnpj = async (userId, payload) => {
   if (!validateCnpj(cnpjNumerico)) {
     throw badRequest('CNPJ do MEI inválido');
   }
-  return await buildPeriodsFromPdf(userId, {
+  const cacheKey = getPeriodsListCacheKey(userId, cnpjNumerico, false);
+  const cached = readPeriodsListCache(cacheKey);
+  if (cached) return cached;
+
+  const data = await buildPeriodsFromPdf(userId, {
     cnpj: cnpjNumerico,
     useCertificate: false
   });
+  writePeriodsListCache(cacheKey, data);
+  return data;
 };
 
 /** Modalidades do Integra Parcelamento SERPRO com serviço "Consultar Pedidos". Doc: apicenter.estaleiro.serpro.gov.br Integra Contador. */
 const PARCELAMENTO_MODALIDADES = [
   { idSistema: 'PARCSN', idServico: 'PEDIDOSPARC163', modalidade: 'Simples Nacional (Ordinário)' },
   { idSistema: 'PARCSN-ESP', idServico: 'PEDIDOSPARC173', modalidade: 'Simples Nacional (Especial)' },
+  { idSistema: 'PERTSN', idServico: 'PEDIDOSPARC183', modalidade: 'PERT Simples Nacional' },
   { idSistema: 'RELPSN', idServico: 'PEDIDOSPARC193', modalidade: 'Reescalonamento Simples Nacional' },
   { idSistema: 'PARCMEI', idServico: 'PEDIDOSPARC203', modalidade: 'MEI (Ordinário)' },
   { idSistema: 'PARCMEI-ESP', idServico: 'PEDIDOSPARC213', modalidade: 'MEI (Especial)' },
+  { idSistema: 'PERTMEI', idServico: 'PEDIDOSPARC223', modalidade: 'PERT MEI' },
   { idSistema: 'RELPMEI', idServico: 'PEDIDOSPARC233', modalidade: 'Reescalonamento MEI' }
 ];
+
+/** Visão geral MEI: só modalidades MEI (2 consultas SERPRO em vez de 8). */
+const PARCELAMENTO_MODALIDADES_MEI = PARCELAMENTO_MODALIDADES.filter(
+  (m) => m.idSistema === 'PARCMEI' || m.idSistema === 'PARCMEI-ESP'
+);
+
+const PERIODS_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
+const periodsListCache = new Map();
+
+const getPeriodsListCacheKey = (userId, cnpj, useCertificate) =>
+  `${userId || ''}:${normalizeDoc(cnpj)}:${useCertificate ? '1' : '0'}`;
+
+const readPeriodsListCache = (key) => {
+  const hit = periodsListCache.get(key);
+  if (!hit || hit.expiresAt <= Date.now()) {
+    if (hit) periodsListCache.delete(key);
+    return null;
+  }
+  return hit.data;
+};
+
+const writePeriodsListCache = (key, data) => {
+  periodsListCache.set(key, { data, expiresAt: Date.now() + PERIODS_LIST_CACHE_TTL_MS });
+};
+
+const PERIODS_SERPRO_CONCURRENCY = 4;
 
 /**
  * Mapeamento para obter PDF por parcelamento: Consultar Parcelamento (numero -> detalhes com periodoApuracao)
@@ -1904,8 +2185,20 @@ const PARCELAMENTO_PDF_SERPRO = {
   'PARCSN': { consultar: { idSistema: 'PARCSN', idServico: 'OBTERPARC224' }, emitir: null },
   'PARCSN-ESP': { consultar: { idSistema: 'PARCSN-ESP', idServico: 'OBTERPARC224' }, emitir: { idSistema: 'PARCSN-ESP', idServico: 'GERARDAS171' } },
   'RELPSN': { consultar: { idSistema: 'RELPSN', idServico: 'OBTERPARC224' }, emitir: null },
-  'PARCMEI': { consultar: { idSistema: 'PARCMEI', idServico: 'OBTERPARC224' }, emitir: null },
-  'PARCMEI-ESP': { consultar: { idSistema: 'PARCMEI-ESP', idServico: 'OBTERPARC224' }, emitir: { idSistema: 'PARCMEI-ESP', idServico: 'GERARDAS211' } },
+  'PARCMEI': {
+    consultar: { idSistema: 'PARCMEI', idServico: 'OBTERPARC204' },
+    listarParcelas: { idSistema: 'PARCMEI', idServico: 'PARCELASPARAGERAR202' },
+    emitir: { idSistema: 'PARCMEI', idServico: 'GERARDAS201' }
+  },
+  'PARCMEI-ESP': {
+    consultar: { idSistema: 'PARCMEI-ESP', idServico: 'OBTERPARC214' },
+    listarParcelas: { idSistema: 'PARCMEI-ESP', idServico: 'PARCELASPARAGERAR212' },
+    emitir: { idSistema: 'PARCMEI-ESP', idServico: 'GERARDAS211' }
+  },
+  'PERTMEI': {
+    consultar: { idSistema: 'PERTMEI', idServico: 'OBTERPARC224' },
+    emitir: { idSistema: 'PERTMEI', idServico: 'GERARDAS221' }
+  },
   'RELPMEI': { consultar: { idSistema: 'RELPMEI', idServico: 'OBTERPARC224' }, emitir: null }
 };
 
@@ -1913,22 +2206,61 @@ const MODALIDADE_TO_IDSISTEMA = Object.fromEntries(
   PARCELAMENTO_MODALIDADES.map((m) => [m.modalidade, m.idSistema])
 );
 
+/** Autor = titular do certificado quando difere do CNPJ consultado (procurador SERPRO). */
+const resolveParcelamentoSerproParties = async (userId, contribuinte, cnpj) => {
+  await ensureClientCertificate(userId);
+  const contrib = resolveContribuinte(userId, contribuinte, cnpj);
+  const contribNumero = normalizeDoc(contrib.numero);
+  const certDoc = normalizeDoc(getUserCertDocument(userId) || '');
+  const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || contribNumero);
+
+  // Padrão: próprio contribuinte (certificado da cliente na conta do MEI — sem procuração Receita).
+  // Só troca o autor se o CNPJ/CPF do certificado for diferente do CNPJ consultado (contador + cert da escritória).
+  let autorPedidoNumero = contribNumero;
+  if (certDoc && certDoc !== contribNumero && validateDoc(certDoc)) {
+    autorPedidoNumero = certDoc;
+  }
+
+  const contribuinteTipo = contrib.tipo;
+  const autorTipo =
+    normalizeDocTypeNumber(null, autorPedidoNumero) || getDocType(autorPedidoNumero);
+
+  if (env.NODE_ENV !== 'production') {
+    console.info('[mei-guide] parcelamentos SERPRO parties', {
+      contribuinte: contribNumero,
+      autor: autorPedidoNumero,
+      contratante: contratanteNumero,
+      usaProcuradorReceita: autorPedidoNumero !== contribNumero,
+      precisaTermoIntegraContador: autorPedidoNumero !== contratanteNumero
+    });
+  }
+
+  return {
+    contribNumero,
+    autorPedidoNumero,
+    contratanteNumero,
+    contribuinteTipo,
+    autorTipo
+  };
+};
+
 const normalizeParcelamentoItem = (item, modalidade) => {
   if (!item || typeof item !== 'object') return null;
   const numero = item.numero ?? item.numeroParcelamento ?? item.numero_parcelamento;
   const dataPedido =
+    item.dataDoPedido ??
+    item.data_do_pedido ??
     item.dataPedido ??
     item.data_pedido ??
     item.dataPedidoPedido ??
-    item.dataDoPedido ??
     item.data_do_pedido;
   const situacao = item.situacao ?? item.situacaoParcelamento ?? item.situacaoPedido;
   const dataSituacao =
+    item.dataDaSituacao ??
+    item.data_da_situacao ??
     item.dataSituacao ??
     item.data_situacao ??
-    item.dataSituacaoParcelamento ??
-    item.dataDaSituacao ??
-    item.data_da_situacao;
+    item.dataSituacaoParcelamento;
   // Item sem numero não é um parcelamento válido
   if (numero == null) return null;
   return {
@@ -1940,14 +2272,23 @@ const normalizeParcelamentoItem = (item, modalidade) => {
   };
 };
 
-/** Extrai a lista de pedidos de parcelamento independentemente do formato (array direto ou objeto com lista/parcelamentos/pedidos). */
+/** Extrai a lista de pedidos de parcelamento (formato SERPRO: dados JSON com chave parcelamentos). */
 const extractParcelamentoList = (raw) => {
-  if (Array.isArray(raw)) return raw;
-  if (raw && typeof raw === 'object') {
-    if (Array.isArray(raw.lista)) return raw.lista;
-    if (Array.isArray(raw.parcelamentos)) return raw.parcelamentos;
-    if (Array.isArray(raw.pedidos)) return raw.pedidos;
-    if (Array.isArray(raw.pedidosParcelamento)) return raw.pedidosParcelamento;
+  let data = raw;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    if (Array.isArray(data.parcelamentos)) return data.parcelamentos;
+    if (Array.isArray(data.lista)) return data.lista;
+    if (Array.isArray(data.pedidos)) return data.pedidos;
+    if (Array.isArray(data.pedidosParcelamento)) return data.pedidosParcelamento;
+    if (data.dados) return extractParcelamentoList(data.dados);
   }
   return [];
 };
@@ -1978,51 +2319,283 @@ function extractFirstPeriodoApuracao(dados) {
   return null;
 }
 
-/**
- * Tenta obter PDF do parcelamento via SERPRO (Consultar Parcelamento -> Emitir DAS) e persistir em parcelamento_pdfs.
- * Falhas são apenas logadas; não propaga exceção.
- */
-async function tryFetchAndStoreParcelamentoPdf({
-  userId,
-  numero,
-  modalidade,
-  contribNumero,
+/** Todas as parcelas AAAAMM do detalhe do parcelamento (mais recente primeiro). */
+function extractParcelasApuracaoList(dados) {
+  const root = parseSerproDados(dados) ?? dados;
+  if (!root || typeof root !== 'object') return [];
+  const parcelamento = root.parcelamento ?? root;
+  const found = new Set();
+
+  const pushPeriod = (p) => {
+    const n = Number(p);
+    if (!Number.isFinite(n) || n < 100000) return;
+    found.add(n);
+  };
+
+  const scanDetalhes = (arr) => {
+    if (!Array.isArray(arr)) return;
+    for (const d of arr) {
+      pushPeriod(d?.periodoApuracao ?? d?.periodo_apuracao);
+    }
+  };
+
+  scanDetalhes(parcelamento.consolidacaoOriginal?.detalhesConsolidacao);
+  scanDetalhes(parcelamento.detalhesConsolidacao);
+  const demonstrativo = parcelamento.demonstrativoPagamentos ?? parcelamento.demonstrativo_pagamentos;
+  if (Array.isArray(demonstrativo)) {
+    for (const d of demonstrativo) {
+      pushPeriod(d?.mesDaParcela ?? d?.mes_da_parcela ?? d?.periodoApuracao ?? d?.periodo_apuracao);
+    }
+  }
+  if (Array.isArray(parcelamento.consolidacoesRestanteDivida)) {
+    for (const c of parcelamento.consolidacoesRestanteDivida) {
+      scanDetalhes(c?.detalhesConsolidacao);
+    }
+  }
+
+  return [...found].sort((a, b) => b - a);
+}
+
+/** Parcelas liberadas para impressão (PARCELASPARAGERAR*) — só estas devem ir para GERARDAS*. */
+function extractListaParcelasImpressao(dados) {
+  if (dados == null) return [];
+  const root = parseSerproDados(dados) ?? dados;
+  const raw =
+    (root && typeof root === 'object' && !Array.isArray(root)
+      ? root.listaParcela
+        ?? root.lista_parcela
+        ?? root.parcelas
+        ?? root.lista
+        ?? root.parcelamento?.listaParcela
+        ?? root.parcelamento?.lista_parcela
+      : null) ?? (Array.isArray(root) ? root : null);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (item == null) return null;
+      if (typeof item === 'number' || typeof item === 'string') return Number(item);
+      return Number(
+        item.parcela ?? item.mesDaParcela ?? item.mes_da_parcela ?? item.periodoApuracao
+      );
+    })
+    .filter((n) => Number.isFinite(n) && n >= 100000)
+    .sort((a, b) => b - a);
+}
+
+const extractSerproMensagensTexto = (raw) => {
+  const msgs = raw?.mensagens;
+  if (!Array.isArray(msgs) || msgs.length === 0) return '';
+  return msgs
+    .map((m) => (typeof m === 'string' ? m : m?.texto ?? m?.mensagem ?? m?.descricao ?? ''))
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+};
+
+async function fetchParcelasListaImpressaoSerpro({
+  config,
   contratanteNumero,
-  autorNumero
+  autorNumero,
+  contribNumero,
+  userId,
+  contribuinteTipo,
+  autorTipo
 }) {
+  if (!config?.listarParcelas) return [];
+  const result = await consultarServico({
+    contratanteNumero,
+    autorPedidoNumero: autorNumero,
+    contribuinteNumero: contribNumero,
+    idSistema: config.listarParcelas.idSistema,
+    idServico: config.listarParcelas.idServico,
+    dados: undefined,
+    userId,
+    contribuinteTipo,
+    autorTipo
+  });
+  const parcelas = extractListaParcelasImpressao(result?.dados);
+  if (env.NODE_ENV !== 'production') {
+    console.info(
+      '[mei-guide] PARCELASPARAGERAR202:',
+      parcelas.length ? parcelas.join(', ') : '(vazio)',
+      'raw:',
+      JSON.stringify(result?.dados ?? result?.raw?.dados)?.slice(0, 500)
+    );
+  }
+  return parcelas;
+}
+
+/** Parcelas ainda não arrecadadas no demonstrativo do pedido (OBTERPARC204). */
+function extractParcelasDemonstrativoEmAberto(dados) {
+  const root = parseSerproDados(dados) ?? dados;
+  if (!root || typeof root !== 'object') return [];
+  const parcelamento = root.parcelamento ?? root;
+  const dem = parcelamento.demonstrativoPagamentos ?? parcelamento.demonstrativo_pagamentos;
+  if (!Array.isArray(dem)) return [];
+  const open = [];
+  for (const row of dem) {
+    const mes = row?.mesDaParcela ?? row?.mes_da_parcela;
+    if (mes == null) continue;
+    const arrecadacao = row?.dataDeArrecadacao ?? row?.data_de_arrecadacao;
+    const valorPago = row?.valorPago ?? row?.valor_pago;
+    const pago =
+      (arrecadacao != null && Number(arrecadacao) > 0)
+      || (valorPago != null && Number(valorPago) > 0);
+    if (!pago) open.push(Number(mes));
+  }
+  return [...new Set(open)].filter((n) => Number.isFinite(n) && n >= 100000).sort((a, b) => b - a);
+}
+
+const buildParcelasCandidatasRecentes = (quantidade = 8) => {
+  const now = new Date();
+  const out = [];
+  for (let i = 0; i < quantidade; i += 1) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    out.push(Number(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`));
+  }
+  return out;
+};
+
+/**
+ * Obtém PDF do parcelamento via SERPRO (Consultar Parcelamento -> Emitir DAS) e persiste em parcelamento_pdfs.
+ * @param {{ quiet?: boolean }} [options] — quiet: só loga falha (background na listagem).
+ */
+async function fetchAndStoreParcelamentoPdf(
+  {
+    userId,
+    numero,
+    modalidade,
+    contribNumero,
+    contratanteNumero,
+    autorNumero
+  },
+  options = {}
+) {
+  const { quiet = false } = options;
   const idSistema = MODALIDADE_TO_IDSISTEMA[modalidade];
   const config = idSistema ? PARCELAMENTO_PDF_SERPRO[idSistema] : null;
-  if (!config?.consultar || !config.emitir) return;
+  if (!config?.consultar || !config.emitir) {
+    const msg = modalidade
+      ? `PDF não configurado para a modalidade ${modalidade}`
+      : 'Informe a modalidade do parcelamento para gerar o PDF';
+    if (quiet) {
+      if (env.NODE_ENV !== 'production') {
+        console.warn('[mei-guide] parcelamento PDF ignorado:', numero, msg);
+      }
+      return;
+    }
+    throw badRequest(msg);
+  }
+
+  const logFail = (message) => {
+    if (env.NODE_ENV !== 'production') {
+      console.warn('[mei-guide] parcelamento PDF:', numero, modalidade, message);
+    }
+    if (!quiet) throw badRequest(message);
+  };
 
   try {
+    const contribuinteTipo =
+      normalizeDocTypeNumber(null, contribNumero) || getDocType(contribNumero);
+    const autorTipo =
+      normalizeDocTypeNumber(null, autorNumero) || getDocType(autorNumero);
     const consultResult = await consultarServico({
       contratanteNumero,
       autorPedidoNumero: autorNumero,
       contribuinteNumero: contribNumero,
       idSistema: config.consultar.idSistema,
       idServico: config.consultar.idServico,
-      dados: { numeroParcelamento: Number(numero) || numero }
+      dados: { numeroParcelamento: Number(numero) || numero },
+      userId,
+      contribuinteTipo,
+      autorTipo
     });
-    const parcelaAaaamm = extractFirstPeriodoApuracao(consultResult?.dados);
-    if (!parcelaAaaamm) {
+
+    let parcelasLista = [];
+    try {
+      parcelasLista = await fetchParcelasListaImpressaoSerpro({
+        config,
+        contratanteNumero,
+        autorNumero,
+        contribNumero,
+        userId,
+        contribuinteTipo,
+        autorTipo
+      });
+    } catch (listErr) {
       if (env.NODE_ENV !== 'production') {
-        console.warn('[mei-guide] parcelamento PDF: sem periodoApuracao para numero=', numero, 'modalidade=', modalidade);
+        console.warn(
+          '[mei-guide] parcelamento PDF: lista parcelas impressão ignorada:',
+          listErr?.message || listErr
+        );
       }
+    }
+
+    const demonstrativoAberto = extractParcelasDemonstrativoEmAberto(consultResult?.dados);
+    if (env.NODE_ENV !== 'production') {
+      console.info(
+        '[mei-guide] parcelamento PDF candidatos pedido=',
+        numero,
+        'lista=',
+        parcelasLista.join(', ') || '(vazio)',
+        'demonstrativoAberto=',
+        demonstrativoAberto.join(', ') || '(vazio)'
+      );
+    }
+
+    /** Não usar detalhesConsolidacao (dívida antiga) — só lista impressão, demonstrativo em aberto ou meses recentes. */
+    let parcelasParaEmitir = parcelasLista.length > 0 ? parcelasLista : demonstrativoAberto;
+    if (!parcelasParaEmitir.length) {
+      parcelasParaEmitir = buildParcelasCandidatasRecentes(8);
+    }
+    parcelasParaEmitir = [...new Set(parcelasParaEmitir)].sort((a, b) => b - a).slice(0, 8);
+
+    if (!parcelasParaEmitir.length) {
+      logFail('Receita não retornou parcela disponível para emissão do DAS');
       return;
     }
 
-    const emitResult = await emitirServico({
-      contratanteNumero,
-      autorPedidoNumero: autorNumero,
-      contribuinteNumero: contribNumero,
-      idSistema: config.emitir.idSistema,
-      idServico: config.emitir.idServico,
-      dados: { parcelaParaEmitir: parcelaAaaamm }
-    });
-    const pdfBase64 = emitResult?.dados?.docArrecadacaoPdfB64 ?? emitResult?.dados?.doc_arrecadacao_pdf_b64;
+    let pdfBase64 = null;
+    let ultimaMensagemSerpro = '';
+    for (const parcelaAaaamm of parcelasParaEmitir) {
+      try {
+        const emitResult = await emitirServico({
+          contratanteNumero,
+          autorPedidoNumero: autorNumero,
+          contribuinteNumero: contribNumero,
+          idSistema: config.emitir.idSistema,
+          idServico: config.emitir.idServico,
+          dados: { parcelaParaEmitir: parcelaAaaamm },
+          userId,
+          contribuinteTipo,
+          autorTipo
+        });
+        pdfBase64 = extractDasPdfBase64FromSerproResponse(emitResult);
+        if (pdfBase64) break;
+        const msg = extractSerproMensagensTexto(emitResult?.raw);
+        if (msg) ultimaMensagemSerpro = msg;
+        if (env.NODE_ENV !== 'production') {
+          console.warn('[mei-guide] parcelamento PDF: sem PDF para parcela=', parcelaAaaamm, 'numero=', numero);
+        }
+      } catch (emitErr) {
+        ultimaMensagemSerpro = emitErr?.message || ultimaMensagemSerpro;
+        if (env.NODE_ENV !== 'production') {
+          console.warn(
+            '[mei-guide] parcelamento PDF: emissão falhou parcela=',
+            parcelaAaaamm,
+            emitErr?.message || emitErr
+          );
+        }
+      }
+    }
+
     if (!pdfBase64) {
+      const msg =
+        ultimaMensagemSerpro
+        || 'Não foi possível gerar o DAS na Receita. Confira no PGMEI/Parcelamento se há parcela em aberto para este pedido.';
+      if (!quiet) throw notFound(msg);
       if (env.NODE_ENV !== 'production') {
-        console.warn('[mei-guide] parcelamento PDF: emissão sem docArrecadacaoPdfB64 para numero=', numero);
+        console.warn('[mei-guide] parcelamento PDF:', numero, modalidade, msg);
       }
       return;
     }
@@ -2038,33 +2611,102 @@ async function tryFetchAndStoreParcelamentoPdf({
       console.info('[mei-guide] parcelamento PDF salvo: numero=', numero);
     }
   } catch (err) {
-    if (env.NODE_ENV !== 'production') {
-      console.warn('[mei-guide] tryFetchAndStoreParcelamentoPdf falhou:', numero, modalidade, err?.message || err);
+    if (quiet) {
+      if (env.NODE_ENV !== 'production') {
+        console.warn('[mei-guide] tryFetchAndStoreParcelamentoPdf falhou:', numero, modalidade, err?.message || err);
+      }
+      return;
     }
+    throw err;
   }
+}
+
+async function tryFetchAndStoreParcelamentoPdf(params) {
+  await fetchAndStoreParcelamentoPdf(params, { quiet: true });
 }
 
 export const listParcelamentos = async (userId, payload) => {
   ensureConfigured();
-  const { cnpj, contribuinte } = payload || {};
-  const docFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
-  if (!docFromRequest) {
-    await ensureClientCertificate(userId);
+  const { cnpj, contribuinte, scope = 'all' } = payload || {};
+  const modalidadesAlvo =
+    scope === 'mei' ? PARCELAMENTO_MODALIDADES_MEI : PARCELAMENTO_MODALIDADES;
+  const {
+    contribNumero,
+    autorPedidoNumero,
+    contratanteNumero,
+    contribuinteTipo,
+    autorTipo
+  } = await resolveParcelamentoSerproParties(userId, contribuinte, cnpj);
+
+  const precisaTermoIntegraContador =
+    autorPedidoNumero !== contratanteNumero || contribNumero !== autorPedidoNumero;
+
+  if (precisaTermoIntegraContador) {
+    try {
+      await obterAutenticaProcuradorTokenSerpro(userId, {
+        contribuinteNumero: contribNumero,
+        contribuinteTipo,
+        autorPedidoNumero,
+        autorTipo
+      });
+    } catch (error) {
+      const authCtx = {
+        contribuinte: { numero: contribNumero, tipo: contribuinteTipo },
+        autorPedidoDados: { numero: autorPedidoNumero, tipo: autorTipo }
+      };
+      const cacheKey = getAutenticaProcuradorCacheKey(userId, authCtx);
+      const cached = procuradorTokenCache.get(cacheKey);
+      const now = Date.now();
+      let tokenFallback = cached?.token && cached.expiresAt > now + 60000 ? cached.token : null;
+      if (!tokenFallback) {
+        const { obterTokenProcurador } = await import('./gestao/authProcurador.service.js');
+        tokenFallback = obterTokenProcurador(autorPedidoNumero) || null;
+        if (tokenFallback) {
+          procuradorTokenCache.set(cacheKey, {
+            token: tokenFallback,
+            expiresAt: getNextMidnight()
+          });
+        }
+      }
+      if (tokenFallback) {
+        if (env.NODE_ENV !== 'production') {
+          console.warn(
+            '[mei-guide] parcelamentos: termo Serpro falhou, seguindo com token em cache:',
+            error?.message || error
+          );
+        }
+      } else {
+        const termoErro = error?.message || 'Falha ao enviar termo de autorização à SERPRO';
+        console.warn('[mei-guide] parcelamentos: termo Integra Contador falhou:', termoErro);
+        return {
+          parcelamentos: [],
+          modalidadesConsultadas: modalidadesAlvo.length,
+          resumoPorModalidade: {},
+          termoAutorizacaoErro: termoErro,
+          modalidadesStatus: modalidadesAlvo.map(({ modalidade, idSistema, idServico }) => ({
+            modalidade,
+            idSistema,
+            idServico,
+            status: 'error',
+            erro: termoErro
+          }))
+        };
+      }
+    }
   }
-  const contrib = resolveContribuinte(userId, contribuinte, cnpj);
-  const contribNumero = normalizeDoc(contrib.numero);
-  const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || contrib.numero);
-  const autorPedidoNumero = contribNumero;
 
   const baseParams = {
     contratanteNumero,
     autorPedidoNumero,
     contribuinteNumero: contribNumero,
-    dados: {}
+    dados: {},
+    userId,
+    contribuinteTipo,
+    autorTipo
   };
 
   const results = await Promise.allSettled(
-    PARCELAMENTO_MODALIDADES.map(({ idSistema, idServico, modalidade }) =>
+    modalidadesAlvo.map(({ idSistema, idServico, modalidade }) =>
       consultarServico({ ...baseParams, idSistema, idServico }).then((result) => ({
         modalidade,
         dados: result?.dados
@@ -2076,7 +2718,7 @@ export const listParcelamentos = async (userId, payload) => {
   const modalidadesStatus = [];
   for (let i = 0; i < results.length; i++) {
     const settled = results[i];
-    const { modalidade, idSistema, idServico } = PARCELAMENTO_MODALIDADES[i];
+    const { modalidade, idSistema, idServico } = modalidadesAlvo[i];
     if (settled.status === 'rejected') {
       const errMsg = settled.reason?.message || 'erro desconhecido';
       console.warn('[mei-guide] parcelamentos modalidade falhou:', modalidade, idSistema, idServico, errMsg);
@@ -2110,8 +2752,8 @@ export const listParcelamentos = async (userId, payload) => {
     resumoPorModalidade[m] = (resumoPorModalidade[m] || 0) + 1;
   }
 
-  // Dispara em background a tentativa de obter e salvar PDF de cada parcelamento (não bloqueia a resposta).
-  if (parcelamentos.length > 0) {
+  // PDF em background só na listagem completa (aba Parcelamentos), não no resumo da visão geral.
+  if (parcelamentos.length > 0 && scope !== 'mei') {
     Promise.allSettled(
       parcelamentos.map((p) =>
         tryFetchAndStoreParcelamentoPdf({
@@ -2128,7 +2770,7 @@ export const listParcelamentos = async (userId, payload) => {
 
   return {
     parcelamentos,
-    modalidadesConsultadas: PARCELAMENTO_MODALIDADES.length,
+    modalidadesConsultadas: modalidadesAlvo.length,
     resumoPorModalidade,
     modalidadesStatus
   };
@@ -2144,24 +2786,25 @@ export const getOrDownloadParcelamentoPdf = async (userId, payload) => {
   if (!docFromRequest) {
     await ensureClientCertificate(userId);
   }
-  const contrib = resolveContribuinte(userId, contribuinte, cnpj);
-  const contribNumero = normalizeDoc(contrib.numero);
-  const contratanteNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || contrib.numero);
-  const autorNumero = contribNumero;
+  const parties = await resolveParcelamentoSerproParties(userId, contribuinte, cnpj);
+  const { contribNumero, autorPedidoNumero, contratanteNumero } = parties;
 
   let data = await parcelamentoPdfService.getParcelamentoPdf({
     userId,
     numeroParcelamento: String(numero).trim()
   });
 
-  if (!data?.pdf_base64 && modalidade) {
-    await tryFetchAndStoreParcelamentoPdf({
+  if (!data?.pdf_base64) {
+    if (!modalidade) {
+      throw badRequest('Modalidade do parcelamento é obrigatória para gerar o PDF');
+    }
+    await fetchAndStoreParcelamentoPdf({
       userId,
       numero: String(numero).trim(),
       modalidade,
       contribNumero,
       contratanteNumero,
-      autorNumero
+      autorNumero: autorPedidoNumero
     });
     data = await parcelamentoPdfService.getParcelamentoPdf({
       userId,
@@ -2175,7 +2818,9 @@ export const getOrDownloadParcelamentoPdf = async (userId, payload) => {
     return { buffer, contentType: 'application/pdf', filename };
   }
 
-  throw notFound('PDF não disponível para este parcelamento');
+  throw notFound(
+    'A Receita não devolveu DAS para este pedido. Só é possível baixar guia do parcelamento com situação "Em parcelamento" (parcelas em aberto). Parcelamentos encerrados não geram novo PDF aqui.'
+  );
 };
 
 /** Bloqueia envio/consulta de DAS quando a Receita indica período indisponível (ex.: não optante). */

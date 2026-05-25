@@ -61,14 +61,27 @@ export const downloadGuide = async (req, res, next) => {
       autorPedidoDados,
       contribuinte
     });
+    const buffer = file?.buffer;
+    if (!buffer?.length) {
+      return next(Object.assign(new Error('PDF do DAS vazio ou indisponível'), { status: 404 }));
+    }
+    const isPdf =
+      buffer.length >= 4
+      && buffer[0] === 0x25
+      && buffer[1] === 0x50
+      && buffer[2] === 0x44
+      && buffer[3] === 0x46;
+    if (!isPdf) {
+      return next(Object.assign(new Error('Resposta da Receita não é um PDF válido'), { status: 502 }));
+    }
     await meiGuideDasBase64Service.upsertDasBase64({
       userId: req.user.id,
       periodoApuracao: id,
-      pdfBase64: file.buffer.toString('base64')
+      pdfBase64: buffer.toString('base64')
     });
     res.setHeader('Content-Type', file.contentType || 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-    return res.send(file.buffer);
+    return res.send(buffer);
   } catch (error) {
     return next(error);
   }
@@ -165,7 +178,8 @@ export const getParcelamentos = async (req, res, next) => {
     } : null;
     const data = await meiGuideService.listParcelamentos(req.user.id, {
       cnpj: req.query?.cnpj,
-      contribuinte
+      contribuinte,
+      scope: req.query?.scope === 'mei' ? 'mei' : 'all'
     });
     return sendSuccess(res, data, 'Parcelamentos MEI listados');
   } catch (error) {

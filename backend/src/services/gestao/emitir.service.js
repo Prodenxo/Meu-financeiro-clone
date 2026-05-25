@@ -61,11 +61,19 @@ const parseDados = (payload) => {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Termo Integra Contador: procuração Receita (contrib ≠ autor) ou autor ≠ contratante (ICGERENCIADOR-019). */
+const precisaAutenticarProcuradorToken = (contratanteLimpo, autorLimpo, contribuinteLimpo) =>
+  Boolean(contratanteLimpo && autorLimpo && autorLimpo !== contratanteLimpo) ||
+  contribuinteLimpo !== autorLimpo;
+
 const buildSerproHeaders = async ({
   forceRefresh = false,
   contratanteLimpo,
   autorLimpo,
-  contribuinteLimpo
+  contribuinteLimpo,
+  userId = null,
+  contribuinteTipo = null,
+  autorTipo = null
 }) => {
   const { accessToken, jwtToken } = await getSerproTokens({ forceRefresh });
   const headers = {
@@ -74,9 +82,22 @@ const buildSerproHeaders = async ({
     'Content-Type': 'application/json'
   };
 
-  if (contribuinteLimpo !== autorLimpo) {
-    let procuradorToken = obterTokenProcurador(autorLimpo);
-    if (!procuradorToken) {
+  if (!precisaAutenticarProcuradorToken(contratanteLimpo, autorLimpo, contribuinteLimpo)) {
+    return headers;
+  }
+
+  const cacheKey = `procurador_token_${autorLimpo}`;
+  let procuradorToken = obterTokenProcurador(autorLimpo);
+  if (!procuradorToken) {
+    if (userId) {
+      const { obterAutenticaProcuradorTokenSerpro } = await import('../mei-guide.service.js');
+      procuradorToken = await obterAutenticaProcuradorTokenSerpro(userId, {
+        contribuinteNumero: contribuinteLimpo,
+        contribuinteTipo: contribuinteTipo ?? getDocTypeNumber(contribuinteLimpo),
+        autorPedidoNumero: autorLimpo,
+        autorTipo: autorTipo ?? getDocTypeNumber(autorLimpo)
+      });
+    } else {
       const nomeAssinante = env.SERPRO_ASSINADO_POR_NOME || '';
       procuradorToken = await autenticarViaCertificado(
         contribuinteLimpo,
@@ -84,12 +105,17 @@ const buildSerproHeaders = async ({
         nomeAssinante,
         contratanteLimpo
       );
-      armazenarTokenNoCache(`procurador_token_${autorLimpo}`, procuradorToken);
     }
-    headers.autenticar_procurador_token = procuradorToken;
-    if (env.NODE_ENV !== 'production') {
-      console.info('[emitir] autenticar_procurador_token aplicado');
-    }
+    armazenarTokenNoCache(cacheKey, procuradorToken);
+  }
+  headers.autenticar_procurador_token = procuradorToken;
+  if (env.NODE_ENV !== 'production') {
+    console.info('[emitir] autenticar_procurador_token aplicado', {
+      autor: autorLimpo,
+      contratante: contratanteLimpo,
+      contribuinte: contribuinteLimpo,
+      viaCertificadoUsuario: Boolean(userId)
+    });
   }
 
   return headers;
@@ -102,7 +128,10 @@ export const emitirServico = async ({
   idSistema,
   idServico,
   dados = {},
-  versaoSistema = '1.0'
+  versaoSistema = '1.0',
+  userId = null,
+  contribuinteTipo = null,
+  autorTipo = null
 }) => {
   if (!env.SERPRO_API_BASE_URL) {
     throw badRequest('API Serpro não configurada');
@@ -140,7 +169,10 @@ export const emitirServico = async ({
       forceRefresh,
       contratanteLimpo,
       autorLimpo,
-      contribuinteLimpo
+      contribuinteLimpo,
+      userId,
+      contribuinteTipo,
+      autorTipo
     });
     const response = await serproApiFetch(`${baseUrl}/Emitir`, {
       method: 'POST',

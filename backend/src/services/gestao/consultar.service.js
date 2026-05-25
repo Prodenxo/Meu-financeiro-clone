@@ -47,10 +47,16 @@ const parseDados = (payload) => {
 const SERVICOS_SEM_DADOS = new Set([
   'PEDIDOSPARC163',
   'PEDIDOSPARC173',
+  'PEDIDOSPARC183',
   'PEDIDOSPARC193',
   'PEDIDOSPARC203',
   'PEDIDOSPARC213',
-  'PEDIDOSPARC233'
+  'PEDIDOSPARC223',
+  'PEDIDOSPARC233',
+  'PARCELASPARAGERAR162',
+  'PARCELASPARAGERAR172',
+  'PARCELASPARAGERAR202',
+  'PARCELASPARAGERAR212'
 ]);
 
 /** Extrai mensagem de erro do corpo da resposta da SERPRO (mensagens, message, error). */
@@ -73,11 +79,19 @@ const extractSerproErrorMessage = (rawBody, statusText) => {
 
 const MENSAGEM_GENERICA_400 = 'Não foi possível consultar o serviço. Verifique o CNPJ e tente novamente.';
 
+/** Termo Integra Contador: procuração Receita (contrib ≠ autor) ou autor ≠ contratante (ICGERENCIADOR-019). */
+const precisaAutenticarProcuradorToken = (contratanteLimpo, autorLimpo, contribuinteLimpo) =>
+  Boolean(contratanteLimpo && autorLimpo && autorLimpo !== contratanteLimpo) ||
+  contribuinteLimpo !== autorLimpo;
+
 const buildSerproHeaders = async ({
   forceRefresh = false,
   contratanteLimpo,
   autorLimpo,
-  contribuinteLimpo
+  contribuinteLimpo,
+  userId = null,
+  contribuinteTipo = null,
+  autorTipo = null
 }) => {
   const { accessToken, jwtToken } = await getSerproTokens({ forceRefresh });
   const headers = {
@@ -86,9 +100,22 @@ const buildSerproHeaders = async ({
     'Content-Type': 'application/json'
   };
 
-  if (contribuinteLimpo !== autorLimpo) {
-    let procuradorToken = obterTokenProcurador(autorLimpo);
-    if (!procuradorToken) {
+  if (!precisaAutenticarProcuradorToken(contratanteLimpo, autorLimpo, contribuinteLimpo)) {
+    return headers;
+  }
+
+  const cacheKey = `procurador_token_${autorLimpo}`;
+  let procuradorToken = obterTokenProcurador(autorLimpo);
+  if (!procuradorToken) {
+    if (userId) {
+      const { obterAutenticaProcuradorTokenSerpro } = await import('../mei-guide.service.js');
+      procuradorToken = await obterAutenticaProcuradorTokenSerpro(userId, {
+        contribuinteNumero: contribuinteLimpo,
+        contribuinteTipo: contribuinteTipo ?? getDocTypeNumber(contribuinteLimpo),
+        autorPedidoNumero: autorLimpo,
+        autorTipo: autorTipo ?? getDocTypeNumber(autorLimpo)
+      });
+    } else {
       const nomeAssinante = env.SERPRO_ASSINADO_POR_NOME || '';
       procuradorToken = await autenticarViaCertificado(
         contribuinteLimpo,
@@ -96,12 +123,17 @@ const buildSerproHeaders = async ({
         nomeAssinante,
         contratanteLimpo
       );
-      armazenarTokenNoCache(`procurador_token_${autorLimpo}`, procuradorToken);
     }
-    headers.autenticar_procurador_token = procuradorToken;
-    if (env.NODE_ENV !== 'production') {
-      console.info('[consultar] autenticar_procurador_token aplicado');
-    }
+    armazenarTokenNoCache(cacheKey, procuradorToken);
+  }
+  headers.autenticar_procurador_token = procuradorToken;
+  if (env.NODE_ENV !== 'production') {
+    console.info('[consultar] autenticar_procurador_token aplicado', {
+      autor: autorLimpo,
+      contratante: contratanteLimpo,
+      contribuinte: contribuinteLimpo,
+      viaCertificadoUsuario: Boolean(userId)
+    });
   }
 
   return headers;
@@ -113,7 +145,10 @@ export const consultarServico = async ({
   contribuinteNumero,
   idSistema,
   idServico,
-  dados = {}
+  dados = {},
+  userId = null,
+  contribuinteTipo = null,
+  autorTipo = null
 }) => {
   if (!env.SERPRO_API_BASE_URL) {
     throw badRequest('API Serpro não configurada');
@@ -161,7 +196,10 @@ export const consultarServico = async ({
       forceRefresh,
       contratanteLimpo,
       autorLimpo,
-      contribuinteLimpo
+      contribuinteLimpo,
+      userId,
+      contribuinteTipo,
+      autorTipo
     });
     const response = await fetch(`${baseUrl}/Consultar`, {
       method: 'POST',

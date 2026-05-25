@@ -72,13 +72,22 @@ const requestWithOptionalMtls = async (url, options, tlsConfig) => {
 };
 
 const parseErrorMessage = async (response) => {
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    const payload = await response.json();
-    return payload?.message || payload?.error || response.statusText;
+  let text = '';
+  try {
+    text = String(await response.text());
+  } catch {
+    text = '';
   }
-  const text = await response.text();
-  return text || response.statusText;
+  const trimmed = text.trim();
+  if (trimmed) {
+    try {
+      const payload = JSON.parse(trimmed);
+      return payload?.message || payload?.error || response.statusText;
+    } catch {
+      return trimmed;
+    }
+  }
+  return response.statusText || `Erro HTTP ${response.status || 0}`;
 };
 
 const ensureTokenConfigured = () => {

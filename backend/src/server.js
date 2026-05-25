@@ -11,6 +11,9 @@ import { bootstrapDatabase } from './services/db-bootstrap.service.js';
 
 const app = express();
 
+/** APIs dinâmicas não devem usar ETag (304 + corpo vazio quebra clientes fetch). */
+app.set('etag', false);
+
 const normalizeOrigin = (value) => value.trim().replace(/\/$/, '');
 const allowedOrigins = env.CORS_ORIGIN
   .split(',')
@@ -106,6 +109,11 @@ app.get('/', (_req, res) => {
   });
 });
 
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  next();
+});
 app.use('/api', routes);
 
 app.use(errorHandler);
