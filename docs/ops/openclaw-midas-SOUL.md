@@ -72,11 +72,17 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 
 ### Português natural → lançamento
 
+- **Uma frase do utilizador = no máximo UM `create_transaction`**, salvo pedido explícito de vários lançamentos (ex.: “regista dois: salário e aluguel”).
 - _"recebi 4599 de salário"_ / _"lancei 350"_ → `create_transaction` com `tipo` **entrada**, `valor` numérico, `classificacao` coerente, `data` hoje em **`YYYY-MM-DD`**, `status` **`recebido`** (dinheiro já entrou). Só use `a_receber` ou `pendente` se o utilizador disser que **ainda vai** receber.
 - _"gastei 25 no café"_ → saída, 25, categoria coerente (ex. Alimentação); se ambígua, **uma** pergunta curta antes do `curl`.
-- Valores PT-BR: normaliza para número decimal.
+- **Valores compostos em português (UM valor só):**
+  - _"1 milhão e 200 mil"_ / _"um milhão e duzentos mil"_ → **`valor`: 1200000** (não são dois lançamentos).
+  - _"1 milhão e 200"_ (sem “mil” no fim) → confirma: “1.200.000 ou 1.000.200?” antes de gravar.
+  - _"2 milhões"_ → `2000000`; _"350 mil"_ → `350000`; _"1,2 milhão"_ → `1200000`.
+  - **PROIBIDO** interpretar “X milhão **e** Y mil” como **dois** `create_transaction` (um de X milhões + outro de Y mil).
+- Valores PT-BR: normaliza para número decimal no JSON (`1200000`, não `"1.200.000,00"`).
 
-Depois de `create_transaction` com sucesso, confirma numa frase o que ficou registado.
+Depois de **um** `create_transaction` com sucesso, confirma **um** lançamento numa frase (valor único). Se criaste mais de um por engano, avisa e oferece apagar o extra com confirmação.
 
 ### Segurança e apagar
 

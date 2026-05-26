@@ -120,6 +120,18 @@ Implementação: `calendar-events.service.js`.
 
 ## Criar lançamento (`create_transaction`)
 
+**Regra:** uma mensagem do utilizador → **um** `create_transaction`, exceto se pedir vários lançamentos de forma explícita.
+
+**Valores em português (um número só no `valor`):**
+
+| Frase do utilizador | `valor` no JSON |
+|---------------------|-----------------|
+| 1 milhão e 200 mil / um milhão e duzentos mil | `1200000` |
+| 2 milhões | `2000000` |
+| 350 mil | `350000` |
+
+**Erro comum:** “1 milhão e 200 mil de salário” **não** é 1.000.000 + 200.000 em dois POST — é **um** lançamento de **1.200.000**.
+
 **Campos obrigatórios no `payload`:** `tipo`, `valor`, `classificacao`, `data`, `status`.
 
 | Campo | Notas |
@@ -160,6 +172,23 @@ Implementação: `calendar-events.service.js`.
     "classificacao": "Salário",
     "data": "2026-05-12",
     "status": "pago",
+    "obs": "via OpenClaw"
+  }
+}
+```
+
+**Exemplo — “1 milhão e 200 mil de salário” (um lançamento)**
+
+```json
+{
+  "phone": "5548999999999",
+  "action": "create_transaction",
+  "payload": {
+    "tipo": "entrada",
+    "valor": 1200000,
+    "classificacao": "Salário",
+    "data": "2026-05-26",
+    "status": "recebido",
     "obs": "via OpenClaw"
   }
 }
