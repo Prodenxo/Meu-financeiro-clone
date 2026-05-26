@@ -193,6 +193,14 @@ Requer `OPENCLAW_WEBHOOK_SECRET` no `.env`. Para remoto: `OPENCLAW_ACTION_URL=ht
 
 ---
 
+## Multi-utilizador (toda a app)
+
+- **Mensagens que o utilizador manda:** já é por conta — o campo `phone` no JSON é o WhatsApp **de quem escreveu**; o backend resolve `user_id` via `n8n_link` (telefone no perfil).
+- **Um número WhatsApp Midas** para todos (modelo habitual): cada cliente fala com o mesmo número; nunca uses o telefone de exemplo da documentação no lugar do remetente.
+- **Lembretes automáticos (07h / 21h):** cron OpenClaw com telefone fixo serve **só para testes contigo**. Para toda a base, o caminho certo é cron no **backend** (ou n8n) que percorre todos os `n8n_link` e só envia quem tiver compromissos — ver [`openclaw-agenda-cron.md`](./openclaw-agenda-cron.md) secção 0.
+
+---
+
 ## n8n + Z-API (sem OpenClaw no WhatsApp)
 
 O mesmo endpoint serve automações **só n8n**: ver [`whatsapp-n8n-openclaw-backend.md`](./whatsapp-n8n-openclaw-backend.md).

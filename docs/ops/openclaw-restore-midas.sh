@@ -65,6 +65,17 @@ Segue **MF-API.md** no workspace. Toda chamada à API: `~/.openclaw/mf-curl.sh` 
 EOF
 fi
 
+if ! grep -q 'Lembretes automáticos de agenda' "$WS/SOUL.md" 2>/dev/null; then
+  cat >> "$WS/SOUL.md" << 'EOF'
+
+## Lembretes automáticos de agenda (cron 07:00 e 21:00 America/Sao_Paulo)
+- Cron com tz America/Sao_Paulo (7h UTC sem tz = 4h BRT — errado).
+- Job: phone fixo do destinatário no mf-curl; list_calendar_events para hoje.
+- Com eventos: uma mensagem curta com a lista. Sem eventos ou erro API: NÃO enviar nada (sem pedir telefone).
+- Ver openclaw-agenda-cron.md no repo Meu Financeiro.
+EOF
+fi
+
 echo "--- Teste ping ---"
 "${OC}/mf-curl.sh" '{"action":"ping"}' | head -c 400
 echo ""

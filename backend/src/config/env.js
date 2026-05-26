@@ -142,6 +142,18 @@ export const env = {
   PLUGNOTAS_NFCE_CANCEL_PATH: process.env.PLUGNOTAS_NFCE_CANCEL_PATH || '/nfce/:id/cancelamento',
   N8N_WHATSAPP_WEBHOOK_URL: process.env.N8N_WHATSAPP_WEBHOOK_URL || '',
   N8N_WHATSAPP_WEBHOOK_SECRET: process.env.N8N_WHATSAPP_WEBHOOK_SECRET || '',
+  /** Instância Z-API (ID na URL `/instances/{id}/token/...`). */
+  ZAPI_INSTANCE_ID: (process.env.ZAPI_INSTANCE_ID || '').trim(),
+  /** Token da instância (segmento `token/{...}` na URL Z-API). */
+  ZAPI_TOKEN: (process.env.ZAPI_TOKEN || '').trim(),
+  /** Header `Client-Token` nos POST de envio (painel Z-API → segurança). */
+  ZAPI_CLIENT_TOKEN: (process.env.ZAPI_CLIENT_TOKEN || '').trim(),
+  /** Base da API Z-API (opcional). Padrão `https://api.z-api.io`. */
+  ZAPI_API_BASE_URL: (process.env.ZAPI_API_BASE_URL || '').trim(),
+  /**
+   * Canal de saída WhatsApp: `auto` (Z-API se configurada, senão n8n), `zapi`, `n8n`.
+   */
+  WHATSAPP_OUTBOUND_MODE: (process.env.WHATSAPP_OUTBOUND_MODE || 'auto').trim(),
   /**
    * Segredo Bearer (OpenClaw / n8n → POST /api/bot/openclaw/action).
    */
@@ -164,10 +176,15 @@ export const env = {
   /** Timeout ms do POST de relay (1000–60000). Padrão 8000. */
   OPENCLAW_ZAPI_RELAY_TIMEOUT_MS: process.env.OPENCLAW_ZAPI_RELAY_TIMEOUT_MS || '8000',
   /**
-   * `true`: após gerar e guardar o DAS no job mensal/cron, dispara o mesmo webhook WhatsApp (n8n)
-   * que o admin usa — mesmo payload, `source: mei_das_automatico`. Requer telefone em `user_metadata.phone`.
+   * `true`: após gerar e guardar o DAS no job mensal/cron, envia WhatsApp (Z-API directo ou n8n)
+   * — mesmo payload do admin, `source: mei_das_automatico`. Requer telefone em `user_metadata.phone`.
    */
   MEI_DAS_AUTO_WHATSAPP_ENABLED: process.env.MEI_DAS_AUTO_WHATSAPP_ENABLED || 'false',
+  /**
+   * `true`: cron `/api/cron/agenda-lembretes` envia WhatsApp só a utilizadores com compromissos hoje
+   * (`n8n_link` + `list_calendar_events`). Requer Z-API outbound ou `N8N_WHATSAPP_WEBHOOK_URL`.
+   */
+  AGENDA_WHATSAPP_REMINDERS_ENABLED: process.env.AGENDA_WHATSAPP_REMINDERS_ENABLED || 'false',
   /**
    * URL pública do frontend usada em links de convite (`/register?convite=`).
    * Se vazio, usa `FRONTEND_URL` ou header `Origin` da requisição (fallback dev `http://localhost:3000`).

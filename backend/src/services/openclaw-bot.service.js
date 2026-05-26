@@ -12,7 +12,10 @@ import {
 import * as meiGuideService from './mei-guide.service.js';
 import { isPeriodoIndisponivelSerproError } from './mei-guide-serpro-period-guard.js';
 import * as calendarEventsService from './calendar-events.service.js';
-import { sendWhatsappMessage } from './n8n-whatsapp.service.js';
+import {
+  isWhatsappOutboundConfigured,
+  sendWhatsappMessage,
+} from './whatsapp-outbound.service.js';
 import {
   buildDasPaymentStatusMessage,
   getDasPaymentStatusForUser,
@@ -102,11 +105,11 @@ export const trySendDasWhatsappWebhook = async ({
   pdfBase64,
   fileName,
 }) => {
-  const webhookUrl = (env.N8N_WHATSAPP_WEBHOOK_URL || '').trim();
-  if (!webhookUrl) {
+  if (!isWhatsappOutboundConfigured()) {
     return {
-      whatsappStatus: 'skipped_no_webhook',
-      hint: 'Configure N8N_WHATSAPP_WEBHOOK_URL no backend ou use mf-das-send.sh no OpenClaw.',
+      whatsappStatus: 'skipped_no_whatsapp',
+      hint:
+        'Configure ZAPI_INSTANCE_ID + ZAPI_TOKEN + ZAPI_CLIENT_TOKEN (ou N8N_WHATSAPP_WEBHOOK_URL) no backend, ou use mf-das-send.sh no OpenClaw.',
     };
   }
   if (!phone) {

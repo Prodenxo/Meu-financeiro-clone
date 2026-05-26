@@ -4,6 +4,7 @@ import {
   runMonthlyAutomaticDasDownload,
   runSingleUserAutomaticDasDownload
 } from '../services/mei-das.service.js';
+import { runAgendaWhatsappReminders } from '../services/agenda-reminders.service.js';
 import { badRequest } from '../utils/errors.js';
 
 const router = Router();
@@ -29,6 +30,23 @@ router.get('/das-mensal/usuario', requireCronSecret, async (req, res, next) => {
       : undefined;
     const summary = await runSingleUserAutomaticDasDownload(userId, { competencia });
     res.json({ ok: summary.ok, summary });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Lembretes de agenda (07h = slot manha, 21h = slot noite).
+ * Só envia WhatsApp se houver compromissos hoje; agenda vazia = silêncio.
+ * Query: `slot=manha|noite` (padrão manha).
+ */
+router.get('/agenda-lembretes', requireCronSecret, async (req, res, next) => {
+  try {
+    const rawSlot = String(req.query.slot || 'manha').trim().toLowerCase();
+    const slot = rawSlot === 'noite' ? 'noite' : 'manha';
+    const dateIso = req.query.date ? String(req.query.date).trim() : undefined;
+    const summary = await runAgendaWhatsappReminders({ slot, dateIso });
+    res.json({ ok: true, summary });
   } catch (error) {
     next(error);
   }

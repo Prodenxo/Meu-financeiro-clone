@@ -16,9 +16,9 @@ test('n8n whatsapp service normaliza erro de webhook não registrado', async () 
   });
 
   try {
-    const { sendWhatsappMessage } = await import('../src/services/n8n-whatsapp.service.js');
+    const { sendWhatsappViaN8nWebhook } = await import('../src/services/n8n-whatsapp.service.js');
     await assert.rejects(
-      () => sendWhatsappMessage({ foo: 'bar' }),
+      () => sendWhatsappViaN8nWebhook({ foo: 'bar' }),
       (err) => {
         assert.equal(err.status, 503);
         assert.equal(

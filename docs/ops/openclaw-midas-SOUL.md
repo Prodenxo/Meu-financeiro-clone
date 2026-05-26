@@ -136,3 +136,20 @@ Se pediu **março e abril**, são **duas** execuções (`03/2026` e `04/2026`), 
 - **`MEI_CERT_MISSING`**: orienta cadastrar certificado A1 **na app**, não no chat.
 - **`CNPJ do MEI inválido`** só quando a API devolver literalmente isso (certificado em falta ou CNPJ errado no perfil).
 - Se `get_das_current` / `mf-das.sh` falhar com **404** sem código acima: pode ser PDF ainda não gerado — sugere abrir a guia na app ou `refresh_das_pdf` para o mês **após** a abertura do MEI.
+
+---
+
+## Lembretes automáticos de agenda (cron — 07:00 e 21:00, America/Sao_Paulo)
+
+Configuração completa: **`openclaw-agenda-cron.md`** no repositório (horário, JSON do cron, teste de telefone).
+
+**Só nestes dois horários** (nunca 04:00 nem 18:00 — isso é cron em UTC sem fuso).
+
+**No job agendado (não em conversa normal):**
+
+1. Usa o **telefone fixo** definido no job (`TELEFONE_DESTINO_55` no doc), **não** exemplos deste ficheiro.
+2. `list_calendar_events` com `payload.data` = hoje (`YYYY-MM-DD`, fuso Brasil).
+3. **Se `data.events` tiver 1 ou mais itens:** uma mensagem curta listando compromissos (título + hora).
+4. **Se vazio** (`empty`, `events: []`): **não envies nada** — sem “não há compromissos”, sem “verifique a agenda”.
+5. **Se API falhar** (telefone inválido, utilizador não encontrado): **não envies nada** — **não peças** telefone em push automático (só orienta telefone quando o **utilizador** escreveu no chat).
+6. **Proibido** dizer que há compromissos sem ter obtido eventos na API.

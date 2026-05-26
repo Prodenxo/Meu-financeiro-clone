@@ -5,7 +5,10 @@ import { env } from '../config/env.js';
 import * as usersService from './users.service.js';
 import * as meiGuideService from './mei-guide.service.js';
 import { getCertificateDocument } from './mei-certificate-store.js';
-import { sendWhatsappMessage } from './n8n-whatsapp.service.js';
+import {
+  isWhatsappOutboundConfigured,
+  sendWhatsappMessage,
+} from './whatsapp-outbound.service.js';
 import { getDasBase64 } from './mei-guide-das-base64.service.js';
 import { isCompetenciaPaid } from './mei-period-status.service.js';
 
@@ -71,10 +74,11 @@ const trySendAutomaticDasWhatsapp = async ({
   pdfBase64
 }) => {
   if (!isAutoWhatsappAfterDasEnabled()) return 'skipped_disabled';
-  const webhookUrl = (env.N8N_WHATSAPP_WEBHOOK_URL || '').trim();
-  if (!webhookUrl) {
-    console.warn('[mei-das] MEI_DAS_AUTO_WHATSAPP_ENABLED=true mas N8N_WHATSAPP_WEBHOOK_URL está vazio');
-    return 'skipped_no_webhook';
+  if (!isWhatsappOutboundConfigured()) {
+    console.warn(
+      '[mei-das] MEI_DAS_AUTO_WHATSAPP_ENABLED=true mas WhatsApp outbound não está configurado (Z-API ou n8n)',
+    );
+    return 'skipped_no_whatsapp';
   }
   if (!pdfBase64) return 'skipped_no_pdf';
 
@@ -105,11 +109,11 @@ const trySendAutomaticDasWhatsapp = async ({
 
   try {
     await sendWhatsappMessage(payload);
-    console.info('[mei-das] WhatsApp automático solicitado (webhook)', { userId, competencia });
+    console.info('[mei-das] WhatsApp automático enviado', { userId, competencia });
     return 'sent';
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn('[mei-das] Falha no WhatsApp automático (webhook)', { userId, competencia, message: msg });
+    console.warn('[mei-das] Falha no WhatsApp automático', { userId, competencia, message: msg });
     return 'failed';
   }
 };

@@ -34,7 +34,8 @@ const normalizeWebhookErrorMessage = (body, response) => {
   return rawMessage;
 };
 
-export const sendWhatsappMessage = async (payload) => {
+/** Legado: POST para workflow n8n. Preferir `whatsapp-outbound.service.js` (Z-API directo). */
+export const sendWhatsappViaN8nWebhook = async (payload) => {
   const webhookUrl = env.N8N_WHATSAPP_WEBHOOK_URL;
   if (!webhookUrl) {
     throw badRequest('Webhook do WhatsApp não configurado');
@@ -42,7 +43,7 @@ export const sendWhatsappMessage = async (payload) => {
   const response = await fetch(webhookUrl, {
     method: 'POST',
     headers: buildWebhookHeaders(),
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
   const body = await parseWebhookResponse(response);
   if (!response.ok) {
@@ -51,6 +52,12 @@ export const sendWhatsappMessage = async (payload) => {
   }
   return {
     status: response.status,
-    body
+    body,
   };
 };
+
+export {
+  sendWhatsappMessage,
+  isWhatsappOutboundConfigured,
+  getWhatsappOutboundChannel,
+} from './whatsapp-outbound.service.js';
