@@ -42,9 +42,9 @@ Requisitos por utilizador em produção:
 Comportamento em código:
 
 - Percorre todos os `n8n_link` com telefone.
-- `list_calendar_events` para **hoje** (fuso `America/Sao_Paulo`).
+- `list_calendar_events` para o dia alvo (fuso `America/Sao_Paulo`): **manhã = hoje**, **noite = amanhã**.
 - **`events.length === 0` → não envia nada** (sem mensagem de agenda vazia).
-- **Com eventos →** uma mensagem com lista (Bom dia / Boa noite + títulos e horários).
+- **Com eventos →** uma mensagem com lista (Bom dia + compromissos de **hoje**; Boa noite + compromissos de **amanhã**).
 
 Teste manual:
 

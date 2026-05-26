@@ -12,12 +12,26 @@ const CERT_EXPIRATION_TITLE = 'Vencimento do certificado digital';
  * @returns {string}
  */
 export const calendarDateTodayInSaoPaulo = () => {
+  return calendarDateAddDaysInSaoPaulo(0);
+};
+
+/**
+ * Soma dias ao “hoje” em America/Sao_Paulo (YYYY-MM-DD).
+ * @param {number} days
+ * @returns {string}
+ */
+export const calendarDateAddDaysInSaoPaulo = (days) => {
+  const offset = Number(days) || 0;
+  const anchor = new Date();
+  if (offset !== 0) {
+    anchor.setTime(anchor.getTime() + offset * 24 * 60 * 60 * 1000);
+  }
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: SAO_PAULO_TZ,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date());
+  }).format(anchor);
 };
 
 /**

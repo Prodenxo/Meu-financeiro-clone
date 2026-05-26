@@ -2,6 +2,7 @@ import { env } from '../config/env.js';
 import { createSupabaseClient } from '../config/supabase.js';
 import { resolveOpenclawWhatsappPhone } from './openclaw-bot.service.js';
 import {
+  calendarDateAddDaysInSaoPaulo,
   calendarDateTodayInSaoPaulo,
   listCalendarEventsForUser,
 } from './calendar-events.service.js';
@@ -11,6 +12,18 @@ import {
 } from './whatsapp-outbound.service.js';
 
 const VALID_SLOTS = new Set(['manha', 'noite']);
+
+/**
+ * Data consultada na agenda: manhã = hoje; noite = amanhã (fuso São Paulo).
+ * @param {'manha'|'noite'} slot
+ * @param {string} [explicitDateIso] override YYYY-MM-DD (query `date`)
+ */
+export const resolveAgendaReminderDateIso = (slot, explicitDateIso) => {
+  const override = String(explicitDateIso || '').trim();
+  if (override) return override;
+  if (slot === 'noite') return calendarDateAddDaysInSaoPaulo(1);
+  return calendarDateTodayInSaoPaulo();
+};
 
 export const isAgendaWhatsappRemindersEnabled = () =>
   String(env.AGENDA_WHATSAPP_REMINDERS_ENABLED || '').toLowerCase() === 'true';
@@ -48,14 +61,15 @@ export const formatAgendaReminderWhatsappMessage = (calendar, slot = 'manha') =>
   const events = calendar?.events || [];
   if (!events.length) return null;
   const greeting = slot === 'noite' ? 'Boa noite' : 'Bom dia';
-  const dateLabel = calendar.dateDisplay || 'hoje';
+  const dateLabel = calendar.dateDisplay || (slot === 'noite' ? 'amanhã' : 'hoje');
+  const dayWord = slot === 'noite' ? 'amanhã' : 'hoje';
   const lines = events.map((e) => {
     const title = String(e.title || 'Compromisso').trim();
     if (e.allDay || !e.time) return `• ${title} (dia inteiro)`;
     const time = String(e.time).slice(0, 5);
     return `• ${time} — ${title}`;
   });
-  return `${greeting}! Compromissos de hoje (${dateLabel}):\n${lines.join('\n')}`;
+  return `${greeting}! Compromissos de ${dayWord} (${dateLabel}):\n${lines.join('\n')}`;
 };
 
 const trySendAgendaReminder = async ({ userId, phone, message, slot, dateIso }) => {
@@ -80,12 +94,13 @@ const trySendAgendaReminder = async ({ userId, phone, message, slot, dateIso }) 
 };
 
 /**
- * Percorre utilizadores com telefone em `n8n_link`; envia WhatsApp só quem tiver eventos hoje.
+ * Percorre utilizadores com telefone em `n8n_link`; envia WhatsApp só quem tiver eventos no dia alvo.
+ * Manhã = hoje; noite = amanhã (America/Sao_Paulo).
  * @param {{ slot?: 'manha'|'noite', dateIso?: string }} [options]
  */
 export const runAgendaWhatsappReminders = async (options = {}) => {
   const slot = VALID_SLOTS.has(options.slot) ? options.slot : 'manha';
-  const dateIso = options.dateIso || calendarDateTodayInSaoPaulo();
+  const dateIso = resolveAgendaReminderDateIso(slot, options.dateIso);
   const startedAt = new Date().toISOString();
 
   if (!isAgendaWhatsappRemindersEnabled()) {
