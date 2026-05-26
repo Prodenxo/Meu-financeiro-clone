@@ -31,6 +31,12 @@ import {
   previewOpenclawNfseEmit,
   rethrowNfseErrorForBot,
 } from './openclaw-nfse.service.js';
+import {
+  deliverOpenclawNfseWhatsappPdf,
+  isOpenclawNfseAutoWhatsappEnabled,
+  markOpenclawNfseWhatsappSent,
+  registerOpenclawNfseWhatsappDelivery,
+} from './nfse-whatsapp-delivery.service.js';
 
 const MAX_LIST = 40;
 
@@ -940,12 +946,42 @@ export const runOpenclawAction = async (input) => {
       const tomador = nota?.cnpj_tomador || result.preview?.tomadorCpfCnpj;
       const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
       const pdfReady = isNfsePdfReadyStatus(status);
-      const execCommand = pdfReady
-        ? buildNfseSendExecCommand(destinationPhone, nota?.id)
+      const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
+      let autoWhatsapp = null;
+
+      if (autoEnabled && destinationPhone && nota?.id) {
+        await registerOpenclawNfseWhatsappDelivery(userId, nota.id, destinationPhone);
+        if (pdfReady) {
+          autoWhatsapp = await deliverOpenclawNfseWhatsappPdf(
+            userId,
+            nota.id,
+            destinationPhone,
+          );
+        }
+      }
+
+      const autoSent = autoWhatsapp?.whatsappStatus === 'sent';
+      const autoFailed = ['failed', 'skipped_no_whatsapp'].includes(
+        autoWhatsapp?.whatsappStatus || '',
+      );
+      const useOpenclawScriptFallback = !autoSent && (!autoEnabled || autoFailed);
+      const execCommand = useOpenclawScriptFallback && pdfReady && destinationPhone && nota?.id
+        ? buildNfseSendExecCommand(destinationPhone, nota.id)
         : null;
-      const statusHint = pdfReady
-        ? ' PDF pronto — pode enviar com mf-nfse-send.sh.'
-        : ' Quando status for concluido, envie o PDF com mf-nfse-send.sh TELEFONE UUID.';
+
+      let statusHint = '';
+      if (autoSent) {
+        statusHint = ' PDF enviado automaticamente no WhatsApp.';
+      } else if (autoEnabled) {
+        statusHint = pdfReady
+          ? ' Envio automático do PDF falhou — use mf-nfse-send.sh se necessário.'
+          : ' O PDF será enviado automaticamente quando a nota concluir (não precisa pedir de novo).';
+      } else if (pdfReady) {
+        statusHint = ' PDF pronto — pode enviar com mf-nfse-send.sh.';
+      } else {
+        statusHint = ' Quando status for concluido, envie o PDF com mf-nfse-send.sh TELEFONE UUID.';
+      }
+
       return {
         ok: true,
         message: `NFSe enviada para emissão (status: ${status}). Tomador: ${tomador || '—'}.${statusHint}`,
@@ -959,6 +995,13 @@ export const runOpenclawAction = async (input) => {
             pdfReady,
           },
           execCommand,
+          autoWhatsappEnabled: autoEnabled,
+          autoWhatsapp: autoWhatsapp
+            ? {
+              status: autoWhatsapp.whatsappStatus,
+              error: autoWhatsapp.whatsappError ?? null,
+            }
+            : null,
           userId,
           actorContext,
           ...linkDebug,
@@ -1068,6 +1111,9 @@ export const runOpenclawAction = async (input) => {
         extraPayload: { notaId: pdfResult.nota.id, userId },
       });
       const sent = whatsapp.whatsappStatus === 'sent';
+      if (sent) {
+        await markOpenclawNfseWhatsappSent(userId, pdfResult.nota.id);
+      }
       return {
         ok: true,
         message: sent
@@ -1079,7 +1125,9 @@ export const runOpenclawAction = async (input) => {
           whatsappStatus: whatsapp.whatsappStatus,
           whatsappError: whatsapp.whatsappError ?? null,
           hint: whatsapp.hint ?? null,
-          execCommand: buildNfseSendExecCommand(destinationPhone, pdfResult.nota.id),
+          execCommand: sent
+            ? null
+            : buildNfseSendExecCommand(destinationPhone, pdfResult.nota.id),
           actorContext,
           ...linkDebug,
         },

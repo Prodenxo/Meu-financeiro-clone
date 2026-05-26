@@ -5,6 +5,7 @@ import {
   runSingleUserAutomaticDasDownload
 } from '../services/mei-das.service.js';
 import { runAgendaWhatsappReminders } from '../services/agenda-reminders.service.js';
+import { runOpenclawNfseWhatsappDeliveryJob } from '../services/nfse-whatsapp-delivery.service.js';
 import { badRequest } from '../utils/errors.js';
 
 const router = Router();
@@ -82,6 +83,52 @@ router.get('/agenda-lembretes', requireCronSecret, async (req, res, next) => {
       startedAt,
       message:
         'Lembretes em processamento em background. Para aguardar o lote completo, use ?sync=1.',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Entrega PDF NFSe emitida via OpenClaw (pendentes em metadata_json).
+ * Query: `sync=1` aguarda o lote (padrão 202 em background).
+ */
+router.get('/nfse-whatsapp-pending', requireCronSecret, async (req, res, next) => {
+  try {
+    const sync =
+      String(req.query.sync || '').toLowerCase() === '1'
+      || String(req.query.sync || '').toLowerCase() === 'true';
+
+    if (sync) {
+      const summary = await runOpenclawNfseWhatsappDeliveryJob();
+      return res.json({ ok: true, summary });
+    }
+
+    const startedAt = new Date().toISOString();
+    void runOpenclawNfseWhatsappDeliveryJob()
+      .then((summary) => {
+        // eslint-disable-next-line no-console
+        console.info('[nfse-whatsapp-delivery] background concluído', {
+          total: summary.total,
+          sent: summary.sent,
+          waiting: summary.waiting,
+          skipped: summary.skipped,
+        });
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error(
+          '[nfse-whatsapp-delivery] background falhou',
+          err instanceof Error ? err.message : err,
+        );
+      });
+
+    return res.status(202).json({
+      ok: true,
+      accepted: true,
+      startedAt,
+      message:
+        'Entrega NFSe WhatsApp em processamento. Para aguardar o lote, use ?sync=1.',
     });
   } catch (error) {
     next(error);

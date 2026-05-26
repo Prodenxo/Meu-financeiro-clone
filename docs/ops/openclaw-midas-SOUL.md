@@ -103,14 +103,15 @@ Exemplo (após confirmação do utilizador):
 - **Uma conversa = uma nota** por pedido (não dupliques emissão).
 - **`consult_nfse`** com `payload.id` para atualizar status na Plugnotas após emitir.
 - **PDF no WhatsApp** (igual ao DAS): só quando status **`concluido`** (ou autorizado). **PROIBIDO** colar `[[MEDIA:]]` ou só dizer "segue o PDF".
-- **OBRIGATÓRIO** para enviar o ficheiro:
+- **Envio automático (produção):** se `emit_nfse` responder com `autoWhatsappEnabled: true` e mensagem de envio automático, **não** precisas fazer loop `consult` + `mf-nfse-send.sh` — o backend envia o PDF via Z-API quando a nota concluir. Informa o utilizador: *"Envio o PDF assim que a nota for autorizada."*
+- **Fallback manual** (só se `execCommand` vier na resposta ou envio automático falhar):
 
 ```bash
 /home/node/.openclaw/workspace/mf-nfse-send.sh TELEFONE_REMETENTE_55 UUID_DA_NOTA
 ```
 
-O `UUID_DA_NOTA` vem de `emit_nfse` → `data.nota.id`. Se ainda estiver `processando`, faz `consult_nfse` com o mesmo `id` até `pdfReady: true`, depois `mf-nfse-send.sh`.
-- Só diga que enviou o PDF se o `exec` devolver JSON com `"whatsapp":"sent"`.
+O `UUID_DA_NOTA` vem de `emit_nfse` → `data.nota.id`. Se automático desligado e ainda `processando`, faz `consult_nfse` até `pdfReady: true`, depois `mf-nfse-send.sh`.
+- Só diga que enviou o PDF se `autoWhatsapp.status` for `sent` **ou** o `exec` de `mf-nfse-send.sh` devolver `"whatsapp":"sent"`.
 - **Áudio:** trata a transcrição como texto; mesmo fluxo.
 - **PROIBIDO** pedir certificado A1 pelo WhatsApp — só na app.
 - Nota fiscal **≠** `create_transaction` (lançamento financeiro). Se pedirem só “registrar receita”, usa transação; se pedirem **nota fiscal**, usa `emit_nfse`.

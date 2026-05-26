@@ -186,6 +186,12 @@ export const env = {
    */
   AGENDA_WHATSAPP_REMINDERS_ENABLED: process.env.AGENDA_WHATSAPP_REMINDERS_ENABLED || 'false',
   /**
+   * `true`: após `emit_nfse` pelo OpenClaw, agenda envio do PDF via Z-API (cron
+   * `/api/cron/nfse-whatsapp-pending`). Requer Z-API outbound (não usa n8n).
+   */
+  OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED:
+    process.env.OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED || 'false',
+  /**
    * URL pública do frontend usada em links de convite (`/register?convite=`).
    * Se vazio, usa `FRONTEND_URL` ou header `Origin` da requisição (fallback dev `http://localhost:3000`).
    */
