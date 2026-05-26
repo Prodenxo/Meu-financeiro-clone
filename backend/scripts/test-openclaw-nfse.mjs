@@ -134,6 +134,7 @@ Modos:
   clientes  — list_nfse_clientes
   list      — list_nfse_notas
   consult   — consult_nfse (precisa id da nota como 3º argumento)
+  send-pdf  — send_nfse_whatsapp (3º arg = id da nota; nota concluida)
 
 Flag:
   --local   — ignora OPENCLAW_ACTION_URL e usa http://127.0.0.1:PORT (npm run dev)
@@ -243,7 +244,21 @@ if (mode === 'setup') {
     console.log(
       `Consultar: node scripts/test-openclaw-nfse.mjs --local consult ${phone} ${notaId}`,
     )
+    console.log(
+      `Enviar PDF (WhatsApp/Z-API): node scripts/test-openclaw-nfse.mjs consult ${phone} ${notaId} — depois send-pdf quando concluido`,
+    )
   }
+} else if (mode === 'send-pdf') {
+  if (!notaIdArg) {
+    console.error('Uso: node scripts/test-openclaw-nfse.mjs send-pdf <telefone> <nota-uuid>')
+    process.exit(1)
+  }
+  const r = await postAction(url, secret, {
+    phone,
+    action: 'send_nfse_whatsapp',
+    payload: { id: notaIdArg, sync: true },
+  })
+  console.log(JSON.stringify(r, null, 2))
 } else {
   usage()
   process.exit(1)

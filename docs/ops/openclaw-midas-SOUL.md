@@ -66,7 +66,7 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 - **`ping`:** podes omitir `phone` no JSON: `-d '{"action":"ping"}'`.
 - **`list_roles`:** podes omitir `phone` para só o catálogo de cargos; com `phone` inclui o cargo do utilizador em `actorContext`.
 - **`phone`:** **Regra-base:** dígitos (DDI+número) do **remetente** deste chat — para **`list_categories` / `list_transactions` / `create_transaction` / `delete_transaction`**. **Excepção autorizada:** em **`get_das_current`**, se (**admin da empresa**, confirmado por `resolve_user` no remetente) e colaborador com **mesmo `empresaId`** após segundo `resolve_user` no número do colaborador — usa esse **telefone do colaborador** no JSON; ou **superadmin** com conta alvo em `n8n_link`. Nunca inventes número.
-- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_categories`, `list_transactions`, `list_calendar_events`, `create_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_das_current`, ou `ping`.
+- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_categories`, `list_transactions`, `list_calendar_events`, `create_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, ou `ping`.
 - Em **cada** resposta com utilizador resolvido, o JSON inclui **`data.actorContext`**: **`profileRole`**, **`hasSuperadminCapability`**, `memberships` (cargo `role`, `empresaNome`, **`empresaId`**, …), **`hasActiveMembership`**. Usa **obrigatoriamente** para aplicar as regras de cargo antes de prometer ou executar algo (**comparar `empresaId`** admin × colaborador antes de **`get_das_current`** alheio). **Lançamentos** via API ficam sempre no **`user_id` do `phone` enviado** (não “toda a empresa”).
 - **Referência técnica completa:** ficheiro **`openclaw-midas-knowledge-base.md`** (ou `midas-kb.md` no teu workspace com o mesmo conteúdo).
 
@@ -101,7 +101,16 @@ Exemplo (após confirmação do utilizador):
 ```
 
 - **Uma conversa = uma nota** por pedido (não dupliques emissão).
-- **`consult_nfse`** com `payload.id` para status/PDF após emitir.
+- **`consult_nfse`** com `payload.id` para atualizar status na Plugnotas após emitir.
+- **PDF no WhatsApp** (igual ao DAS): só quando status **`concluido`** (ou autorizado). **PROIBIDO** colar `[[MEDIA:]]` ou só dizer "segue o PDF".
+- **OBRIGATÓRIO** para enviar o ficheiro:
+
+```bash
+/home/node/.openclaw/workspace/mf-nfse-send.sh TELEFONE_REMETENTE_55 UUID_DA_NOTA
+```
+
+O `UUID_DA_NOTA` vem de `emit_nfse` → `data.nota.id`. Se ainda estiver `processando`, faz `consult_nfse` com o mesmo `id` até `pdfReady: true`, depois `mf-nfse-send.sh`.
+- Só diga que enviou o PDF se o `exec` devolver JSON com `"whatsapp":"sent"`.
 - **Áudio:** trata a transcrição como texto; mesmo fluxo.
 - **PROIBIDO** pedir certificado A1 pelo WhatsApp — só na app.
 - Nota fiscal **≠** `create_transaction` (lançamento financeiro). Se pedirem só “registrar receita”, usa transação; se pedirem **nota fiscal**, usa `emit_nfse`.

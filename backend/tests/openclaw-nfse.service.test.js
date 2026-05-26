@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseValorReais } from '../src/services/openclaw-nfse.service.js';
+import { isNfsePdfReadyStatus, parseValorReais } from '../src/services/openclaw-nfse.service.js';
 
 /** Valor da nota fiscal (emit_nfse), não lançamento financeiro. */
 test('parseValorReais NFSe — número e formato BR', () => {
@@ -20,4 +20,10 @@ test('parseValorReais NFSe — inválido', () => {
   assert.equal(parseValorReais(''), null);
   assert.equal(parseValorReais('abc'), null);
   assert.equal(parseValorReais(0), null);
+});
+
+test('isNfsePdfReadyStatus', () => {
+  assert.equal(isNfsePdfReadyStatus('concluido'), true);
+  assert.equal(isNfsePdfReadyStatus('processando'), false);
+  assert.equal(isNfsePdfReadyStatus('autorizado'), true);
 });

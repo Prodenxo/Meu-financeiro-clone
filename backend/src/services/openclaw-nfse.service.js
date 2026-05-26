@@ -7,6 +7,7 @@ import {
 } from './mei-certificate-store.js';
 import { resolverCertificadoIdPorCnpj } from './plugnotas/empresa.service.js';
 import {
+  baixarPdf,
   emitirNota,
   listarCatalogoClientes,
   listarCatalogoProdutos,
@@ -443,6 +444,12 @@ export const listOpenclawNfseNotas = async (userId, { limit = 10 } = {}) => {
   }));
 };
 
+/** Status em que o PDF costuma existir na Plugnotas. */
+export const isNfsePdfReadyStatus = (status) => {
+  const s = String(status || '').trim().toLowerCase();
+  return s === 'concluido' || s.includes('autoriz');
+};
+
 export const consultOpenclawNfse = async (userId, { id, sync = true } = {}) => {
   const recordId = String(id || '').trim();
   if (!recordId) throw badRequest('payload.id da nota é obrigatório');
@@ -456,6 +463,52 @@ export const consultOpenclawNfse = async (userId, { id, sync = true } = {}) => {
     xml_url: record.xml_url,
     created_at: record.created_at,
     updated_at: record.updated_at,
+    pdfReady: isNfsePdfReadyStatus(record?.status),
+  };
+};
+
+const buildNfsePdfFileName = (record) => {
+  const short = String(record?.id || 'nota').slice(0, 8);
+  const tomador = String(record?.cnpj_tomador || '').replace(/\D/g, '').slice(-6) || 'nfse';
+  return `NFSe-${tomador}-${short}.pdf`.replace(/[^a-zA-Z0-9._-]/g, '_');
+};
+
+/**
+ * Sincroniza a nota (opcional), valida status e devolve PDF em base64 para OpenClaw / WhatsApp.
+ */
+export const fetchOpenclawNfsePdfBase64 = async (userId, { id, sync = true } = {}) => {
+  const recordId = String(id || '').trim();
+  if (!recordId) {
+    throw badRequest('payload.id da nota é obrigatório', { code: 'NFSE_ID_REQUIRED' });
+  }
+  const record = await obterNota(userId, recordId, { sync: sync !== false });
+  if (!isNfsePdfReadyStatus(record?.status)) {
+    throw badRequest(
+      `NFSe ainda não está pronta para PDF (status: ${record?.status || 'processando'}).`,
+      {
+        code: 'NFSE_PDF_NOT_READY',
+        botHint:
+          'Consulte com consult_nfse (sync) até status concluido; depois mf-nfse-send.sh TELEFONE UUID.',
+        status: record?.status,
+        notaId: record.id,
+      },
+    );
+  }
+  const file = await baixarPdf(userId, recordId);
+  const buffer = file?.buffer;
+  if (!buffer?.length) {
+    throw badRequest('PDF da NFSe vazio ou indisponível', { code: 'NFSE_PDF_EMPTY' });
+  }
+  return {
+    base64: Buffer.from(buffer).toString('base64'),
+    fileName: buildNfsePdfFileName(record),
+    mimeType: file.contentType || 'application/pdf',
+    nota: {
+      id: record.id,
+      status: record.status,
+      plugnotas_id: record.plugnotas_id,
+      cnpj_tomador: record.cnpj_tomador,
+    },
   };
 };
 

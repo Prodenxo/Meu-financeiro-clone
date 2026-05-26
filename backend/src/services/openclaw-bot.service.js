@@ -23,7 +23,9 @@ import {
 import {
   consultOpenclawNfse,
   emitOpenclawNfse,
+  fetchOpenclawNfsePdfBase64,
   getOpenclawNfseSetupStatus,
+  isNfsePdfReadyStatus,
   listOpenclawNfseClientes,
   listOpenclawNfseNotas,
   previewOpenclawNfseEmit,
@@ -103,22 +105,21 @@ export const resolveOpenclawWhatsappPhone = (phoneDigits, matchedUserNumber) => 
 };
 
 /**
- * Envia DAS via webhook n8n/Z-API. Não lança: devolve status para resposta curta ao agente.
+ * Envia PDF via Z-API / n8n. Não lança: devolve status para resposta curta ao agente.
  * @returns {Promise<{ whatsappStatus: string, whatsappError?: string, hint?: string }>}
  */
-export const trySendDasWhatsappWebhook = async ({
-  userId,
+export const trySendWhatsappPdfOutbound = async ({
   phone,
-  display,
-  periodoDigits,
   pdfBase64,
   fileName,
+  message,
+  extraPayload = {},
 }) => {
   if (!isWhatsappOutboundConfigured()) {
     return {
       whatsappStatus: 'skipped_no_whatsapp',
       hint:
-        'Configure ZAPI_INSTANCE_ID + ZAPI_TOKEN + ZAPI_CLIENT_TOKEN (ou N8N_WHATSAPP_WEBHOOK_URL) no backend, ou use mf-das-send.sh no OpenClaw.',
+        'Configure ZAPI no backend ou use mf-nfse-send.sh / mf-das-send.sh no OpenClaw (openclaw message send).',
     };
   }
   if (!phone) {
@@ -127,25 +128,49 @@ export const trySendDasWhatsappWebhook = async ({
   if (!pdfBase64) {
     return { whatsappStatus: 'skipped_no_pdf' };
   }
-  const year = periodoDigits.slice(0, 4);
-  const month = periodoDigits.slice(4, 6);
-  const payload = {
-    userId,
-    phone,
-    competencia: `${year}-${month}`,
-    periodoApuracao: periodoDigits,
-    fileName,
-    pdfBase64,
-    source: 'openclaw_bot',
-    message: `Segue o DAS MEI da competência ${display}.`,
-  };
   try {
-    await sendWhatsappMessage(payload);
+    await sendWhatsappMessage({
+      phone,
+      fileName,
+      pdfBase64,
+      message,
+      source: 'openclaw_bot',
+      ...extraPayload,
+    });
     return { whatsappStatus: 'sent' };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { whatsappStatus: 'failed', whatsappError: msg };
   }
+};
+
+/** Envia DAS via webhook n8n/Z-API. */
+export const trySendDasWhatsappWebhook = async ({
+  userId,
+  phone,
+  display,
+  periodoDigits,
+  pdfBase64,
+  fileName,
+}) => {
+  const year = periodoDigits.slice(0, 4);
+  const month = periodoDigits.slice(4, 6);
+  return trySendWhatsappPdfOutbound({
+    phone,
+    pdfBase64,
+    fileName,
+    message: `Segue o DAS MEI da competência ${display}.`,
+    extraPayload: {
+      userId,
+      competencia: `${year}-${month}`,
+      periodoApuracao: periodoDigits,
+    },
+  });
+};
+
+const buildNfseSendExecCommand = (destinationPhone, notaId) => {
+  if (!destinationPhone || !notaId) return null;
+  return `/home/node/.openclaw/workspace/mf-nfse-send.sh ${destinationPhone} ${notaId}`;
 };
 
 /**
@@ -913,9 +938,17 @@ export const runOpenclawAction = async (input) => {
       const nota = result.nota;
       const status = nota?.status || 'processando';
       const tomador = nota?.cnpj_tomador || result.preview?.tomadorCpfCnpj;
+      const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+      const pdfReady = isNfsePdfReadyStatus(status);
+      const execCommand = pdfReady
+        ? buildNfseSendExecCommand(destinationPhone, nota?.id)
+        : null;
+      const statusHint = pdfReady
+        ? ' PDF pronto — pode enviar com mf-nfse-send.sh.'
+        : ' Quando status for concluido, envie o PDF com mf-nfse-send.sh TELEFONE UUID.';
       return {
         ok: true,
-        message: `NFSe enviada para emissão (status: ${status}). Tomador: ${tomador || '—'}.`,
+        message: `NFSe enviada para emissão (status: ${status}). Tomador: ${tomador || '—'}.${statusHint}`,
         data: {
           nota: {
             id: nota?.id,
@@ -923,7 +956,9 @@ export const runOpenclawAction = async (input) => {
             plugnotas_id: nota?.plugnotas_id,
             id_integracao: nota?.id_integracao,
             pdf_url: nota?.pdf_url,
+            pdfReady,
           },
+          execCommand,
           userId,
           actorContext,
           ...linkDebug,
@@ -950,10 +985,104 @@ export const runOpenclawAction = async (input) => {
         payload?.sync !== false
         && String(payload?.sync || '').toLowerCase() !== 'false';
       const nota = await consultOpenclawNfse(userId, { id: payload?.id, sync });
+      const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+      const execCommand = nota.pdfReady
+        ? buildNfseSendExecCommand(destinationPhone, nota.id)
+        : null;
+      const sendHint = nota.pdfReady
+        ? ' Para enviar no WhatsApp use mf-nfse-send.sh com o telefone do remetente.'
+        : '';
       return {
         ok: true,
-        message: `Nota ${nota.id}: status ${nota.status || '—'}.${nota.pdf_url ? ' PDF disponível.' : ''}`,
-        data: { nota, userId, actorContext, ...linkDebug },
+        message: `Nota ${nota.id}: status ${nota.status || '—'}.${nota.pdfReady ? ' PDF pronto.' : ''}${sendHint}`,
+        data: { nota, execCommand, userId, actorContext, ...linkDebug },
+      };
+    } catch (err) {
+      rethrowNfseErrorForBot(err);
+    }
+  }
+
+  if (action === 'get_nfse_pdf') {
+    try {
+      const sync =
+        payload?.sync !== false
+        && String(payload?.sync || '').toLowerCase() !== 'false';
+      const pdfResult = await fetchOpenclawNfsePdfBase64(userId, {
+        id: payload?.id,
+        sync,
+      });
+      const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+      const includeBase64 =
+        payload?.includeBase64 === true
+        || String(payload?.includeBase64 || '').toLowerCase() === 'true'
+        || payload?.includeBase64 === 1;
+
+      if (!includeBase64) {
+        return {
+          ok: true,
+          message: `PDF NFSe pronto (${pdfResult.nota.status}). Para enviar no WhatsApp use mf-nfse-send.sh.`,
+          data: {
+            fileName: pdfResult.fileName,
+            mimeType: pdfResult.mimeType,
+            includeBase64: false,
+            nota: pdfResult.nota,
+            execCommand: buildNfseSendExecCommand(destinationPhone, pdfResult.nota.id),
+            actorContext,
+            ...linkDebug,
+          },
+        };
+      }
+
+      return {
+        ok: true,
+        message: `PDF NFSe obtido (status ${pdfResult.nota.status}).`,
+        data: {
+          fileName: pdfResult.fileName,
+          mimeType: pdfResult.mimeType,
+          base64: pdfResult.base64,
+          nota: pdfResult.nota,
+          actorContext,
+          ...linkDebug,
+        },
+      };
+    } catch (err) {
+      rethrowNfseErrorForBot(err);
+    }
+  }
+
+  if (action === 'send_nfse_whatsapp') {
+    try {
+      const sync =
+        payload?.sync !== false
+        && String(payload?.sync || '').toLowerCase() !== 'false';
+      const pdfResult = await fetchOpenclawNfsePdfBase64(userId, {
+        id: payload?.id,
+        sync,
+      });
+      const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+      const whatsapp = await trySendWhatsappPdfOutbound({
+        phone: destinationPhone,
+        pdfBase64: pdfResult.base64,
+        fileName: pdfResult.fileName,
+        message: String(payload?.message || '').trim() || 'Segue a NFSe emitida.',
+        extraPayload: { notaId: pdfResult.nota.id, userId },
+      });
+      const sent = whatsapp.whatsappStatus === 'sent';
+      return {
+        ok: true,
+        message: sent
+          ? `PDF NFSe enviado no WhatsApp (nota ${pdfResult.nota.id}).`
+          : `PDF obtido; envio WhatsApp: ${whatsapp.whatsappStatus}. Use mf-nfse-send.sh no OpenClaw.`,
+        data: {
+          nota: pdfResult.nota,
+          fileName: pdfResult.fileName,
+          whatsappStatus: whatsapp.whatsappStatus,
+          whatsappError: whatsapp.whatsappError ?? null,
+          hint: whatsapp.hint ?? null,
+          execCommand: buildNfseSendExecCommand(destinationPhone, pdfResult.nota.id),
+          actorContext,
+          ...linkDebug,
+        },
       };
     } catch (err) {
       rethrowNfseErrorForBot(err);
@@ -997,6 +1126,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

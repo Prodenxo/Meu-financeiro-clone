@@ -76,6 +76,8 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 | `emit_nfse` | Sim | Emite NFSe (Plugnotas); exige `payload.confirm: true` após confirmação do utilizador. |
 | `list_nfse_notas` | Sim | Últimas notas NFSe (`payload.limit` opcional, máx. 40). |
 | `consult_nfse` | Sim | Status de uma nota (`payload.id`); `payload.sync: false` para não consultar Plugnotas. |
+| `get_nfse_pdf` | Sim | PDF em base64 (`includeBase64: true`) ou só metadados + `execCommand`. |
+| `send_nfse_whatsapp` | Sim | Envia PDF via Z-API/n8n se configurado; senão use `mf-nfse-send.sh`. |
 
 ---
 
@@ -90,6 +92,11 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 3. `preview_nfse` ou `emit_nfse` **sem** `confirm` → mostrar resumo
 4. Utilizador confirma no chat
 5. `emit_nfse` com `"confirm": true`
+6. Quando `consult_nfse` → `pdfReady: true` (status concluido), enviar PDF:
+
+```bash
+/home/node/.openclaw/workspace/mf-nfse-send.sh 5521996185328 UUID_DA_NOTA
+```
 
 **Payload `emit_nfse` / `preview_nfse`**
 

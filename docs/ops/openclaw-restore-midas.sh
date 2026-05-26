@@ -27,6 +27,18 @@ if [ -f "${SCRIPT_DIR}/openclaw-mf-das.sh" ]; then
   sed "s|\${MF_CURL:-\$DIR/mf-curl.sh}|${OC}/mf-curl.sh|" "${SCRIPT_DIR}/openclaw-mf-das.sh" > "${WS}/mf-das.sh"
   chmod 755 "${WS}/mf-das.sh"
 fi
+if [ -f "${SCRIPT_DIR}/openclaw-mf-nfse.sh" ]; then
+  sed "s|\${MF_CURL:-\$DIR/mf-curl.sh}|${OC}/mf-curl.sh|" "${SCRIPT_DIR}/openclaw-mf-nfse.sh" > "${WS}/mf-nfse.sh"
+  chmod 755 "${WS}/mf-nfse.sh"
+fi
+if [ -f "${SCRIPT_DIR}/openclaw-mf-nfse-send.sh" ]; then
+  cp -f "${SCRIPT_DIR}/openclaw-mf-nfse-send.sh" "${WS}/mf-nfse-send.sh"
+  chmod 755 "${WS}/mf-nfse-send.sh"
+fi
+if [ -f "${SCRIPT_DIR}/openclaw-mf-send-nfse.sh" ]; then
+  cp -f "${SCRIPT_DIR}/openclaw-mf-send-nfse.sh" "${WS}/mf-send-nfse.sh"
+  chmod 755 "${WS}/mf-send-nfse.sh"
+fi
 
 cat > "${WS}/MF-API.md" << 'EOF'
 # Meu Financeiro — OBRIGATÓRIO (ler antes de qualquer tool)
