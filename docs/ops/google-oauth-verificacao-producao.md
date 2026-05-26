@@ -39,6 +39,7 @@ Deve mencionar explicitamente:
 - Finalidade: sincronizar compromissos financeiros e lembretes na Agenda.
 - Como pedir eliminação de dados e revogar acesso (desconectar em Configurações + apagar conta se existir).
 - E-mail de contacto para privacidade (ex.: `privacidade@meiinfinito.com.br`).
+- **Obrigatório para verificação Google (API):** secção explícita sobre **com quem compartilha, transfere ou divulga dados de utilizador do Google** (Supabase, Google API, hospedagem — e que **não** vende nem usa para ads/IA/credit scoring). Ver [App Privacy Policy](https://support.google.com/cloud/answer/13806988?hl=pt-BR).
 
 > Rotas no `Site/frontend`: `/privacidade` e `/termos` (públicas, sem login). Fazer deploy do frontend antes do envio ao Google.
 
