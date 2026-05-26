@@ -175,6 +175,13 @@ export const env = {
   OPENCLAW_ZAPI_RELAY_SECRET: (process.env.OPENCLAW_ZAPI_RELAY_SECRET || '').trim(),
   /** Timeout ms do POST de relay (1000–60000). Padrão 8000. */
   OPENCLAW_ZAPI_RELAY_TIMEOUT_MS: process.env.OPENCLAW_ZAPI_RELAY_TIMEOUT_MS || '8000',
+  /** Transcrição de notas de voz Z-API → texto antes do relay OpenClaw. */
+  WHATSAPP_AUDIO_TRANSCRIPTION_ENABLED:
+    process.env.WHATSAPP_AUDIO_TRANSCRIPTION_ENABLED || 'true',
+  OPENAI_API_KEY: (process.env.OPENAI_API_KEY || '').trim(),
+  GROQ_API_KEY: (process.env.GROQ_API_KEY || '').trim(),
+  WHATSAPP_TRANSCRIPTION_OPENAI_API_KEY:
+    (process.env.WHATSAPP_TRANSCRIPTION_OPENAI_API_KEY || '').trim(),
   /**
    * `true`: após gerar e guardar o DAS no job mensal/cron, envia WhatsApp (Z-API directo ou n8n)
    * — mesmo payload do admin, `source: mei_das_automatico`. Requer telefone em `user_metadata.phone`.

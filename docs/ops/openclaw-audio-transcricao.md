@@ -1,6 +1,8 @@
 # OpenClaw — corrigir erro ao receber áudio (WhatsApp)
 
-O Meu Financeiro **não transcreve áudio** no backend. A transcrição é feita pelo **OpenClaw** (`tools.media.audio` no `openclaw.json`). Se falhar, o Midas diz que não conseguiu ouvir/transcrever.
+Com **Z-API → relay** (`OPENCLAW_ZAPI_RELAY_URL`), o backend **transcreve notas de voz** antes de enviar texto ao OpenClaw (`whatsapp-audio-transcription.service.js`). Requer `OPENAI_API_KEY` ou `GROQ_API_KEY` no serviço **backend**.
+
+Se o WhatsApp estiver **directamente** no OpenClaw (sem Z-API), a transcrição continua a ser do **OpenClaw** (`tools.media.audio` no `openclaw.json`).
 
 Documentação oficial: https://docs.openclaw.ai/nodes/audio
 
@@ -19,7 +21,7 @@ Documentação oficial: https://docs.openclaw.ai/nodes/audio
 1. **`tools.media.audio` não configurado** ou sem API key (OpenAI / Groq / Deepgram).
 2. **OpenClaw desatualizado** — bugs antigos em áudio no WhatsApp (atualizar imagem).
 3. **Áudio > 20 MB** (`maxBytes` padrão) — tenta áudio mais curto.
-4. **Z-API relay só com texto** — se a mensagem passar pelo webhook Z-API sem áudio, o relay envia `text: ""` (ver secção Z-API abaixo).
+4. **Z-API sem chave STT** — nota de voz chega ao webhook mas `OPENAI_API_KEY` / `GROQ_API_KEY` não estão no **backend** → relay não é feito (`audio_transcription_failed`). Ver secção Z-API abaixo.
 
 ---
 
@@ -105,16 +107,32 @@ Enquanto o STT não estiver estável: **escrever por texto** no WhatsApp — o f
 
 ---
 
-## Se usares Z-API → relay (n8n/OpenClaw HTTP)
+## Z-API → relay OpenClaw (Meu Financeiro)
 
-O ficheiro `zapi-inbound.service.js` do backend **só extrai `text.message`**. Notas de voz na Z-API **não viram texto** no relay.
+Fluxo: WhatsApp → Z-API → `POST /api/webhooks/zapi/inbound` → STT no backend → `OPENCLAW_ZAPI_RELAY_URL`.
 
-Para áudio com Z-API precisas de:
+### Variáveis no **backend** (Easypanel / `.env`)
 
-- WhatsApp ligado **directamente** ao OpenClaw (Baileys / canal WhatsApp do gateway), **ou**
-- Estender o webhook Z-API para baixar o áudio e transcrever antes do relay (fora do escopo actual).
+| Variável | Obrigatório | Descrição |
+|----------|-------------|-----------|
+| `OPENCLAW_ZAPI_RELAY_URL` | Sim | URL HTTP do OpenClaw que recebe `{ phone, text }` |
+| `OPENAI_API_KEY` **ou** `GROQ_API_KEY` | Sim (áudio) | Whisper / gpt-4o-mini-transcribe |
+| `WHATSAPP_AUDIO_TRANSCRIPTION_ENABLED` | Não | Default `true`; `false` desliga STT |
+| `WHATSAPP_TRANSCRIPTION_OPENAI_API_KEY` | Não | Chave só para STT (se diferente da do agente) |
 
-**Recomendação Meu Financeiro:** um único canal WhatsApp no **OpenClaw** (sem disputar com Z-API no mesmo número).
+### Diagnóstico
+
+```bash
+curl -s https://SEU_BACKEND/api/webhooks/zapi/monitor
+```
+
+Resposta esperada: `audioTranscription.enabled: true`, `provider: "openai"` ou `"groq"`, `configured: true`.
+
+### Deploy
+
+Após alterar `.env`, **reinicia o backend**. Envia uma nota de voz curta; nos logs: `[ZAPI] transcrição` só aparece em falha.
+
+**Recomendação:** um único número WhatsApp — ou Z-API+relay **ou** OpenClaw directo, para não duplicar respostas.
 
 ---
 

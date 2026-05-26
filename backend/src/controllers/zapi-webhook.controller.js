@@ -1,5 +1,10 @@
 import { env } from '../config/env.js';
-import { sendSuccess } from '../utils/response.js';import * as zapiInbound from '../services/zapi-inbound.service.js';
+import { sendSuccess } from '../utils/response.js';
+import * as zapiInbound from '../services/zapi-inbound.service.js';
+import {
+  getWhatsappAudioTranscriptionStatus,
+  transcribeZapiInboundAudio,
+} from '../services/whatsapp-audio-transcription.service.js';
 
 export const getZapiMonitor = (_req, res) => {
   return res.json({
@@ -7,12 +12,13 @@ export const getZapiMonitor = (_req, res) => {
     service: 'zapi-inbound-bridge',
     relayConfigured: Boolean((env.OPENCLAW_ZAPI_RELAY_URL || '').trim()),
     webhookTokenConfigured: Boolean((env.ZAPI_WEBHOOK_TOKEN || '').trim()),
+    audioTranscription: getWhatsappAudioTranscriptionStatus(),
   });
 };
 
 export const postInbound = async (req, res, next) => {
   try {
-    const parsed = zapiInbound.parseZapiInbound(req.body);
+    let parsed = zapiInbound.parseZapiInbound(req.body);
     if (parsed.ignored) {
       return sendSuccess(
         res,
@@ -21,14 +27,40 @@ export const postInbound = async (req, res, next) => {
       );
     }
 
-    void zapiInbound.relayZapiInbound(parsed).catch(() => {});
+    let transcriptionSource = null;
+    if (!parsed.text && parsed.hasAudio) {
+      const transcription = await transcribeZapiInboundAudio(req.body);
+      if (transcription) {
+        parsed = { ...parsed, text: transcription };
+        transcriptionSource = 'zapi_audio_stt';
+      }
+    }
+
+    if (!parsed.text?.trim()) {
+      return sendSuccess(
+        res,
+        {
+          accepted: true,
+          phone: parsed.phone,
+          ignoredReason: parsed.hasAudio ? 'audio_transcription_failed' : 'empty_text',
+          relayConfigured: Boolean((env.OPENCLAW_ZAPI_RELAY_URL || '').trim()),
+        },
+        'sem texto',
+      );
+    }
+
+    const relayUrl = (env.OPENCLAW_ZAPI_RELAY_URL || '').trim();
+    if (relayUrl) {
+      await zapiInbound.relayZapiInbound(parsed);
+    }
 
     return sendSuccess(
       res,
       {
         accepted: true,
         phone: parsed.phone,
-        relayScheduled: Boolean((env.OPENCLAW_ZAPI_RELAY_URL || '').trim()),
+        relayed: Boolean(relayUrl),
+        transcriptionSource,
       },
       'aceite',
     );

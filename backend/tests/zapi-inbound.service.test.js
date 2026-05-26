@@ -43,6 +43,25 @@ test('parseZapiInbound extrai texto e telefone', () => {
   }
 });
 
+test('parseZapiInbound marca hasAudio em nota de voz', () => {
+  const r = parseZapiInbound({
+    type: 'ReceivedCallback',
+    phone: '5548123456789',
+    fromMe: false,
+    isGroup: false,
+    audio: {
+      audioUrl: 'https://cdn.z-api.io/audio.ogg',
+      mimeType: 'audio/ogg',
+      ptt: true,
+    },
+  });
+  assert.equal(r.ignored, false);
+  if (!r.ignored) {
+    assert.equal(r.text, '');
+    assert.equal(r.hasAudio, true);
+  }
+});
+
 test('parseZapiInbound aceita primeiro item de array', () => {
   const r = parseZapiInbound([
     {

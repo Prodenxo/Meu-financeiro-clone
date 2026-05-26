@@ -44,10 +44,17 @@ export const parseZapiInbound = (raw) => {
     text = String(body.text.message).trim();
   }
 
+  const hasAudio = Boolean(
+    body.audio
+    && typeof body.audio === 'object'
+    && String(/** @type {Record<string, unknown>} */ (body.audio).audioUrl || '').trim(),
+  );
+
   return {
     ignored: false,
     phone,
     text,
+    hasAudio,
     messageId: body.messageId != null ? String(body.messageId) : null,
     instanceId: body.instanceId != null ? String(body.instanceId) : null,
     isGroup: Boolean(body.isGroup),
