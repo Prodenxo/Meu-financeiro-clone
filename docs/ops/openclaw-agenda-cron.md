@@ -53,6 +53,8 @@ curl -s "http://127.0.0.1:3333/api/cron/agenda-lembretes?slot=manha" \
   -H "Authorization: Bearer SEU_CRON_SECRET"
 ```
 
+**cron-job.org:** o timeout máximo de espera é **30s**. O endpoint responde **202 Accepted** de imediato e processa em background (WhatsApp continua a ser enviado). Para ver o JSON completo no terminal, use `?sync=1` (pode demorar vários segundos).
+
 ---
 
 ## 1. Horário errado (4h e 18h em vez de 7h e 21h)
