@@ -1727,19 +1727,13 @@ export const obterNota = async (userId, id, { sync = false } = {}) => {
   const status = resolveStatusAfterPlugnotasSync(record, providerStatus);
   const protocol = extractProtocol(response) || record.protocol;
 
-  const updated = await updateRecord(userId, record.id, {
+  return await updateRecord(userId, record.id, {
     plugnotas_id: plugnotasId,
     id_integracao: idIntegracao,
     protocol,
     status,
     response_json: response
   });
-
-  void import('./nfse-whatsapp-delivery.service.js')
-    .then((mod) => mod.tryDeliverPendingOpenclawNfseIfReady(userId, updated))
-    .catch(() => {});
-
-  return updated;
 };
 
 export const atualizarNota = async (userId, id, input) => {

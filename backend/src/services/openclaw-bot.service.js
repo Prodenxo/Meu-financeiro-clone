@@ -33,6 +33,7 @@ import {
 } from './openclaw-nfse.service.js';
 import {
   deliverOpenclawNfseWhatsappPdf,
+  getOpenclawNfseWhatsappDeliveryState,
   isOpenclawNfseAutoWhatsappEnabled,
   markOpenclawNfseWhatsappSent,
   registerOpenclawNfseWhatsappDelivery,
@@ -969,9 +970,10 @@ export const runOpenclawAction = async (input) => {
         scheduleOpenclawNfseWhatsappDeliveryRetries(userId, nota.id);
       }
       const useOpenclawScriptFallback = !autoSent && (!autoEnabled || autoFailed);
-      const execCommand = useOpenclawScriptFallback && pdfReady && destinationPhone && nota?.id
-        ? buildNfseSendExecCommand(destinationPhone, nota.id)
-        : null;
+      const execCommand =
+        useOpenclawScriptFallback && pdfReady && destinationPhone && nota?.id
+          ? buildNfseSendExecCommand(destinationPhone, nota.id)
+          : null;
 
       let statusHint = '';
       if (autoSent) {
@@ -1006,6 +1008,8 @@ export const runOpenclawAction = async (input) => {
               error: autoWhatsapp.whatsappError ?? null,
             }
             : null,
+          pdfWhatsappAlreadySent: autoSent,
+          doNotRunNfseSendScript: autoSent || (autoEnabled && !autoFailed),
           userId,
           actorContext,
           ...linkDebug,
@@ -1032,17 +1036,33 @@ export const runOpenclawAction = async (input) => {
         payload?.sync !== false
         && String(payload?.sync || '').toLowerCase() !== 'false';
       const nota = await consultOpenclawNfse(userId, { id: payload?.id, sync });
+      const delivery = await getOpenclawNfseWhatsappDeliveryState(userId, nota.id);
       const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
-      const execCommand = nota.pdfReady
-        ? buildNfseSendExecCommand(destinationPhone, nota.id)
-        : null;
-      const sendHint = nota.pdfReady
-        ? ' Para enviar no WhatsApp use mf-nfse-send.sh com o telefone do remetente.'
-        : '';
+      const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
+      const execCommand =
+        nota.pdfReady && !delivery.alreadySent && !autoEnabled
+          ? buildNfseSendExecCommand(destinationPhone, nota.id)
+          : null;
+      let sendHint = '';
+      if (delivery.alreadySent) {
+        sendHint = ' PDF já enviado no WhatsApp.';
+      } else if (autoEnabled) {
+        sendHint = ' Envio automático activo — não use mf-nfse-send.sh.';
+      } else if (nota.pdfReady) {
+        sendHint = ' Para enviar no WhatsApp use mf-nfse-send.sh com o telefone do remetente.';
+      }
       return {
         ok: true,
         message: `Nota ${nota.id}: status ${nota.status || '—'}.${nota.pdfReady ? ' PDF pronto.' : ''}${sendHint}`,
-        data: { nota, execCommand, userId, actorContext, ...linkDebug },
+        data: {
+          nota,
+          execCommand,
+          whatsappDelivery: delivery,
+          doNotRunNfseSendScript: delivery.alreadySent || autoEnabled,
+          userId,
+          actorContext,
+          ...linkDebug,
+        },
       };
     } catch (err) {
       rethrowNfseErrorForBot(err);
@@ -1099,11 +1119,29 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'send_nfse_whatsapp') {
     try {
+      const notaId = String(payload?.id || '').trim();
+      const priorDelivery = await getOpenclawNfseWhatsappDeliveryState(userId, notaId);
+      if (priorDelivery.alreadySent) {
+        return {
+          ok: true,
+          message: 'PDF desta NFSe já foi enviado no WhatsApp (sem duplicar).',
+          data: {
+            notaId,
+            whatsappStatus: 'already_sent',
+            whatsappDelivery: priorDelivery,
+            execCommand: null,
+            userId,
+            actorContext,
+            ...linkDebug,
+          },
+        };
+      }
+
       const sync =
         payload?.sync !== false
         && String(payload?.sync || '').toLowerCase() !== 'false';
       const pdfResult = await fetchOpenclawNfsePdfBase64(userId, {
-        id: payload?.id,
+        id: notaId,
         sync,
       });
       const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);

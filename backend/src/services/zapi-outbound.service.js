@@ -91,6 +91,10 @@ export const sendZapiPdf = async ({ phone, pdfBase64, fileName, message }) => {
     await sendZapiText({ phone: target, message: String(message).trim() });
   }
 
+  let safeFileName = String(fileName || 'documento').trim() || 'documento';
+  safeFileName = safeFileName.replace(/\.pdf$/i, '');
+  safeFileName = `${safeFileName}.pdf`;
+
   const document = `data:application/pdf;base64,${rawB64}`;
   const response = await fetch(buildZapiUrl('send-document/pdf'), {
     method: 'POST',
@@ -98,7 +102,7 @@ export const sendZapiPdf = async ({ phone, pdfBase64, fileName, message }) => {
     body: JSON.stringify({
       phone: target,
       document,
-      fileName: fileName || 'documento.pdf',
+      fileName: safeFileName,
     }),
   });
   return assertZapiOk(response, 'send-document/pdf');

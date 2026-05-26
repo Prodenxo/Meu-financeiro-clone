@@ -17,4 +17,6 @@ test('isOpenclawNfseAutoWhatsappEnabled — lê env', () => {
 test('OPENCLAW_NFSE_META chaves estáveis', () => {
   assert.equal(OPENCLAW_NFSE_META.PENDING, 'openclawWhatsappPdfPending');
   assert.equal(OPENCLAW_NFSE_META.PHONE, 'openclawWhatsappPhone');
+  assert.equal(OPENCLAW_NFSE_META.SENT_AT, 'openclawWhatsappPdfSentAt');
+  assert.equal(OPENCLAW_NFSE_META.SENDING_AT, 'openclawWhatsappPdfSendingAt');
 });

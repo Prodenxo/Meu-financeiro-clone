@@ -22,10 +22,13 @@ export const OPENCLAW_NFSE_META = {
   PHONE: 'openclawWhatsappPhone',
   PENDING: 'openclawWhatsappPdfPending',
   SENT_AT: 'openclawWhatsappPdfSentAt',
+  SENDING_AT: 'openclawWhatsappPdfSendingAt',
   ATTEMPTS: 'openclawWhatsappPdfAttempts',
   LAST_ERROR: 'openclawWhatsappPdfLastError',
   REQUESTED_AT: 'openclawWhatsappPdfRequestedAt',
 };
+
+const SENDING_CLAIM_MAX_MS = 3 * 60 * 1000;
 
 const TERMINAL_FAILURE_STATUSES = new Set(['rejeitado', 'cancelado', 'erro']);
 
@@ -88,6 +91,26 @@ const mergeNotaMetadata = async (userId, notaId, patch) => {
 /**
  * Marca nota emitida pelo OpenClaw para entrega automática de PDF (cron Z-API).
  */
+export const getOpenclawNfseWhatsappDeliveryState = async (userId, notaId) => {
+  if (!userId || !notaId) {
+    return { pending: false, sentAt: null, alreadySent: false };
+  }
+  const admin = getAdmin();
+  const { data: row } = await admin
+    .from(MEI_NFSE_TABLE)
+    .select('metadata_json')
+    .eq('id', notaId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  const meta = toObject(row?.metadata_json);
+  const sentAt = meta[OPENCLAW_NFSE_META.SENT_AT] || null;
+  return {
+    pending: meta[OPENCLAW_NFSE_META.PENDING] === true,
+    sentAt,
+    alreadySent: Boolean(sentAt),
+  };
+};
+
 export const registerOpenclawNfseWhatsappDelivery = async (userId, notaId, phone) => {
   const normalizedPhone = normalizePhone55(phone);
   if (!userId || !notaId || !normalizedPhone) return null;
@@ -109,6 +132,7 @@ export const markOpenclawNfseWhatsappSent = async (userId, notaId, { channel = '
   return mergeNotaMetadata(userId, notaId, {
     [OPENCLAW_NFSE_META.PENDING]: false,
     [OPENCLAW_NFSE_META.SENT_AT]: now,
+    [OPENCLAW_NFSE_META.SENDING_AT]: null,
     [OPENCLAW_NFSE_META.LAST_ERROR]: null,
     openclawWhatsappPdfSentChannel: channel,
   });
@@ -170,6 +194,43 @@ const isPendingExpired = (row) => {
   return Date.now() - ts > MAX_PENDING_AGE_MS;
 };
 
+const isOpenclawWhatsappPdfAlreadySent = (meta) =>
+  Boolean(meta?.[OPENCLAW_NFSE_META.SENT_AT]);
+
+const isOpenclawWhatsappPdfSending = (meta) => {
+  const at = meta?.[OPENCLAW_NFSE_META.SENDING_AT];
+  if (!at) return false;
+  const ts = Date.parse(String(at));
+  if (!Number.isFinite(ts)) return false;
+  return Date.now() - ts < SENDING_CLAIM_MAX_MS;
+};
+
+/** Reserva envio (evita duplicar Z-API + mf-nfse-send em paralelo). */
+const claimOpenclawNfseWhatsappDeliverySlot = async (userId, notaId) => {
+  const admin = getAdmin();
+  const { data: row, error } = await admin
+    .from(MEI_NFSE_TABLE)
+    .select('metadata_json')
+    .eq('id', notaId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw badRequest(error.message);
+  if (!row) return { ok: false, reason: 'not_found' };
+
+  const meta = toObject(row.metadata_json);
+  if (isOpenclawWhatsappPdfAlreadySent(meta)) {
+    return { ok: false, reason: 'already_sent' };
+  }
+  if (isOpenclawWhatsappPdfSending(meta)) {
+    return { ok: false, reason: 'sending_in_progress' };
+  }
+
+  await mergeNotaMetadata(userId, notaId, {
+    [OPENCLAW_NFSE_META.SENDING_AT]: new Date().toISOString(),
+  });
+  return { ok: true };
+};
+
 const trySendNfsePdfZapi = async ({ userId, phone, pdfBase64, fileName, notaId }) => {
   if (!isWhatsappOutboundConfigured()) {
     return { whatsappStatus: 'skipped_no_whatsapp' };
@@ -200,30 +261,49 @@ export const deliverOpenclawNfseWhatsappPdf = async (userId, notaId, phone) => {
     return { whatsappStatus: 'skipped_no_phone', notaId };
   }
 
-  const pdfResult = await fetchOpenclawNfsePdfBase64(userId, { id: notaId, sync: true });
-  const whatsapp = await trySendNfsePdfZapi({
-    userId,
-    phone: normalizedPhone,
-    pdfBase64: pdfResult.base64,
-    fileName: pdfResult.fileName,
-    notaId,
-  });
-
-  if (whatsapp.whatsappStatus === 'sent') {
-    await markOpenclawNfseWhatsappSent(userId, notaId, { channel: whatsapp.channel });
-    return {
-      ...whatsapp,
-      notaId,
-      fileName: pdfResult.fileName,
-    };
+  const deliveryKey = `${userId}:${notaId}`;
+  if (deliveryInFlight.has(deliveryKey)) {
+    return { whatsappStatus: 'skipped_in_flight', notaId };
   }
 
-  await markOpenclawNfseWhatsappFailed(
-    userId,
-    notaId,
-    whatsapp.whatsappError || whatsapp.whatsappStatus,
-  );
-  return { ...whatsapp, notaId };
+  const claim = await claimOpenclawNfseWhatsappDeliverySlot(userId, notaId);
+  if (!claim.ok) {
+    return { whatsappStatus: claim.reason, notaId };
+  }
+
+  deliveryInFlight.add(deliveryKey);
+  try {
+    const pdfResult = await fetchOpenclawNfsePdfBase64(userId, { id: notaId, sync: true });
+    const whatsapp = await trySendNfsePdfZapi({
+      userId,
+      phone: normalizedPhone,
+      pdfBase64: pdfResult.base64,
+      fileName: pdfResult.fileName,
+      notaId,
+    });
+
+    if (whatsapp.whatsappStatus === 'sent') {
+      await markOpenclawNfseWhatsappSent(userId, notaId, { channel: whatsapp.channel });
+      clearScheduledRetries(userId, notaId);
+      return {
+        ...whatsapp,
+        notaId,
+        fileName: pdfResult.fileName,
+      };
+    }
+
+    await markOpenclawNfseWhatsappFailed(
+      userId,
+      notaId,
+      whatsapp.whatsappError || whatsapp.whatsappStatus,
+    );
+    await mergeNotaMetadata(userId, notaId, {
+      [OPENCLAW_NFSE_META.SENDING_AT]: null,
+    });
+    return { ...whatsapp, notaId };
+  } finally {
+    deliveryInFlight.delete(deliveryKey);
+  }
 };
 
 const clearScheduledRetries = (userId, notaId) => {
@@ -246,6 +326,7 @@ export const tryDeliverPendingOpenclawNfseIfReady = async (userId, record) => {
 
   const meta = toObject(record.metadata_json);
   if (meta[OPENCLAW_NFSE_META.PENDING] !== true) return null;
+  if (isOpenclawWhatsappPdfAlreadySent(meta)) return null;
 
   const key = `${userId}:${record.id}`;
   if (deliveryInFlight.has(key)) return null;
@@ -328,6 +409,10 @@ const processPendingRow = async (row) => {
   const meta = toObject(row.metadata_json);
   const phone = normalizePhone55(meta[OPENCLAW_NFSE_META.PHONE]);
   const attempts = Number(meta[OPENCLAW_NFSE_META.ATTEMPTS] || 0);
+
+  if (isOpenclawWhatsappPdfAlreadySent(meta)) {
+    return { notaId, userId, status: 'already_sent' };
+  }
 
   if (isPendingExpired(row)) {
     await markOpenclawNfseWhatsappFailed(userId, notaId, 'pending_expired_72h', { clearPending: true });
