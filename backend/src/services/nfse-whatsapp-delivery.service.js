@@ -29,6 +29,14 @@ export const OPENCLAW_NFSE_META = {
 
 const TERMINAL_FAILURE_STATUSES = new Set(['rejeitado', 'cancelado', 'erro']);
 
+/** Evita reentrância obterNota(sync) → entrega → consult → obterNota. */
+const deliveryInFlight = new Set();
+
+/** Timers de retry in-process após emit_nfse (complementa o cron). */
+const scheduledRetryTimers = new Map();
+
+const RETRY_DELAYS_MS = [5_000, 12_000, 25_000, 45_000, 90_000, 180_000];
+
 const toObject = (value) => (
   value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : {}
 );
@@ -216,6 +224,102 @@ export const deliverOpenclawNfseWhatsappPdf = async (userId, notaId, phone) => {
     whatsapp.whatsappError || whatsapp.whatsappStatus,
   );
   return { ...whatsapp, notaId };
+};
+
+const clearScheduledRetries = (userId, notaId) => {
+  const key = `${userId}:${notaId}`;
+  const timers = scheduledRetryTimers.get(key);
+  if (!timers) return;
+  timers.forEach((timer) => clearTimeout(timer));
+  scheduledRetryTimers.delete(key);
+};
+
+/**
+ * Tenta entregar PDF pendente para uma nota (após sync ou cron).
+ * @returns {Promise<object|null>}
+ */
+export const tryDeliverPendingOpenclawNfseIfReady = async (userId, record) => {
+  if (!isOpenclawNfseAutoWhatsappEnabled() || !isWhatsappOutboundConfigured()) {
+    return null;
+  }
+  if (!userId || !record?.id) return null;
+
+  const meta = toObject(record.metadata_json);
+  if (meta[OPENCLAW_NFSE_META.PENDING] !== true) return null;
+
+  const key = `${userId}:${record.id}`;
+  if (deliveryInFlight.has(key)) return null;
+  deliveryInFlight.add(key);
+
+  try {
+    const row = {
+      id: record.id,
+      user_id: userId,
+      status: record.status,
+      metadata_json: record.metadata_json,
+      created_at: record.created_at,
+    };
+    const result = await processPendingRow(row);
+    if (result.status === 'sent') {
+      clearScheduledRetries(userId, record.id);
+    }
+    return result;
+  } finally {
+    deliveryInFlight.delete(key);
+  }
+};
+
+/**
+ * Após emit_nfse com nota ainda em processamento: tenta enviar PDF sem depender só do cron externo.
+ */
+export const scheduleOpenclawNfseWhatsappDeliveryRetries = (userId, notaId) => {
+  if (!isOpenclawNfseAutoWhatsappEnabled()) return;
+  if (!userId || !notaId) return;
+
+  clearScheduledRetries(userId, notaId);
+  const key = `${userId}:${notaId}`;
+
+  const timers = RETRY_DELAYS_MS.map((delayMs) =>
+    setTimeout(() => {
+      void (async () => {
+        try {
+          const admin = getAdmin();
+          const { data: row, error } = await admin
+            .from(MEI_NFSE_TABLE)
+            .select('id, user_id, status, metadata_json, created_at')
+            .eq('id', notaId)
+            .eq('user_id', userId)
+            .maybeSingle();
+          if (error || !row) {
+            clearScheduledRetries(userId, notaId);
+            return;
+          }
+          const meta = toObject(row.metadata_json);
+          if (meta[OPENCLAW_NFSE_META.PENDING] !== true) {
+            clearScheduledRetries(userId, notaId);
+            return;
+          }
+          const result = await processPendingRow(row);
+          if (
+            result.status === 'sent'
+            || result.status === 'expired'
+            || result.status === 'max_attempts'
+            || TERMINAL_FAILURE_STATUSES.has(result.status)
+          ) {
+            clearScheduledRetries(userId, notaId);
+          }
+        } catch (err) {
+          console.warn('[nfse-whatsapp-delivery] retry agendado falhou', {
+            notaId,
+            userId,
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      })();
+    }, delayMs),
+  );
+
+  scheduledRetryTimers.set(key, timers);
 };
 
 const processPendingRow = async (row) => {

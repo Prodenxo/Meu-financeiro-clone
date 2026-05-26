@@ -231,7 +231,35 @@ const collectResponseCandidates = (response) => {
   }
   if (response.nfse && typeof response.nfse === 'object') list.push(response.nfse);
   if (response.documento && typeof response.documento === 'object') list.push(response.documento);
+  if (response.retorno && typeof response.retorno === 'object') list.push(response.retorno);
+  if (response.xml && typeof response.xml === 'object') {
+    list.push(response.xml);
+    if (response.xml.retorno && typeof response.xml.retorno === 'object') {
+      list.push(response.xml.retorno);
+    }
+  }
   return list;
+};
+
+/** Prioridade para desempate quando a resposta Plugnotas traz campos contraditórios. */
+const plugnotasStatusRank = (normalized) => {
+  if (normalized === 'cancelado') return 6;
+  if (normalized === 'cancelamento_pendente') return 5;
+  if (normalized === 'concluido') return 4;
+  if (normalized === 'rejeitado') return 3;
+  if (normalized === 'interrompido') return 2;
+  if (normalized === 'processando') return 1;
+  return 0;
+};
+
+const readStatusFromCandidate = (candidate) => {
+  if (!candidate || typeof candidate !== 'object') return null;
+  const raw = candidate.situacao
+    ?? candidate.status
+    ?? candidate.message
+    ?? candidate.mensagem;
+  if (raw === undefined || raw === null || raw === '') return null;
+  return normalizeStatus(raw);
 };
 
 const pickCandidateValue = (candidates, accessor) => {
@@ -944,15 +972,59 @@ const upsertProdutosCatalogo = async (userId, payload, { documentType = DOCUMENT
   return rows.length;
 };
 
-const extractPlugNotasStatus = (response) => {
+const hasCancelamentoSolicitado = (record) => {
+  const meta = toObject(record?.metadata_json);
+  const cancel = toObject(meta?.cancelamento);
+  return Boolean(cancel?.requestedAt);
+};
+
+/**
+ * Evita que sync com o emissor reverta cancelamento local para "concluido"
+ * enquanto a nota ainda aparece AUTORIZADA na Plugnotas.
+ */
+export const resolveStatusAfterPlugnotasSync = (record, providerStatus) => {
+  const local = normalizeStatus(record?.status);
+  const remote = normalizeStatus(providerStatus);
+  if (!remote) return local;
+
+  if (remote === 'cancelado') return 'cancelado';
+
+  if (local === 'cancelado') return 'cancelado';
+
+  const cancelamentoEmCurso =
+    local === 'cancelamento_pendente' || hasCancelamentoSolicitado(record);
+
+  if (cancelamentoEmCurso) {
+    if (remote === 'concluido' || remote === 'processando') {
+      return 'cancelamento_pendente';
+    }
+    return local === 'cancelamento_pendente' ? 'cancelamento_pendente' : remote;
+  }
+
+  return remote;
+};
+
+export const extractPlugNotasStatus = (response) => {
   const candidates = collectResponseCandidates(response);
+  let best = '';
+  let bestRank = 0;
+  for (const candidate of candidates) {
+    const normalized = readStatusFromCandidate(candidate);
+    if (!normalized) continue;
+    const rank = plugnotasStatusRank(normalized);
+    if (rank > bestRank) {
+      bestRank = rank;
+      best = normalized;
+    }
+  }
+  if (best) return best;
   return normalizeStatus(
     pickCandidateValue(candidates, (candidate) => (
       candidate?.status
         || candidate?.situacao
         || candidate?.message
         || candidate?.mensagem
-    )) || ''
+    )) || '',
   );
 };
 
@@ -971,9 +1043,70 @@ const extractProtocol = (response) => {
   return pickCandidateValue(candidates, (candidate) => candidate?.protocol || candidate?.protocolo);
 };
 
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Evita usar o id interno Supabase como id Plugnotas (protocolo errado na lista). */
+const isLikelyInternalRecordUuid = (value, recordId) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+  if (recordId && normalized === String(recordId).trim()) return true;
+  return UUID_V4_RE.test(normalized);
+};
+
+/**
+ * Resolve id remoto Plugnotas para cancelar/consultar (prioriza consulta por integração).
+ */
+export const resolvePlugnotasProviderIdForRecord = async (record, adapter) => {
+  if (!record || !adapter) return null;
+  const recordId = record.id;
+
+  const plugId = record.plugnotas_id ? String(record.plugnotas_id).trim() : '';
+  if (plugId && !isLikelyInternalRecordUuid(plugId, recordId)) {
+    return plugId;
+  }
+
+  if (record.id_integracao && record.cnpj_prestador && adapter.consultarPorIntegracao) {
+    try {
+      const lookup = await adapter.consultarPorIntegracao(record.id_integracao, record.cnpj_prestador);
+      const resolved = extractPlugNotasId(lookup);
+      if (resolved && !isLikelyInternalRecordUuid(resolved, recordId)) {
+        return String(resolved).trim();
+      }
+    } catch (_error) {
+      // segue para outros fallbacks
+    }
+  }
+
+  const protocol = record.protocol ? String(record.protocol).trim() : '';
+  if (protocol && !isLikelyInternalRecordUuid(protocol, recordId) && adapter.consultarPorIdOuProtocolo) {
+    try {
+      const lookup = await adapter.consultarPorIdOuProtocolo(protocol);
+      const resolved = extractPlugNotasId(lookup) || protocol;
+      if (resolved && !isLikelyInternalRecordUuid(resolved, recordId)) {
+        return String(resolved).trim();
+      }
+    } catch (_error) {
+      // ignora
+    }
+  }
+
+  if (plugId) return plugId;
+  if (protocol && !isLikelyInternalRecordUuid(protocol, recordId)) return protocol;
+  return null;
+};
+
 const refreshWithPlugNotas = async (record) => {
   const documentType = normalizeDocumentType(record?.document_type || DOCUMENT_TYPE_NFSE);
   const adapter = getAdapterByDocumentType(documentType);
+  // NFSe: rota consultar/{idIntegracao}/{cnpj} costuma trazer retorno.situacao (AUTORIZADA) completo.
+  if (
+    documentType === DOCUMENT_TYPE_NFSE
+    && record?.id_integracao
+    && record?.cnpj_prestador
+    && adapter.consultarPorIntegracao
+  ) {
+    return await adapter.consultarPorIntegracao(record.id_integracao, record.cnpj_prestador);
+  }
   if (record?.plugnotas_id) return await adapter.consultar(record.plugnotas_id);
   if (record?.protocol && adapter.consultarPorIdOuProtocolo) {
     return await adapter.consultarPorIdOuProtocolo(record.protocol);
@@ -1590,16 +1723,23 @@ export const obterNota = async (userId, id, { sync = false } = {}) => {
 
   const plugnotasId = extractPlugNotasId(response) || record.plugnotas_id;
   const idIntegracao = extractIntegracaoId(response) || record.id_integracao;
-  const status = extractPlugNotasStatus(response);
+  const providerStatus = extractPlugNotasStatus(response);
+  const status = resolveStatusAfterPlugnotasSync(record, providerStatus);
   const protocol = extractProtocol(response) || record.protocol;
 
-  return await updateRecord(userId, record.id, {
+  const updated = await updateRecord(userId, record.id, {
     plugnotas_id: plugnotasId,
     id_integracao: idIntegracao,
     protocol,
     status,
     response_json: response
   });
+
+  void import('./nfse-whatsapp-delivery.service.js')
+    .then((mod) => mod.tryDeliverPendingOpenclawNfseIfReady(userId, updated))
+    .catch(() => {});
+
+  return updated;
 };
 
 export const atualizarNota = async (userId, id, input) => {
@@ -1642,27 +1782,33 @@ export const cancelarNota = async (userId, id, input) => {
     return record;
   }
 
-  const reason = sanitizeReason(input?.reason);
+  const reason =
+    sanitizeReason(input?.reason)
+    || 'Cancelamento solicitado pelo contribuinte via Meu Financeiro';
+
   let providerResponse = null;
   let providerError = null;
-  let nextStatus = 'cancelado';
-  let providerId = record?.plugnotas_id || record?.protocol || null;
-  if (!providerId && record?.id_integracao && record?.cnpj_prestador && adapter.consultarPorIntegracao) {
-    try {
-      const providerLookup = await adapter.consultarPorIntegracao(record.id_integracao, record.cnpj_prestador);
-      providerId = extractPlugNotasId(providerLookup) || providerId;
-    } catch (_error) {
-      // Mantém comportamento de fallback local quando não for possível resolver o ID remoto.
-    }
-  }
+  let nextStatus = 'cancelamento_pendente';
+  const providerId = await resolvePlugnotasProviderIdForRecord(record, adapter);
+
   if (providerId) {
     try {
       providerResponse = await adapter.cancelar(providerId, { reason });
-      nextStatus = extractPlugNotasStatus(providerResponse) || 'cancelado';
+      const statusCancelamento = extractPlugNotasStatus(providerResponse);
+      if (statusCancelamento === 'cancelado' || statusCancelamento === 'cancelamento_pendente') {
+        nextStatus = statusCancelamento;
+      } else {
+        nextStatus = 'cancelamento_pendente';
+      }
     } catch (error) {
       providerError = error;
       nextStatus = 'cancelamento_pendente';
     }
+  } else {
+    providerError = new Error(
+      'Não foi possível identificar esta nota no emissor (falta ID Plugnotas ou integração com CNPJ do prestador).',
+    );
+    nextStatus = 'cancelamento_pendente';
   }
 
   const metadata = prune({

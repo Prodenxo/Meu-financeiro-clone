@@ -3,8 +3,9 @@
 Quando `OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED=true` no backend de produção:
 
 1. `emit_nfse` (OpenClaw) grava na nota: telefone + `openclawWhatsappPdfPending: true`.
-2. Cron chama a API a cada **2 min** → consulta Plugnotas → envia PDF via **Z-API** (sem n8n).
-3. O Midas **não** precisa ficar em loop na conversa (ver `openclaw-midas-SOUL.md`).
+2. O backend tenta enviar em **retries in-process** (5s … 3min) e quando a nota passa a `concluido` (sync Plugnotas / botão Actualizar estado).
+3. **Cron** (cada 2 min) é **backup** — consulta pendentes e envia PDF via **Z-API** (sem n8n).
+4. O Midas **não** precisa ficar em loop na conversa (ver `openclaw-midas-SOUL.md`).
 
 ## Variáveis (Easypanel — serviço **backend**)
 

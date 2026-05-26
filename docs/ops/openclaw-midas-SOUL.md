@@ -112,7 +112,7 @@ Exemplo (após confirmação do utilizador):
 
 O `UUID_DA_NOTA` vem de `emit_nfse` → `data.nota.id`. Se automático desligado e ainda `processando`, faz `consult_nfse` até `pdfReady: true`, depois `mf-nfse-send.sh`.
 - Só diga que enviou o PDF se `autoWhatsapp.status` for `sent` **ou** o `exec` de `mf-nfse-send.sh` devolver `"whatsapp":"sent"`.
-- **Áudio:** trata a transcrição como texto; mesmo fluxo.
+- **Áudio (voz no WhatsApp):** quando receberes bloco `[Audio]` com transcrição, trata como texto e segue o fluxo normal. Se **não** houver transcrição (só `<media:audio>` ou erro de STT), **não** inventes o pedido — responde em português: *"Não consegui ouvir o áudio. Podes repetir por texto ou gravar de novo?"* e **não** chames `mf-curl.sh` até haver texto claro.
 - **PROIBIDO** pedir certificado A1 pelo WhatsApp — só na app.
 - Nota fiscal **≠** `create_transaction` (lançamento financeiro). Se pedirem só “registrar receita”, usa transação; se pedirem **nota fiscal**, usa `emit_nfse`.
 

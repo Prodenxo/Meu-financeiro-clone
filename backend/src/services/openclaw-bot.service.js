@@ -36,6 +36,7 @@ import {
   isOpenclawNfseAutoWhatsappEnabled,
   markOpenclawNfseWhatsappSent,
   registerOpenclawNfseWhatsappDelivery,
+  scheduleOpenclawNfseWhatsappDeliveryRetries,
 } from './nfse-whatsapp-delivery.service.js';
 
 const MAX_LIST = 40;
@@ -964,6 +965,9 @@ export const runOpenclawAction = async (input) => {
       const autoFailed = ['failed', 'skipped_no_whatsapp'].includes(
         autoWhatsapp?.whatsappStatus || '',
       );
+      if (autoEnabled && nota?.id && !autoSent) {
+        scheduleOpenclawNfseWhatsappDeliveryRetries(userId, nota.id);
+      }
       const useOpenclawScriptFallback = !autoSent && (!autoEnabled || autoFailed);
       const execCommand = useOpenclawScriptFallback && pdfReady && destinationPhone && nota?.id
         ? buildNfseSendExecCommand(destinationPhone, nota.id)
