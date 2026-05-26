@@ -17,6 +17,20 @@ O OpenClaw que criaste no **Easypanel** corre **dentro do VPS**: o `localhost` d
 3. **Só API, sem OpenClaw** — Confirma o endpoint:  
    `npm run test:openclaw:salario -- 5548…`  
    (o script lê o mesmo `Site/backend/.env` e usa `http://127.0.0.1:<PORT>/api/bot/openclaw/action` por defeito).
+
+   **NFSe (nota fiscal)** — mesmo backend local, sem WhatsApp:
+
+   ```powershell
+   cd Site\backend
+   npm run dev
+   # noutro terminal:
+   node scripts/test-openclaw-nfse.mjs setup 5521996185328
+   node scripts/test-openclaw-nfse.mjs preview 5521996185328
+   # só depois de validar o preview:
+   node scripts/test-openclaw-nfse.mjs emit 5521996185328
+   ```
+
+   Ajusta `TEST_NFSE_*` em `Site/backend/.env` (tomador, valor, descrição). O telefone tem de existir em `n8n_link`.
 4. **OpenClaw no PC** — Instalação na secção **Instalação OpenClaw (resumo)** abaixo, com `openclaw onboard` (não precisas do serviço Easypanel para isto). Na tool HTTP / skill, URL do Meu Financeiro:  
    `http://127.0.0.1:3333/api/bot/openclaw/action`  
    (ajusta à tua `PORT`) e o **mesmo** `Authorization: Bearer` que **`OPENCLAW_WEBHOOK_SECRET`** em `Site/backend/.env`.
@@ -114,6 +128,10 @@ Não passes chaves Supabase ao modelo: só este endpoint com Bearer.
 | `list_calendar_events` | sim | Compromissos numa data (`payload.data` / `date`; ver `calendar-events.service.js`). |
 | `create_transaction` | sim | Insere em `lancamentos_id`. |
 | `delete_transaction` | sim | `payload.id` (UUID); só dono. |
+| `get_nfse_setup_status` | sim | Prontidão para NFSe (certificado + prestador). |
+| `list_nfse_clientes` | sim | Catálogo de tomadores. |
+| `preview_nfse` / `emit_nfse` | sim | Pré-visualização / emissão NFSe (`confirm: true` para emitir). |
+| `list_nfse_notas` / `consult_nfse` | sim | Listar / consultar notas emitidas. |
 
 ### `create_transaction` — `payload`
 

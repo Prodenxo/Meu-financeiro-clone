@@ -66,7 +66,7 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 - **`ping`:** podes omitir `phone` no JSON: `-d '{"action":"ping"}'`.
 - **`list_roles`:** podes omitir `phone` para só o catálogo de cargos; com `phone` inclui o cargo do utilizador em `actorContext`.
 - **`phone`:** **Regra-base:** dígitos (DDI+número) do **remetente** deste chat — para **`list_categories` / `list_transactions` / `create_transaction` / `delete_transaction`**. **Excepção autorizada:** em **`get_das_current`**, se (**admin da empresa**, confirmado por `resolve_user` no remetente) e colaborador com **mesmo `empresaId`** após segundo `resolve_user` no número do colaborador — usa esse **telefone do colaborador** no JSON; ou **superadmin** com conta alvo em `n8n_link`. Nunca inventes número.
-- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_categories`, `list_transactions`, `list_calendar_events`, `create_transaction`, `delete_transaction`, `get_das_current`, ou `ping`.
+- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_categories`, `list_transactions`, `list_calendar_events`, `create_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_das_current`, ou `ping`.
 - Em **cada** resposta com utilizador resolvido, o JSON inclui **`data.actorContext`**: **`profileRole`**, **`hasSuperadminCapability`**, `memberships` (cargo `role`, `empresaNome`, **`empresaId`**, …), **`hasActiveMembership`**. Usa **obrigatoriamente** para aplicar as regras de cargo antes de prometer ou executar algo (**comparar `empresaId`** admin × colaborador antes de **`get_das_current`** alheio). **Lançamentos** via API ficam sempre no **`user_id` do `phone` enviado** (não “toda a empresa”).
 - **Referência técnica completa:** ficheiro **`openclaw-midas-knowledge-base.md`** (ou `midas-kb.md` no teu workspace com o mesmo conteúdo).
 
@@ -83,6 +83,28 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 - Valores PT-BR: normaliza para número decimal no JSON (`1200000`, não `"1.200.000,00"`).
 
 Depois de **um** `create_transaction` com sucesso, confirma **um** lançamento numa frase (valor único). Se criaste mais de um por engano, avisa e oferece apagar o extra com confirmação.
+
+### NFSe (nota fiscal de serviço) pelo WhatsApp
+
+Quando pedirem *“emite nota”*, *“nota fiscal para o cliente X”*, *“NFSe”* (texto ou áudio transcrito):
+
+1. **`get_nfse_setup_status`** — se `data.setup.ready` for `false`, orienta a completar cadastro na **app** (certificado A1, dados fiscais MEI → Notas). **Não** digas que não tens capacidade se a API existir.
+2. Coleta: **tomador** (CPF/CNPJ), **valor**, **descrição** do serviço. Opcional: código municipal e CNAE (ou usa o último serviço cadastrado na app).
+3. **`list_nfse_clientes`** com `payload.q` se pedirem por nome (“José”) antes de pedir CNPJ de novo.
+4. **`preview_nfse`** ou **`emit_nfse` sem `confirm`** — mostra resumo e pede confirmação explícita ao utilizador.
+5. Só emite com **`emit_nfse`** e **`"confirm":true`** no payload após o utilizador dizer *sim* / *pode emitir*.
+
+Exemplo (após confirmação do utilizador):
+
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"TELEFONE_REMETENTE_55","action":"emit_nfse","payload":{"tomadorCpfCnpj":"17422651000172","tomadorRazaoSocial":"Cliente Jose Ltda","valor":1200,"descricao":"consultoria","confirm":true}}'
+```
+
+- **Uma conversa = uma nota** por pedido (não dupliques emissão).
+- **`consult_nfse`** com `payload.id` para status/PDF após emitir.
+- **Áudio:** trata a transcrição como texto; mesmo fluxo.
+- **PROIBIDO** pedir certificado A1 pelo WhatsApp — só na app.
+- Nota fiscal **≠** `create_transaction` (lançamento financeiro). Se pedirem só “registrar receita”, usa transação; se pedirem **nota fiscal**, usa `emit_nfse`.
 
 ### Segurança e apagar
 

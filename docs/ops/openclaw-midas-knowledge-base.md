@@ -70,6 +70,58 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 | `delete_transaction` | Sim | Apaga por `id` (UUID), só se for **dono** do lançamento. |
 | `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp). |
 | `list_calendar_events` | Sim | Compromissos numa data (`payload.data` / `payload.date`); ver secção Agenda abaixo. |
+| `get_nfse_setup_status` | Sim | Verifica certificado, Plugnotas e dados fiscais do prestador. |
+| `list_nfse_clientes` | Sim | Catálogo de tomadores (`payload.q` opcional). |
+| `preview_nfse` | Sim | Pré-visualização sem emitir. |
+| `emit_nfse` | Sim | Emite NFSe (Plugnotas); exige `payload.confirm: true` após confirmação do utilizador. |
+| `list_nfse_notas` | Sim | Últimas notas NFSe (`payload.limit` opcional, máx. 40). |
+| `consult_nfse` | Sim | Status de uma nota (`payload.id`); `payload.sync: false` para não consultar Plugnotas. |
+
+---
+
+## NFSe pelo WhatsApp (`emit_nfse`)
+
+**Pré-requisitos na app:** certificado A1, empresa no Plugnotas, endereço fiscal do prestador. Opcional: serviço padrão no catálogo (código + CNAE).
+
+**Fluxo recomendado**
+
+1. `get_nfse_setup_status`
+2. Recolher tomador (CPF/CNPJ), valor, descrição
+3. `preview_nfse` ou `emit_nfse` **sem** `confirm` → mostrar resumo
+4. Utilizador confirma no chat
+5. `emit_nfse` com `"confirm": true`
+
+**Payload `emit_nfse` / `preview_nfse`**
+
+| Campo | Obrigatório | Notas |
+|-------|-------------|--------|
+| `tomadorCpfCnpj` | Sim* | 11 (CPF) ou 14 (CNPJ) dígitos |
+| `tomadorRazaoSocial` | Condicional | Obrigatório se lookup CNPJ falhar; CNPJ pode vir da BrasilAPI |
+| `valor` | Sim | Número ou texto (`1200`, `1.200,00`) |
+| `descricao` | Recomendado | Discriminação do serviço |
+| `codigoServico` | Condicional | Mín. 6 caracteres; senão usa último do catálogo |
+| `cnae` | Condicional | 7 dígitos; senão usa catálogo |
+| `confirm` | Só em `emit_nfse` | `true` para emitir de facto |
+
+**Exemplo — José, R$ 1.200, consultoria**
+
+```json
+{
+  "phone": "5521996185328",
+  "action": "emit_nfse",
+  "payload": {
+    "tomadorCpfCnpj": "17422651000172",
+    "tomadorRazaoSocial": "Jose Servicos Ltda",
+    "valor": 1200,
+    "descricao": "consultoria",
+    "confirm": true
+  }
+}
+```
+
+**Erros comuns:** `NFSE_EMITENTE_MISSING`, `NFSE_CODIGO_SERVICO_MISSING`, `NFSE_TOMADOR_NOME_MISSING` — seguir `botHint` na resposta; orientar app MEI → Notas.
+
+Implementação: `openclaw-nfse.service.js` + `mei-notas.service.js` (`emitirNota`).
 
 ---
 

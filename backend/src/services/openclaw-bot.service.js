@@ -20,6 +20,15 @@ import {
   buildDasPaymentStatusMessage,
   getDasPaymentStatusForUser,
 } from './mei-das.service.js';
+import {
+  consultOpenclawNfse,
+  emitOpenclawNfse,
+  getOpenclawNfseSetupStatus,
+  listOpenclawNfseClientes,
+  listOpenclawNfseNotas,
+  previewOpenclawNfseEmit,
+  rethrowNfseErrorForBot,
+} from './openclaw-nfse.service.js';
 
 const MAX_LIST = 40;
 
@@ -849,6 +858,108 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'get_nfse_setup_status') {
+    const setup = await getOpenclawNfseSetupStatus(userId);
+    return {
+      ok: true,
+      message: setup.ready
+        ? 'Conta pronta para emitir NFSe pelo WhatsApp.'
+        : `Cadastro incompleto para NFSe: ${setup.missing.join(', ')}. Complete na app MEI → Notas.`,
+      data: { setup, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'list_nfse_clientes') {
+    const q = String(payload?.q ?? payload?.nome ?? payload?.busca ?? '').trim();
+    const limit = payload?.limit;
+    const clientes = await listOpenclawNfseClientes(userId, { q, limit });
+    return {
+      ok: true,
+      message: `${clientes.length} cliente(s) no catálogo NFSe.`,
+      data: { clientes, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'preview_nfse') {
+    try {
+      const preview = await previewOpenclawNfseEmit(userId, payload);
+      return {
+        ok: true,
+        message: `Pré-visualização: NFSe de R$ ${preview.valorServico} para ${preview.tomadorRazaoSocial} (${preview.tomadorCpfCnpj}). Confirme com emit_nfse e confirm:true.`,
+        data: { preview, requiresConfirm: true, userId, actorContext, ...linkDebug },
+      };
+    } catch (err) {
+      rethrowNfseErrorForBot(err);
+    }
+  }
+
+  if (action === 'emit_nfse') {
+    try {
+      const result = await emitOpenclawNfse(userId, payload);
+      if (result.requiresConfirm) {
+        return {
+          ok: true,
+          message: `Confirme a emissão: R$ ${result.preview.valorServico} — ${result.preview.tomadorRazaoSocial}. Repita com "confirm":true no payload.`,
+          data: {
+            preview: result.preview,
+            requiresConfirm: true,
+            notEmitted: true,
+            userId,
+            actorContext,
+            ...linkDebug,
+          },
+        };
+      }
+      const nota = result.nota;
+      const status = nota?.status || 'processando';
+      const tomador = nota?.cnpj_tomador || result.preview?.tomadorCpfCnpj;
+      return {
+        ok: true,
+        message: `NFSe enviada para emissão (status: ${status}). Tomador: ${tomador || '—'}.`,
+        data: {
+          nota: {
+            id: nota?.id,
+            status: nota?.status,
+            plugnotas_id: nota?.plugnotas_id,
+            id_integracao: nota?.id_integracao,
+            pdf_url: nota?.pdf_url,
+          },
+          userId,
+          actorContext,
+          ...linkDebug,
+        },
+      };
+    } catch (err) {
+      rethrowNfseErrorForBot(err);
+    }
+  }
+
+  if (action === 'list_nfse_notas') {
+    const limit = payload?.limit;
+    const notas = await listOpenclawNfseNotas(userId, { limit });
+    return {
+      ok: true,
+      message: `${notas.length} nota(s) NFSe recente(s).`,
+      data: { notas, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'consult_nfse') {
+    try {
+      const sync =
+        payload?.sync !== false
+        && String(payload?.sync || '').toLowerCase() !== 'false';
+      const nota = await consultOpenclawNfse(userId, { id: payload?.id, sync });
+      return {
+        ok: true,
+        message: `Nota ${nota.id}: status ${nota.status || '—'}.${nota.pdf_url ? ' PDF disponível.' : ''}`,
+        data: { nota, userId, actorContext, ...linkDebug },
+      };
+    } catch (err) {
+      rethrowNfseErrorForBot(err);
+    }
+  }
+
   if (action === 'refresh_das_pdf') {
     const { display, periodoDigits } = resolveDasCompetencia();
     try {
@@ -886,6 +997,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };
