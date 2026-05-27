@@ -25,6 +25,16 @@ export const postOpenclawAction = async (req, res, next) => {
       action: body.action,
       payload: body.payload,
     });
+
+    if (result.ok === false) {
+      return res.status(422).json({
+        success: false,
+        data: result.data ?? null,
+        message: result.message || 'Operação não concluída',
+        errors: null,
+      });
+    }
+
     return sendSuccess(res, result.data, result.message);
   } catch (error) {
     return next(error);

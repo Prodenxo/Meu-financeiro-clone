@@ -21,6 +21,19 @@ test('parseCalendarQueryDate para create_calendar_event', () => {
   assert.equal(iso?.display, '28/05/2026');
 });
 
+test('parseCalendarQueryDate aceita hoje e amanhã', () => {
+  const tomorrow = parseCalendarQueryDate('amanhã');
+  const today = parseCalendarQueryDate('hoje');
+  assert.ok(tomorrow?.iso);
+  assert.ok(today?.iso);
+  assert.notEqual(tomorrow?.iso, today?.iso);
+});
+
+test('parseCalendarEventTimeHm aceita meio dia', () => {
+  assert.deepEqual(parseCalendarEventTimeHm('meio dia'), { hour: 12, minute: 0 });
+  assert.deepEqual(parseCalendarEventTimeHm('12h'), { hour: 12, minute: 0 });
+});
+
 test('parseCreateMeetLinkFlag aceita variantes', () => {
   assert.equal(parseCreateMeetLinkFlag({ createMeetLink: true }), true);
   assert.equal(parseCreateMeetLinkFlag({ meet: 'sim' }), true);

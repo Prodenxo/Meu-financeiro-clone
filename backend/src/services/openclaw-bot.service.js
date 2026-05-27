@@ -730,14 +730,18 @@ export const runOpenclawAction = async (input) => {
       const hint = created.notLinked
         ? ' Peça para conectar o Google Calendar em Configurações na app.'
         : '';
+      const message = `${created.message || 'Não foi possível criar o compromisso.'}${hint}`;
       return {
         ok: false,
-        message: `${created.message || 'Não foi possível criar o compromisso.'}${hint}`,
+        message,
         data: {
           ...created,
           userId,
           actorContext,
           ...linkDebug,
+          agentInstructions:
+            'Repita só esta message ao utilizador. Não digas "dificuldades técnicas". '
+            + 'Se notLinked, explique conectar Google Calendar na app Meu Financeiro.',
         },
       };
     }
@@ -749,6 +753,8 @@ export const runOpenclawAction = async (input) => {
         userId,
         actorContext,
         ...linkDebug,
+        agentInstructions:
+          'Confirme o compromisso com título, data e hora da message. Se houver meetUri, envie o link.',
       },
     };
   }

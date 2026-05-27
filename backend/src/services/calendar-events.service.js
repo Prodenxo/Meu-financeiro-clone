@@ -40,8 +40,24 @@ export const calendarDateAddDaysInSaoPaulo = (days) => {
  * @param {string} raw
  * @returns {{ iso: string, display: string } | null}
  */
+const normalizeCalendarDateWords = (raw) => {
+  const s = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+  if (!s) return s;
+  if (s === 'hoje') return calendarDateTodayInSaoPaulo();
+  if (s === 'amanha' || s === 'amanhã') return calendarDateAddDaysInSaoPaulo(1);
+  if (s === 'depois de amanha' || s === 'depois de amanhã') {
+    return calendarDateAddDaysInSaoPaulo(2);
+  }
+  return String(raw ?? '').trim();
+};
+
 export const parseCalendarQueryDate = (raw) => {
-  const s = String(raw ?? '').trim();
+  const normalized = normalizeCalendarDateWords(raw);
+  const s = String(normalized ?? '').trim();
   if (!s) return null;
 
   const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -398,7 +414,40 @@ export const listCalendarEventsForUser = async (userId, options = {}) => {
  * @returns {{ hour: number, minute: number } | null}
  */
 export const parseCalendarEventTimeHm = (raw) => {
-  const s = String(raw ?? '').trim();
+  const s = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+  if (!s) return null;
+
+  if (
+    s === 'meio dia'
+    || s === 'meio-dia'
+    || s === 'meiodia'
+    || s === 'ao meio dia'
+    || s === 'ao meio-dia'
+    || s === '12h'
+    || s === '12h00'
+  ) {
+    return { hour: 12, minute: 0 };
+  }
+
+  const hOnly = /^(\d{1,2})h$/.exec(s);
+  if (hOnly) {
+    const hour = Number(hOnly[1]);
+    if (hour >= 0 && hour <= 23) return { hour, minute: 0 };
+  }
+
+  const hMin = /^(\d{1,2})h(\d{2})$/.exec(s);
+  if (hMin) {
+    const hour = Number(hMin[1]);
+    const minute = Number(hMin[2]);
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return { hour, minute };
+    }
+  }
+
   const m = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(s);
   if (!m) return null;
   const hour = Number(m[1]);
