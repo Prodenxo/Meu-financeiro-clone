@@ -10,20 +10,21 @@ Mensagens automáticas do tipo *"você tem compromissos agendados"* + *"telefone
 |------|----------------|-------------|
 | **Chat (resposta)** | Cada pessoa escreve no WhatsApp do Midas → OpenClaw vê o **remetente** → `phone` no `mf-curl` → `n8n_link` → dados **dessa** conta. | **Produção** — já é multi-utilizador. |
 | **Cron OpenClaw com 1 telefone fixo** | Um job com `TELEFONE_DESTINO_55` no prompt. | **Só o teu número** (dev / piloto). |
-| **Cron no backend (produção)** | `GET /api/cron/agenda-lembretes?slot=manha\|noite` — percorre `n8n_link`, consulta agenda de cada `user_id`, envia WhatsApp **só** quem tiver eventos. | **Produção** — lembretes 07:00 e 21:00. |
+| **OpenClaw cron → backend (recomendado)** | Job no OpenClaw às 07:00 e 21:00 (`America/Sao_Paulo`) executa `mf-agenda-cron.sh manha\|noite` → `GET /api/cron/agenda-lembretes?sync=1`. O **backend** envia Z-API para todos. | **Produção** — sem cron-job.org. |
+| **cron-job.org → backend** | Mesmo endpoint HTTP; vários cliques/retries geram **spam** (várias mensagens seguidas). | Evitar em produção. |
+| **Cron OpenClaw com 1 telefone + `list_calendar_events`** | Só lembra **uma** pessoa por job. | Não usar para a base inteira. |
 
-**Importante:** configurar o robô “para ti” no cron **não escala** para mil utilizadores. Para todos:
+**Importante:** o OpenClaw **não** percorre mil utilizadores sozinho no prompt. Ele só **dispara** o lote no backend (1 exec por horário). Quem envia WhatsApp é o **backend** + Z-API.
 
-1. **Conversas:** um gateway OpenClaw + um número WhatsApp; `SOUL.md` + `mf-curl` com o telefone **do remetente** (já está assim).
-2. **Lembretes automáticos:** não duplicar um cron OpenClaw por cliente — usar **job no backend** que itera utilizadores, igual ao DAS automático (`MEI_DAS_AUTO_WHATSAPP` + Z-API ou n8n).
+Requisitos por utilizador:
 
-Requisitos por utilizador em produção:
-
-- Telefone guardado no perfil → linha em `n8n_link`.
-- Opt-in explícito para lembretes WhatsApp (recomendado: flag no perfil antes de implementar o cron global).
+- Telefone em `n8n_link`.
 - Silêncio se agenda vazia (sem spam).
 
-**Desactiva** os jobs de agenda no **OpenClaw** (evita mensagens genéricas às 4h/18h). Usa só o cron do backend abaixo.
+**Desactiva:**
+
+1. Os 2 jobs **MF agenda manhã/noite** no **cron-job.org**.
+2. Jobs OpenClaw antigos que pedem `list_calendar_events` com telefone fixo (duplicam ou erram o horário).
 
 ### Backend implementado (`agenda-reminders.service.js`)
 
@@ -34,26 +35,29 @@ Requisitos por utilizador em produção:
 | `N8N_WHATSAPP_WEBHOOK_URL` | opcional (legado; só se ainda não migrou) |
 | `CRON_SECRET` | Bearer no agendador |
 
-| Horário (Brasil) | Chamada |
-|------------------|---------|
-| **07:00** | `GET /api/cron/agenda-lembretes?slot=manha` + `Authorization: Bearer <CRON_SECRET>` |
-| **21:00** | `GET /api/cron/agenda-lembretes?slot=noite` + mesmo header |
+| Horário (Brasil) | OpenClaw cron (`exec`) |
+|------------------|-------------------------|
+| **07:00** | `/home/node/.openclaw/workspace/mf-agenda-cron.sh manha` |
+| **21:00** | `/home/node/.openclaw/workspace/mf-agenda-cron.sh noite` |
 
-Comportamento em código:
+**Env no serviço OpenClaw (Easypanel):** `MF_API_URL`, `CRON_SECRET` (igual ao backend).
 
-- Percorre todos os `n8n_link` com telefone.
-- `list_calendar_events` para o dia alvo (fuso `America/Sao_Paulo`): **manhã = hoje**, **noite = amanhã**.
-- **`events.length === 0` → não envia nada** (sem mensagem de agenda vazia).
-- **Com eventos →** uma mensagem com lista (Bom dia + compromissos de **hoje**; Boa noite + compromissos de **amanhã**).
+Instalação no contentor (colar `Site/docs/ops/scripts/install-mf-agenda-cron-openclaw.sh` no Console Bash).
 
-Teste manual:
+Comportamento:
+
+- Percorre `n8n_link` (1 WhatsApp por telefone).
+- Manhã = compromissos de **hoje**; noite = **amanhã** (São Paulo).
+- Sem eventos → não envia.
+- **Dedup sem Supabase:** lock em memória + ficheiro em `/tmp` + um lote de cada vez (`?sync=1`).
+
+Teste manual no contentor OpenClaw:
 
 ```bash
-curl -s "http://127.0.0.1:3333/api/cron/agenda-lembretes?slot=manha" \
-  -H "Authorization: Bearer SEU_CRON_SECRET"
+/home/node/.openclaw/workspace/mf-agenda-cron.sh manha
 ```
 
-**cron-job.org:** o timeout máximo de espera é **30s**. O endpoint responde **202 Accepted** de imediato e processa em background (WhatsApp continua a ser enviado). Para ver o JSON completo no terminal, use `?sync=1` (pode demorar vários segundos).
+Teste forçado (ignora dedup): `.../agenda-lembretes?slot=manha&sync=1&force=1`
 
 ---
 

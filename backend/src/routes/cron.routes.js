@@ -4,7 +4,10 @@ import {
   runMonthlyAutomaticDasDownload,
   runSingleUserAutomaticDasDownload
 } from '../services/mei-das.service.js';
-import { runAgendaWhatsappReminders } from '../services/agenda-reminders.service.js';
+import {
+  isAgendaReminderBatchInFlight,
+  runAgendaWhatsappReminders,
+} from '../services/agenda-reminders.service.js';
 import { runOpenclawNfseWhatsappDeliveryJob } from '../services/nfse-whatsapp-delivery.service.js';
 import { badRequest } from '../utils/errors.js';
 
@@ -40,24 +43,37 @@ router.get('/das-mensal/usuario', requireCronSecret, async (req, res, next) => {
  * Lembretes de agenda (07h = slot manha, 21h = slot noite).
  * Só envia WhatsApp se houver compromissos hoje; agenda vazia = silêncio.
  * Query: `slot=manha|noite` (padrão manha).
- * Por defeito responde **202** logo (cron-job.org limita espera a 30s). `?sync=1` aguarda o lote.
+ * Preferir `?sync=1` (OpenClaw `mf-agenda-cron.sh`). Sem sync: 202 só se não houver lote a correr.
  */
 router.get('/agenda-lembretes', requireCronSecret, async (req, res, next) => {
   try {
     const rawSlot = String(req.query.slot || 'manha').trim().toLowerCase();
     const slot = rawSlot === 'noite' ? 'noite' : 'manha';
     const dateIso = req.query.date ? String(req.query.date).trim() : undefined;
+    const force =
+      String(req.query.force || '').toLowerCase() === '1'
+      || String(req.query.force || '').toLowerCase() === 'true';
     const sync =
       String(req.query.sync || '').toLowerCase() === '1'
       || String(req.query.sync || '').toLowerCase() === 'true';
 
     if (sync) {
-      const summary = await runAgendaWhatsappReminders({ slot, dateIso });
+      const summary = await runAgendaWhatsappReminders({ slot, dateIso, force });
       return res.json({ ok: true, summary });
     }
 
+    if (isAgendaReminderBatchInFlight()) {
+      return res.status(202).json({
+        ok: true,
+        deduped: true,
+        reason: 'batch_in_flight',
+        slot,
+        message: 'Lote já em execução; pedido ignorado.',
+      });
+    }
+
     const startedAt = new Date().toISOString();
-    void runAgendaWhatsappReminders({ slot, dateIso })
+    void runAgendaWhatsappReminders({ slot, dateIso, force })
       .then((summary) => {
         // eslint-disable-next-line no-console
         console.info('[agenda-reminders] background concluído', {

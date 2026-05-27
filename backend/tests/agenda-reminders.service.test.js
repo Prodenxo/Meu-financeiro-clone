@@ -2,8 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildAgendaReminderRunKey,
   formatAgendaReminderWhatsappMessage,
+  markAgendaReminderBatchDone,
   resolveAgendaReminderDateIso,
+  tryAcquireAgendaReminderBatchMemory,
 } from '../src/services/agenda-reminders.service.js';
 import {
   calendarDateAddDaysInSaoPaulo,
@@ -38,4 +41,12 @@ test('formatAgendaReminderWhatsappMessage: lista compromissos', () => {
 test('resolveAgendaReminderDateIso: manhã hoje, noite amanhã', () => {
   assert.equal(resolveAgendaReminderDateIso('manha'), calendarDateTodayInSaoPaulo());
   assert.equal(resolveAgendaReminderDateIso('noite'), calendarDateAddDaysInSaoPaulo(1));
+});
+
+test('dedup em memória: segundo lote no mesmo slot/dia é bloqueado', () => {
+  const runKey = buildAgendaReminderRunKey('manha', '2099-01-15');
+  assert.equal(tryAcquireAgendaReminderBatchMemory(runKey, true), true);
+  markAgendaReminderBatchDone(runKey);
+  assert.equal(tryAcquireAgendaReminderBatchMemory(runKey, false), false);
+  assert.equal(tryAcquireAgendaReminderBatchMemory(runKey, true), true);
 });

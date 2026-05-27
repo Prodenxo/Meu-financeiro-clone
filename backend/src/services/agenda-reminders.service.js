@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { env } from '../config/env.js';
 import { createSupabaseClient } from '../config/supabase.js';
 import { resolveOpenclawWhatsappPhone } from './openclaw-bot.service.js';
@@ -12,6 +16,62 @@ import {
 } from './whatsapp-outbound.service.js';
 
 const VALID_SLOTS = new Set(['manha', 'noite']);
+
+/** Evita dois lotes em paralelo (vários GET do agendador com 202). */
+let agendaReminderBatchPromise = null;
+
+/** Dedup em memória (reinício do contentor limpa — complementado por ficheiro em /tmp). */
+const memoryBatchDone = new Map();
+
+const BATCH_TTL_MS = 22 * 60 * 60 * 1000;
+
+/**
+ * @param {'manha'|'noite'} slot
+ * @param {string} dateIso YYYY-MM-DD
+ */
+export const buildAgendaReminderRunKey = (slot, dateIso) =>
+  `agenda:${slot}:${dateIso}`;
+
+export const isAgendaReminderBatchInFlight = () => !!agendaReminderBatchPromise;
+
+/**
+ * @param {string} runKey
+ * @param {boolean} force
+ */
+export const tryAcquireAgendaReminderBatchMemory = (runKey, force) => {
+  if (force) return true;
+  const prev = memoryBatchDone.get(runKey);
+  if (prev && Date.now() - prev < BATCH_TTL_MS) return false;
+  for (const [key, ts] of memoryBatchDone) {
+    if (Date.now() - ts >= BATCH_TTL_MS) memoryBatchDone.delete(key);
+  }
+  return true;
+};
+
+/**
+ * @param {string} runKey
+ */
+export const markAgendaReminderBatchDone = (runKey) => {
+  memoryBatchDone.set(runKey, Date.now());
+};
+
+/**
+ * Lock em ficheiro (sem Supabase) — sobrevive a hot reload se /tmp persistir.
+ * @param {string} runKey
+ * @param {boolean} force
+ */
+export const tryAcquireAgendaReminderBatchFile = (runKey, force) => {
+  if (force) return true;
+  const safe = runKey.replace(/[^a-z0-9_-]/gi, '_');
+  const file = path.join(os.tmpdir(), `mf-agenda-batch-${safe}.lock`);
+  try {
+    fs.writeFileSync(file, `${new Date().toISOString()}\n`, { flag: 'wx', encoding: 'utf8' });
+    return true;
+  } catch (err) {
+    if (err && typeof err === 'object' && err.code === 'EEXIST') return false;
+    return true;
+  }
+};
 
 /**
  * Data consultada na agenda: manhã = hoje; noite = amanhã (fuso São Paulo).
@@ -39,14 +99,17 @@ const listUsersWithWhatsappLink = async () => {
     .not('user_id', 'is', null)
     .not('user_number', 'is', null);
   if (error) throw new Error(error.message);
-  const seen = new Set();
+  const seenUsers = new Set();
+  const seenPhones = new Set();
   const out = [];
   for (const row of data || []) {
     const userId = String(row.user_id || '').trim();
-    if (!userId || seen.has(userId)) continue;
+    if (!userId || seenUsers.has(userId)) continue;
     const phone = resolveOpenclawWhatsappPhone(row.user_number, row.user_number);
     if (!phone) continue;
-    seen.add(userId);
+    if (seenPhones.has(phone)) continue;
+    seenUsers.add(userId);
+    seenPhones.add(phone);
     out.push({ userId, phone });
   }
   return out;
@@ -93,28 +156,10 @@ const trySendAgendaReminder = async ({ userId, phone, message, slot, dateIso }) 
   }
 };
 
-/**
- * Percorre utilizadores com telefone em `n8n_link`; envia WhatsApp só quem tiver eventos no dia alvo.
- * Manhã = hoje; noite = amanhã (America/Sao_Paulo).
- * @param {{ slot?: 'manha'|'noite', dateIso?: string }} [options]
- */
-export const runAgendaWhatsappReminders = async (options = {}) => {
+const runAgendaWhatsappRemindersInner = async (options) => {
   const slot = VALID_SLOTS.has(options.slot) ? options.slot : 'manha';
   const dateIso = resolveAgendaReminderDateIso(slot, options.dateIso);
   const startedAt = new Date().toISOString();
-
-  if (!isAgendaWhatsappRemindersEnabled()) {
-    return {
-      ok: true,
-      skipped: 'disabled',
-      slot,
-      dateIso,
-      startedAt,
-      finishedAt: new Date().toISOString(),
-      message:
-        'Lembretes de agenda desligados (AGENDA_WHATSAPP_REMINDERS_ENABLED≠true).',
-    };
-  }
 
   const users = await listUsersWithWhatsappLink();
   const results = [];
@@ -192,4 +237,82 @@ export const runAgendaWhatsappReminders = async (options = {}) => {
     errors: results.filter((r) => r.status === 'error').length,
     results,
   };
+};
+
+/**
+ * Percorre utilizadores com telefone em `n8n_link`; envia WhatsApp só quem tiver eventos no dia alvo.
+ * Dedup sem BD: memória + lock em /tmp + single-flight.
+ * @param {{ slot?: 'manha'|'noite', dateIso?: string, force?: boolean }} [options]
+ */
+export const runAgendaWhatsappReminders = async (options = {}) => {
+  const slot = VALID_SLOTS.has(options.slot) ? options.slot : 'manha';
+  const dateIso = resolveAgendaReminderDateIso(slot, options.dateIso);
+  const force = options.force === true;
+  const runKey = buildAgendaReminderRunKey(slot, dateIso);
+  const startedAt = new Date().toISOString();
+
+  if (!isAgendaWhatsappRemindersEnabled()) {
+    return {
+      ok: true,
+      skipped: 'disabled',
+      slot,
+      dateIso,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      message:
+        'Lembretes de agenda desligados (AGENDA_WHATSAPP_REMINDERS_ENABLED≠true).',
+    };
+  }
+
+  if (!force) {
+    if (!tryAcquireAgendaReminderBatchMemory(runKey, force)) {
+      return {
+        ok: true,
+        skipped: 'batch_already_ran',
+        dedup: 'memory',
+        slot,
+        dateIso,
+        runKey,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        message:
+          'Lote já executado neste processo para este slot/dia. Use ?force=1 só em teste.',
+      };
+    }
+    if (!tryAcquireAgendaReminderBatchFile(runKey, force)) {
+      return {
+        ok: true,
+        skipped: 'batch_already_ran',
+        dedup: 'file',
+        slot,
+        dateIso,
+        runKey,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        message:
+          'Lote já executado hoje (lock em /tmp). Use ?force=1 só em teste.',
+      };
+    }
+  }
+
+  if (agendaReminderBatchPromise && !force) {
+    return agendaReminderBatchPromise;
+  }
+
+  const work = (async () => {
+    const summary = await runAgendaWhatsappRemindersInner({ slot, dateIso });
+    if (!force && summary.ok && !summary.skipped) {
+      markAgendaReminderBatchDone(runKey);
+    }
+    return summary;
+  })();
+
+  agendaReminderBatchPromise = work;
+  try {
+    return await work;
+  } finally {
+    if (agendaReminderBatchPromise === work) {
+      agendaReminderBatchPromise = null;
+    }
+  }
 };
