@@ -199,6 +199,17 @@ export const env = {
   OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED:
     process.env.OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED || 'false',
   /**
+   * Notificações Z-API: nova solicitação → todos os superadmins (profiles + vínculo);
+   * aprovação → solicitante. Requer Z-API outbound.
+   */
+  ACCESS_REQUEST_WHATSAPP_NOTIFY_ENABLED:
+    process.env.ACCESS_REQUEST_WHATSAPP_NOTIFY_ENABLED || 'false',
+  /** Opcional: telefones extra (vírgula), além dos superadmins na BD. */
+  ACCESS_REQUEST_NOTIFY_SUPERADMIN_EXTRA_PHONES:
+    (process.env.ACCESS_REQUEST_NOTIFY_SUPERADMIN_EXTRA_PHONES
+      || process.env.ACCESS_REQUEST_NOTIFY_SUPERADMIN_PHONE
+      || '').trim(),
+  /**
    * URL pública do frontend usada em links de convite (`/register?convite=`).
    * Se vazio, usa `FRONTEND_URL` ou header `Origin` da requisição (fallback dev `http://localhost:3000`).
    */

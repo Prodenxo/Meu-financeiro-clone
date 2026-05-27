@@ -3,6 +3,10 @@ import { getServiceRoleClient } from '../config/supabase.js';
 import { badRequest, unauthorized } from '../utils/errors.js';
 import { normalizeEnvSecret } from '../config/env.js';
 import { buildAccessRequestReport } from '../services/access-request-report.service.js';
+import {
+  notifyApplicantAccessApproved,
+  notifySuperadminAccessRequestSubmitted,
+} from '../services/access-request-whatsapp.service.js';
 
 const router = Router();
 
@@ -189,6 +193,10 @@ router.post('/manage', requireInternalSecret, async (req, res, next) => {
         },
       });
 
+      const fullName = prevMeta.full_name ?? prevMeta.display_name ?? prevMeta.name ?? null;
+      const email = authData?.user?.email ?? null;
+      void notifyApplicantAccessApproved(sb, userId, { fullName, email }).catch(() => {});
+
       return res.json({ ok: true });
     }
 
@@ -343,6 +351,15 @@ router.post('/submit', requireInternalSecret, async (req, res, next) => {
       await sb.auth.admin.deleteUser(userId).catch(() => {});
       return next(err);
     }
+
+    void notifySuperadminAccessRequestSubmitted(sb, {
+      fullName,
+      email,
+      phone: phone || null,
+      empresaNome,
+      cnpj,
+      observacao,
+    }).catch(() => {});
 
     return res.json({ ok: true, userId });
   } catch (err) {

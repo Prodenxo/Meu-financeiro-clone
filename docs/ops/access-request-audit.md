@@ -55,3 +55,20 @@ Opcional: deploy da Edge `manage-access-requests` (fallback do histórico se a r
 
 - **Negados** não aparecem (usuário e empresa pendentes são removidos).
 - Histórico vazio com API antiga: faça deploy do backend com a rota `/admin/access-requests/report`.
+
+## WhatsApp (Z-API) — sem tabela nova
+
+Com `ACCESS_REQUEST_WHATSAPP_NOTIFY_ENABLED=true` e Z-API já usada no DAS/NFSe:
+
+| Evento | Quem recebe | Origem do telefone |
+|--------|-------------|-------------------|
+| Nova solicitação (`submit`) | **Todos** com cargo superadmin | `profiles.role = superadmin` **ou** vínculo activo em `role_x_user_x_empresa` com role superadmin → `n8n_link` / metadata |
+| Aprovação (`approve` na app) | Solicitante | `n8n_link` / metadata do cadastro |
+
+Opcional: `ACCESS_REQUEST_NOTIFY_SUPERADMIN_EXTRA_PHONES` (vírgula) para números fixos além da BD.
+
+Cada superadmin precisa ter **telefone no perfil da app** (grava em `n8n_link`) para receber o aviso.
+
+Falha no WhatsApp **não** bloqueia submit/approve (só log `[access-request-whatsapp]`).
+
+Deploy: reinicie o backend no Easypanel após alterar env.
