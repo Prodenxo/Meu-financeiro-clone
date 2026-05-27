@@ -64,11 +64,12 @@ Deve aparecer:
 
 ---
 
-## 4. Z-API / n8n (não mudar)
+## 4. Z-API / n8n (produção — OpenClaw directo)
 
-- [ ] **Ao receber** continua no n8n: `https://auto-n8n-omega.../webhook/financas`
-- [ ] n8n encaminha mensagens para o OpenClaw (fluxo actual).
-- [ ] **Não** apontar Z-API directo para o backend se quiseres Midas + n8n como hoje.
+- [ ] **Desactivar** workflow n8n `financas` (inbound WhatsApp).
+- [ ] Z-API **não** aponta “ao receber” para o n8n.
+- [ ] OpenClaw: `dmPolicy: open` + `allowFrom: ["*"]` — script `scripts/openclaw-allow-all-dms.sh`
+- [ ] Guia completo: [`producao-completa-midas.md`](./producao-completa-midas.md)
 
 ---
 
