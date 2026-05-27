@@ -67,7 +67,13 @@ Com `ACCESS_REQUEST_WHATSAPP_NOTIFY_ENABLED=true` e Z-API já usada no DAS/NFSe:
 
 ### Aprovar pelo WhatsApp (superadmin)
 
-O webhook Z-API (`POST` inbound) processa comandos **antes** do relay OpenClaw. O número do remetente tem de estar em `n8n_link` ligado a um utilizador **superadmin**.
+**Com webhook Z-API no n8n (sem mudar painel):** o **OpenClaw (Midas)** aprova via API  
+`POST /api/bot/openclaw/action` — actions `list_access_requests`, `approve_access_request`, `reject_access_request` (só superadmin).  
+No WhatsApp: *"lista cadastros pendentes"*, *"aprovar acesso milena@email.com"*, *"mf pendentes"*.
+
+**Com webhook no backend** (opcional): comandos `mf pendentes` / `mf aprovar` no inbound Z-API.
+
+O telefone do remetente tem de estar em `n8n_link` ligado a um utilizador **superadmin**.
 
 | Comando | Ação |
 |---------|------|

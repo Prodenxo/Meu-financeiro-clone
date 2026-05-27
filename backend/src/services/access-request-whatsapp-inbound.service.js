@@ -95,8 +95,48 @@ export const buildPendingAccessRequestsListMessage = (pending) => {
   return lines.join('\n');
 };
 
+/**
+ * @param {string} phone
+ * @param {string} message
+ */
 const sendReply = async (phone, message) => {
-  await sendWhatsappMessage({ phone, message });
+  try {
+    await sendWhatsappMessage({ phone, message });
+    return { sent: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // eslint-disable-next-line no-console
+    console.error('[access-request-whatsapp-inbound] falha ao enviar WhatsApp:', msg);
+    return { sent: false, error: msg };
+  }
+};
+
+/**
+ * Quando o webhook recebe `mf …` mas o handler não corre (env / deploy).
+ * @param {string | undefined} reason
+ */
+export const buildMfCommandNotProcessedMessage = (reason) => {
+  if (reason === 'disabled') {
+    return (
+      'Recebi "mf …" no servidor, mas notificações de cadastro estão desligadas '
+      + '(ACCESS_REQUEST_WHATSAPP_NOTIFY_ENABLED). Ative no Easypanel e reinicie o backend.'
+    );
+  }
+  if (reason === 'not_command') {
+    return 'Comando mf não reconhecido. Tente: mf pendentes | mf ajuda';
+  }
+  return (
+    'O servidor viu sua mensagem "mf …" mas não concluiu o processamento. '
+    + 'Confira logs do backend ou envie mf ajuda.'
+  );
+};
+
+/**
+ * @param {string} phone
+ * @param {string | undefined} reason
+ */
+export const sendMfCommandDiagnosticReply = async (phone, reason) => {
+  return sendReply(phone, buildMfCommandNotProcessedMessage(reason));
 };
 
 /**

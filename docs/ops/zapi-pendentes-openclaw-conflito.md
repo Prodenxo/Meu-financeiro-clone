@@ -38,6 +38,26 @@ Tem de aparecer:
 
 Se **não** existir esse campo → **redeploy/restart** do backend no Easypanel (o código novo ainda não está em produção).
 
+## Silêncio total (OpenClaw e Z-API não respondem)
+
+Isso quase sempre significa: a mensagem **não chegou** ao backend.
+
+| O que funciona | O que falta |
+|--------------|-------------|
+| Aviso de nova solicitação (envio **saída** Z-API) | Webhook **entrada** “ao receber” → backend |
+
+Confere no monitor:
+
+```text
+GET https://auto-back-meufinanceiro-site.4tnf3f.easypanel.host/api/webhooks/zapi/monitor
+```
+
+Precisas de `"zapiInboundReady": true` (token + outbound + access notify).
+
+`npm run dev` no PC **não** recebe mensagens da Z-API em produção — só o backend no Easypanel.
+
+---
+
 ## 2. Z-API — webhook “ao receber”
 
 No painel Z-API, URL de recebimento:

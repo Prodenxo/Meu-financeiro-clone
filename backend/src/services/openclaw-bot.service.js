@@ -39,6 +39,11 @@ import {
   registerOpenclawNfseWhatsappDelivery,
   scheduleOpenclawNfseWhatsappDeliveryRetries,
 } from './nfse-whatsapp-delivery.service.js';
+import {
+  openclawApproveAccessRequest,
+  openclawListAccessRequests,
+  openclawRejectAccessRequest,
+} from './openclaw-access-requests.service.js';
 
 const MAX_LIST = 40;
 
@@ -576,6 +581,21 @@ export const runOpenclawAction = async (input) => {
       message: `Conta ligada a este telefone: ${account.displayName}${account.empresaNome ? ` (${account.empresaNome})` : ''}.`,
       data: { userId, account, actorContext, ...linkDebug },
     };
+  }
+
+  if (action === 'list_access_requests') {
+    const result = await openclawListAccessRequests(userId, actorContext);
+    return { ...result, data: { ...result.data, actorContext, ...linkDebug } };
+  }
+
+  if (action === 'approve_access_request') {
+    const result = await openclawApproveAccessRequest(userId, actorContext, payload);
+    return { ...result, data: { ...result.data, actorContext, ...linkDebug } };
+  }
+
+  if (action === 'reject_access_request') {
+    const result = await openclawRejectAccessRequest(actorContext, payload);
+    return { ...result, data: { ...result.data, actorContext, ...linkDebug } };
   }
 
   if (action === 'get_permissions') {
@@ -1216,6 +1236,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };
