@@ -72,3 +72,15 @@ Cada superadmin precisa ter **telefone no perfil da app** (grava em `n8n_link`) 
 Falha no WhatsApp **não** bloqueia submit/approve (só log `[access-request-whatsapp]`).
 
 Deploy: reinicie o backend no Easypanel após alterar env.
+
+## Erro «Não autenticado» (401) na tela Pendentes
+
+A app chama a Edge `manage-access-requests`, que valida o **JWT do utilizador** (não é causado pelo envio Z-API).
+
+| Causa | O que fazer |
+|-------|-------------|
+| Sessão expirada | Sair e entrar de novo na app |
+| Edge sem segredos | Supabase → Edge Functions → Secrets: `ACCESS_REQUEST_INTERNAL_SECRET` **igual** ao backend; `MEU_FINANCEIRO_API_URL` = URL do backend |
+| Token não ia no invoke (web) | App usa `lib/manage-access-requests.ts` com `Authorization` explícito — atualize o frontend |
+
+Se após login continuar 401: no Supabase Dashboard → Functions → `manage-access-requests` → Logs.
