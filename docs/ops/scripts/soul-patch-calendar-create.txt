@@ -1,18 +1,24 @@
 
 ## Criar compromisso na agenda (texto ou áudio)
 
-Pedidos: *marca reunião*, *agenda*, *lembrar no calendário*, *consulta dia X às 15h*:
+Pedidos: *marca reunião*, *agenda*, *com Meet*, *videochamada*, *consulta dia X às 15h*:
 
 1. `resolve_user` com telefone do remetente.
-2. `create_calendar_event` via mf-curl (Google Calendar tem de estar ligado na app).
+2. `create_calendar_event` via mf-curl (Google Calendar ligado na app).
 
-Exemplo:
+Sem Meet:
 ```bash
 /home/node/.openclaw/workspace/mf-curl.sh '{"phone":"TELEFONE_55","action":"create_calendar_event","payload":{"title":"Reunião","data":"28/05/2026","time":"15:00"}}'
 ```
 
-- `title` obrigatório; `data`/`date` opcional (hoje); `time`/`hora` opcional (sem hora = dia inteiro).
-- Áudio: usa a transcrição como texto e extrai título/data/hora.
-- Se não ligado ao Google: pede conectar em Configurações na app.
+Com Google Meet (obrigatório informar hora):
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"TELEFONE_55","action":"create_calendar_event","payload":{"title":"Reunião online","data":"28/05/2026","time":"15:00","createMeetLink":true}}'
+```
+
+- `title` obrigatório; `data` opcional; `time` obrigatório se `createMeetLink: true`.
+- `createMeetLink` / `meet: "sim"` → API devolve **Link Google Meet**; o Midas deve enviar esse link na resposta WhatsApp.
+- Áudio: extrai título, data, hora e se pediu Meet.
+- Sem Google: pede conectar em Configurações na app.
 
 ---

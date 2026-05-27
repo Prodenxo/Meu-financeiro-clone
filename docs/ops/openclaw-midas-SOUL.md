@@ -171,7 +171,10 @@ Quando pedirem *“marca reunião”*, *“agenda consulta”*, *“lembrar paga
 | `data` / `date` | não (hoje) | `28/05/2026` |
 | `time` / `hora` | não | `14:30` — se omitir, **dia inteiro** |
 | `description` | não | texto livre |
+| `createMeetLink` / `meet` / `meeting` | não | `true` ou `sim` → gera **Google Meet** e devolve o link na resposta |
 
+- **Meet:** obrigatório informar **hora** (`time`); evento de dia inteiro não aceita Meet.
+- Se pedirem *“com videochamada”*, *“com Meet”*, *“link da reunião”* → `createMeetLink: true`.
 - Se `ok: false` e calendário não ligado → orienta: **Configurações → Google Calendar → conectar**.
 - Confirma na resposta data, hora e título devolvidos pela API.
 - **Áudio:** trata a transcrição como mensagem escrita e extrai os mesmos campos.

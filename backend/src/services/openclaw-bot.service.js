@@ -727,13 +727,9 @@ export const runOpenclawAction = async (input) => {
         },
       };
     }
-    let reply = created.message;
-    if (created.hangoutLink) {
-      reply += ` Link Meet: ${created.hangoutLink}`;
-    }
     return {
       ok: true,
-      message: reply,
+      message: created.message,
       data: {
         ...created,
         userId,

@@ -421,6 +421,38 @@ const pickMeetUriFromGoogleEvent = (eventData) => {
 };
 
 /**
+ * @param {Record<string, unknown>} payload
+ */
+export const parseCreateMeetLinkFlag = (payload = {}) => {
+  const raw = payload.createMeetLink
+    ?? payload.createMeet
+    ?? payload.meet
+    ?? payload.meeting
+    ?? payload.comMeet
+    ?? payload.com_meet
+    ?? payload.videoCall
+    ?? payload.linkMeet
+    ?? payload.comVideo;
+  if (raw === true) return true;
+  const s = String(raw ?? '').trim().toLowerCase();
+  if (!s) return false;
+  return ['true', '1', 'yes', 'sim', 'on'].includes(s);
+};
+
+const fetchGoogleCalendarEventById = async (accessToken, eventId) => {
+  const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?conferenceDataVersion=1`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) return null;
+  return res.json();
+};
+
+/**
  * Cria compromisso no Google Calendar (primary) do utilizador.
  * @param {string} userId
  * @param {Record<string, unknown>} payload
@@ -479,9 +511,16 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     : null;
   const endDateIso = endDateParsed?.iso ?? parsed.iso;
 
-  const description = String(
+  let description = String(
     payload.description ?? payload.descricao ?? payload.obs ?? '',
   ).trim();
+
+  const wantsMeet = parseCreateMeetLinkFlag(payload);
+  if (wantsMeet && allDay) {
+    throw badRequest(
+      'Google Meet exige horário definido. Informe payload.time (ex.: 15:00) ou allDay: false.',
+    );
+  }
 
   const tokenResult = await getGoogleCalendarAccessTokenForUser(userId);
   if (tokenResult.error) {
@@ -494,10 +533,24 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     };
   }
 
+  if (wantsMeet) {
+    description = description ? `${description}\n[MF_MEET]` : '[MF_MEET]';
+  }
+
   const eventBody = {
     summary: title,
     ...(description ? { description } : {}),
   };
+
+  if (wantsMeet) {
+    eventBody.conferenceData = {
+      createRequest: {
+        requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        conferenceSolutionKey: { type: 'hangoutsMeet' },
+      },
+    };
+    eventBody.extendedProperties = { private: { mfMeet: '1' } };
+  }
 
   if (allDay) {
     eventBody.start = { date: parsed.iso };
@@ -513,8 +566,9 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     };
   }
 
+  const calendarQuery = wantsMeet ? '?conferenceDataVersion=1' : '';
   const calendarResponse = await fetch(
-    'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events${calendarQuery}`,
     {
       method: 'POST',
       headers: {
@@ -535,17 +589,38 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     };
   }
 
-  const eventData = await calendarResponse.json();
-  const meetUri = pickMeetUriFromGoogleEvent(eventData);
+  let eventData = await calendarResponse.json();
+  let meetUri = pickMeetUriFromGoogleEvent(eventData);
+
+  if (wantsMeet && eventData.id && !meetUri) {
+    const refreshed = await fetchGoogleCalendarEventById(
+      tokenResult.accessToken,
+      eventData.id,
+    );
+    if (refreshed) {
+      eventData = refreshed;
+      meetUri = pickMeetUriFromGoogleEvent(eventData);
+    }
+  }
+
   const timeLabel = allDay
     ? 'dia inteiro'
     : `${pad2(startHour)}:${pad2(startMinute)}`;
 
+  let message = `Compromisso criado: ${title} em ${parsed.display} (${timeLabel}).`;
+  if (wantsMeet) {
+    message += meetUri
+      ? ` Link Google Meet: ${meetUri}`
+      : ' Meet solicitado; o link pode demorar alguns segundos a aparecer no Google Calendar.';
+  }
+
   return {
     ok: true,
-    message: `Compromisso criado: ${title} em ${parsed.display} (${timeLabel}).`,
+    message,
     eventId: eventData.id || null,
     hangoutLink: meetUri,
+    meetLink: meetUri,
+    createMeetLink: wantsMeet,
     date: parsed.iso,
     dateDisplay: parsed.display,
     title,

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   parseCalendarEventTimeHm,
   parseCalendarQueryDate,
+  parseCreateMeetLinkFlag,
 } from '../src/services/calendar-events.service.js';
 import { buildAccessRequestApprovedApplicantMessage } from '../src/services/access-request-whatsapp.service.js';
 
@@ -18,6 +19,13 @@ test('parseCalendarQueryDate para create_calendar_event', () => {
   assert.equal(br?.iso, '2026-05-28');
   const iso = parseCalendarQueryDate('2026-05-28');
   assert.equal(iso?.display, '28/05/2026');
+});
+
+test('parseCreateMeetLinkFlag aceita variantes', () => {
+  assert.equal(parseCreateMeetLinkFlag({ createMeetLink: true }), true);
+  assert.equal(parseCreateMeetLinkFlag({ meet: 'sim' }), true);
+  assert.equal(parseCreateMeetLinkFlag({ meeting: 'true' }), true);
+  assert.equal(parseCreateMeetLinkFlag({}), false);
 });
 
 test('mensagem aprovacao inclui link grupo suporte', () => {
