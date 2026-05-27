@@ -5,8 +5,11 @@ import {
   computeGoogleEventDurationMinutes,
   formatDurationLabelPtBr,
   formatCalendarEventDisplayLine,
+  formatCalendarEventWhatsappDetail,
   extractGoogleEventReminders,
   pickMeetUriFromGoogleEvent,
+  parseGoogleCalendarDateTimeToInstant,
+  formatGoogleDateTimeLocalPtBr,
 } from '../src/services/calendar-events.service.js';
 
 test('mapGoogleItemToCalendarEvent inclui duração, Meet e lembretes', () => {
@@ -80,4 +83,27 @@ test('formatCalendarEventDisplayLine não confunde fim com início', () => {
     durationLabel: '1h',
   });
   assert.equal(line, '17:00–18:00 (1h) — Arthur');
+});
+
+test('dateTime sem offset + timeZone SP mantém hora de início (evento criado no Google)', () => {
+  const item = {
+    summary: 'Reunião com Leozin',
+    start: { dateTime: '2026-05-27T18:30:00', timeZone: 'America/Sao_Paulo' },
+    end: { dateTime: '2026-05-27T19:30:00', timeZone: 'America/Sao_Paulo' },
+  };
+  const mapped = mapGoogleItemToCalendarEvent(item, '2026-05-27');
+  assert.equal(mapped.time, '18:30');
+  assert.equal(mapped.endTime, '19:30');
+  assert.equal(mapped.title, 'Reunião com Leozin');
+
+  const detail = formatCalendarEventWhatsappDetail(mapped);
+  assert.match(detail, /Início: 18:30/);
+  assert.match(detail, /Fim: 19:30/);
+  assert.doesNotMatch(detail, /Início: 19:30/);
+});
+
+test('parseGoogleCalendarDateTimeToInstant com offset explícito', () => {
+  const d = parseGoogleCalendarDateTimeToInstant('2026-05-27T18:30:00-03:00');
+  assert.equal(formatGoogleDateTimeLocalPtBr('2026-05-27T18:30:00-03:00'), '18:30');
+  assert.ok(d);
 });

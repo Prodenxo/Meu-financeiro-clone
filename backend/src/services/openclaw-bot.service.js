@@ -483,6 +483,9 @@ export const runOpenclawAction = async (input) => {
     proximo_compromisso: 'get_next_calendar_event',
     proximo_compromisso_agenda: 'get_next_calendar_event',
     next_calendar_event: 'get_next_calendar_event',
+    excluir_compromisso: 'delete_calendar_event',
+    cancelar_reuniao: 'delete_calendar_event',
+    delete_calendar_event: 'delete_calendar_event',
   };
   let action = String(input?.action || '').trim();
   action = actionAliases[action] || action;
@@ -805,10 +808,45 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Responda copiando o texto de message (lista pronta). '
-          + 'PROIBIDO inventar horário: use só events[].time como início e endTime como fim. '
-          + 'NUNCA diga que a reunião é às endTime. Para "hoje" use payload.data=hoje. '
-          + 'Para "próximo compromisso" use action get_next_calendar_event, NÃO listar amanhã.',
+          'Agenda AO VIVO (fetchedAt) — sem cache. SEMPRE chame de novo após excluir; '
+          + 'NUNCA repitas compromissos só porque apareceram numa mensagem anterior. '
+          + 'Copie só message. Início ≠ Fim. Excluir = delete_calendar_event com events[].id (google). '
+          + 'Itens [lançamento financeiro] não são reunião Google.',
+      },
+    };
+  }
+
+  if (action === 'delete_calendar_event') {
+    const deleted = await calendarEventsService.deleteCalendarEventForUser(userId, payload);
+    if (!deleted.ok) {
+      const hint = deleted.notLinked
+        ? ' Peça para conectar o Google Calendar na app.'
+        : '';
+      return {
+        ok: false,
+        message: `${deleted.message || 'Não foi possível excluir.'}${hint}`,
+        data: {
+          ...deleted,
+          userId,
+          actorContext,
+          ...linkDebug,
+          agentInstructions:
+            'Repita só message. Se alreadyDeleted, diga que já não está na agenda. '
+            + 'Depois chame list_calendar_events para mostrar a lista actual.',
+        },
+      };
+    }
+    return {
+      ok: true,
+      message: deleted.message,
+      data: {
+        ...deleted,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Confirme a exclusão com message. OBRIGATÓRIO: list_calendar_events em seguida '
+          + '(mesma data) para provar que saiu — não uses memória do chat.',
       },
     };
   }
@@ -843,7 +881,8 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Confirme o compromisso com título, data e hora da message. Se houver meetUri, envie o link.',
+          'Repita APENAS a message (título, data, início e fim). NUNCA troque início por fim. '
+          + 'Se houver meetLink/hangoutLink, envie o link.',
       },
     };
   }
@@ -1374,6 +1413,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, get_next_calendar_event, create_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, get_next_calendar_event, create_calendar_event, delete_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

@@ -67,8 +67,22 @@ const calendarBlock = `## Agenda — consultar e criar (Google Calendar + bot)
 \`\`\`
 
 - Resposta = **somente** o campo JSON \`message\` (já vem formatada). **PROIBIDO** reescrever horários.
+- **Agenda ao vivo** — não há cache no servidor. Depois de **excluir**, chama \`list_calendar_events\` de novo; **PROIBIDO** citar reunião que já não veio na API.
 - **Hora da reunião = \`time\` (início).** \`endTime\` é só o fim — **NUNCA** digas que a reunião é às endTime.
-- Eventos criados no Google Calendar têm os mesmos campos que os criados pelo bot.
+- \`[lançamento financeiro]\` = movimento da app, **não** é reunião Google.
+
+### Excluir compromisso
+
+| Pedido | action | payload |
+|--------|--------|---------|
+| cancela / exclui reunião | \`delete_calendar_event\` | \`{"eventId":"…"}\` da última \`list_calendar_events\` **ou** \`{"title":"…","data":"hoje"}\` |
+
+\`\`\`bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE '{"action":"delete_calendar_event","payload":{"title":"Reunião com Arthur","data":"hoje"}}'
+\`\`\`
+
+- **PROIBIDO** dizer que excluiu sem \`delete_calendar_event\` com \`ok: true\`.
+- Depois da exclusão: \`list_calendar_events\` na mesma data para confirmar.
 
 ### Criar compromisso
 
@@ -78,7 +92,9 @@ Pedidos: *marca reunião*, *agenda*, *lembrar no calendário*:
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_calendar_event","payload":{"title":"Reunião","data":"amanha","time":"12:00"}}'
 \`\`\`
 
-- \`title\` obrigatório; \`data\`: hoje/amanhã ou DD/MM/YYYY; \`time\`: HH:MM (início).
+- \`title\` ou \`com\`/\`participante\` (ex.: \`"title":"Reunião com Arthur"\`); **NUNCA** uses \`nome\` do utilizador como título.
+- \`data\`: hoje/amanhã ou DD/MM/YYYY; \`time\`/\`hora\`: **início** HH:MM — **NÃO** envies \`endTime\` no lugar de \`time\`.
+- \`endTime\`/\`horaFim\` = só término; duração default 1h se omitir fim.
 - **Meet:** \`createMeetLink: true\` — exige \`time\`.
 
 ---
@@ -132,7 +148,7 @@ for (const m of calMarkers) {
   if (i >= 0 && (calIdx < 0 || i < calIdx)) calIdx = i;
 }
 const phoneIdx2 = cur.indexOf(phoneSection);
-const needsAgendaV3 = !cur.includes('get_next_calendar_event');
+const needsAgendaV3 = !cur.includes('get_next_calendar_event') || !cur.includes('delete_calendar_event');
 
 if (calIdx >= 0) {
   const sliceEnd = phoneIdx2 > calIdx ? phoneIdx2 : cur.length;
@@ -177,9 +193,13 @@ else
 fi
 
 echo "--- Verificação (tem de aparecer get_next_calendar_event) ---"
-grep -n "get_next_calendar_event\|SEGURANÇA\|list_access_requests" "$SOUL" | head -n 8
+grep -n "get_next_calendar_event\|delete_calendar_event\|SEGURANÇA\|list_access_requests" "$SOUL" | head -n 10
 if ! grep -q "get_next_calendar_event" "$SOUL"; then
   echo "ERRO: SOUL sem get_next_calendar_event — secção agenda não aplicou"
+  exit 1
+fi
+if ! grep -q "delete_calendar_event" "$SOUL"; then
+  echo "ERRO: SOUL sem delete_calendar_event — secção excluir não aplicou"
   exit 1
 fi
 echo ""

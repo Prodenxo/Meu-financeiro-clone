@@ -5,6 +5,8 @@ import {
   parseCalendarEventTimeHm,
   parseCalendarQueryDate,
   parseCreateMeetLinkFlag,
+  resolveCalendarEventTitleFromPayload,
+  resolveCreateCalendarTimesFromPayload,
 } from '../src/services/calendar-events.service.js';
 import { buildAccessRequestApprovedApplicantMessage } from '../src/services/access-request-whatsapp.service.js';
 
@@ -32,6 +34,29 @@ test('parseCalendarQueryDate aceita hoje e amanhã', () => {
 test('parseCalendarEventTimeHm aceita meio dia', () => {
   assert.deepEqual(parseCalendarEventTimeHm('meio dia'), { hour: 12, minute: 0 });
   assert.deepEqual(parseCalendarEventTimeHm('12h'), { hour: 12, minute: 0 });
+});
+
+test('resolveCalendarEventTitleFromPayload ignora nome do utilizador', () => {
+  assert.equal(
+    resolveCalendarEventTitleFromPayload({ nome: 'Rosiele', com: 'Arthur' }),
+    'Reunião com Arthur',
+  );
+  assert.equal(
+    resolveCalendarEventTitleFromPayload({ title: 'Call cliente' }),
+    'Call cliente',
+  );
+  assert.equal(resolveCalendarEventTitleFromPayload({ nome: 'Rosiele' }), '');
+});
+
+test('resolveCreateCalendarTimesFromPayload separa início e fim', () => {
+  const t = resolveCreateCalendarTimesFromPayload({
+    time: '18:30',
+    endTime: '19:30',
+  });
+  assert.equal(t.startHour, 18);
+  assert.equal(t.startMinute, 30);
+  assert.equal(t.endHour, 19);
+  assert.equal(t.endMinute, 30);
 });
 
 test('parseCreateMeetLinkFlag aceita variantes', () => {

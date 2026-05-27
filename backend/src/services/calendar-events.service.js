@@ -144,6 +144,15 @@ export const dayBoundsIsoInSaoPaulo = (dateIso) => {
  * @param {object} item
  * @param {string} dateIso
  */
+/**
+ * Eventos excluídos no Google ficam com status "cancelled" e ainda podem vir na API.
+ * @param {object} item
+ */
+export const isGoogleCalendarItemActive = (item) => {
+  const status = String(item?.status || 'confirmed').trim().toLowerCase();
+  return status !== 'cancelled' && status !== 'canceled';
+};
+
 export const googleEventOverlapsDate = (item, dateIso) => {
   const startRaw = item?.start?.dateTime || item?.start?.date;
   if (!startRaw) return false;
@@ -246,11 +255,12 @@ export const fetchGoogleCalendarItems = async (userId, range) => {
   const calendarUrl = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
   calendarUrl.searchParams.set('singleEvents', 'true');
   calendarUrl.searchParams.set('orderBy', 'startTime');
+  calendarUrl.searchParams.set('showDeleted', 'false');
   calendarUrl.searchParams.set('timeMin', range.timeMin);
   calendarUrl.searchParams.set('timeMax', range.timeMax);
   calendarUrl.searchParams.set(
     'fields',
-    'items(id,summary,description,location,start,end,hangoutLink,conferenceData,reminders,htmlLink,status),nextPageToken',
+    'items(id,summary,description,location,start(date,dateTime,timeZone),end(date,dateTime,timeZone),hangoutLink,conferenceData,reminders,htmlLink,status),nextPageToken',
   );
 
   const calendarResponse = await fetch(calendarUrl.toString(), {
@@ -274,12 +284,14 @@ export const fetchGoogleCalendarItems = async (userId, range) => {
 };
 
 export const mapGoogleItemToCalendarEvent = (item, dateIso) => {
+  const startTz = item.start?.timeZone || SAO_PAULO_TZ;
+  const endTz = item.end?.timeZone || startTz;
   const allDay = !!item.start?.date && !item.start?.dateTime;
   const time = !allDay && item.start?.dateTime
-    ? formatGoogleDateTimeLocalPtBr(item.start.dateTime)
+    ? formatGoogleDateTimeLocalPtBr(item.start.dateTime, startTz)
     : null;
   const endTime = !allDay && item.end?.dateTime
-    ? formatGoogleDateTimeLocalPtBr(item.end.dateTime)
+    ? formatGoogleDateTimeLocalPtBr(item.end.dateTime, endTz)
     : null;
   const durationMinutes = computeGoogleEventDurationMinutes(item);
   const durationLabel = formatDurationLabelPtBr(durationMinutes);
@@ -298,6 +310,8 @@ export const mapGoogleItemToCalendarEvent = (item, dateIso) => {
     date: dateIso,
     time,
     endTime,
+    startTimeZone: startTz,
+    endTimeZone: endTz,
     startAtIso,
     endAtIso,
     durationMinutes,
@@ -340,8 +354,11 @@ const mapTransactionToCalendarEvent = (t, dateIso) => {
  */
 export const eventStartsAtInstant = (event) => {
   if (event?.startAtIso) {
-    const d = new Date(event.startAtIso);
-    if (Number.isFinite(d.getTime())) return d;
+    const d = parseGoogleCalendarDateTimeToInstant(
+      event.startAtIso,
+      event.startTimeZone || SAO_PAULO_TZ,
+    );
+    if (d) return d;
   }
   if (event?.date && event?.time) {
     const [h, m] = String(event.time).split(':').map((x) => Number(x));
@@ -363,8 +380,11 @@ export const eventStartsAtInstant = (event) => {
  */
 export const eventEndsAtInstant = (event) => {
   if (event?.endAtIso) {
-    const d = new Date(event.endAtIso);
-    if (Number.isFinite(d.getTime())) return d;
+    const d = parseGoogleCalendarDateTimeToInstant(
+      event.endAtIso,
+      event.endTimeZone || event.startTimeZone || SAO_PAULO_TZ,
+    );
+    if (d) return d;
   }
   const start = eventStartsAtInstant(event);
   if (start && event?.durationMinutes) {
@@ -399,6 +419,7 @@ export const formatCalendarEventDisplayLine = (e, opts = {}) => {
   if (e.endTime) line += `–${String(e.endTime).slice(0, 5)}`;
   if (e.durationLabel) line += ` (${e.durationLabel})`;
   line += ` — ${title}`;
+  if (e.source === 'transaction') line += ' [lançamento financeiro]';
   return line;
 };
 
@@ -407,7 +428,15 @@ export const formatCalendarEventDisplayLine = (e, opts = {}) => {
  * @returns {string}
  */
 export const formatCalendarEventWhatsappDetail = (e) => {
-  const lines = [formatCalendarEventDisplayLine(e)];
+  const title = String(e?.title || 'Compromisso').trim();
+  const lines = [title];
+  if (e?.allDay || !e?.time) {
+    lines.push('Horário: dia inteiro');
+  } else {
+    lines.push(`Início: ${String(e.time).slice(0, 5)}`);
+    if (e.endTime) lines.push(`Fim: ${String(e.endTime).slice(0, 5)}`);
+    if (e.durationLabel) lines.push(`Duração: ${e.durationLabel}`);
+  }
   if (e?.meetLink) lines.push(`Meet: ${e.meetLink}`);
   if (e?.reminderSummary) lines.push(`Lembrete: ${e.reminderSummary}`);
   if (e?.htmlLink) lines.push(`Ver no Google Calendar: ${e.htmlLink}`);
@@ -512,6 +541,7 @@ export const listCalendarEventsForUser = async (userId, options = {}) => {
   } else {
     googleCalendarLinked = true;
     for (const item of googleResult.items) {
+      if (!isGoogleCalendarItemActive(item)) continue;
       if (!googleEventOverlapsDate(item, dateIso)) continue;
       events.push(mapGoogleItemToCalendarEvent(item, dateIso));
     }
@@ -546,6 +576,8 @@ export const listCalendarEventsForUser = async (userId, options = {}) => {
     googleCalendarNote,
     message,
     empty: count === 0,
+    fetchedAt: new Date().toISOString(),
+    liveFromGoogle: googleCalendarLinked,
   };
 };
 
@@ -661,14 +693,45 @@ export const pickMeetUriFromGoogleEvent = (eventData) => {
   return null;
 };
 
+/** Offsets fixos para dateTime sem sufixo Z/± (Google manda timeZone à parte). */
+const GOOGLE_TZ_OFFSET_SUFFIX = {
+  'America/Sao_Paulo': '-03:00',
+  'America/Fortaleza': '-03:00',
+  'America/Belem': '-03:00',
+  'America/Manaus': '-04:00',
+  'America/Cuiaba': '-04:00',
+  'America/Rio_Branco': '-05:00',
+};
+
+/**
+ * Converte dateTime da API Google (com ou sem offset) para instante UTC.
+ * @param {string} dateTimeIso
+ * @param {string} [timeZone]
+ * @returns {Date | null}
+ */
+export const parseGoogleCalendarDateTimeToInstant = (dateTimeIso, timeZone = SAO_PAULO_TZ) => {
+  const raw = String(dateTimeIso || '').trim();
+  if (!raw.includes('T')) return null;
+
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+    const d = new Date(raw);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+
+  const normalized = raw.length === 16 ? `${raw}:00` : raw;
+  const suffix = GOOGLE_TZ_OFFSET_SUFFIX[timeZone] || GOOGLE_TZ_OFFSET_SUFFIX[SAO_PAULO_TZ];
+  const d = new Date(`${normalized}${suffix}`);
+  return Number.isFinite(d.getTime()) ? d : null;
+};
+
 /**
  * @param {string} dateTimeIso
+ * @param {string} [timeZone]
  * @returns {string | null} HH:MM
  */
-export const formatGoogleDateTimeLocalPtBr = (dateTimeIso) => {
-  if (!dateTimeIso || !String(dateTimeIso).includes('T')) return null;
-  const d = new Date(dateTimeIso);
-  if (!Number.isFinite(d.getTime())) return null;
+export const formatGoogleDateTimeLocalPtBr = (dateTimeIso, timeZone = SAO_PAULO_TZ) => {
+  const d = parseGoogleCalendarDateTimeToInstant(dateTimeIso, timeZone);
+  if (!d) return null;
   return d.toLocaleTimeString('pt-BR', {
     hour: '2-digit',
     minute: '2-digit',
@@ -686,9 +749,15 @@ export const computeGoogleEventDurationMinutes = (item) => {
   const startRaw = item?.start?.dateTime;
   const endRaw = item?.end?.dateTime;
   if (!startRaw || !endRaw) return null;
-  const start = new Date(startRaw);
-  const end = new Date(endRaw);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return null;
+  const start = parseGoogleCalendarDateTimeToInstant(
+    startRaw,
+    item?.start?.timeZone || SAO_PAULO_TZ,
+  );
+  const end = parseGoogleCalendarDateTimeToInstant(
+    endRaw,
+    item?.end?.timeZone || item?.start?.timeZone || SAO_PAULO_TZ,
+  );
+  if (!start || !end) return null;
   const mins = Math.round((end.getTime() - start.getTime()) / 60_000);
   return mins > 0 ? mins : null;
 };
@@ -736,6 +805,120 @@ export const extractGoogleEventReminders = (item) => {
 /**
  * @param {Record<string, unknown>} payload
  */
+/**
+ * Título do compromisso — não usar `nome` (costuma ser o utilizador, não o assunto).
+ * @param {Record<string, unknown>} payload
+ */
+export const resolveCalendarEventTitleFromPayload = (payload = {}) => {
+  const pick = (...keys) => {
+    for (const key of keys) {
+      const v = String(payload[key] ?? '').trim();
+      if (v) return v;
+    }
+    return '';
+  };
+
+  const explicit = pick('title', 'titulo', 'summary', 'assunto', 'evento', 'compromisso');
+  if (explicit) return explicit;
+
+  const person = pick(
+    'com',
+    'with',
+    'convidado',
+    'participante',
+    'contato',
+    'cliente',
+    'pessoa',
+  );
+  if (person) return `Reunião com ${person}`;
+
+  return '';
+};
+
+/**
+ * @param {Record<string, unknown>} payload
+ * @returns {{ startHour: number, startMinute: number, endHour: number, endMinute: number, allDay: boolean }}
+ */
+export const resolveCreateCalendarTimesFromPayload = (payload = {}) => {
+  const hasExplicitTime = [
+    'time',
+    'hora',
+    'horario',
+    'startTime',
+    'inicio',
+    'horaInicio',
+  ].some((k) => payload[k] != null && String(payload[k]).trim() !== '');
+
+  const allDay = payload.allDay === true
+    || payload.diaInteiro === true
+    || String(payload.allDay || payload.diaInteiro || '').toLowerCase() === 'true'
+    || (!hasExplicitTime && payload.allDay !== false && payload.diaInteiro !== false);
+
+  let startHour = Number(payload.startHour);
+  let startMinute = Number(payload.startMinute);
+  if (!Number.isFinite(startHour)) startHour = 9;
+  if (!Number.isFinite(startMinute)) startMinute = 0;
+
+  const startRaw = payload.time
+    ?? payload.hora
+    ?? payload.horario
+    ?? payload.startTime
+    ?? payload.inicio
+    ?? payload.horaInicio;
+
+  if (startRaw != null && String(startRaw).trim() !== '') {
+    const tm = parseCalendarEventTimeHm(startRaw);
+    if (!tm) throw badRequest('hora inválida; use HH:MM (ex.: 14:30) em payload.time.');
+    startHour = tm.hour;
+    startMinute = tm.minute;
+  }
+
+  const endFromPayload = payload.endTime
+    ?? payload.horaFim
+    ?? payload.fim
+    ?? payload.end
+    ?? null;
+
+  if (!hasExplicitTime && endFromPayload != null && String(endFromPayload).trim() !== '') {
+    throw badRequest(
+      'payload.endTime/horaFim é hora de término, não de início. Informe payload.time (início), ex.: "18:30".',
+    );
+  }
+
+  let endHour = Number(payload.endHour);
+  let endMinute = Number(payload.endMinute);
+
+  if (endFromPayload != null && String(endFromPayload).trim() !== '') {
+    const endTm = parseCalendarEventTimeHm(endFromPayload);
+    if (!endTm) throw badRequest('hora de término inválida; use HH:MM em payload.endTime.');
+    endHour = endTm.hour;
+    endMinute = endTm.minute;
+  } else {
+    const durRaw = payload.durationMinutes
+      ?? payload.duracaoMinutos
+      ?? payload.duracao
+      ?? null;
+    const dur = durRaw != null ? Number(durRaw) : NaN;
+    if (Number.isFinite(dur) && dur > 0) {
+      const totalStart = startHour * 60 + startMinute;
+      const totalEnd = totalStart + Math.round(dur);
+      endHour = Math.floor(totalEnd / 60);
+      endMinute = totalEnd % 60;
+    } else if (!Number.isFinite(endHour)) {
+      endHour = startHour + 1;
+      endMinute = startMinute;
+    }
+  }
+
+  if (!Number.isFinite(endMinute)) endMinute = startMinute;
+  if (endHour >= 24) {
+    endHour = 23;
+    endMinute = 59;
+  }
+
+  return { startHour, startMinute, endHour, endMinute, allDay };
+};
+
 export const parseCreateMeetLinkFlag = (payload = {}) => {
   const raw = payload.createMeetLink
     ?? payload.createMeet
@@ -771,11 +954,11 @@ const fetchGoogleCalendarEventById = async (accessToken, eventId) => {
  * @param {Record<string, unknown>} payload
  */
 export const createCalendarEventForUser = async (userId, payload = {}) => {
-  const title = String(
-    payload.title ?? payload.titulo ?? payload.summary ?? payload.nome ?? '',
-  ).trim();
+  const title = resolveCalendarEventTitleFromPayload(payload);
   if (!title) {
-    throw badRequest('Informe payload.title (título do compromisso).');
+    throw badRequest(
+      'Informe payload.title (ex.: "Reunião com Arthur") ou payload.com / participante.',
+    );
   }
 
   const rawDate = payload.date ?? payload.data;
@@ -788,36 +971,8 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     );
   }
 
-  const hasExplicitTime = payload.time != null
-    || payload.hora != null
-    || payload.startHour != null
-    || payload.startMinute != null;
-  const allDay = payload.allDay === true
-    || payload.diaInteiro === true
-    || String(payload.allDay || payload.diaInteiro || '').toLowerCase() === 'true'
-    || (!hasExplicitTime && payload.allDay !== false && payload.diaInteiro !== false);
-
-  let startHour = Number(payload.startHour);
-  let startMinute = Number(payload.startMinute);
-  if (!Number.isFinite(startHour)) startHour = 9;
-  if (!Number.isFinite(startMinute)) startMinute = 0;
-
-  const timeRaw = payload.time ?? payload.hora;
-  if (timeRaw != null && String(timeRaw).trim() !== '') {
-    const tm = parseCalendarEventTimeHm(timeRaw);
-    if (!tm) throw badRequest('hora inválida; use HH:MM (ex.: 14:30).');
-    startHour = tm.hour;
-    startMinute = tm.minute;
-  }
-
-  let endHour = Number(payload.endHour);
-  let endMinute = Number(payload.endMinute);
-  if (!Number.isFinite(endHour)) endHour = startHour + 1;
-  if (!Number.isFinite(endMinute)) endMinute = startMinute;
-  if (endHour >= 24) {
-    endHour = 23;
-    endMinute = 59;
-  }
+  const { startHour, startMinute, endHour, endMinute, allDay } =
+    resolveCreateCalendarTimesFromPayload(payload);
 
   const endDateParsed = payload.endDate ?? payload.dataFim
     ? parseCalendarQueryDate(String(payload.endDate ?? payload.dataFim))
@@ -931,8 +1086,11 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
   const timeLabel = allDay
     ? 'dia inteiro'
     : `${pad2(startHour)}:${pad2(startMinute)}`;
+  const endLabel = allDay ? null : `${pad2(endHour)}:${pad2(endMinute)}`;
 
-  let message = `Compromisso criado: ${title} em ${parsed.display} (${timeLabel}).`;
+  let message = allDay
+    ? `Compromisso criado: "${title}" em ${parsed.display} (dia inteiro).`
+    : `Compromisso criado: "${title}" em ${parsed.display} — início ${timeLabel}${endLabel ? `, fim ${endLabel}` : ''}.`;
   if (wantsMeet) {
     message += meetUri
       ? ` Link Google Meet: ${meetUri}`
@@ -960,5 +1118,127 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     reminders,
     reminderSummary: reminders.map((r) => r.label).join('; ') || null,
     source: 'google',
+  };
+};
+
+/**
+ * Remove compromisso no Google Calendar (não há cache local — só API Google).
+ * @param {string} userId
+ * @param {Record<string, unknown>} payload — `eventId` ou `title`+`data`
+ */
+export const deleteCalendarEventForUser = async (userId, payload = {}) => {
+  let eventId = String(payload.eventId ?? payload.id ?? '').trim();
+  let matchedTitle = null;
+
+  if (!eventId) {
+    const titleQuery = String(
+      payload.title ?? payload.titulo ?? payload.summary ?? payload.assunto ?? '',
+    ).trim();
+    const rawDate = payload.date ?? payload.data;
+    const parsed = rawDate
+      ? parseCalendarQueryDate(rawDate)
+      : parseCalendarQueryDate(calendarDateTodayInSaoPaulo());
+    if (!titleQuery) {
+      throw badRequest(
+        'Informe payload.eventId (da última list_calendar_events) ou title + data.',
+      );
+    }
+    if (!parsed) {
+      throw badRequest('data inválida para localizar o compromisso a excluir.');
+    }
+
+    const range = dayBoundsIsoInSaoPaulo(parsed.iso);
+    const googleResult = await fetchGoogleCalendarItems(userId, range);
+    if (googleResult.error) {
+      return {
+        ok: false,
+        notLinked: !!googleResult.notLinked,
+        message: googleResult.error,
+      };
+    }
+
+    const needle = titleQuery.toLowerCase();
+    const matches = googleResult.items.filter((item) => {
+      if (!isGoogleCalendarItemActive(item)) return false;
+      if (!googleEventOverlapsDate(item, parsed.iso)) return false;
+      const sum = String(item.summary || '').trim().toLowerCase();
+      return sum.includes(needle) || needle.includes(sum);
+    });
+
+    if (!matches.length) {
+      return {
+        ok: false,
+        message:
+          `Nenhum compromisso ativo no Google Calendar com título parecido a "${titleQuery}" em ${parsed.display}. `
+          + 'Se já excluiu no Google, a agenda está vazia — não inventes o compromisso.',
+        date: parsed.iso,
+        dateDisplay: parsed.display,
+      };
+    }
+
+    if (matches.length > 1) {
+      const titles = matches.map((m) => String(m.summary || 'Evento').trim()).join('; ');
+      return {
+        ok: false,
+        message:
+          `Há ${matches.length} compromissos parecidos (${titles}). `
+          + 'Peça ao utilizador qual é ou use payload.eventId da listagem.',
+        ambiguous: true,
+        candidates: matches.map((m) => ({
+          eventId: m.id,
+          title: m.summary,
+        })),
+      };
+    }
+
+    eventId = String(matches[0].id);
+    matchedTitle = String(matches[0].summary || titleQuery).trim();
+  }
+
+  const tokenResult = await getGoogleCalendarAccessTokenForUser(userId);
+  if (tokenResult.error) {
+    return {
+      ok: false,
+      notLinked: !!tokenResult.notLinked,
+      message: tokenResult.error,
+    };
+  }
+
+  const deleteResponse = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${tokenResult.accessToken}` },
+    },
+  );
+
+  if (deleteResponse.status === 404 || deleteResponse.status === 410) {
+    return {
+      ok: true,
+      alreadyDeleted: true,
+      eventId,
+      message:
+        'Esse compromisso já não existe no Google Calendar (já foi excluído). '
+        + 'Use list_calendar_events para ver a agenda atual.',
+    };
+  }
+
+  if (!deleteResponse.ok && deleteResponse.status !== 204) {
+    const errText = await deleteResponse.text();
+    return {
+      ok: false,
+      message: `Erro ao excluir no Google Calendar: ${errText.slice(0, 200)}`,
+      eventId,
+    };
+  }
+
+  const label = matchedTitle || String(payload.title || payload.titulo || 'Compromisso').trim();
+  return {
+    ok: true,
+    eventId,
+    title: label,
+    message: `Compromisso excluído do Google Calendar: "${label}".`,
+    agentHint:
+      'Para confirmar ao utilizador, chame list_calendar_events de novo (agenda ao vivo, sem memória do chat).',
   };
 };
