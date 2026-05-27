@@ -1,7 +1,10 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
-import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
+import {
+  expandBrazilMobilePhoneVariants,
+  normalizeWhatsappPhoneDigits,
+} from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
 import * as categoriesService from './categories.service.js';
 import * as rbacCatalogService from './rbac-catalog.service.js';
@@ -194,17 +197,17 @@ const buildNfseSendExecCommand = (destinationPhone, notaId) => {
  * Tenta bater com o que está em `n8n_link.user_number` (pode estar com ou sem 55).
  */
 export const buildPhoneLookupCandidates = (digits) => {
-  const out = [];
-  const d = String(digits || '').replace(/\D/g, '');
-  if (!d) return out;
-  out.push(d);
-  if (d.startsWith('55') && d.length > 11) {
-    out.push(d.slice(2));
+  const out = new Set();
+  for (const v of expandBrazilMobilePhoneVariants(digits)) {
+    out.add(v);
+    if (v.startsWith('55') && v.length > 11) {
+      out.add(v.slice(2));
+    }
+    if (!v.startsWith('55') && v.length >= 10 && v.length <= 11) {
+      out.add(`55${v}`);
+    }
   }
-  if (!d.startsWith('55') && d.length >= 10 && d.length <= 11) {
-    out.push(`55${d}`);
-  }
-  return [...new Set(out)];
+  return [...out];
 };
 
 /**

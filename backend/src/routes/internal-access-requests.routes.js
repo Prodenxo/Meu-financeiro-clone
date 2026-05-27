@@ -10,6 +10,7 @@ import {
   rejectAccessRequest,
 } from '../services/access-request-manage.service.js';
 import { notifySuperadminAccessRequestSubmitted } from '../services/access-request-whatsapp.service.js';
+import { canonicalizeBrazilWhatsappPhone } from '../utils/whatsapp-phone.js';
 
 const router = Router();
 
@@ -243,7 +244,7 @@ router.post('/submit', requireInternalSecret, async (req, res, next) => {
       if (linkErr) throw new Error(linkErr.message);
 
       if (phone) {
-        const cleaned = phone.startsWith('+') ? phone.slice(1) : phone.replace(/\D/g, '');
+        const cleaned = canonicalizeBrazilWhatsappPhone(phone);
         if (cleaned) {
           await sb
             .from('n8n_link')

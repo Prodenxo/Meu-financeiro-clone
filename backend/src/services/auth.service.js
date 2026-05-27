@@ -2,7 +2,10 @@ import { createSupabaseClient, getServiceRoleClient } from '../config/supabase.j
 import { env } from '../config/env.js';
 import { badRequest, forbidden, unauthorized, serviceUnavailable } from '../utils/errors.js';
 import { assertStrongPassword } from '../utils/passwordPolicy.js';
-import { normalizeWhatsappPhoneDigits } from '../utils/whatsapp-phone.js';
+import {
+  canonicalizeBrazilWhatsappPhone,
+  normalizeWhatsappPhoneDigits,
+} from '../utils/whatsapp-phone.js';
 import crypto from 'crypto';
 
 const hashInviteToken = (rawToken) => crypto.createHash('sha256').update(String(rawToken).trim(), 'utf8').digest('hex');
@@ -179,7 +182,7 @@ export const signUp = async ({ email, password, phone, displayName, inviteToken 
   assertStrongPassword(password);
 
   const createSupabaseClientFn = deps.createSupabaseClientFn || createSupabaseClient;
-  const cleanedPhone = phone ? normalizeWhatsappPhoneDigits(phone) : '';
+  const cleanedPhone = phone ? canonicalizeBrazilWhatsappPhone(phone) : '';
   const supabase = createSupabaseClientFn({ useServiceRole: !!env.SUPABASE_SERVICE_ROLE_KEY });
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -470,7 +473,7 @@ export const updatePhone = async (accessToken, phone) => {
     throw badRequest('SUPABASE_SERVICE_ROLE_KEY não configurada');
   }
 
-  const cleanedPhone = normalizeWhatsappPhoneDigits(phone);
+  const cleanedPhone = canonicalizeBrazilWhatsappPhone(phone);
   if (!cleanedPhone) throw badRequest('Telefone é obrigatório');
   const adminClient = createSupabaseClient({ useServiceRole: true });
 

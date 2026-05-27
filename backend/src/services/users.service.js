@@ -96,7 +96,12 @@ export const ensureRoleId = async (adminClient, role) => {
   return fallback || { roleId: null, role: null };
 };
 
-const cleanPhone = (phone) => (phone?.startsWith('+') ? phone.substring(1) : phone);
+import { canonicalizeBrazilWhatsappPhone } from '../utils/whatsapp-phone.js';
+
+const cleanPhone = (phone) => {
+  if (!phone) return '';
+  return canonicalizeBrazilWhatsappPhone(phone);
+};
 const normalizeEmpresaText = (value) => {
   if (value === undefined) return undefined;
   if (value === null) return null;
