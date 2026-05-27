@@ -103,7 +103,9 @@ export const relayZapiInbound = async (normalized) => {
   const payload = {
     source: 'zapi',
     phone: normalized.phone,
+    /** Texto já transcrito (nota de voz) ou mensagem escrita — o agente deve executar, não perguntar o que fazer. */
     text: normalized.text,
+    messageType: normalized.hasAudio ? 'transcribed_voice' : 'text',
     messageId: normalized.messageId,
     instanceId: normalized.instanceId,
     receivedAt: new Date().toISOString(),

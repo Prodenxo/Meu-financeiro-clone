@@ -31,7 +31,7 @@ export const postInbound = async (req, res, next) => {
     if (!parsed.text && parsed.hasAudio) {
       const transcription = await transcribeZapiInboundAudio(req.body);
       if (transcription) {
-        parsed = { ...parsed, text: transcription };
+        parsed = { ...parsed, text: transcription, hasAudio: true };
         transcriptionSource = 'zapi_audio_stt';
       }
     }

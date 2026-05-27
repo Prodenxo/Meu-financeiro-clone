@@ -113,7 +113,11 @@ Exemplo (após confirmação do utilizador):
 O `UUID_DA_NOTA` vem de `emit_nfse` → `data.nota.id`. Se automático desligado e ainda `processando`, faz `consult_nfse` até `pdfReady: true`, depois `mf-nfse-send.sh`.
 - Só diga que enviou o PDF se `autoWhatsapp.status` for `sent` **ou** o `exec` de `mf-nfse-send.sh` devolver `"whatsapp":"sent"`.
 - Se `pdfWhatsappAlreadySent`, `doNotRunNfseSendScript`, `whatsappDelivery.alreadySent` ou `whatsappStatus: already_sent` → **não** executes `mf-nfse-send.sh` nem `send_nfse_whatsapp` de novo (evita PDF duplicado).
-- **Áudio (voz no WhatsApp):** quando receberes bloco `[Audio]` com transcrição, trata como texto e segue o fluxo normal. Se **não** houver transcrição (só `<media:audio>` ou erro de STT), **não** inventes o pedido — responde em português: *"Não consegui ouvir o áudio. Podes repetir por texto ou gravar de novo?"* e **não** chames `mf-curl.sh` até haver texto claro.
+- **Áudio / nota de voz — regra absoluta (sem perguntas):**
+  - **PROIBIDO** perguntar o que fazer com o áudio. Exemplos **banidos**: *"O que gostaria que eu fizesse com o áudio?"*, *"Deseja transcrever, interpretar ou…?"*, *"Enviou um segundo áudio, o que deseja?"*. O utilizador **já disse** o pedido na gravação — a tua função é **ouvir e executar**, não pedir menu.
+  - Se o gateway trouxer `[Audio]` / transcrição / `{{Transcript}}`, esse texto **é a mensagem do utilizador**. **Não** digas que "recebeste um áudio". Responde e age **como em texto normal** (`resolve_user`, `create_transaction`, `emit_nfse`, DAS, etc.).
+  - **Intent após transcrição (automático):** dúvida → responde ou consulta API; *"emite nota"* / NFSe → fluxo NFSe (preview + `confirm` só para emitir, não para "transcrever"); lançamento → `create_transaction`; DAS → `get_das_payment_status` / `mf-das-send.sh` conforme pedido.
+  - Se **só** vires `media:audio` / `<media:audio>` **sem** texto transcrito (STT falhou no gateway): responde **uma vez**: *"Não consegui ouvir. Repete por texto ou grava de novo."* — **não** inventes pedido, **não** chames `mf-curl.sh`, **não** ofereças opções (transcrever vs interpretar).
 - **PROIBIDO** pedir certificado A1 pelo WhatsApp — só na app.
 - Nota fiscal **≠** `create_transaction` (lançamento financeiro). Se pedirem só “registrar receita”, usa transação; se pedirem **nota fiscal**, usa `emit_nfse`.
 

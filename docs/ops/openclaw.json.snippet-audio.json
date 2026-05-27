@@ -1,0 +1,15 @@
+{
+  "tools": {
+    "media": {
+      "audio": {
+        "enabled": true,
+        "maxBytes": 20971520,
+        "scope": { "default": "allow" },
+        "echoTranscript": false,
+        "models": [
+          { "provider": "openai", "model": "gpt-4o-mini-transcribe" }
+        ]
+      }
+    }
+  }
+}

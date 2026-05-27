@@ -12,7 +12,10 @@ Documentação oficial: https://docs.openclaw.ai/nodes/audio
 
 - Utilizador manda **nota de voz** no WhatsApp.
 - Midas responde que **não conseguiu transcrever** o áudio (ou ignora o pedido).
+- Midas pergunta *"O que gostaria que eu fizesse com o áudio?"* — **comportamento errado** (SOUL proíbe; causa: STT não correu e o modelo vê só `media:audio`).
 - Nos logs do gateway pode aparecer falha STT ou corpo da mensagem só com `<media:audio>`.
+
+**Comportamento desejado:** transcrever **antes** do agente (OpenClaw `tools.media.audio` ou backend Z-API) e o Midas **executa** o pedido (nota, DAS, lançamento, dúvida) como se fosse texto — sem menu de opções.
 
 ---
 
@@ -96,8 +99,13 @@ openclaw gateway restart
 ### 4. Teste
 
 1. Manda um áudio **curto** (5–15 s): *"qual o meu saldo?"* ou *"emite nota de 500 reais"*.
-2. Nos logs do contentor, procura `transcri` / `[Audio]` / `gpt-4o-mini-transcribe` ou `groq`.
-3. O Midas deve responder ao **conteúdo** do áudio, não pedir para repetir.
+2. Nos logs do contentor (`openclaw gateway` com `--verbose`), procura linhas de **transcription** / substituição do body por `[Audio]`.
+3. No painel OpenClaw, a mensagem do utilizador deve mostrar **`[Audio]` com texto**, não só `media:audio` cru.
+4. O Midas deve **agir** (responder, `exec` mf-curl, preview NFSe, etc.) — **nunca** perguntar se queres transcrever ou interpretar.
+
+### 5. SOUL (obrigatório no workspace)
+
+Actualiza `SOUL.md` a partir de `openclaw-midas-SOUL.md` (secção áudio) e redeploy (`SOUL.md.b64.part01`–`part08`). Sem isto, mesmo com STT activo o modelo pode perguntar em vez de executar.
 
 ---
 
