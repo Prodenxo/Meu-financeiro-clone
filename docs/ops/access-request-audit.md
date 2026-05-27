@@ -63,7 +63,32 @@ Com `ACCESS_REQUEST_WHATSAPP_NOTIFY_ENABLED=true` e Z-API já usada no DAS/NFSe:
 | Evento | Quem recebe | Origem do telefone |
 |--------|-------------|-------------------|
 | Nova solicitação (`submit`) | **Todos** com cargo superadmin | `profiles.role = superadmin` **ou** vínculo activo em `role_x_user_x_empresa` com role superadmin → `n8n_link` / metadata |
-| Aprovação (`approve` na app) | Solicitante | `n8n_link` / metadata do cadastro |
+| Aprovação (`approve` na app ou WhatsApp) | Solicitante | `n8n_link` / metadata do cadastro |
+
+### Aprovar pelo WhatsApp (superadmin)
+
+O webhook Z-API (`POST` inbound) processa comandos **antes** do relay OpenClaw. O número do remetente tem de estar em `n8n_link` ligado a um utilizador **superadmin**.
+
+| Comando | Ação |
+|---------|------|
+| `/aprovar <e-mail ou CNPJ>` | Aprova o cadastro pendente (mesma lógica da app) |
+| `/rejeitar <e-mail ou CNPJ>` | Recusa e remove utilizador pendente |
+| `/pendentes` | Lista pendentes com linha `/aprovar …` para copiar |
+| `/ajuda-acesso` | Mostra comandos |
+
+**Importante:** use a **barra `/`** para o OpenClaw **não** receber a mensagem (evita confundir com “transações pendentes”). O backend **não** reencaminha texto que começa com `/` para `OPENCLAW_ZAPI_RELAY_URL`.
+
+Na notificação de nova solicitação já vem o texto pronto, por exemplo:
+
+```
+/aprovar milenapaes779@gmail.com
+```
+
+Também funcionam sem barra (`PENDENTES`, `APROVAR …`) se o deploy processar o inbound antes do relay; **recomendado** sempre com `/`.
+
+Também aceita CNPJ só com dígitos ou UUID do utilizador. Áudio transcrito com o mesmo texto funciona.
+
+**SOUL OpenClaw:** após alterar `openclaw-midas-SOUL.md`, regenerar partes b64 e redeploy no VPS (`docs/ops/easypanel-console-deploy-soul.md`).
 
 Opcional: `ACCESS_REQUEST_NOTIFY_SUPERADMIN_EXTRA_PHONES` (vírgula) para números fixos além da BD.
 

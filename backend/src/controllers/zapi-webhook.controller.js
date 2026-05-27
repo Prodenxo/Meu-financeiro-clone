@@ -1,6 +1,8 @@
 import { env } from '../config/env.js';
 import { sendSuccess } from '../utils/response.js';
 import * as zapiInbound from '../services/zapi-inbound.service.js';
+import { handleAccessRequestWhatsappInbound } from '../services/access-request-whatsapp-inbound.service.js';
+import { shouldSkipOpenclawRelay } from '../services/zapi-slash-commands.service.js';
 import {
   getWhatsappAudioTranscriptionStatus,
   transcribeZapiInboundAudio,
@@ -49,8 +51,22 @@ export const postInbound = async (req, res, next) => {
       );
     }
 
+    let accessRequestHandled = false;
+    try {
+      const inbound = await handleAccessRequestWhatsappInbound({
+        phone: parsed.phone,
+        text: parsed.text,
+      });
+      accessRequestHandled = Boolean(inbound.handled);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.warn('[ZAPI] access-request inbound:', msg);
+    }
+
+    const skipOpenclawRelay = shouldSkipOpenclawRelay(parsed.text, accessRequestHandled);
     const relayUrl = (env.OPENCLAW_ZAPI_RELAY_URL || '').trim();
-    if (relayUrl) {
+    if (relayUrl && !skipOpenclawRelay) {
       await zapiInbound.relayZapiInbound(parsed);
     }
 
@@ -59,7 +75,9 @@ export const postInbound = async (req, res, next) => {
       {
         accepted: true,
         phone: parsed.phone,
-        relayed: Boolean(relayUrl),
+        relayed: Boolean(relayUrl) && !skipOpenclawRelay,
+        accessRequestHandled,
+        openclawSkipped: skipOpenclawRelay && !accessRequestHandled,
         transcriptionSource,
       },
       'aceite',

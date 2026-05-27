@@ -131,7 +131,18 @@ export const buildAccessRequestSubmittedSuperadminMessage = (input) => {
   if (input.observacao) {
     lines.push('', `Observação: ${input.observacao}`);
   }
-  lines.push('', 'Aprove no app: Configurações → Solicitações de acesso.');
+  if (input.email) {
+    lines.push(
+      '',
+      'Para aprovar pelo WhatsApp (use a barra / — o bot financeiro ignora):',
+      `/aprovar ${input.email}`,
+      '',
+      'Outros: /pendentes | /rejeitar <e-mail>',
+    );
+  } else {
+    lines.push('', 'Para aprovar: /pendentes e depois /aprovar <e-mail>.');
+  }
+  lines.push('', 'Ou no app: Configurações → Solicitações de acesso.');
   return lines.join('\n');
 };
 

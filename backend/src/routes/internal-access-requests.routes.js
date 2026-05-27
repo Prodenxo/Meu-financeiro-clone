@@ -4,34 +4,19 @@ import { badRequest, unauthorized } from '../utils/errors.js';
 import { normalizeEnvSecret } from '../config/env.js';
 import { buildAccessRequestReport } from '../services/access-request-report.service.js';
 import {
-  notifyApplicantAccessApproved,
-  notifySuperadminAccessRequestSubmitted,
-} from '../services/access-request-whatsapp.service.js';
+  approveAccessRequest,
+  getUserRole,
+  listPendingAccessRequests,
+  rejectAccessRequest,
+} from '../services/access-request-manage.service.js';
+import { notifySuperadminAccessRequestSubmitted } from '../services/access-request-whatsapp.service.js';
 
 const router = Router();
-
-const ADMIN_ROLE_ID = '849af65c-fe71-464c-8d26-1c61166b29a1';
-
-const normalizeRole = (role) => {
-  if (!role) return null;
-  const n = String(role).trim().toLowerCase();
-  if (n === 'superadmin') return 'superadmin';
-  if (n === 'admin') return 'admin';
-  if (n === 'user' || n === 'usuario') return 'usuario';
-  if (n === 'outsider') return 'outsider';
-  return null;
-};
 
 const normalizeText = (value) => {
   if (value == null) return null;
   const s = String(value).trim();
   return s || null;
-};
-
-const fetchActorEmail = async (sb, actorUserId) => {
-  if (!actorUserId) return null;
-  const { data } = await sb.auth.admin.getUserById(actorUserId);
-  return data?.user?.email ?? null;
 };
 
 const requireInternalSecret = (req, _res, next) => {
@@ -43,36 +28,6 @@ const requireInternalSecret = (req, _res, next) => {
   return next();
 };
 
-// Verifica se o actorUserId é superadmin via role_x_user_x_empresa
-const getActorRole = async (actorUserId) => {
-  const sb = getServiceRoleClient();
-
-  const { data: linkData } = await sb
-    .from('role_x_user_x_empresa')
-    .select('roles_id, status')
-    .eq('user_id', actorUserId)
-    .eq('status', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (linkData?.roles_id) {
-    const { data: roleData } = await sb
-      .from('roles')
-      .select('roles')
-      .eq('id', linkData.roles_id)
-      .maybeSingle();
-    return normalizeRole(roleData?.roles);
-  }
-
-  const { data: profile } = await sb
-    .from('profiles')
-    .select('role')
-    .eq('id', actorUserId)
-    .maybeSingle();
-  return normalizeRole(profile?.role);
-};
-
 // POST /api/internal/access-requests/manage
 router.post('/manage', requireInternalSecret, async (req, res, next) => {
   try {
@@ -81,73 +36,59 @@ router.post('/manage', requireInternalSecret, async (req, res, next) => {
     if (!actorUserId) return next(badRequest('actorUserId obrigatório'));
     if (!action) return next(badRequest('action obrigatória'));
 
-    const role = await getActorRole(actorUserId);
+    const sb = getServiceRoleClient();
+    const role = await getUserRole(sb, actorUserId);
     if (role !== 'superadmin') {
       return res.status(403).json({ error: 'Apenas superadmin.' });
     }
 
-    const sb = getServiceRoleClient();
-
     // LIST: busca usuários com role_x_user_x_empresa.status = false E empresa pendente
     if (action === 'list') {
-      const { data: pendingLinks, error: linksErr } = await sb
-        .from('role_x_user_x_empresa')
-        .select('user_id, created_at')
-        .eq('status', false);
+      const pending = await listPendingAccessRequests(sb);
+      const requests = await Promise.all(
+        pending.map(async (item) => {
+          const { data: empresa } = await sb
+            .from('empresas')
+            .select(
+              'empresa, cnpj, razao_social, nome_fantasia, logradouro, numero, complemento, bairro, cidade, estado, cep, telefone, email',
+            )
+            .eq('requested_by', item.userId)
+            .eq('status', 'pending')
+            .maybeSingle();
 
-      if (linksErr) return next(linksErr);
-      if (!pendingLinks?.length) return res.json({ requests: [] });
+          if (!empresa) return null;
 
-      const requests = (
-        await Promise.all(
-          pendingLinks.map(async (link) => {
-            const { data: authData } = await sb.auth.admin.getUserById(link.user_id);
-            const meta = authData?.user?.user_metadata ?? {};
+          const enderecoParts = [
+            empresa.logradouro,
+            empresa.numero,
+            empresa.complemento,
+            empresa.bairro,
+            empresa.cidade,
+            empresa.estado,
+          ].filter(Boolean);
 
-            const { data: empresa } = await sb
-              .from('empresas')
-              .select(
-                'empresa, cnpj, razao_social, nome_fantasia, logradouro, numero, complemento, bairro, cidade, estado, cep, telefone, email',
-              )
-              .eq('requested_by', link.user_id)
-              .eq('status', 'pending')
-              .maybeSingle();
+          return {
+            userId: item.userId,
+            email: item.email,
+            fullName: item.fullName,
+            phone: item.phone,
+            observacao: item.observacao,
+            requestedAt: item.requestedAt,
+            empresa: {
+              nome: empresa.empresa ?? item.empresa?.nome ?? null,
+              cnpj: empresa.cnpj ?? item.empresa?.cnpj ?? null,
+              razaoSocial: empresa.razao_social ?? item.empresa?.razaoSocial ?? null,
+              nomeFantasia: empresa.nome_fantasia ?? item.empresa?.nomeFantasia ?? null,
+              endereco: enderecoParts.join(', '),
+              cep: empresa.cep ?? null,
+              telefone: empresa.telefone ?? null,
+              email: empresa.email ?? null,
+            },
+          };
+        }),
+      );
 
-            // Só retorna usuários que têm empresa pendente (filtra bloqueados)
-            if (!empresa) return null;
-
-            const enderecoParts = [
-              empresa.logradouro,
-              empresa.numero,
-              empresa.complemento,
-              empresa.bairro,
-              empresa.cidade,
-              empresa.estado,
-            ].filter(Boolean);
-
-            return {
-              userId: link.user_id,
-              email: authData?.user?.email ?? null,
-              fullName: meta.full_name ?? meta.name ?? null,
-              phone: meta.phone ?? authData?.user?.phone ?? null,
-              observacao: meta.access_request_observacao ?? meta.observacao ?? null,
-              requestedAt: link.created_at ?? null,
-              empresa: {
-                nome: empresa.empresa ?? null,
-                cnpj: empresa.cnpj ?? null,
-                razaoSocial: empresa.razao_social ?? null,
-                nomeFantasia: empresa.nome_fantasia ?? null,
-                endereco: enderecoParts.join(', '),
-                cep: empresa.cep ?? null,
-                telefone: empresa.telefone ?? null,
-                email: empresa.email ?? null,
-              },
-            };
-          }),
-        )
-      ).filter(Boolean);
-
-      return res.json({ requests });
+      return res.json({ requests: requests.filter(Boolean) });
     }
 
     // REPORT: histórico derivado de empresas + auth metadata (sem tabela de auditoria)
@@ -167,35 +108,10 @@ router.post('/manage', requireInternalSecret, async (req, res, next) => {
     if (action === 'approve') {
       if (!userId) return next(badRequest('userId obrigatório para approve'));
 
-      const actorEmail = await fetchActorEmail(sb, actorUserId);
-      const approvedAt = new Date().toISOString();
-
-      await sb
-        .from('role_x_user_x_empresa')
-        .update({ status: true, roles_id: ADMIN_ROLE_ID, mei: false })
-        .eq('user_id', userId)
-        .eq('status', false);
-
-      await sb
-        .from('empresas')
-        .update({ status: 'active' })
-        .eq('requested_by', userId)
-        .eq('status', 'pending');
-
-      const { data: authData } = await sb.auth.admin.getUserById(userId);
-      const prevMeta = authData?.user?.user_metadata ?? {};
-      await sb.auth.admin.updateUserById(userId, {
-        user_metadata: {
-          ...prevMeta,
-          access_approved_at: approvedAt,
-          access_approved_by: actorUserId,
-          access_approved_by_email: actorEmail,
-        },
-      });
-
-      const fullName = prevMeta.full_name ?? prevMeta.display_name ?? prevMeta.name ?? null;
-      const email = authData?.user?.email ?? null;
-      void notifyApplicantAccessApproved(sb, userId, { fullName, email }).catch(() => {});
+      const result = await approveAccessRequest({ actorUserId, userId });
+      if (!result.ok) {
+        return res.status(404).json({ error: 'Solicitação não encontrada ou já processada.' });
+      }
 
       return res.json({ ok: true });
     }
@@ -204,19 +120,10 @@ router.post('/manage', requireInternalSecret, async (req, res, next) => {
     if (action === 'reject') {
       if (!userId) return next(badRequest('userId obrigatório para reject'));
 
-      await sb
-        .from('role_x_user_x_empresa')
-        .delete()
-        .eq('user_id', userId)
-        .eq('status', false);
-
-      await sb
-        .from('empresas')
-        .delete()
-        .eq('requested_by', userId)
-        .eq('status', 'pending');
-
-      await sb.auth.admin.deleteUser(userId);
+      const result = await rejectAccessRequest({ userId });
+      if (!result.ok) {
+        return res.status(404).json({ error: 'Solicitação não encontrada ou já processada.' });
+      }
 
       return res.json({ ok: true });
     }

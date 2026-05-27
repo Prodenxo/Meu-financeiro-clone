@@ -142,6 +142,8 @@ Após alterar `.env`, **reinicia o backend**. Envia uma nota de voz curta; nos l
 
 **Recomendação:** um único número WhatsApp — ou Z-API+relay **ou** OpenClaw directo, para não duplicar respostas.
 
+**Comandos com `/`:** mensagens que começam com `/` (ex. `/pendentes`, `/aprovar email@x.com`) **não** são reencaminhadas ao OpenClaw — ficam no backend (aprovação de cadastros). Ver `access-request-audit.md`.
+
 ---
 
 ## SOUL
