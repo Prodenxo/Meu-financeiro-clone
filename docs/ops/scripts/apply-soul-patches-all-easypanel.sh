@@ -57,7 +57,7 @@ const calendarBlock = `## Agenda — consultar e criar (Google Calendar + bot)
 
 | Pedido do utilizador | action | payload |
 |----------------------|--------|---------|
-| próximo compromisso / qual minha próxima reunião | \`get_next_calendar_event\` | \`{}\` |
+| **próximo compromisso** / próxima reunião / qual meu próximo | \`get_next_calendar_event\` | \`{}\` — **PROIBIDO** \`list_calendar_events\` com amanhã |
 | o que tenho hoje / compromissos de hoje | \`list_calendar_events\` | \`{"data":"hoje"}\` |
 | agenda amanhã / dia DD/MM | \`list_calendar_events\` | \`{"data":"amanhã"}\` ou data |
 
@@ -120,24 +120,34 @@ if (cadIdx >= 0 && phoneIdx > cadIdx) {
   changes.push('cadastros (já ok)');
 }
 
-// Calendário
-const calStart = '## Criar compromisso na agenda (texto ou áudio)';
-const calIdx = cur.indexOf(calStart);
+// Calendário — vários títulos antigos; força update se faltar get_next_calendar_event
+const calMarkers = [
+  '## Agenda — consultar e criar',
+  '## Criar compromisso na agenda (texto ou áudio)',
+  '## Criar compromisso na agenda',
+];
+let calIdx = -1;
+for (const m of calMarkers) {
+  const i = cur.indexOf(m);
+  if (i >= 0 && (calIdx < 0 || i < calIdx)) calIdx = i;
+}
 const phoneIdx2 = cur.indexOf(phoneSection);
+const needsAgendaV3 = !cur.includes('get_next_calendar_event');
 
-if (calIdx >= 0 && phoneIdx2 > calIdx) {
-  cur = cur.slice(0, calIdx) + calendarBlock + cur.slice(phoneIdx2);
-  changes.push('calendário (secção atualizada)');
-} else if (!cur.includes('create_calendar_event')) {
-  const insertAt = cur.indexOf(phoneSection);
-  if (insertAt >= 0) {
+if (calIdx >= 0) {
+  const sliceEnd = phoneIdx2 > calIdx ? phoneIdx2 : cur.length;
+  cur = cur.slice(0, calIdx) + calendarBlock + cur.slice(sliceEnd);
+  changes.push(needsAgendaV3 ? 'calendário (substituído — faltava get_next)' : 'calendário (secção substituída)');
+} else if (needsAgendaV3 || !cur.includes('create_calendar_event')) {
+  const insertAt = phoneIdx2 >= 0 ? phoneIdx2 : 0;
+  if (insertAt > 0) {
     cur = cur.slice(0, insertAt) + calendarBlock + cur.slice(insertAt);
   } else {
     cur = calendarBlock + cur;
   }
-  changes.push('calendário (adicionado)');
+  changes.push('calendário (inserido)');
 } else {
-  changes.push('calendário (já ok)');
+  changes.push('calendário (AVISO: já tem create_calendar_event mas sem secção Agenda — reveja SOUL)');
 }
 
 fs.writeFileSync(soulPath, cur);
@@ -166,6 +176,11 @@ else
   echo "AVISO: MF_API_URL/OPENCLAW_WEBHOOK_SECRET vazios — corre install-mf-curl-secure-openclaw.sh depois"
 fi
 
-grep -n "SEGURANÇA\|list_access_requests\|mf-curl.sh TELEFONE" "$SOUL" | head -n 6
+echo "--- Verificação (tem de aparecer get_next_calendar_event) ---"
+grep -n "get_next_calendar_event\|SEGURANÇA\|list_access_requests" "$SOUL" | head -n 8
+if ! grep -q "get_next_calendar_event" "$SOUL"; then
+  echo "ERRO: SOUL sem get_next_calendar_event — secção agenda não aplicou"
+  exit 1
+fi
 echo ""
 echo "URGENTE: Redeploy BACKEND Easypanel + Restart OpenClaw + WhatsApp /new"

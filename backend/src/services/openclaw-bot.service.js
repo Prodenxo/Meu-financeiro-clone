@@ -476,7 +476,13 @@ export const resolveActorMembershipsForUser = async (userId) => {
  * @param {{ phone?: string, senderPhone?: string, action: string, payload?: object }} input
  */
 export const runOpenclawAction = async (input) => {
-  const action = String(input?.action || '').trim();
+  const actionAliases = {
+    proximo_compromisso: 'get_next_calendar_event',
+    proximo_compromisso_agenda: 'get_next_calendar_event',
+    next_calendar_event: 'get_next_calendar_event',
+  };
+  let action = String(input?.action || '').trim();
+  action = actionAliases[action] || action;
   const payload = input?.payload && typeof input.payload === 'object' ? input.payload : {};
 
   if (!action) throw badRequest('action é obrigatório');
@@ -728,10 +734,65 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'list_calendar_events') {
     const rawDate = payload?.data ?? payload?.date;
+    const wantsNext =
+      payload?.next === true
+      || payload?.proximo === true
+      || String(payload?.scope || '').toLowerCase() === 'next';
+
+    if (wantsNext) {
+      const next = await calendarEventsService.findNextCalendarEventForUser(userId, {
+        maxDays: payload?.maxDays ?? payload?.dias ?? 14,
+      });
+      return {
+        ok: true,
+        message: next.message,
+        data: {
+          ...next,
+          userId,
+          actorContext,
+          ...linkDebug,
+          resolvedAs: 'get_next_calendar_event',
+          agentInstructions:
+            'Responda repetindo APENAS message. Hora de início = nextEvent.time, não endTime.',
+        },
+      };
+    }
+
     const calendar = await calendarEventsService.listCalendarEventsForUser(userId, {
       date: rawDate,
       data: rawDate,
     });
+
+    if (calendar.empty && rawDate) {
+      const parsed = calendarEventsService.parseCalendarQueryDate(rawDate);
+      const todayIso = calendarEventsService.calendarDateTodayInSaoPaulo();
+      if (parsed && parsed.iso > todayIso) {
+        const next = await calendarEventsService.findNextCalendarEventForUser(userId, {
+          maxDays: 7,
+        });
+        if (!next.empty) {
+          return {
+            ok: true,
+            message: [
+              next.message,
+              '',
+              `(Não há compromissos em ${parsed.display}; o próximo na tua agenda é o indicado acima.)`,
+            ].join('\n'),
+            data: {
+              ...next,
+              userId,
+              actorContext,
+              ...linkDebug,
+              redirectedFromEmptyFutureDay: parsed.iso,
+              agentInstructions:
+                'Responda repetindo APENAS o texto de message (próximo compromisso real). '
+                + 'NUNCA digas que não há nada se message já listou um compromisso.',
+            },
+          };
+        }
+      }
+    }
+
     return {
       ok: true,
       message: calendar.message,
@@ -743,7 +804,8 @@ export const runOpenclawAction = async (input) => {
         agentInstructions:
           'Responda copiando o texto de message (lista pronta). '
           + 'PROIBIDO inventar horário: use só events[].time como início e endTime como fim. '
-          + 'NUNCA diga que a reunião é às endTime. Para "hoje" use payload.data=hoje ou omita data.',
+          + 'NUNCA diga que a reunião é às endTime. Para "hoje" use payload.data=hoje. '
+          + 'Para "próximo compromisso" use action get_next_calendar_event, NÃO listar amanhã.',
       },
     };
   }
