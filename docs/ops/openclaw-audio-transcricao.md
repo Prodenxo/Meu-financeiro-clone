@@ -15,7 +15,7 @@ Documentação oficial: https://docs.openclaw.ai/nodes/audio
 - Midas pergunta *"O que gostaria que eu fizesse com o áudio?"* — **comportamento errado** (SOUL proíbe; causa: STT não correu e o modelo vê só `media:audio`).
 - Nos logs do gateway pode aparecer falha STT ou corpo da mensagem só com `<media:audio>`.
 
-**Comportamento desejado:** transcrever **antes** do agente (OpenClaw `tools.media.audio` ou backend Z-API) e o Midas **executa** o pedido (nota, DAS, lançamento, dúvida) como se fosse texto — sem menu de opções.
+**Comportamento desejado:** transcrever **antes** do agente (OpenClaw `tools.media.audio` ou backend Z-API); o Midas **responde como em chat de texto** — conversa, dúvidas, conselhos **ou** acções na app (nota, DAS, lançamento) quando o pedido pedir — sem menu de opções nem “não tenho ferramenta de transcrição” quando a transcrição já veio no `[Audio]`.
 
 ---
 
