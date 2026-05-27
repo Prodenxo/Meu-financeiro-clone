@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { extractZapiInboundText } from './zapi-inbound-text.service.js';
 
 /**
  * Extrai telefone e texto do callback Z-API "Ao receber" (ReceivedCallback).
@@ -39,10 +40,7 @@ export const parseZapiInbound = (raw) => {
     return { ignored: true, reason: 'no_phone' };
   }
 
-  let text = '';
-  if (body.text && typeof body.text === 'object' && typeof body.text.message === 'string') {
-    text = String(body.text.message).trim();
-  }
+  const text = extractZapiInboundText(body);
 
   const hasAudio = Boolean(
     body.audio

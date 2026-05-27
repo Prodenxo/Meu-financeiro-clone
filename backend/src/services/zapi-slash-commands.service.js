@@ -1,3 +1,10 @@
+import { normalizeInboundCommandText } from './zapi-inbound-text.service.js';
+
+/** Versão do bridge inbound (monitor / diagnóstico de deploy). */
+export const ZAPI_INBOUND_BRIDGE_VERSION = 2;
+
+const ACCESS_COMMAND_RE = /^(APROVAR|REJEITAR|PENDENTES|LISTAR|AJUDA|HELP)\b/i;
+
 /**
  * Mensagens que começam com `/` são reservadas ao backend (Z-API inbound).
  * Não devem ser reencaminhadas ao OpenClaw — evita o bot confundir com transações.
@@ -7,8 +14,26 @@
  * @param {string} text
  */
 export const isSlashReservedMessage = (text) => {
-  const t = String(text || '').trim();
+  const t = normalizeInboundCommandText(text);
   return t.startsWith('/');
+};
+
+/**
+ * Comandos de cadastro (com ou sem `/`) — não confundir com DAS/transações no OpenClaw.
+ * @param {string} text
+ */
+export const isAccessManagementCommandMessage = (text) => {
+  const normalized = normalizeInboundCommandText(text);
+  if (!normalized) return false;
+  const plain = normalized.startsWith('/')
+    ? normalized.slice(1).trim()
+    : normalized;
+  if (/^pendentes$/i.test(plain) || /^listar$/i.test(plain)) return true;
+  if (/^ajuda(?:-acesso)?$/i.test(plain) || /^help(?:-access)?$/i.test(plain)) {
+    return true;
+  }
+  if (/^aprovar\b/i.test(plain) || /^rejeitar\b/i.test(plain)) return true;
+  return ACCESS_COMMAND_RE.test(normalized);
 };
 
 /**
@@ -16,7 +41,7 @@ export const isSlashReservedMessage = (text) => {
  * @param {string} text
  */
 export const normalizeSlashCommandText = (text) => {
-  const raw = String(text || '').trim();
+  const raw = normalizeInboundCommandText(text);
   if (!raw.startsWith('/')) return raw;
 
   let t = raw.slice(1).trim();
@@ -42,8 +67,25 @@ export const normalizeSlashCommandText = (text) => {
 /**
  * @param {string} text
  * @param {boolean} accessRequestHandled
+ * @returns {{ skip: boolean, reason: string | null }}
+ */
+export const getOpenclawRelaySkipDecision = (text, accessRequestHandled = false) => {
+  if (accessRequestHandled) {
+    return { skip: true, reason: 'access_request_handled' };
+  }
+  if (isSlashReservedMessage(text)) {
+    return { skip: true, reason: 'slash_reserved' };
+  }
+  if (isAccessManagementCommandMessage(text)) {
+    return { skip: true, reason: 'access_management_command' };
+  }
+  return { skip: false, reason: null };
+};
+
+/**
+ * @param {string} text
+ * @param {boolean} accessRequestHandled
  */
 export const shouldSkipOpenclawRelay = (text, accessRequestHandled = false) => {
-  if (accessRequestHandled) return true;
-  return isSlashReservedMessage(text);
+  return getOpenclawRelaySkipDecision(text, accessRequestHandled).skip;
 };

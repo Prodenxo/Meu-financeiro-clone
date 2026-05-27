@@ -41,6 +41,8 @@ test('slash commands normalizam e não vão ao OpenClaw', () => {
   assert.equal(shouldSkipOpenclawRelay('/pendentes', false), true);
   assert.equal(shouldSkipOpenclawRelay('olá', false), false);
   assert.equal(shouldSkipOpenclawRelay('olá', true), true);
+  assert.equal(shouldSkipOpenclawRelay('pendentes', false), true);
+  assert.equal(shouldSkipOpenclawRelay('PENDENTES', false), true);
 });
 
 test('parseAccessRequestWhatsappCommand reconhece aprovar e listar', () => {

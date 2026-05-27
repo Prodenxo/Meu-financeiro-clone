@@ -9,6 +9,7 @@ import {
   rejectAccessRequest,
 } from './access-request-manage.service.js';
 import { isAccessRequestWhatsappNotifyEnabled } from './access-request-whatsapp.service.js';
+import { normalizeInboundCommandText } from './zapi-inbound-text.service.js';
 import { isSlashReservedMessage, normalizeSlashCommandText } from './zapi-slash-commands.service.js';
 
 const COMMAND_PREFIX_RE = /^(APROVAR|REJEITAR|PENDENTES|LISTAR|AJUDA|HELP)\b/i;
@@ -17,7 +18,7 @@ const COMMAND_PREFIX_RE = /^(APROVAR|REJEITAR|PENDENTES|LISTAR|AJUDA|HELP)\b/i;
  * @param {string} text
  */
 export const normalizeAccessRequestCommandInput = (text) => {
-  const raw = String(text || '').trim();
+  const raw = normalizeInboundCommandText(text);
   if (isSlashReservedMessage(raw)) return normalizeSlashCommandText(raw);
   return raw;
 };
