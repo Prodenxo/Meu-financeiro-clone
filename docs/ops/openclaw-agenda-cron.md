@@ -10,8 +10,9 @@ Mensagens automáticas do tipo *"você tem compromissos agendados"* + *"telefone
 |------|----------------|-------------|
 | **Chat (resposta)** | Cada pessoa escreve no WhatsApp do Midas → OpenClaw vê o **remetente** → `phone` no `mf-curl` → `n8n_link` → dados **dessa** conta. | **Produção** — já é multi-utilizador. |
 | **Cron OpenClaw com 1 telefone fixo** | Um job com `TELEFONE_DESTINO_55` no prompt. | **Só o teu número** (dev / piloto). |
-| **OpenClaw cron → backend (recomendado)** | Job no OpenClaw às 07:00 e 21:00 (`America/Sao_Paulo`) executa `mf-agenda-cron.sh manha\|noite` → `GET /api/cron/agenda-lembretes?sync=1`. O **backend** envia Z-API para todos. | **Produção** — sem cron-job.org. |
-| **cron-job.org → backend** | Mesmo endpoint HTTP; vários cliques/retries geram **spam** (várias mensagens seguidas). | Evitar em produção. |
+| **Scheduler no backend (recomendado)** | Com `AGENDA_WHATSAPP_REMINDERS_ENABLED=true`, o Node dispara **07:00** e **21:00** (`America/Sao_Paulo`) e envia via **Z-API** — sem cron-job.org nem OpenClaw. | **Produção** |
+| **OpenClaw / mf-agenda-cron.sh** | Só se quiseres disparo manual ou versão OpenClaw com cron. | Opcional |
+| **cron-job.org → backend** | Retries / “Executar agora” geraram **spam**. | **Desligar** se o scheduler interno estiver activo |
 | **Cron OpenClaw com 1 telefone + `list_calendar_events`** | Só lembra **uma** pessoa por job. | Não usar para a base inteira. |
 
 **Importante:** o OpenClaw **não** percorre mil utilizadores sozinho no prompt. Ele só **dispara** o lote no backend (1 exec por horário). Quem envia WhatsApp é o **backend** + Z-API.
@@ -26,23 +27,55 @@ Requisitos por utilizador:
 1. Os 2 jobs **MF agenda manhã/noite** no **cron-job.org**.
 2. Jobs OpenClaw antigos que pedem `list_calendar_events` com telefone fixo (duplicam ou erram o horário).
 
-### Backend implementado (`agenda-reminders.service.js`)
+### Backend + Z-API + scheduler interno (recomendado)
 
-| Env | Valor |
-|-----|--------|
+| Env (Easypanel → **backend**) | Valor |
+|--------------------------------|--------|
 | `AGENDA_WHATSAPP_REMINDERS_ENABLED` | `true` |
-| `ZAPI_INSTANCE_ID` + `ZAPI_TOKEN` + `ZAPI_CLIENT_TOKEN` | envio directo (ver `zapi-whatsapp-backend.md`) |
-| `N8N_WHATSAPP_WEBHOOK_URL` | opcional (legado; só se ainda não migrou) |
-| `CRON_SECRET` | Bearer no agendador |
+| `AGENDA_WHATSAPP_SCHEDULER_ENABLED` | omitir ou `true` (`false` = só endpoint HTTP `/api/cron/agenda-lembretes`) |
+| `ZAPI_INSTANCE_ID` + `ZAPI_TOKEN` + `ZAPI_CLIENT_TOKEN` | envio Z-API |
 
-| Horário (Brasil) | OpenClaw cron (`exec`) |
-|------------------|-------------------------|
-| **07:00** | `/home/node/.openclaw/workspace/mf-agenda-cron.sh manha` |
-| **21:00** | `/home/node/.openclaw/workspace/mf-agenda-cron.sh noite` |
+Após **deploy/restart** do backend, no log deve aparecer:
 
-**Env no serviço OpenClaw (Easypanel):** `MF_API_URL`, `CRON_SECRET` (igual ao backend).
+`[agenda-reminders] Scheduler interno ativo (7h e 21h America/Sao_Paulo)`
 
-Instalação no contentor (colar `Site/docs/ops/scripts/install-mf-agenda-cron-openclaw.sh` no Console Bash).
+| Horário (Brasil) | O quê |
+|------------------|--------|
+| **07:00** | Lote `manha` (compromissos de hoje) |
+| **21:00** | Lote `noite` (compromissos de amanhã) |
+
+Dedup no mesmo dia: memória + `/tmp` — evita reenvio se alguém chamar o endpoint HTTP à parte.
+
+**Desactiva** os jobs no **cron-job.org** (senão os dois sistemas disparam).
+
+### Alternativa: HTTP externo ou OpenClaw
+
+| Horário (Brasil) | OpenClaw (`exec`) ou cron-job.org |
+|------------------|-----------------------------------|
+| **07:00** | `mf-agenda-cron.sh manha` ou `GET .../agenda-lembretes?slot=manha&sync=1` |
+| **21:00** | `mf-agenda-cron.sh noite` ou `...&slot=noite&sync=1` |
+
+Só usar se `AGENDA_WHATSAPP_SCHEDULER_ENABLED=false`.
+
+### Sem `openclaw cron` (versão 2026.4.x)
+
+Se `openclaw cron list` imprimir só a versão / “comando cron não disponível”, o agendador **interno** do OpenClaw não está disponível na CLI. Usa **uma** destas opções:
+
+**Opção 1 — crontab no contentor** (se existir `crontab`):
+
+Colar `Site/docs/ops/scripts/install-mf-agenda-crontab-openclaw.sh` no Console. Agenda 7h/21h **sem disparar agora**.
+
+**Opção 2 — cron-job.org** (2 jobs só, sem “Run now” repetido):
+
+| Job | Horário (painel: America/Sao_Paulo ou UTC+Brasil) | URL |
+|-----|---------------------------------------------------|-----|
+| MF agenda manhã | 07:00 | `GET https://auto-back-meufinanceiro-site.4tnf3f.easypanel.host/api/cron/agenda-lembretes?slot=manha&sync=1` |
+| MF agenda noite | 21:00 | `GET .../api/cron/agenda-lembretes?slot=noite&sync=1` |
+
+Header: `Authorization: Bearer <CRON_SECRET>`  
+Desactiva retries agressivos / não cliques “Executar agora” várias vezes. O backend ignora lote duplicado no mesmo dia.
+
+**Opção 3 — actualizar OpenClaw** para build com `openclaw cron add` (futuro).
 
 Comportamento:
 

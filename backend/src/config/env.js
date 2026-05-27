@@ -193,6 +193,11 @@ export const env = {
    */
   AGENDA_WHATSAPP_REMINDERS_ENABLED: process.env.AGENDA_WHATSAPP_REMINDERS_ENABLED || 'false',
   /**
+   * `true` (padrão quando lembretes estão on): dispara 07:00 e 21:00 no próprio backend
+   * (America/Sao_Paulo) — sem cron-job.org. `false` desliga só o scheduler interno.
+   */
+  AGENDA_WHATSAPP_SCHEDULER_ENABLED: process.env.AGENDA_WHATSAPP_SCHEDULER_ENABLED || '',
+  /**
    * `true`: após `emit_nfse` pelo OpenClaw, agenda envio do PDF via Z-API (cron
    * `/api/cron/nfse-whatsapp-pending`). Requer Z-API outbound (não usa n8n).
    */
