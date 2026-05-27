@@ -8,28 +8,24 @@ import {
   listPendingAccessRequests,
   rejectAccessRequest,
 } from './access-request-manage.service.js';
+import {
+  isAccessManagementCommandMessage,
+  toInternalAccessCommandText,
+} from './access-request-command-text.service.js';
 import { isAccessRequestWhatsappNotifyEnabled } from './access-request-whatsapp.service.js';
-import { normalizeInboundCommandText } from './zapi-inbound-text.service.js';
-import { isSlashReservedMessage, normalizeSlashCommandText } from './zapi-slash-commands.service.js';
-
-const COMMAND_PREFIX_RE = /^(APROVAR|REJEITAR|PENDENTES|LISTAR|AJUDA|HELP)\b/i;
 
 /**
  * @param {string} text
  */
 export const normalizeAccessRequestCommandInput = (text) => {
-  const raw = normalizeInboundCommandText(text);
-  if (isSlashReservedMessage(raw)) return normalizeSlashCommandText(raw);
-  return raw;
+  return toInternalAccessCommandText(text);
 };
 
 /**
  * @param {string} text
  */
 export const isAccessRequestWhatsappCommand = (text) => {
-  const t = normalizeAccessRequestCommandInput(text);
-  if (!t) return false;
-  return COMMAND_PREFIX_RE.test(t);
+  return isAccessManagementCommandMessage(text);
 };
 
 /**
@@ -58,13 +54,12 @@ export const parseAccessRequestWhatsappCommand = (text) => {
 };
 
 export const buildAccessRequestWhatsappHelpMessage = () => (
-  'Comandos de solicitações de acesso (Meu Financeiro):\n\n'
-  + 'Use com barra / (o assistente financeiro ignora estes):\n'
-  + '• /pendentes — lista cadastros aguardando\n'
-  + '• /aprovar <e-mail ou CNPJ>\n'
-  + '• /rejeitar <e-mail ou CNPJ>\n'
-  + '• /ajuda-acesso\n\n'
-  + 'Exemplo:\n/aprovar cliente@email.com'
+  'Cadastros (Meu Financeiro):\n\n'
+  + '• mf pendentes\n'
+  + '• mf aprovar <e-mail ou CNPJ>\n'
+  + '• mf rejeitar <e-mail ou CNPJ>\n'
+  + '• mf ajuda\n\n'
+  + 'Ex.: mf aprovar cliente@email.com'
 );
 
 /**
@@ -87,7 +82,7 @@ export const buildPendingAccessRequestsListMessage = (pending) => {
     lines.push(`   E-mail: ${email}`);
     lines.push(`   CNPJ: ${cnpj}`);
     if (email && email !== '—') {
-      lines.push(`   → /aprovar ${email}`);
+      lines.push(`   → mf aprovar ${email}`);
     }
     lines.push('');
   });
@@ -96,7 +91,7 @@ export const buildPendingAccessRequestsListMessage = (pending) => {
     lines.push(`… e mais ${pending.length - max}. Use APROVAR <e-mail> para um específico.`);
   }
 
-  lines.push('Comandos: /pendentes | /aprovar <e-mail> | /rejeitar <e-mail>');
+  lines.push('Comandos: mf pendentes | mf aprovar <e-mail>');
   return lines.join('\n');
 };
 

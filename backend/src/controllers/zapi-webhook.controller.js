@@ -18,10 +18,12 @@ export const getZapiMonitor = (_req, res) => {
     service: 'zapi-inbound-bridge',
     inboundBridgeVersion: ZAPI_INBOUND_BRIDGE_VERSION,
     features: [
+      'mf_access_commands',
       'slash_skip_relay',
       'access_command_skip_relay',
       'access_whatsapp_inbound',
     ],
+    preferredAccessCommand: 'mf pendentes',
     accessRequestWhatsapp: isAccessRequestWhatsappNotifyEnabled(),
     relayConfigured: Boolean((env.OPENCLAW_ZAPI_RELAY_URL || '').trim()),
     webhookTokenConfigured: Boolean((env.ZAPI_WEBHOOK_TOKEN || '').trim()),

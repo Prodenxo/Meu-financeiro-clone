@@ -21,8 +21,8 @@ test('buildAccessRequestSubmittedSuperadminMessage inclui dados principais', () 
   assert.ok(msg.includes('maria@exemplo.com'));
   assert.ok(msg.includes('17.422.651/0001-72'));
   assert.ok(msg.includes('MEI novo'));
-  assert.ok(msg.includes('/aprovar maria@exemplo.com'));
-  assert.ok(msg.includes('/pendentes'));
+  assert.ok(msg.includes('mf aprovar maria@exemplo.com'));
+  assert.ok(msg.includes('mf pendentes'));
 });
 
 test('buildAccessRequestApprovedApplicantMessage personaliza nome', () => {

@@ -15,9 +15,9 @@ import {
 } from '../src/services/access-request-whatsapp-inbound.service.js';
 import {
   isSlashReservedMessage,
-  normalizeSlashCommandText,
   shouldSkipOpenclawRelay,
 } from '../src/services/zapi-slash-commands.service.js';
+import { toInternalAccessCommandText } from '../src/services/access-request-command-text.service.js';
 
 test('buildAccessRequestSubmittedSuperadminMessage inclui comando APROVAR', () => {
   const msg = buildAccessRequestSubmittedSuperadminMessage({
@@ -27,22 +27,20 @@ test('buildAccessRequestSubmittedSuperadminMessage inclui comando APROVAR', () =
     empresaNome: 'MPC LTDA',
     cnpj: '66518874000143',
   });
-  assert.ok(msg.includes('/aprovar milena@exemplo.com'));
-  assert.ok(msg.includes('/pendentes'));
+  assert.ok(msg.includes('mf aprovar milena@exemplo.com'));
+  assert.ok(msg.includes('mf pendentes'));
 });
 
-test('slash commands normalizam e não vão ao OpenClaw', () => {
-  assert.equal(normalizeSlashCommandText('/pendentes'), 'PENDENTES');
-  assert.deepEqual(parseAccessRequestWhatsappCommand('/aprovar a@b.com'), {
+test('mf pendentes no relay skip', () => {
+  assert.equal(toInternalAccessCommandText('mf pendentes'), 'PENDENTES');
+  assert.deepEqual(parseAccessRequestWhatsappCommand('mf aprovar a@b.com'), {
     action: 'approve',
     arg: 'a@b.com',
   });
-  assert.equal(isSlashReservedMessage('/pendentes'), true);
+  assert.equal(shouldSkipOpenclawRelay('mf pendentes', false), true);
   assert.equal(shouldSkipOpenclawRelay('/pendentes', false), true);
   assert.equal(shouldSkipOpenclawRelay('olá', false), false);
-  assert.equal(shouldSkipOpenclawRelay('olá', true), true);
-  assert.equal(shouldSkipOpenclawRelay('pendentes', false), true);
-  assert.equal(shouldSkipOpenclawRelay('PENDENTES', false), true);
+  assert.equal(isSlashReservedMessage('/pendentes'), true);
 });
 
 test('parseAccessRequestWhatsappCommand reconhece aprovar e listar', () => {

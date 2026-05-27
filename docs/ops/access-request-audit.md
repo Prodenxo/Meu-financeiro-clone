@@ -73,18 +73,16 @@ O webhook Z-API (`POST` inbound) processa comandos **antes** do relay OpenClaw. 
 |---------|------|
 | `/aprovar <e-mail ou CNPJ>` | Aprova o cadastro pendente (mesma lógica da app) |
 | `/rejeitar <e-mail ou CNPJ>` | Recusa e remove utilizador pendente |
-| `/pendentes` | Lista pendentes com linha `/aprovar …` para copiar |
-| `/ajuda-acesso` | Mostra comandos |
+| `mf pendentes` | Lista pendentes com linha `mf aprovar …` para copiar |
+| `mf ajuda` | Mostra comandos |
 
-**Importante:** use a **barra `/`** para o OpenClaw **não** receber a mensagem (evita confundir com “transações pendentes”). O backend **não** reencaminha texto que começa com `/` para `OPENCLAW_ZAPI_RELAY_URL`.
+**Formato recomendado:** `mf pendentes`, `mf aprovar email@…` (sem `/` — o OpenClaw trata `/` como comando dele).
 
 Na notificação de nova solicitação já vem o texto pronto, por exemplo:
 
 ```
-/aprovar milenapaes779@gmail.com
+mf aprovar milenapaes779@gmail.com
 ```
-
-Também funcionam sem barra (`PENDENTES`, `APROVAR …`) se o deploy processar o inbound antes do relay; **recomendado** sempre com `/`.
 
 Também aceita CNPJ só com dígitos ou UUID do utilizador. Áudio transcrito com o mesmo texto funciona.
 

@@ -1,16 +1,26 @@
-# `/pendentes` e o OpenClaw responde DAS — como corrigir
+# Cadastros no WhatsApp vs OpenClaw (DAS)
 
-Se enviaste **`/pendentes`** e o **Midas** falou de **DAS MEI** ou transações, a mensagem **chegou ao OpenClaw por outro caminho** (ou o backend em produção ainda é antigo).
+O OpenClaw trata mensagens com **`/`** como comandos dele (`/new`, etc.). **Não uses `/pendentes`.**
+
+## Comando certo (copiar)
+
+```text
+mf pendentes
+mf aprovar email@exemplo.com
+mf rejeitar email@exemplo.com
+```
+
+Se o **Midas** ainda falou de **DAS** ao enviar isso, a mensagem **não passou pelo backend** (caminho duplo WhatsApp).
 
 ## Como deve funcionar
 
 ```
 WhatsApp → Z-API → POST backend /api/webhooks/zapi/inbound
-                        ├─ /pendentes → backend responde (cadastros)
+                        ├─ MF CADASTRO … → backend responde (cadastros)
                         └─ outras msgs → relay → OpenClaw (DAS, NFSe, …)
 ```
 
-O OpenClaw **não** deve ver `/pendentes`, `PENDENTES`, `/aprovar`, etc.
+O OpenClaw **não** deve ver `MF CADASTRO …` (e o relay ignora isso no backend).
 
 ## 1. Confirmar deploy do backend (2 min)
 
@@ -23,7 +33,7 @@ GET https://auto-back-meufinanceiro-site.4tnf3f.easypanel.host/api/webhooks/zapi
 Tem de aparecer:
 
 ```json
-"inboundBridgeVersion": 2
+"inboundBridgeVersion": 4
 ```
 
 Se **não** existir esse campo → **redeploy/restart** do backend no Easypanel (o código novo ainda não está em produção).
@@ -60,9 +70,9 @@ Para desligar WhatsApp no OpenClaw (console do contentor):
 
 ## 4. Teste após deploy
 
-1. Envia `/pendentes` no WhatsApp.
+1. Envia `mf pendentes` no WhatsApp (não `/pendentes`).
 2. Logs do backend (Easypanel): deve aparecer  
-   `[ZAPI] openclaw relay ignorado: slash_reserved` (ou `access_management_command`).
+   `[ZAPI] openclaw relay ignorado: mf_access_command`.
 3. Resposta esperada: lista de **solicitações de cadastro**, não DAS.
 
 Se o Midas **ainda** responder e o log **não** aparecer → a mensagem **não passou** pelo backend (passo 3).
