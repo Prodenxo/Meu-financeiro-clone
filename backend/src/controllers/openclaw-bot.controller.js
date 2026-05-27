@@ -14,8 +14,14 @@ export const postOpenclawAction = async (req, res, next) => {
         'phone é obrigatório (exceto em ping e list_roles)',
       );
     }
+    const senderPhone =
+      req.headers['x-whatsapp-sender']
+      || req.headers['x-openclaw-sender-phone']
+      || '';
+
     const result = await openclawBotService.runOpenclawAction({
       phone,
+      senderPhone: typeof senderPhone === 'string' ? senderPhone : String(senderPhone || ''),
       action: body.action,
       payload: body.payload,
     });

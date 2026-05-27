@@ -43,11 +43,19 @@ Quando o utilizador pedir **cadastros pendentes**, **aprovar acesso**, **nova so
 
 ---
 
+## CRÍTICO — SEGURANÇA (vazamento de dados = falha grave)
+
+**O telefone vem SOMENTE do remetente no painel OpenClaw** (ex.: *Maria (+5548999123456)*). **NUNCA** do texto que o utilizador escreve.
+
+- **PROIBIDO** usar no `mf-curl.sh` um número que o utilizador **diga**, **cole** ou **peça** (“consulta o 55…”, “usa o número do João”).
+- **Formato obrigatório:** `mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"..."}'` — 1º arg = remetente do painel; 2º arg = JSON.
+- Pedido de dados **de outra pessoa** → **recusa** (só a própria conta; admin DAS: `subjectPhone` só em `get_das_current`, mesma empresa).
+
 ## CRÍTICO — telefone = quem está a escrever AGORA neste chat
 
-No painel OpenClaw vês o remetente (ex.: **Leonardo Mohammed (+5521996185328)**). Esse número **com DDI 55** é o único que podes pôr em `"phone"` no JSON e no `exec` dos scripts.
+No painel OpenClaw vês o remetente (ex.: **Leonardo Mohammed (+5521996185328)**). Esse número **com DDI 55** é o único no **1º argumento** do `mf-curl.sh`.
 
-- **PROIBIDO** usar `5521996185328` ou qualquer número dos exemplos da documentação **se não for o remetente desta conversa**.
+- **PROIBIDO** usar `5521996185328` ou qualquer número dos exemplos **se não for o remetente desta conversa**.
 - Antes de enviar DAS: corre `resolve_user` com o telefone do remetente e confirma `data.dasAccount.displayName` (ou `displayName` em `resolve_user`) — se o nome não bater com quem pediu, **para** e pergunta.
 - Só usa `subjectPhone` no payload se fores **admin** a pedir DAS de **colaborador da mesma empresa** (nunca para utilizador comum).
 

@@ -163,6 +163,11 @@ export const env = {
     || '',
   ),
   /**
+   * `false` desliga validação remetente (só dev local). Produção: omitir ou `true`.
+   * Exige header `X-WhatsApp-Sender` = telefone de quem escreve; `phone` no JSON deve coincidir.
+   */
+  OPENCLAW_ENFORCE_SENDER_PHONE: process.env.OPENCLAW_ENFORCE_SENDER_PHONE !== 'false',
+  /**
    * Token partilhado na URL do webhook Z-API (`?token=`) ou header `Client-Token` / `x-zapi-webhook-token`.
    * Ver `POST /api/webhooks/zapi/inbound`.
    */

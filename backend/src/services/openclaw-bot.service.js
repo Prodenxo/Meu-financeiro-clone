@@ -44,6 +44,10 @@ import {
   openclawListAccessRequests,
   openclawRejectAccessRequest,
 } from './openclaw-access-requests.service.js';
+import {
+  assertPayloadNoImpersonation,
+  resolveOpenclawCallerPhone,
+} from './openclaw-sender-guard.service.js';
 
 const MAX_LIST = 40;
 
@@ -469,14 +473,24 @@ export const resolveActorMembershipsForUser = async (userId) => {
 };
 
 /**
- * @param {{ phone: string, action: string, payload?: object }} input
+ * @param {{ phone?: string, senderPhone?: string, action: string, payload?: object }} input
  */
 export const runOpenclawAction = async (input) => {
-  const phone = input?.phone;
   const action = String(input?.action || '').trim();
   const payload = input?.payload && typeof input.payload === 'object' ? input.payload : {};
 
   if (!action) throw badRequest('action é obrigatório');
+
+  let phone = input?.phone;
+
+  if (action !== 'ping') {
+    const caller = resolveOpenclawCallerPhone({
+      bodyPhone: phone,
+      senderPhone: input?.senderPhone,
+    });
+    phone = caller.phone;
+    assertPayloadNoImpersonation(payload, phone, action);
+  }
 
   if (action === 'ping') {
     return { ok: true, message: 'OpenClaw online', data: { pong: true } };
