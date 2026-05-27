@@ -4,17 +4,27 @@ set -e
 WS=/home/node/.openclaw/workspace
 mkdir -p "$WS"
 
-test -x "$WS/mf-curl.sh" || {
+if ! grep -q 'X-WhatsApp-Sender' "$WS/mf-curl.sh" 2>/dev/null; then
   test -n "$MF_API_URL" && test -n "$OPENCLAW_WEBHOOK_SECRET" || {
     echo "ERRO: defina MF_API_URL e OPENCLAW_WEBHOOK_SECRET no Easypanel → Restart"
     exit 1
   }
-  printf '%s\n' '#!/bin/sh' "exec curl -sS -X POST '$MF_API_URL' \\" \
-    "-H 'Content-Type: application/json; charset=utf-8' \\" \
-    "-H 'Authorization: Bearer $OPENCLAW_WEBHOOK_SECRET' \\" \
-    '-d "$1"' > "$WS/mf-curl.sh"
-  chmod +x "$WS/mf-curl.sh"
-}
+  node -e "
+const fs=require('fs'),path=require('path');
+const ws=process.env.OPENCLAW_WORKSPACE||'/home/node/.openclaw/workspace';
+const u=process.env.MF_API_URL,s=process.env.OPENCLAW_WEBHOOK_SECRET;
+const sh='#!/bin/sh\\nset -e\\nSENDER=\"\${1:?TELEFONE_REMETENTE}\"; shift\\nJSON=\"\${1:?json}\";\\n'
++'BODY=\$(node -e \"const s=process.argv[1],r=process.argv[2];let j=JSON.parse(r);j.phone=s.replace(/\\\\D/g,\\\"\\\");console.log(JSON.stringify(j));\" \"\$SENDER\" \"\$JSON\")\\n'
++'exec curl -sS -X POST '+JSON.stringify(u)
++' -H '+JSON.stringify('Content-Type: application/json; charset=utf-8')
++' -H '+JSON.stringify('Authorization: Bearer '+s)
++' -H \"X-WhatsApp-Sender: \$(echo \"\$SENDER\" | tr -cd 0-9)\" -d \"\$BODY\"\\n';
+fs.writeFileSync(path.join(ws,'mf-curl.sh'),sh,{mode:0o755});
+console.log('[ok] mf-curl.sh seguro (2 args)');
+" OPENCLAW_WORKSPACE="$WS" MF_API_URL="$MF_API_URL" OPENCLAW_WEBHOOK_SECRET="$OPENCLAW_WEBHOOK_SECRET"
+else
+  echo "OK: mf-curl.sh já é seguro"
+fi
 
 # mf-das.js com includeBase64
 cat > "$WS/mf-das.js" << 'NODE_EOF'
@@ -30,8 +40,8 @@ if (!phone || !mes) {
   process.exit(1);
 }
 const curl = path.join(dir, 'mf-curl.sh');
-const body = JSON.stringify({ phone, action: 'get_das_current', payload: { mes, includeBase64: true } });
-const raw = execFileSync(curl, [body], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+const body = JSON.stringify({ action: 'get_das_current', payload: { mes, includeBase64: true } });
+const raw = execFileSync(curl, [phone, body], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 let r;
 try { r = JSON.parse(raw); } catch (e) {
   console.error(raw.slice(0, 500));
@@ -69,6 +79,11 @@ NODE_EOF
 printf '#!/bin/sh\nexec node "%s/mf-das.js" "$@"\n' "$WS" > "$WS/mf-das.sh"
 chmod +x "$WS/mf-das.js" "$WS/mf-das.sh"
 
+# mf-das-send.sh — copiar lógica actualizada (send_das_whatsapp + fallback)
+if [ -f "$(dirname "$0")/openclaw-mf-das-send.sh" ]; then
+  cp "$(dirname "$0")/openclaw-mf-das-send.sh" "$WS/mf-das-send.sh"
+  chmod +x "$WS/mf-das-send.sh"
+else
 cat > "$WS/mf-das-send.sh" << 'SEND_EOF'
 #!/bin/sh
 set -e
@@ -76,13 +91,18 @@ WS="$(cd "$(dirname "$0")" && pwd)"
 PHONE="${1:?phone}"
 MES="${2:?MM/YYYY}"
 TARGET="${3:-$PHONE}"
+API_RAW="$("$WS/mf-curl.sh" "$PHONE" "{\"action\":\"send_das_whatsapp\",\"payload\":{\"mes\":\"$MES\"}}" 2>/dev/null)" || API_RAW=""
+if [ -n "$API_RAW" ]; then
+  API_OK=$(echo "$API_RAW" | node -e "let j;try{j=JSON.parse(require('fs').readFileSync(0,'utf8'))}catch(e){process.exit(1)};const w=(j.data&&j.data.whatsappStatus)||'';if(j.success&&(w==='sent'||/enviado/i.test(String(j.message||'')))){process.stdout.write('yes');process.exit(0)};process.exit(1)" 2>/dev/null) || API_OK=""
+  if [ "$API_OK" = "yes" ]; then echo "$API_RAW"; exit 0; fi
+fi
 OUT="$("$WS/mf-das.sh" "$PHONE" "$MES")" || { echo '{"success":false,"step":"mf-das.sh"}'; exit 1; }
 FILE="$(echo "$OUT" | node -e "let j=JSON.parse(require('fs').readFileSync(0,'utf8'));if(!j.file)process.exit(1);process.stdout.write(j.file)")" || { echo "$OUT"; exit 1; }
 openclaw message send --channel whatsapp --target "$TARGET" --media "$FILE" --message "DAS $MES" || { echo '{"success":false,"step":"whatsapp"}'; exit 1; }
 echo "{\"success\":true,\"mes\":\"$MES\",\"file\":\"$FILE\",\"whatsapp\":\"sent\"}"
 SEND_EOF
 chmod +x "$WS/mf-das-send.sh"
-
+fi
 printf '#!/bin/sh\nset -e\nWS="$(cd "$(dirname "$0")" && pwd)"\nexec "$WS/mf-das-send.sh" "$@"\n' > "$WS/mf-send-das.sh"
 chmod +x "$WS/mf-send-das.sh"
 
@@ -102,7 +122,7 @@ echo "=== ficheiros ==="
 ls -la "$WS"/mf-*.sh "$WS"/*.md
 echo "=== teste (opcional) — troca pelo TEU telefone do painel OpenClaw ==="
 echo "mf-curl resolve_user:"
-echo "  $WS/mf-curl.sh '{\"phone\":\"55XXXXXXXXXXX\",\"action\":\"resolve_user\"}'"
+echo "  $WS/mf-curl.sh 55XXXXXXXXXXX '{\"action\":\"resolve_user\"}'"
 echo "mf-das + WhatsApp:"
 echo "  $WS/mf-das.sh 55XXXXXXXXXXX 02/2026"
 echo "  $WS/mf-das-send.sh 55XXXXXXXXXXX 02/2026"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Baixa DAS (PDF) via mf-curl.sh e grava em /tmp — NUNCA imprime base64 no stdout.
+# Baixa DAS (PDF) via mf-curl.sh seguro (2 args) e grava em /tmp.
 # Uso: ./openclaw-mf-das.sh TELEFONE_DO_REMETENTE_55 03/2026
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -9,7 +9,7 @@ MES="${2:?informe competencia MM/YYYY, ex. 03/2026}"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 
-"$MF_CURL" "{\"phone\":\"$PHONE\",\"action\":\"get_das_current\",\"payload\":{\"mes\":\"$MES\",\"includeBase64\":true}}" > "$TMP"
+"$MF_CURL" "$PHONE" "{\"action\":\"get_das_current\",\"payload\":{\"mes\":\"$MES\",\"includeBase64\":true}}" > "$TMP"
 
 node -e "
 const fs = require('fs');

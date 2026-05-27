@@ -117,6 +117,37 @@ Pedidos: *marca reunião*, *agenda*, *lembrar no calendário*:
 
 `;
 
+const dasBlock = `## DAS MEI — PDF, saldo e telefone vinculado
+
+### Antes de tudo
+1. \`resolve_user\` com **TELEFONE do painel OpenClaw** (1º arg do mf-curl).
+2. Se \`PHONE_NOT_LINKED\` / não encontrado: diga **UMA vez** para guardar o telefone no Perfil da app — **não repita** na mesma conversa.
+3. **PROIBIDO** inventar saldo, DAS ou PDF se a API falhou.
+
+### Saldo
+- \`list_transactions\` → resume entradas/saídas; não há action "saldo" separada.
+
+### PDF DAS (enviar no WhatsApp)
+**OBRIGATÓRIO** \`exec\` (não só texto):
+
+\`\`\`bash
+/home/node/.openclaw/workspace/mf-das-send.sh TELEFONE_REMETENTE_55 MM/YYYY
+\`\`\`
+
+Ex.: \`mf-das-send.sh 5521981087323 05/2026\`
+
+- **PROIBIDO** \`get_das_current\` via mf-curl para "enviar PDF" (base64 não chega ao cliente).
+- Alternativa API: \`send_das_whatsapp\` com \`payload.mes\`.
+- Só confirme envio se JSON tiver \`whatsappStatus: sent\` ou \`"whatsapp":"sent"\` no exec.
+- **PROIBIDO** pedir CNPJ/certificado no chat — usa conta do telefone + certificado na app.
+
+### DAS pago?
+- \`get_das_payment_status\` com \`payload.mes\` — **não** uses só \`get_das_current\` para saber se está pago.
+
+---
+
+`;
+
 const phoneSection = '## CRÍTICO — telefone = quem está a escrever';
 
 // Segurança no topo
@@ -182,6 +213,32 @@ if (calIdx >= 0) {
   changes.push('calendário (AVISO: já tem create_calendar_event mas sem secção Agenda — reveja SOUL)');
 }
 
+// DAS + saldo
+const dasMarkers = ['## DAS MEI — PDF, saldo', '## DAS MEI', '### DAS no WhatsApp'];
+let dasIdx = -1;
+for (const m of dasMarkers) {
+  const i = cur.indexOf(m);
+  if (i >= 0 && (dasIdx < 0 || i < dasIdx)) dasIdx = i;
+}
+const phoneIdx3 = cur.indexOf(phoneSection);
+const needsDas = !cur.includes('mf-das-send.sh') || !cur.includes('send_das_whatsapp');
+
+if (dasIdx >= 0) {
+  const sliceEnd = phoneIdx3 > dasIdx ? phoneIdx3 : cur.length;
+  cur = cur.slice(0, dasIdx) + dasBlock + cur.slice(sliceEnd);
+  changes.push(needsDas ? 'DAS (substituído)' : 'DAS (secção substituída)');
+} else if (needsDas) {
+  const insertAt = phoneIdx3 >= 0 ? phoneIdx3 : 0;
+  if (insertAt > 0) {
+    cur = cur.slice(0, insertAt) + dasBlock + cur.slice(insertAt);
+  } else {
+    cur = dasBlock + cur;
+  }
+  changes.push('DAS (inserido)');
+} else {
+  changes.push('DAS (já ok)');
+}
+
 fs.writeFileSync(soulPath, cur);
 console.log('SOUL:', fs.statSync(soulPath).size, 'bytes');
 console.log('Alterações:', changes.join(', '));
@@ -222,5 +279,8 @@ if ! grep -q "add_calendar_event_meet" "$SOUL"; then
   echo "ERRO: SOUL sem add_calendar_event_meet — secção Meet não aplicou"
   exit 1
 fi
+echo ""
+echo "--- Scripts DAS (mf-curl 2 args) — copiar do repo ou colar openclaw-console-fix-das-agent.sh ---"
+echo "  test -x $WS/mf-das-send.sh && head -1 $WS/mf-curl.sh"
 echo ""
 echo "URGENTE: Redeploy BACKEND Easypanel + Restart OpenClaw + WhatsApp /new"

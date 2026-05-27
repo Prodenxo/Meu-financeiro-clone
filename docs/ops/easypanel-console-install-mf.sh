@@ -6,19 +6,12 @@ set -e
 WS=/home/node/.openclaw/workspace
 mkdir -p "$WS"
 
-if [ ! -x "$WS/mf-curl.sh" ]; then
+if ! grep -q 'X-WhatsApp-Sender' "$WS/mf-curl.sh" 2>/dev/null; then
   test -n "$MF_API_URL" && test -n "$OPENCLAW_WEBHOOK_SECRET" || {
     echo "ERRO: defina MF_API_URL e OPENCLAW_WEBHOOK_SECRET no Easypanel → Environment → Restart"
     exit 1
   }
-  printf '%s\n' '#!/bin/sh' "exec curl -sS -X POST '$MF_API_URL' \\" \
-    "-H 'Content-Type: application/json; charset=utf-8' \\" \
-    "-H 'Authorization: Bearer $OPENCLAW_WEBHOOK_SECRET' \\" \
-    '-d "$1"' > "$WS/mf-curl.sh"
-  chmod +x "$WS/mf-curl.sh"
-  echo "OK: mf-curl.sh criado"
-else
-  echo "OK: mf-curl.sh já existe"
+  echo "AVISO: mf-curl antigo detectado — corre apply-soul-patches-all-easypanel.sh ou openclaw-console-fix-das-agent.sh"
 fi
 
 rm -f "$WS/mf-das-parse.js"
@@ -36,8 +29,8 @@ if (!phone || !mes) {
   process.exit(1);
 }
 const curl = path.join(dir, 'mf-curl.sh');
-const body = JSON.stringify({ phone, action: 'get_das_current', payload: { mes, includeBase64: true } });
-const raw = execFileSync(curl, [body], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+const body = JSON.stringify({ action: 'get_das_current', payload: { mes, includeBase64: true } });
+const raw = execFileSync(curl, [phone, body], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 let r;
 try { r = JSON.parse(raw); } catch (e) {
   console.error(raw.slice(0, 500));

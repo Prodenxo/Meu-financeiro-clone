@@ -489,6 +489,10 @@ export const runOpenclawAction = async (input) => {
     add_calendar_event_meet: 'add_calendar_event_meet',
     gerar_link_reuniao: 'add_calendar_event_meet',
     gerar_meet: 'add_calendar_event_meet',
+    send_das_whatsapp: 'send_das_whatsapp',
+    enviar_das: 'send_das_whatsapp',
+    pdf_das: 'send_das_whatsapp',
+    mandar_das: 'send_das_whatsapp',
   };
   let action = String(input?.action || '').trim();
   action = actionAliases[action] || action;
@@ -583,7 +587,17 @@ export const runOpenclawAction = async (input) => {
   const { userId, phoneDigits, matchedUserNumber, lookupCandidates } = resolved;
   if (!userId) {
     throw notFound(
-      'Nenhum utilizador ligado a este telefone. Abre o app, mete o telefone no perfil e guarda.',
+      'Este WhatsApp ainda não está ligado ao Meu Financeiro. '
+      + 'Abra a app → Perfil → guarde este número (com DDD 55) e tente de novo.',
+      {
+        code: 'PHONE_NOT_LINKED',
+        phoneDigits,
+        lookupCandidates,
+        botHint:
+          'Repita esta message UMA vez — não insista na mesma conversa. '
+          + 'mf-curl: 1º argumento = telefone do remetente no PAINEL OpenClaw (não o que o utilizador digitar). '
+          + 'Se pedirem saldo/DAS antes de vincular, não invente valores.',
+      },
     );
   }
 
@@ -984,9 +998,13 @@ export const runOpenclawAction = async (input) => {
       payload?.includeBase64 === 1;
 
     if (!includeBase64) {
+      const deliverExplicit = String(payload?.deliverWhatsapp ?? '').toLowerCase();
       const deliverWhatsapp =
-        payload?.deliverWhatsapp === true ||
-        String(payload?.deliverWhatsapp || '').toLowerCase() === 'true';
+        deliverExplicit === 'true'
+        || payload?.deliverWhatsapp === true
+        || (deliverExplicit !== 'false'
+          && payload?.deliverWhatsapp !== false
+          && isWhatsappOutboundConfigured());
       let whatsapp = { whatsappStatus: 'not_requested' };
       if (deliverWhatsapp) {
         whatsapp = await trySendDasWhatsappWebhook({
@@ -1004,7 +1022,8 @@ export const runOpenclawAction = async (input) => {
         ok: true,
         message: sent
           ? `PDF DAS ${display} enviado no WhatsApp (${owner}).`
-          : `DAS ${display} de ${owner}. Para enviar no WhatsApp use mf-send-das.sh com o telefone do remetente do chat.`,
+          : `DAS ${display} de ${owner}. Envio WhatsApp: ${whatsapp.whatsappStatus}. `
+            + `Use exec: mf-das-send.sh ${destinationPhone || 'TELEFONE_PAINEL'} ${display}`,
         data: {
           fileName,
           mes: display,
@@ -1108,7 +1127,8 @@ export const runOpenclawAction = async (input) => {
       ok: true,
       message: sent
         ? `PDF DAS ${display} enviado no WhatsApp (conta: ${owner}).`
-        : `DAS ${display} de ${owner}; envio WhatsApp: ${whatsapp.whatsappStatus}.`,
+        : `DAS ${display} de ${owner}; envio WhatsApp: ${whatsapp.whatsappStatus}. `
+          + (whatsapp.hint || `Use mf-das-send.sh ${destinationPhone} ${display}`),
       data: {
         mes: display,
         fileName,
@@ -1120,6 +1140,9 @@ export const runOpenclawAction = async (input) => {
         useOpenclawScript: sent
           ? null
           : `/home/node/.openclaw/workspace/mf-das-send.sh ${destinationPhone} ${display}`,
+        agentInstructions: sent
+          ? 'Confirme só que o PDF foi enviado (message).'
+          : 'OBRIGATÓRIO exec mf-das-send.sh com telefone do PAINEL. Não diga que enviou sem whatsappStatus=sent.',
         actorContext,
         ...(dasSubject?.dataLinkDebug ?? linkDebug),
       },
