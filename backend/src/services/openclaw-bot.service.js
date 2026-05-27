@@ -720,6 +720,10 @@ export const runOpenclawAction = async (input) => {
         userId,
         actorContext,
         ...linkDebug,
+        agentInstructions:
+          'Para cada item em data.events: título, time/endTime, durationLabel, meetLink, reminderSummary. '
+          + 'Eventos source=google criados no Google Calendar têm os mesmos campos. '
+          + 'Se meetLink existir, envia o link. Não digas que não vês compromissos se events não estiver vazio.',
       },
     };
   }

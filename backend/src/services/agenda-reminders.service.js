@@ -128,9 +128,20 @@ export const formatAgendaReminderWhatsappMessage = (calendar, slot = 'manha') =>
   const dayWord = slot === 'noite' ? 'amanhã' : 'hoje';
   const lines = events.map((e) => {
     const title = String(e.title || 'Compromisso').trim();
-    if (e.allDay || !e.time) return `• ${title} (dia inteiro)`;
-    const time = String(e.time).slice(0, 5);
-    return `• ${time} — ${title}`;
+    const sub = [];
+    if (e.allDay || !e.time) {
+      sub.push(`• ${title} (dia inteiro)`);
+    } else {
+      const start = String(e.time).slice(0, 5);
+      let slot = `• ${start}`;
+      if (e.endTime) slot += `–${String(e.endTime).slice(0, 5)}`;
+      if (e.durationLabel) slot += ` (${e.durationLabel})`;
+      slot += ` — ${title}`;
+      sub.push(slot);
+    }
+    if (e.meetLink) sub.push(`  Meet: ${e.meetLink}`);
+    if (e.reminderSummary) sub.push(`  Lembrete: ${e.reminderSummary}`);
+    return sub.join('\n');
   });
   return `${greeting}! Compromissos de ${dayWord} (${dateLabel}):\n${lines.join('\n')}`;
 };

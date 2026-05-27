@@ -67,7 +67,7 @@ Exemplo:
 - **Meet:** \`createMeetLink: true\` ou \`meet: "sim"\` — **exige** \`time\`; envia link Google Meet na resposta.
 - Áudio: extrai título/data/hora/meet da transcrição.
 - Sem Google Calendar: pede conectar em Configurações na app.
-- Consultar dia: \`list_calendar_events\` com \`payload.data\`.
+- Consultar dia: \`list_calendar_events\` com \`payload.data\` — em **data.events** usa \`time\`, \`endTime\`, \`durationLabel\`, \`meetLink\`, \`reminderSummary\` (válido para eventos criados no Google Calendar ou pelo bot).
 
 ---
 

@@ -248,6 +248,10 @@ export const fetchGoogleCalendarItems = async (userId, range) => {
   calendarUrl.searchParams.set('orderBy', 'startTime');
   calendarUrl.searchParams.set('timeMin', range.timeMin);
   calendarUrl.searchParams.set('timeMax', range.timeMax);
+  calendarUrl.searchParams.set(
+    'fields',
+    'items(id,summary,description,location,start,end,hangoutLink,conferenceData,reminders,htmlLink,status),nextPageToken',
+  );
 
   const calendarResponse = await fetch(calendarUrl.toString(), {
     method: 'GET',
@@ -269,31 +273,38 @@ export const fetchGoogleCalendarItems = async (userId, range) => {
   return { items: data.items || [], error: null, notLinked: false };
 };
 
-const mapGoogleItemToCalendarEvent = (item, dateIso) => {
-  const startRaw = item.start?.dateTime || item.start?.date;
-  const endRaw = item.end?.dateTime || item.end?.date || startRaw;
+export const mapGoogleItemToCalendarEvent = (item, dateIso) => {
   const allDay = !!item.start?.date && !item.start?.dateTime;
-  let time = null;
-  if (!allDay && item.start?.dateTime) {
-    const d = new Date(item.start.dateTime);
-    if (Number.isFinite(d.getTime())) {
-      time = d.toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: SAO_PAULO_TZ,
-      });
-    }
-  }
+  const time = !allDay && item.start?.dateTime
+    ? formatGoogleDateTimeLocalPtBr(item.start.dateTime)
+    : null;
+  const endTime = !allDay && item.end?.dateTime
+    ? formatGoogleDateTimeLocalPtBr(item.end.dateTime)
+    : null;
+  const durationMinutes = computeGoogleEventDurationMinutes(item);
+  const durationLabel = formatDurationLabelPtBr(durationMinutes);
+  const meetLink = pickMeetUriFromGoogleEvent(item);
+  const reminders = extractGoogleEventReminders(item);
+  const reminderLabels = reminders.map((r) => r.label).filter(Boolean);
 
   return {
     id: item.id || null,
     title: (item.summary || 'Evento do Google').trim(),
     date: dateIso,
     time,
+    endTime,
+    durationMinutes,
+    durationLabel,
     allDay,
     source: 'google',
     description: item.description || null,
     status: item.status || null,
+    location: item.location ? String(item.location).trim() : null,
+    meetLink,
+    hangoutLink: meetLink,
+    reminders,
+    reminderSummary: reminderLabels.length ? reminderLabels.join('; ') : null,
+    htmlLink: item.htmlLink ? String(item.htmlLink).trim() : null,
   };
 };
 
@@ -458,7 +469,7 @@ export const parseCalendarEventTimeHm = (raw) => {
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
-const pickMeetUriFromGoogleEvent = (eventData) => {
+export const pickMeetUriFromGoogleEvent = (eventData) => {
   const hangout = typeof eventData?.hangoutLink === 'string' ? eventData.hangoutLink.trim() : '';
   if (hangout.includes('meet.google')) return hangout;
   const entryPoints = eventData?.conferenceData?.entryPoints || [];
@@ -467,6 +478,78 @@ const pickMeetUriFromGoogleEvent = (eventData) => {
     if (uri.includes('meet.google')) return uri;
   }
   return null;
+};
+
+/**
+ * @param {string} dateTimeIso
+ * @returns {string | null} HH:MM
+ */
+export const formatGoogleDateTimeLocalPtBr = (dateTimeIso) => {
+  if (!dateTimeIso || !String(dateTimeIso).includes('T')) return null;
+  const d = new Date(dateTimeIso);
+  if (!Number.isFinite(d.getTime())) return null;
+  return d.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: SAO_PAULO_TZ,
+  });
+};
+
+/**
+ * @param {object} item Evento Google Calendar API
+ * @returns {number | null}
+ */
+export const computeGoogleEventDurationMinutes = (item) => {
+  const allDay = !!item?.start?.date && !item?.start?.dateTime;
+  if (allDay) return null;
+  const startRaw = item?.start?.dateTime;
+  const endRaw = item?.end?.dateTime;
+  if (!startRaw || !endRaw) return null;
+  const start = new Date(startRaw);
+  const end = new Date(endRaw);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return null;
+  const mins = Math.round((end.getTime() - start.getTime()) / 60_000);
+  return mins > 0 ? mins : null;
+};
+
+/**
+ * @param {number | null} minutes
+ * @returns {string | null}
+ */
+export const formatDurationLabelPtBr = (minutes) => {
+  if (minutes == null || !Number.isFinite(minutes) || minutes < 1) return null;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h${String(m).padStart(2, '0')}`;
+  if (h > 0) return `${h}h`;
+  return `${m} min`;
+};
+
+/**
+ * @param {object} item
+ * @returns {Array<{ method: string, minutes: number | null, label: string }>}
+ */
+export const extractGoogleEventReminders = (item) => {
+  const reminders = item?.reminders;
+  if (!reminders || typeof reminders !== 'object') return [];
+
+  if (reminders.useDefault === true) {
+    return [{
+      method: 'default',
+      minutes: null,
+      label: 'Padrão do Google Calendar',
+    }];
+  }
+
+  const overrides = Array.isArray(reminders.overrides) ? reminders.overrides : [];
+  return overrides.map((o) => {
+    const method = String(o?.method || 'popup');
+    const minutes = o?.minutes != null ? Number(o.minutes) : null;
+    const label = Number.isFinite(minutes)
+      ? `${minutes} min antes (${method})`
+      : `Lembrete (${method})`;
+    return { method, minutes: Number.isFinite(minutes) ? minutes : null, label };
+  });
 };
 
 /**
@@ -601,6 +684,18 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     eventBody.extendedProperties = { private: { mfMeet: '1' } };
   }
 
+  const reminderRaw = payload.reminderMinutes
+    ?? payload.lembreteMinutos
+    ?? payload.reminder
+    ?? null;
+  const reminderMins = reminderRaw != null ? Number(reminderRaw) : NaN;
+  if (Number.isFinite(reminderMins) && reminderMins >= 0) {
+    eventBody.reminders = {
+      useDefault: false,
+      overrides: [{ method: 'popup', minutes: reminderMins }],
+    };
+  }
+
   if (allDay) {
     eventBody.start = { date: parsed.iso };
     eventBody.end = { date: endDateIso };
@@ -663,6 +758,9 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
       : ' Meet solicitado; o link pode demorar alguns segundos a aparecer no Google Calendar.';
   }
 
+  const durationMinutes = computeGoogleEventDurationMinutes(eventData);
+  const reminders = extractGoogleEventReminders(eventData);
+
   return {
     ok: true,
     message,
@@ -675,6 +773,11 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     title,
     allDay,
     time: allDay ? null : timeLabel,
+    endTime: allDay ? null : formatGoogleDateTimeLocalPtBr(eventData.end?.dateTime),
+    durationMinutes,
+    durationLabel: formatDurationLabelPtBr(durationMinutes),
+    reminders,
+    reminderSummary: reminders.map((r) => r.label).join('; ') || null,
     source: 'google',
   };
 };
