@@ -1,6 +1,13 @@
 # Deploy do SOUL.md no OpenClaw (Easypanel)
 
-O Easypanel **corta colagens** acima de ~4096 caracteres. Por isso o SOUL vai em **partes** (`SOUL.md.b64.part01.txt` …).
+**Preferência:** usa **`deploy-soul-sem-b64.md`** (curl do Git em **1 colagem**, ou `docker cp`).  
+**Comandos `/pendentes` e `/aprovar`** não exigem SOUL — só deploy do **backend**.
+
+---
+
+## Legado — partes b64 (só se curl/docker não der)
+
+O Easypanel **corta colagens** acima de ~4096 caracteres. Por isso existem partes (`SOUL.md.b64.part01.txt` …).
 
 **Onde correr cada comando**
 

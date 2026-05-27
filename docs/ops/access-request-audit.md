@@ -88,7 +88,7 @@ Também funcionam sem barra (`PENDENTES`, `APROVAR …`) se o deploy processar o
 
 Também aceita CNPJ só com dígitos ou UUID do utilizador. Áudio transcrito com o mesmo texto funciona.
 
-**SOUL OpenClaw:** após alterar `openclaw-midas-SOUL.md`, regenerar partes b64 e redeploy no VPS (`docs/ops/easypanel-console-deploy-soul.md`).
+**SOUL OpenClaw:** **opcional** para estes comandos (o backend já bloqueia `/` no relay). Para outras regras do bot: `docs/ops/deploy-soul-sem-b64.md` (curl Git, 1 colagem — sem partes b64).
 
 Opcional: `ACCESS_REQUEST_NOTIFY_SUPERADMIN_EXTRA_PHONES` (vírgula) para números fixos além da BD.
 
