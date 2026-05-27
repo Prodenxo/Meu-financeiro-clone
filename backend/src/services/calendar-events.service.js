@@ -438,6 +438,9 @@ export const formatCalendarEventWhatsappDetail = (e) => {
     if (e.durationLabel) lines.push(`Duração: ${e.durationLabel}`);
   }
   if (e?.meetLink) lines.push(`Meet: ${e.meetLink}`);
+  else if (e?.source === 'google' && e?.time && !e?.allDay) {
+    lines.push('Sem Google Meet (pedir "gera o link da reunião" para criar).');
+  }
   if (e?.reminderSummary) lines.push(`Lembrete: ${e.reminderSummary}`);
   if (e?.htmlLink) lines.push(`Ver no Google Calendar: ${e.htmlLink}`);
   return lines.join('\n');
@@ -1122,20 +1125,27 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
 };
 
 /**
- * Remove compromisso no Google Calendar (não há cache local — só API Google).
+ * Localiza evento Google por eventId ou título+data (uso interno: excluir / Meet).
  * @param {string} userId
- * @param {Record<string, unknown>} payload — `eventId` ou `title`+`data`
+ * @param {Record<string, unknown>} payload
+ * @returns {Promise<
+ *   | { ok: true, eventId: string, item: object, matchedTitle: string, accessToken: string, parsed?: object }
+ *   | { ok: false, message: string, notLinked?: boolean, ambiguous?: boolean, candidates?: object[] }
+ * >}
  */
-export const deleteCalendarEventForUser = async (userId, payload = {}) => {
+export const resolveGoogleCalendarEventTarget = async (userId, payload = {}) => {
   let eventId = String(payload.eventId ?? payload.id ?? '').trim();
   let matchedTitle = null;
+  let item = null;
+  /** @type {{ iso: string, display: string } | null} */
+  let parsed = null;
 
   if (!eventId) {
     const titleQuery = String(
       payload.title ?? payload.titulo ?? payload.summary ?? payload.assunto ?? '',
     ).trim();
     const rawDate = payload.date ?? payload.data;
-    const parsed = rawDate
+    parsed = rawDate
       ? parseCalendarQueryDate(rawDate)
       : parseCalendarQueryDate(calendarDateTodayInSaoPaulo());
     if (!titleQuery) {
@@ -1144,7 +1154,7 @@ export const deleteCalendarEventForUser = async (userId, payload = {}) => {
       );
     }
     if (!parsed) {
-      throw badRequest('data inválida para localizar o compromisso a excluir.');
+      throw badRequest('data inválida para localizar o compromisso.');
     }
 
     const range = dayBoundsIsoInSaoPaulo(parsed.iso);
@@ -1158,10 +1168,10 @@ export const deleteCalendarEventForUser = async (userId, payload = {}) => {
     }
 
     const needle = titleQuery.toLowerCase();
-    const matches = googleResult.items.filter((item) => {
-      if (!isGoogleCalendarItemActive(item)) return false;
-      if (!googleEventOverlapsDate(item, parsed.iso)) return false;
-      const sum = String(item.summary || '').trim().toLowerCase();
+    const matches = googleResult.items.filter((googleItem) => {
+      if (!isGoogleCalendarItemActive(googleItem)) return false;
+      if (!googleEventOverlapsDate(googleItem, parsed.iso)) return false;
+      const sum = String(googleItem.summary || '').trim().toLowerCase();
       return sum.includes(needle) || needle.includes(sum);
     });
 
@@ -1169,8 +1179,7 @@ export const deleteCalendarEventForUser = async (userId, payload = {}) => {
       return {
         ok: false,
         message:
-          `Nenhum compromisso ativo no Google Calendar com título parecido a "${titleQuery}" em ${parsed.display}. `
-          + 'Se já excluiu no Google, a agenda está vazia — não inventes o compromisso.',
+          `Nenhum compromisso ativo no Google Calendar com título parecido a "${titleQuery}" em ${parsed.display}.`,
         date: parsed.iso,
         dateDisplay: parsed.display,
       };
@@ -1182,17 +1191,19 @@ export const deleteCalendarEventForUser = async (userId, payload = {}) => {
         ok: false,
         message:
           `Há ${matches.length} compromissos parecidos (${titles}). `
-          + 'Peça ao utilizador qual é ou use payload.eventId da listagem.',
+          + 'Use payload.eventId da listagem ou peça ao utilizador qual é.',
         ambiguous: true,
         candidates: matches.map((m) => ({
           eventId: m.id,
           title: m.summary,
+          hasMeet: Boolean(pickMeetUriFromGoogleEvent(m)),
         })),
       };
     }
 
-    eventId = String(matches[0].id);
-    matchedTitle = String(matches[0].summary || titleQuery).trim();
+    item = matches[0];
+    eventId = String(item.id);
+    matchedTitle = String(item.summary || titleQuery).trim();
   }
 
   const tokenResult = await getGoogleCalendarAccessTokenForUser(userId);
@@ -1204,11 +1215,182 @@ export const deleteCalendarEventForUser = async (userId, payload = {}) => {
     };
   }
 
+  if (!item) {
+    item = await fetchGoogleCalendarEventById(tokenResult.accessToken, eventId);
+    if (!item) {
+      return {
+        ok: false,
+        message: 'Compromisso não encontrado no Google Calendar.',
+        eventId,
+      };
+    }
+    if (!isGoogleCalendarItemActive(item)) {
+      return {
+        ok: false,
+        message: 'Esse compromisso foi cancelado ou excluído no Google Calendar.',
+        eventId,
+      };
+    }
+    matchedTitle = String(item.summary || 'Compromisso').trim();
+  }
+
+  return {
+    ok: true,
+    eventId,
+    item,
+    matchedTitle,
+    accessToken: tokenResult.accessToken,
+    parsed: parsed || undefined,
+  };
+};
+
+/**
+ * Adiciona Google Meet a compromisso já existente (criado no Google sem link).
+ * @param {string} userId
+ * @param {Record<string, unknown>} payload — `eventId` ou `title`+`data`
+ */
+export const addMeetLinkToCalendarEventForUser = async (userId, payload = {}) => {
+  const resolved = await resolveGoogleCalendarEventTarget(userId, payload);
+  if (!resolved.ok) {
+    return resolved;
+  }
+
+  const { eventId, item, matchedTitle, accessToken } = resolved;
+  const allDay = !!item?.start?.date && !item?.start?.dateTime;
+  if (allDay) {
+    return {
+      ok: false,
+      message:
+        'Compromisso de dia inteiro não aceita Google Meet. '
+        + 'Defina um horário no Google Calendar e peça o link de novo.',
+      eventId,
+      title: matchedTitle,
+    };
+  }
+
+  let current = item;
+  const existing = pickMeetUriFromGoogleEvent(current);
+  if (existing) {
+    return {
+      ok: true,
+      alreadyHadMeet: true,
+      eventId,
+      title: matchedTitle,
+      meetLink: existing,
+      message: `O compromisso "${matchedTitle}" já tem Google Meet:\n${existing}`,
+    };
+  }
+
+  const fresh = await fetchGoogleCalendarEventById(accessToken, eventId);
+  if (fresh) {
+    current = fresh;
+    const freshMeet = pickMeetUriFromGoogleEvent(fresh);
+    if (freshMeet) {
+      return {
+        ok: true,
+        alreadyHadMeet: true,
+        eventId,
+        title: matchedTitle,
+        meetLink: freshMeet,
+        message: `O compromisso "${matchedTitle}" já tem Google Meet:\n${freshMeet}`,
+      };
+    }
+  }
+
+  let description = String(current?.description || '').trim();
+  if (!description.includes('[MF_MEET]')) {
+    description = description ? `${description}\n[MF_MEET]` : '[MF_MEET]';
+  }
+
+  const patchBody = {
+    description,
+    conferenceData: {
+      createRequest: {
+        requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        conferenceSolutionKey: { type: 'hangoutsMeet' },
+      },
+    },
+    extendedProperties: {
+      private: {
+        ...(current?.extendedProperties?.private || {}),
+        mfMeet: '1',
+      },
+    },
+  };
+
+  const patchRes = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?conferenceDataVersion=1`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(patchBody),
+    },
+  );
+
+  if (!patchRes.ok) {
+    const errText = await patchRes.text();
+    return {
+      ok: false,
+      message: `Erro ao gerar Google Meet: ${errText.slice(0, 200)}`,
+      eventId,
+      title: matchedTitle,
+    };
+  }
+
+  let eventData = await patchRes.json();
+  let meetUri = pickMeetUriFromGoogleEvent(eventData);
+  if (!meetUri) {
+    const refreshed = await fetchGoogleCalendarEventById(accessToken, eventId);
+    if (refreshed) {
+      eventData = refreshed;
+      meetUri = pickMeetUriFromGoogleEvent(refreshed);
+    }
+  }
+
+  const title = matchedTitle || String(eventData?.summary || 'Compromisso').trim();
+  if (!meetUri) {
+    return {
+      ok: true,
+      eventId,
+      title,
+      meetLink: null,
+      pendingMeet: true,
+      message:
+        `Pedido de Google Meet enviado para "${title}". `
+        + 'O link pode demorar alguns segundos — chame list_calendar_events para confirmar.',
+    };
+  }
+
+  return {
+    ok: true,
+    eventId,
+    title,
+    meetLink: meetUri,
+    message: `Google Meet gerado para "${title}":\n${meetUri}`,
+  };
+};
+
+/**
+ * Remove compromisso no Google Calendar (não há cache local — só API Google).
+ * @param {string} userId
+ * @param {Record<string, unknown>} payload — `eventId` ou `title`+`data`
+ */
+export const deleteCalendarEventForUser = async (userId, payload = {}) => {
+  const resolved = await resolveGoogleCalendarEventTarget(userId, payload);
+  if (!resolved.ok) {
+    return resolved;
+  }
+
+  const { eventId, matchedTitle } = resolved;
+
   const deleteResponse = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
     {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${tokenResult.accessToken}` },
+      headers: { Authorization: `Bearer ${resolved.accessToken}` },
     },
   );
 

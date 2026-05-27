@@ -486,6 +486,9 @@ export const runOpenclawAction = async (input) => {
     excluir_compromisso: 'delete_calendar_event',
     cancelar_reuniao: 'delete_calendar_event',
     delete_calendar_event: 'delete_calendar_event',
+    add_calendar_event_meet: 'add_calendar_event_meet',
+    gerar_link_reuniao: 'add_calendar_event_meet',
+    gerar_meet: 'add_calendar_event_meet',
   };
   let action = String(input?.action || '').trim();
   action = actionAliases[action] || action;
@@ -810,8 +813,43 @@ export const runOpenclawAction = async (input) => {
         agentInstructions:
           'Agenda AO VIVO (fetchedAt) — sem cache. SEMPRE chame de novo após excluir; '
           + 'NUNCA repitas compromissos só porque apareceram numa mensagem anterior. '
-          + 'Copie só message. Início ≠ Fim. Excluir = delete_calendar_event com events[].id (google). '
+          + 'Copie só message. Início ≠ Fim. Excluir = delete_calendar_event. '
+          + 'Sem Meet na lista → add_calendar_event_meet (não inventar link). '
           + 'Itens [lançamento financeiro] não são reunião Google.',
+      },
+    };
+  }
+
+  if (action === 'add_calendar_event_meet') {
+    const meet = await calendarEventsService.addMeetLinkToCalendarEventForUser(userId, payload);
+    if (!meet.ok) {
+      const hint = meet.notLinked
+        ? ' Peça para conectar o Google Calendar na app.'
+        : '';
+      return {
+        ok: false,
+        message: `${meet.message || 'Não foi possível gerar o Meet.'}${hint}`,
+        data: {
+          ...meet,
+          userId,
+          actorContext,
+          ...linkDebug,
+          agentInstructions:
+            'Repita só message. Se ambiguous, peça qual compromisso ou use eventId da listagem.',
+        },
+      };
+    }
+    return {
+      ok: true,
+      message: meet.message,
+      data: {
+        ...meet,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Envie ao utilizador o link em message (meetLink). '
+          + 'Se pendingMeet, chame list_calendar_events para mostrar o Meet quando aparecer.',
       },
     };
   }
@@ -1413,6 +1451,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, get_next_calendar_event, create_calendar_event, delete_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

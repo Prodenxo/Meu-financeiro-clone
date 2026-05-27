@@ -84,6 +84,22 @@ const calendarBlock = `## Agenda — consultar e criar (Google Calendar + bot)
 - **PROIBIDO** dizer que excluiu sem \`delete_calendar_event\` com \`ok: true\`.
 - Depois da exclusão: \`list_calendar_events\` na mesma data para confirmar.
 
+### Gerar link Meet (reunião criada no Google **sem** Meet)
+
+Quando a lista disser *Sem Google Meet* ou o utilizador pedir *link da reunião*, *gera Meet*, *videochamada*:
+
+| Pedido | action | payload |
+|--------|--------|---------|
+| gera link / Meet / videochamada | \`add_calendar_event_meet\` | \`{"eventId":"…"}\` ou \`{"title":"Reunião com X","data":"hoje"}\` |
+
+\`\`\`bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE '{"action":"add_calendar_event_meet","payload":{"title":"Reunião com Arthur","data":"hoje"}}'
+\`\`\`
+
+- **PROIBIDO** inventar URL meet.google.com — só enviar o link devolvido em \`message\` / \`meetLink\`.
+- Se já tiver Meet, a API devolve o link existente.
+- Compromisso **dia inteiro** → pedir horário no Google primeiro.
+
 ### Criar compromisso
 
 Pedidos: *marca reunião*, *agenda*, *lembrar no calendário*:
@@ -148,7 +164,7 @@ for (const m of calMarkers) {
   if (i >= 0 && (calIdx < 0 || i < calIdx)) calIdx = i;
 }
 const phoneIdx2 = cur.indexOf(phoneSection);
-const needsAgendaV3 = !cur.includes('get_next_calendar_event') || !cur.includes('delete_calendar_event');
+const needsAgendaV3 = !cur.includes('get_next_calendar_event') || !cur.includes('delete_calendar_event') || !cur.includes('add_calendar_event_meet');
 
 if (calIdx >= 0) {
   const sliceEnd = phoneIdx2 > calIdx ? phoneIdx2 : cur.length;
@@ -193,13 +209,17 @@ else
 fi
 
 echo "--- Verificação (tem de aparecer get_next_calendar_event) ---"
-grep -n "get_next_calendar_event\|delete_calendar_event\|SEGURANÇA\|list_access_requests" "$SOUL" | head -n 10
+grep -n "get_next_calendar_event\|delete_calendar_event\|add_calendar_event_meet\|SEGURANÇA" "$SOUL" | head -n 12
 if ! grep -q "get_next_calendar_event" "$SOUL"; then
   echo "ERRO: SOUL sem get_next_calendar_event — secção agenda não aplicou"
   exit 1
 fi
 if ! grep -q "delete_calendar_event" "$SOUL"; then
   echo "ERRO: SOUL sem delete_calendar_event — secção excluir não aplicou"
+  exit 1
+fi
+if ! grep -q "add_calendar_event_meet" "$SOUL"; then
+  echo "ERRO: SOUL sem add_calendar_event_meet — secção Meet não aplicou"
   exit 1
 fi
 echo ""
