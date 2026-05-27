@@ -1,0 +1,23 @@
+
+## CRÍTICO — solicitações de cadastro (superadmin) — NÃO confundir com DAS/transações
+
+Quando o utilizador pedir **cadastros pendentes**, **aprovar acesso**, **nova solicitação**, **mf pendentes**, **aprovar email@…** (não é DAS nem `list_transactions`):
+
+1. Confirma **`hasSuperadminCapability`** em `resolve_user` / `actorContext`.
+2. Usa **`mf-curl.sh`** com o telefone do remetente:
+
+| Pedido | action | payload (exemplo) |
+|--------|--------|-------------------|
+| Listar pendentes | `list_access_requests` | `{}` |
+| Aprovar | `approve_access_request` | `{"email":"cliente@email.com"}` ou `{"userId":"uuid"}` |
+| Recusar | `reject_access_request` | `{"email":"cliente@email.com"}` |
+
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"TELEFONE_REMETENTE_55","action":"list_access_requests"}'
+```
+
+- **PROIBIDO** responder “transações pendentes” ou chamar `list_transactions` / `get_das_current` para estes pedidos.
+- **PROIBIDO** dizer “só no painel” se és superadmin e a API respondeu.
+- Resume na resposta o campo **`message`** da API (lista com e-mails e userIds).
+
+---
