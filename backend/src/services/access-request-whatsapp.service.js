@@ -146,16 +146,30 @@ export const buildAccessRequestSubmittedSuperadminMessage = (input) => {
   return lines.join('\n');
 };
 
+const DEFAULT_ACCESS_REQUEST_SUPPORT_GROUP_URL =
+  'https://chat.whatsapp.com/G0F3SaEFfvNI066k5MYKDT';
+
+export const getAccessRequestSupportGroupUrl = () => {
+  const fromEnv = String(env.ACCESS_REQUEST_WHATSAPP_SUPPORT_GROUP_URL || '').trim();
+  return fromEnv || DEFAULT_ACCESS_REQUEST_SUPPORT_GROUP_URL;
+};
+
 /**
  * @param {{ fullName?: string | null, email?: string | null }} input
  */
 export const buildAccessRequestApprovedApplicantMessage = (input) => {
   const nome = firstName(input.fullName, input.email);
-  return (
-    `Olá, ${nome}! Seu acesso ao Meu Financeiro foi aprovado. `
-    + 'Já pode entrar na app com seu e-mail e senha cadastrados. '
-    + 'Qualquer dúvida, fale conosco.'
-  );
+  const groupUrl = getAccessRequestSupportGroupUrl();
+  const lines = [
+    `Olá, ${nome}! Seu acesso ao Meu Financeiro foi aprovado.`,
+    'Já pode entrar na app com seu e-mail e senha cadastrados.',
+    '',
+    'Entre também no nosso grupo de suporte no WhatsApp:',
+    groupUrl,
+    '',
+    'Qualquer dúvida, estamos por lá.',
+  ];
+  return lines.join('\n');
 };
 
 /**

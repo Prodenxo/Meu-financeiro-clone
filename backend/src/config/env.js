@@ -214,6 +214,10 @@ export const env = {
     (process.env.ACCESS_REQUEST_NOTIFY_SUPERADMIN_EXTRA_PHONES
       || process.env.ACCESS_REQUEST_NOTIFY_SUPERADMIN_PHONE
       || '').trim(),
+  /** Link do grupo de suporte WhatsApp na mensagem de cadastro aprovado. */
+  ACCESS_REQUEST_WHATSAPP_SUPPORT_GROUP_URL: (
+    process.env.ACCESS_REQUEST_WHATSAPP_SUPPORT_GROUP_URL || ''
+  ).trim(),
   /**
    * URL pública do frontend usada em links de convite (`/register?convite=`).
    * Se vazio, usa `FRONTEND_URL` ou header `Origin` da requisição (fallback dev `http://localhost:3000`).

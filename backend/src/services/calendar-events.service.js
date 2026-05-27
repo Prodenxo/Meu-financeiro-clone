@@ -392,3 +392,165 @@ export const listCalendarEventsForUser = async (userId, options = {}) => {
     empty: count === 0,
   };
 };
+
+/**
+ * @param {string} raw HH:MM ou HH:MM:SS
+ * @returns {{ hour: number, minute: number } | null}
+ */
+export const parseCalendarEventTimeHm = (raw) => {
+  const s = String(raw ?? '').trim();
+  const m = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(s);
+  if (!m) return null;
+  const hour = Number(m[1]);
+  const minute = Number(m[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+};
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+const pickMeetUriFromGoogleEvent = (eventData) => {
+  const hangout = typeof eventData?.hangoutLink === 'string' ? eventData.hangoutLink.trim() : '';
+  if (hangout.includes('meet.google')) return hangout;
+  const entryPoints = eventData?.conferenceData?.entryPoints || [];
+  for (const ep of entryPoints) {
+    const uri = String(ep?.uri || '').trim();
+    if (uri.includes('meet.google')) return uri;
+  }
+  return null;
+};
+
+/**
+ * Cria compromisso no Google Calendar (primary) do utilizador.
+ * @param {string} userId
+ * @param {Record<string, unknown>} payload
+ */
+export const createCalendarEventForUser = async (userId, payload = {}) => {
+  const title = String(
+    payload.title ?? payload.titulo ?? payload.summary ?? payload.nome ?? '',
+  ).trim();
+  if (!title) {
+    throw badRequest('Informe payload.title (título do compromisso).');
+  }
+
+  const rawDate = payload.date ?? payload.data;
+  const parsed = rawDate
+    ? parseCalendarQueryDate(rawDate)
+    : parseCalendarQueryDate(calendarDateTodayInSaoPaulo());
+  if (!parsed) {
+    throw badRequest(
+      'data inválida; use YYYY-MM-DD ou DD/MM/YYYY (ex.: 2026-05-28 ou 28/05/2026).',
+    );
+  }
+
+  const hasExplicitTime = payload.time != null
+    || payload.hora != null
+    || payload.startHour != null
+    || payload.startMinute != null;
+  const allDay = payload.allDay === true
+    || payload.diaInteiro === true
+    || String(payload.allDay || payload.diaInteiro || '').toLowerCase() === 'true'
+    || (!hasExplicitTime && payload.allDay !== false && payload.diaInteiro !== false);
+
+  let startHour = Number(payload.startHour);
+  let startMinute = Number(payload.startMinute);
+  if (!Number.isFinite(startHour)) startHour = 9;
+  if (!Number.isFinite(startMinute)) startMinute = 0;
+
+  const timeRaw = payload.time ?? payload.hora;
+  if (timeRaw != null && String(timeRaw).trim() !== '') {
+    const tm = parseCalendarEventTimeHm(timeRaw);
+    if (!tm) throw badRequest('hora inválida; use HH:MM (ex.: 14:30).');
+    startHour = tm.hour;
+    startMinute = tm.minute;
+  }
+
+  let endHour = Number(payload.endHour);
+  let endMinute = Number(payload.endMinute);
+  if (!Number.isFinite(endHour)) endHour = startHour + 1;
+  if (!Number.isFinite(endMinute)) endMinute = startMinute;
+  if (endHour >= 24) {
+    endHour = 23;
+    endMinute = 59;
+  }
+
+  const endDateParsed = payload.endDate ?? payload.dataFim
+    ? parseCalendarQueryDate(String(payload.endDate ?? payload.dataFim))
+    : null;
+  const endDateIso = endDateParsed?.iso ?? parsed.iso;
+
+  const description = String(
+    payload.description ?? payload.descricao ?? payload.obs ?? '',
+  ).trim();
+
+  const tokenResult = await getGoogleCalendarAccessTokenForUser(userId);
+  if (tokenResult.error) {
+    return {
+      ok: false,
+      notLinked: !!tokenResult.notLinked,
+      message: tokenResult.error,
+      date: parsed.iso,
+      dateDisplay: parsed.display,
+    };
+  }
+
+  const eventBody = {
+    summary: title,
+    ...(description ? { description } : {}),
+  };
+
+  if (allDay) {
+    eventBody.start = { date: parsed.iso };
+    eventBody.end = { date: endDateIso };
+  } else {
+    eventBody.start = {
+      dateTime: `${parsed.iso}T${pad2(startHour)}:${pad2(startMinute)}:00`,
+      timeZone: SAO_PAULO_TZ,
+    };
+    eventBody.end = {
+      dateTime: `${endDateIso}T${pad2(endHour)}:${pad2(endMinute)}:00`,
+      timeZone: SAO_PAULO_TZ,
+    };
+  }
+
+  const calendarResponse = await fetch(
+    'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${tokenResult.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(eventBody),
+    },
+  );
+
+  if (!calendarResponse.ok) {
+    const errText = await calendarResponse.text();
+    return {
+      ok: false,
+      message: `Erro ao criar evento no Google Calendar: ${errText.slice(0, 200)}`,
+      date: parsed.iso,
+      dateDisplay: parsed.display,
+    };
+  }
+
+  const eventData = await calendarResponse.json();
+  const meetUri = pickMeetUriFromGoogleEvent(eventData);
+  const timeLabel = allDay
+    ? 'dia inteiro'
+    : `${pad2(startHour)}:${pad2(startMinute)}`;
+
+  return {
+    ok: true,
+    message: `Compromisso criado: ${title} em ${parsed.display} (${timeLabel}).`,
+    eventId: eventData.id || null,
+    hangoutLink: meetUri,
+    date: parsed.iso,
+    dateDisplay: parsed.display,
+    title,
+    allDay,
+    time: allDay ? null : timeLabel,
+    source: 'google',
+  };
+};

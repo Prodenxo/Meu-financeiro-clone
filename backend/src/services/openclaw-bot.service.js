@@ -710,6 +710,39 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'create_calendar_event') {
+    const created = await calendarEventsService.createCalendarEventForUser(userId, payload);
+    if (!created.ok) {
+      const hint = created.notLinked
+        ? ' Peça para conectar o Google Calendar em Configurações na app.'
+        : '';
+      return {
+        ok: false,
+        message: `${created.message || 'Não foi possível criar o compromisso.'}${hint}`,
+        data: {
+          ...created,
+          userId,
+          actorContext,
+          ...linkDebug,
+        },
+      };
+    }
+    let reply = created.message;
+    if (created.hangoutLink) {
+      reply += ` Link Meet: ${created.hangoutLink}`;
+    }
+    return {
+      ok: true,
+      message: reply,
+      data: {
+        ...created,
+        userId,
+        actorContext,
+        ...linkDebug,
+      },
+    };
+  }
+
   const resolveDasCompetencia = () => {
     const rawMes = payload?.mes;
     if (rawMes === undefined || rawMes === null || String(rawMes).trim() === '') {
@@ -1236,6 +1269,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, create_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

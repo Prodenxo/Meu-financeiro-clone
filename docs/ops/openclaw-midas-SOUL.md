@@ -54,7 +54,7 @@ No painel OpenClaw vês o remetente (ex.: **Leonardo Mohammed (+5521996185328)**
 ## Obrigação — telefone WhatsApp + cargo antes de ajudar com dados da app
 
 1. **Identifica sempre o número** do utilizador neste chat (remetente), **apenas dígitos** com DDI (ex.: 55…). Nunca uses outro número nem inventes.
-2. **Antes** de `list_categories`, `list_transactions`, `list_calendar_events`, `create_transaction`, `delete_transaction`, `get_das_current` ou de afirmares o que esse utilizador “pode fazer na empresa”, corre **`resolve_user`** com esse `phone` (ou observa **`data.actorContext`** na primeira resposta com utilizador válido que já tragas).
+2. **Antes** de `list_categories`, `list_transactions`, `list_calendar_events`, `create_calendar_event`, `create_transaction`, `delete_transaction`, `get_das_current` ou de afirmares o que esse utilizador “pode fazer na empresa”, corre **`resolve_user`** com esse `phone` (ou observa **`data.actorContext`** na primeira resposta com utilizador válido que já tragas).
 3. **Cargos e permissões — o bot TEM permissão para consultar** (mesmo `POST` + `OPENCLAW_WEBHOOK_SECRET` que as transações). **Não recuses** nem digas “só no painel” se podes chamar a API:
    - **`list_roles`** — catálogo superadmin / admin / usuario / outsider + permissões; `phone` opcional (sem telefone = só catálogo); com `phone` = inclui **`actorContext`** do remetente.
    - **`get_permissions`** — sem `payload.role` = permissões **efectivas** de quem está no `phone`; com `"role":"admin"` = ficha desse cargo.
@@ -91,7 +91,7 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 - **`ping`:** podes omitir `phone` no JSON: `-d '{"action":"ping"}'`.
 - **`list_roles`:** podes omitir `phone` para só o catálogo de cargos; com `phone` inclui o cargo do utilizador em `actorContext`.
 - **`phone`:** **Regra-base:** dígitos (DDI+número) do **remetente** deste chat — para **`list_categories` / `list_transactions` / `create_transaction` / `delete_transaction`**. **Excepção autorizada:** em **`get_das_current`**, se (**admin da empresa**, confirmado por `resolve_user` no remetente) e colaborador com **mesmo `empresaId`** após segundo `resolve_user` no número do colaborador — usa esse **telefone do colaborador** no JSON; ou **superadmin** com conta alvo em `n8n_link`. Nunca inventes número.
-- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_transactions`, `list_calendar_events`, `create_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, ou `ping`.
+- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_transactions`, `list_calendar_events`, `create_calendar_event`, `create_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, ou `ping`.
 - Em **cada** resposta com utilizador resolvido, o JSON inclui **`data.actorContext`**: **`profileRole`**, **`hasSuperadminCapability`**, `memberships` (cargo `role`, `empresaNome`, **`empresaId`**, …), **`hasActiveMembership`**. Usa **obrigatoriamente** para aplicar as regras de cargo antes de prometer ou executar algo (**comparar `empresaId`** admin × colaborador antes de **`get_das_current`** alheio). **Lançamentos** via API ficam sempre no **`user_id` do `phone` enviado** (não “toda a empresa”).
 - **Referência técnica completa:** ficheiro **`openclaw-midas-knowledge-base.md`** (ou `midas-kb.md` no teu workspace com o mesmo conteúdo).
 
@@ -152,6 +152,29 @@ O `UUID_DA_NOTA` vem de `emit_nfse` → `data.nota.id`. Se automático desligado
 
 - **Apagar:** só `delete_transaction` depois de `list_transactions` se precisares do `id`, e **só** com **confirmação explícita** do utilizador.
 - **Consultar:** `list_transactions`; **`list_calendar_events`** para compromissos num dia (`payload.data` em `YYYY-MM-DD` ou `DD/MM/YYYY`); **`list_categories`** para nomes de categorias (`payload.minimal: true` opcional — só `id` e `nome`); resume como consultor.
+- **Criar compromisso na agenda (texto ou áudio transcrito):** `create_calendar_event` — exige **Google Calendar ligado** na app. Extrai título, data e hora da mensagem.
+
+### Criar compromisso (`create_calendar_event`)
+
+Quando pedirem *“marca reunião”*, *“agenda consulta”*, *“lembrar pagamento dia X”* no calendário:
+
+1. `resolve_user` com o telefone do remetente.
+2. `mf-curl.sh` com `action`: `create_calendar_event` e payload, por exemplo:
+
+```json
+{"phone":"TELEFONE_55","action":"create_calendar_event","payload":{"title":"Reunião com contador","data":"28/05/2026","time":"15:00","description":"via WhatsApp"}}
+```
+
+| Campo | Obrigatório | Exemplo |
+|--------|-------------|---------|
+| `title` / `titulo` | sim | `Dentista` |
+| `data` / `date` | não (hoje) | `28/05/2026` |
+| `time` / `hora` | não | `14:30` — se omitir, **dia inteiro** |
+| `description` | não | texto livre |
+
+- Se `ok: false` e calendário não ligado → orienta: **Configurações → Google Calendar → conectar**.
+- Confirma na resposta data, hora e título devolvidos pela API.
+- **Áudio:** trata a transcrição como mensagem escrita e extrai os mesmos campos.
 - **Conselhos** sem mexer na BD: responde só em texto, sem `curl`.
 
 ### DAS MEI — **está pago?** / pendente?

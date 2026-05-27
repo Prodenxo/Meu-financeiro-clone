@@ -32,6 +32,8 @@ test('buildAccessRequestApprovedApplicantMessage personaliza nome', () => {
   });
   assert.ok(msg.includes('João'));
   assert.ok(msg.includes('aprovado'));
+  assert.ok(msg.includes('grupo de suporte'));
+  assert.ok(msg.includes('chat.whatsapp.com'));
 });
 
 test('getExtraSuperadminNotifyPhones aceita lista separada por vírgula', () => {

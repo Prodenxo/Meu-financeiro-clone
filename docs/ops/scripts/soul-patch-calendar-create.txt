@@ -1,0 +1,18 @@
+
+## Criar compromisso na agenda (texto ou áudio)
+
+Pedidos: *marca reunião*, *agenda*, *lembrar no calendário*, *consulta dia X às 15h*:
+
+1. `resolve_user` com telefone do remetente.
+2. `create_calendar_event` via mf-curl (Google Calendar tem de estar ligado na app).
+
+Exemplo:
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh '{"phone":"TELEFONE_55","action":"create_calendar_event","payload":{"title":"Reunião","data":"28/05/2026","time":"15:00"}}'
+```
+
+- `title` obrigatório; `data`/`date` opcional (hoje); `time`/`hora` opcional (sem hora = dia inteiro).
+- Áudio: usa a transcrição como texto e extrai título/data/hora.
+- Se não ligado ao Google: pede conectar em Configurações na app.
+
+---
