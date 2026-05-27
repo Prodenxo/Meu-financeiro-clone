@@ -287,12 +287,19 @@ export const mapGoogleItemToCalendarEvent = (item, dateIso) => {
   const reminders = extractGoogleEventReminders(item);
   const reminderLabels = reminders.map((r) => r.label).filter(Boolean);
 
+  const startAtIso = item.start?.dateTime
+    ? String(item.start.dateTime)
+    : (allDay ? `${dateIso}T00:00:00-03:00` : null);
+  const endAtIso = item.end?.dateTime ? String(item.end.dateTime) : null;
+
   return {
     id: item.id || null,
     title: (item.summary || 'Evento do Google').trim(),
     date: dateIso,
     time,
     endTime,
+    startAtIso,
+    endAtIso,
     durationMinutes,
     durationLabel,
     allDay,
@@ -315,6 +322,9 @@ const mapTransactionToCalendarEvent = (t, dateIso) => {
     title: `${statusLabel}: ${t.classificacao} - R$ ${Number(t.valor).toFixed(2)}`,
     date: dateIso,
     time: null,
+    endTime: null,
+    startAtIso: `${dateIso}T00:00:00-03:00`,
+    endAtIso: null,
     allDay: true,
     source: 'transaction',
     tipo: t.tipo,
@@ -322,6 +332,127 @@ const mapTransactionToCalendarEvent = (t, dateIso) => {
     valor: Number(t.valor),
     classificacao: t.classificacao,
   };
+};
+
+/**
+ * @param {object} event
+ * @returns {Date | null}
+ */
+export const eventStartsAtInstant = (event) => {
+  if (event?.startAtIso) {
+    const d = new Date(event.startAtIso);
+    if (Number.isFinite(d.getTime())) return d;
+  }
+  if (event?.date && event?.time) {
+    const [h, m] = String(event.time).split(':').map((x) => Number(x));
+    if (Number.isFinite(h) && Number.isFinite(m)) {
+      return new Date(
+        `${event.date}T${pad2(h)}:${pad2(m)}:00-03:00`,
+      );
+    }
+  }
+  if (event?.allDay && event?.date) {
+    return new Date(`${event.date}T00:00:00-03:00`);
+  }
+  return null;
+};
+
+/**
+ * @param {object} event
+ * @returns {Date | null}
+ */
+export const eventEndsAtInstant = (event) => {
+  if (event?.endAtIso) {
+    const d = new Date(event.endAtIso);
+    if (Number.isFinite(d.getTime())) return d;
+  }
+  const start = eventStartsAtInstant(event);
+  if (start && event?.durationMinutes) {
+    return new Date(start.getTime() + event.durationMinutes * 60_000);
+  }
+  if (event?.date && event?.endTime) {
+    const [h, m] = String(event.endTime).split(':').map((x) => Number(x));
+    if (Number.isFinite(h) && Number.isFinite(m)) {
+      return new Date(
+        `${event.date}T${pad2(h)}:${pad2(m)}:00-03:00`,
+      );
+    }
+  }
+  return null;
+};
+
+/**
+ * Linha única: hora de INÍCIO (time), não confundir com endTime.
+ * @param {object} e
+ * @param {{ includeDate?: boolean, dateDisplay?: string }} [opts]
+ */
+export const formatCalendarEventDisplayLine = (e, opts = {}) => {
+  const title = String(e?.title || 'Compromisso').trim();
+  const dateLabel = opts.dateDisplay || e?.dateDisplay || '';
+  const prefix = opts.includeDate && dateLabel ? `${dateLabel} — ` : '';
+
+  if (e?.allDay || !e?.time) {
+    return `${prefix}${title} (dia inteiro)`;
+  }
+
+  let line = `${prefix}${String(e.time).slice(0, 5)}`;
+  if (e.endTime) line += `–${String(e.endTime).slice(0, 5)}`;
+  if (e.durationLabel) line += ` (${e.durationLabel})`;
+  line += ` — ${title}`;
+  return line;
+};
+
+/**
+ * @param {object} e
+ * @returns {string}
+ */
+export const formatCalendarEventWhatsappDetail = (e) => {
+  const lines = [formatCalendarEventDisplayLine(e)];
+  if (e?.meetLink) lines.push(`Meet: ${e.meetLink}`);
+  if (e?.reminderSummary) lines.push(`Lembrete: ${e.reminderSummary}`);
+  if (e?.htmlLink) lines.push(`Ver no Google Calendar: ${e.htmlLink}`);
+  return lines.join('\n');
+};
+
+/**
+ * @param {object} event
+ * @param {Date} now
+ */
+export const isCalendarEventStillRelevant = (event, now = new Date()) => {
+  const end = eventEndsAtInstant(event);
+  if (end && end > now) return true;
+  const start = eventStartsAtInstant(event);
+  if (start && start >= now) return true;
+  if (event?.allDay && event?.date) {
+    const today = calendarDateTodayInSaoPaulo();
+    return String(event.date) >= today;
+  }
+  return false;
+};
+
+/**
+ * @param {object} event
+ * @param {{ dateDisplay?: string }} [meta]
+ */
+export const enrichCalendarEventForDisplay = (event, meta = {}) => {
+  const dateDisplay = meta.dateDisplay || event.dateDisplay || '';
+  return {
+    ...event,
+    dateDisplay,
+    displayLine: formatCalendarEventDisplayLine(event, { dateDisplay }),
+    whatsappDetail: formatCalendarEventWhatsappDetail({
+      ...event,
+      dateDisplay,
+    }),
+  };
+};
+
+const buildDayAgendaMessage = (dateDisplay, events) => {
+  if (!events.length) {
+    return `Nenhum compromisso ou atividade programada para ${dateDisplay}.`;
+  }
+  const blocks = events.map((e, i) => `${i + 1}. ${e.whatsappDetail}`);
+  return `Compromissos em ${dateDisplay}:\n\n${blocks.join('\n\n')}`;
 };
 
 /**
@@ -401,22 +532,72 @@ export const listCalendarEventsForUser = async (userId, options = {}) => {
     certificate: events.filter((e) => e.source === 'certificate').length,
   };
 
-  const count = events.length;
-  const message =
-    count === 0
-      ? `Nenhum compromisso ou atividade programada para ${dateDisplay}.`
-      : `${count} compromisso(s) em ${dateDisplay}.`;
+  const enriched = events.map((e) => enrichCalendarEventForDisplay(e, { dateDisplay }));
+  const count = enriched.length;
+  const message = buildDayAgendaMessage(dateDisplay, enriched);
 
   return {
     date: dateIso,
     dateDisplay,
-    events,
+    events: enriched,
     count,
     sources,
     googleCalendarLinked,
     googleCalendarNote,
     message,
     empty: count === 0,
+  };
+};
+
+/**
+ * Próximo compromisso a partir de agora (fuso São Paulo), hoje → dias seguintes.
+ * @param {string} userId
+ * @param {{ maxDays?: number }} [options]
+ */
+export const findNextCalendarEventForUser = async (userId, options = {}) => {
+  const maxDays = Math.min(Math.max(Number(options.maxDays) || 14, 1), 31);
+  const now = new Date();
+  /** @type {Array<{ event: object, start: Date, day: object }>} */
+  const candidates = [];
+
+  for (let offset = 0; offset < maxDays; offset += 1) {
+    const dateIso = calendarDateAddDaysInSaoPaulo(offset);
+    const day = await listCalendarEventsForUser(userId, { date: dateIso });
+    for (const event of day.events || []) {
+      if (!isCalendarEventStillRelevant(event, now)) continue;
+      const start = eventStartsAtInstant(event) || new Date(`${dateIso}T23:59:59-03:00`);
+      candidates.push({ event, start, day });
+    }
+  }
+
+  candidates.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const next = candidates[0] || null;
+  if (!next) {
+    return {
+      empty: true,
+      message: 'Não há compromissos futuros na agenda nos próximos dias consultados.',
+      nextEvent: null,
+      searchedDays: maxDays,
+    };
+  }
+
+  const e = enrichCalendarEventForDisplay(next.event, {
+    dateDisplay: next.day.dateDisplay,
+  });
+  const message = [
+    `Próximo compromisso (${next.day.dateDisplay}):`,
+    '',
+    e.whatsappDetail,
+    '',
+    `Hora de início: ${e.time || 'dia inteiro'}${e.endTime ? ` (termina ${e.endTime})` : ''}.`,
+  ].join('\n');
+
+  return {
+    empty: false,
+    message,
+    nextEvent: e,
+    searchedDays: maxDays,
   };
 };
 

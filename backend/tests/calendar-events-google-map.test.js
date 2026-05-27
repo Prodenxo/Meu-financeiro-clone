@@ -4,6 +4,7 @@ import {
   mapGoogleItemToCalendarEvent,
   computeGoogleEventDurationMinutes,
   formatDurationLabelPtBr,
+  formatCalendarEventDisplayLine,
   extractGoogleEventReminders,
   pickMeetUriFromGoogleEvent,
 } from '../src/services/calendar-events.service.js';
@@ -58,4 +59,25 @@ test('computeGoogleEventDurationMinutes ignora dia inteiro', () => {
     }),
     null,
   );
+});
+
+test('formatCalendarEventDisplayLine usa time como início e endTime como fim', () => {
+  const line = formatCalendarEventDisplayLine({
+    title: 'Reunião Leozin',
+    time: '18:30',
+    endTime: '19:30',
+    durationLabel: '1h',
+  });
+  assert.match(line, /^18:30–19:30/);
+  assert.doesNotMatch(line, /^19:30/);
+});
+
+test('formatCalendarEventDisplayLine não confunde fim com início', () => {
+  const line = formatCalendarEventDisplayLine({
+    title: 'Arthur',
+    time: '17:00',
+    endTime: '18:00',
+    durationLabel: '1h',
+  });
+  assert.equal(line, '17:00–18:00 (1h) — Arthur');
 });

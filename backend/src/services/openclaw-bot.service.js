@@ -706,6 +706,26 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'get_next_calendar_event') {
+    const next = await calendarEventsService.findNextCalendarEventForUser(userId, {
+      maxDays: payload?.maxDays ?? payload?.dias ?? 14,
+    });
+    return {
+      ok: true,
+      message: next.message,
+      data: {
+        ...next,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Responda ao utilizador repetindo APENAS o texto de message (já formatado). '
+          + 'A hora de INÍCIO é nextEvent.time — NUNCA uses endTime como hora da reunião. '
+          + 'Se empty=true, diga que não há compromissos futuros.',
+      },
+    };
+  }
+
   if (action === 'list_calendar_events') {
     const rawDate = payload?.data ?? payload?.date;
     const calendar = await calendarEventsService.listCalendarEventsForUser(userId, {
@@ -721,9 +741,9 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Para cada item em data.events: título, time/endTime, durationLabel, meetLink, reminderSummary. '
-          + 'Eventos source=google criados no Google Calendar têm os mesmos campos. '
-          + 'Se meetLink existir, envia o link. Não digas que não vês compromissos se events não estiver vazio.',
+          'Responda copiando o texto de message (lista pronta). '
+          + 'PROIBIDO inventar horário: use só events[].time como início e endTime como fim. '
+          + 'NUNCA diga que a reunião é às endTime. Para "hoje" use payload.data=hoje ou omita data.',
       },
     };
   }
@@ -1289,6 +1309,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, create_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, get_next_calendar_event, create_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

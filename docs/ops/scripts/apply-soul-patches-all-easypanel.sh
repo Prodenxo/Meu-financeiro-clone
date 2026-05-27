@@ -51,23 +51,35 @@ Quando o utilizador pedir **cadastros pendentes**, **aprovar acesso**, **mf pend
 
 `;
 
-const calendarBlock = `## Criar compromisso na agenda (texto ou áudio)
+const calendarBlock = `## Agenda — consultar e criar (Google Calendar + bot)
 
-Pedidos: *marca reunião*, *agenda*, *lembrar no calendário*, *consulta dia X às 15h*:
+### Consultar (OBRIGATÓRIO — não inventar horários)
 
-1. \`resolve_user\` com telefone do remetente (1º arg do mf-curl).
-2. \`create_calendar_event\` via mf-curl (Google Calendar ligado na app).
+| Pedido do utilizador | action | payload |
+|----------------------|--------|---------|
+| próximo compromisso / qual minha próxima reunião | \`get_next_calendar_event\` | \`{}\` |
+| o que tenho hoje / compromissos de hoje | \`list_calendar_events\` | \`{"data":"hoje"}\` |
+| agenda amanhã / dia DD/MM | \`list_calendar_events\` | \`{"data":"amanhã"}\` ou data |
 
-Exemplo:
 \`\`\`bash
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_calendar_event","payload":{"title":"Reunião","data":"28/05/2026","time":"15:00"}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"get_next_calendar_event"}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_calendar_events","payload":{"data":"hoje"}}'
 \`\`\`
 
-- \`title\` obrigatório; \`data\` opcional (hoje); \`time\` opcional (sem hora = dia inteiro).
-- **Meet:** \`createMeetLink: true\` ou \`meet: "sim"\` — **exige** \`time\`; envia link Google Meet na resposta.
-- Áudio: extrai título/data/hora/meet da transcrição.
-- Sem Google Calendar: pede conectar em Configurações na app.
-- Consultar dia: \`list_calendar_events\` com \`payload.data\` — em **data.events** usa \`time\`, \`endTime\`, \`durationLabel\`, \`meetLink\`, \`reminderSummary\` (válido para eventos criados no Google Calendar ou pelo bot).
+- Resposta = **somente** o campo JSON \`message\` (já vem formatada). **PROIBIDO** reescrever horários.
+- **Hora da reunião = \`time\` (início).** \`endTime\` é só o fim — **NUNCA** digas que a reunião é às endTime.
+- Eventos criados no Google Calendar têm os mesmos campos que os criados pelo bot.
+
+### Criar compromisso
+
+Pedidos: *marca reunião*, *agenda*, *lembrar no calendário*:
+
+\`\`\`bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_calendar_event","payload":{"title":"Reunião","data":"amanha","time":"12:00"}}'
+\`\`\`
+
+- \`title\` obrigatório; \`data\`: hoje/amanhã ou DD/MM/YYYY; \`time\`: HH:MM (início).
+- **Meet:** \`createMeetLink: true\` — exige \`time\`.
 
 ---
 
