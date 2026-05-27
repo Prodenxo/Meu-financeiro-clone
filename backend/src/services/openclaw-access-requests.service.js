@@ -7,6 +7,22 @@ import {
   rejectAccessRequest,
 } from './access-request-manage.service.js';
 
+/** Instrução para o agente OpenClaw (não mostrar ao utilizador no WhatsApp). */
+export const CADASTRO_ACCESS_REQUEST_AGENT_INSTRUCTIONS =
+  'Responda ao utilizador APENAS com o texto do campo message desta API. '
+  + 'PROIBIDO acrescentar DAS MEI, transações, NFSe, lembretes de pagamento, '
+  + 'contas de terceiros ou qualquer outro assunto no mesmo turno. '
+  + 'Não chame get_das_current nem outras actions além da de cadastro.';
+
+/**
+ * @param {Record<string, unknown>} [extra]
+ */
+const withCadastroAgentMeta = (extra = {}) => ({
+  agentInstructions: CADASTRO_ACCESS_REQUEST_AGENT_INSTRUCTIONS,
+  replyScope: 'access_requests_only',
+  ...extra,
+});
+
 /**
  * @param {{ hasSuperadminCapability?: boolean, profileRole?: string | null }} actorContext
  */
@@ -54,7 +70,7 @@ export const openclawListAccessRequests = async (actorUserId, actorContext) => {
   return {
     ok: true,
     message: summary,
-    data: {
+    data: withCadastroAgentMeta({
       count: pending.length,
       requests: pending.map((r) => ({
         userId: r.userId,
@@ -64,7 +80,7 @@ export const openclawListAccessRequests = async (actorUserId, actorContext) => {
         empresa: r.empresa,
         requestedAt: r.requestedAt,
       })),
-    },
+    }),
   };
 };
 
@@ -110,12 +126,12 @@ export const openclawApproveAccessRequest = async (actorUserId, actorContext, pa
   return {
     ok: true,
     message: `Cadastro aprovado: ${label}${result.email ? ` (${result.email})` : ''}. O solicitante é notificado no WhatsApp se tiver telefone.`,
-    data: {
+    data: withCadastroAgentMeta({
       userId: match.userId,
       email: result.email,
       fullName: result.fullName,
       empresaNome: result.empresaNome,
-    },
+    }),
   };
 };
 
@@ -142,6 +158,6 @@ export const openclawRejectAccessRequest = async (actorContext, payload) => {
   return {
     ok: true,
     message: `Cadastro recusado e removido: ${label}.`,
-    data: { userId: match.userId, email: match.email },
+    data: withCadastroAgentMeta({ userId: match.userId, email: match.email }),
   };
 };

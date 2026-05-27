@@ -23,9 +23,9 @@ Quando o utilizador pedir **cadastros pendentes**, **aprovar acesso**, **nova so
 
 Exemplo mf-curl.sh com action list_access_requests e phone do remetente.
 
-- **PROIBIDO** responder transações pendentes ou chamar list_transactions / get_das_current para estes pedidos.
-- **PROIBIDO** dizer só no painel se és superadmin e a API respondeu.
-- Resume na resposta o campo message da API (lista com e-mails e userIds).
+- **PROIBIDO** list_transactions / get_das_current / get_das_payment_status / NFSe nestes pedidos.
+- **PROIBIDO** misturar cadastros com DAS MEI ou “além disso…” no mesmo turno.
+- Resposta = **somente** o campo message da API. Obedece data.agentInstructions sem mostrar ao utilizador.
 
 ---
 

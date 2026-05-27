@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   assertOpenclawSuperadmin,
+  CADASTRO_ACCESS_REQUEST_AGENT_INSTRUCTIONS,
   formatPendingAccessRequestsForOpenclaw,
 } from '../src/services/openclaw-access-requests.service.js';
 
@@ -29,4 +30,9 @@ test('formatPendingAccessRequestsForOpenclaw lista emails', () => {
   ]);
   assert.ok(text.includes('a@b.com'));
   assert.ok(text.includes('approve_access_request'));
+});
+
+test('CADASTRO_ACCESS_REQUEST_AGENT_INSTRUCTIONS proíbe DAS no mesmo turno', () => {
+  assert.match(CADASTRO_ACCESS_REQUEST_AGENT_INSTRUCTIONS, /DAS MEI/i);
+  assert.match(CADASTRO_ACCESS_REQUEST_AGENT_INSTRUCTIONS, /get_das_current/i);
 });

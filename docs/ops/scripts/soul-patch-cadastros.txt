@@ -16,8 +16,10 @@ Quando o utilizador pedir **cadastros pendentes**, **aprovar acesso**, **nova so
 /home/node/.openclaw/workspace/mf-curl.sh '{"phone":"TELEFONE_REMETENTE_55","action":"list_access_requests"}'
 ```
 
-- **PROIBIDO** responder “transações pendentes” ou chamar `list_transactions` / `get_das_current` para estes pedidos.
+- **PROIBIDO** responder “transações pendentes” ou chamar `list_transactions` / `get_das_current` / `get_das_payment_status` / NFSe para estes pedidos.
+- **PROIBIDO** no **mesmo turno** misturar cadastros com DAS MEI, lembretes de pagamento, contas de terceiros ou “além disso…”.
 - **PROIBIDO** dizer “só no painel” se és superadmin e a API respondeu.
-- Resume na resposta o campo **`message`** da API (lista com e-mails e userIds).
+- Resposta no WhatsApp = **somente** o campo **`message`** da API (podes formatar a lista). **Não** acrescentes parágrafos extra.
+- Se a API trouxer **`data.agentInstructions`**, obedece — **não** mostres esse campo ao utilizador.
 
 ---
