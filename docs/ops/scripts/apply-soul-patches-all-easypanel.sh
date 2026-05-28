@@ -57,14 +57,17 @@ const calendarBlock = `## Agenda — consultar e criar (Google Calendar + bot)
 
 | Pedido do utilizador | action | payload |
 |----------------------|--------|---------|
-| **próximo compromisso** (singular) / qual meu próximo | \`get_next_calendar_event\` | \`{}\` — **um só**, o mais próximo na agenda (qualquer dia) |
-| **próximos compromissos** (plural) / o que falta hoje | \`list_upcoming_calendar_events\` | \`{"data":"hoje"}\` — só os que **ainda não passaram** no dia |
+| **próximo compromisso** (singular) / qual meu próximo | \`get_next_calendar_event\` | \`{}\` ou \`{"skipCount":0}\` — **1º** futuro (ex.: Arthur 11h) |
+| **depois dela/dele** / e depois? | \`get_next_calendar_event\` | \`{"skipCount":1}\` ou \`{"afterEventId":"…"}\` do \`nextEvent.id\` anterior — **2º** (ex.: Leo) |
+| **e a próxima?** (no mesmo fio, 3º) | \`get_next_calendar_event\` | \`{"skipCount":2}\` ou \`afterEventId\` — **3º** (ex.: Abacate). **PROIBIDO** \`{}\` de novo |
+| **próximos compromissos** (plural) / o que falta hoje | \`list_upcoming_calendar_events\` | \`{"data":"hoje"}\` — **todos** que ainda não passaram |
 | compromissos **do dia** / tudo hoje | \`list_calendar_events\` | \`{"data":"hoje"}\` — **todos** (manhã + tarde + noite, inclusive já feitos) |
 | minha agenda / compromissos da agenda | \`list_calendar_events\` | \`{"scope":"agenda"}\` ou \`minha_agenda\` |
 | agenda amanhã / dia DD/MM | \`list_calendar_events\` | \`{"data":"amanhã"}\` ou data |
 
 \`\`\`bash
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"get_next_calendar_event"}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"get_next_calendar_event","payload":{"skipCount":1}}'
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_upcoming_calendar_events","payload":{"data":"hoje"}}'
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_calendar_events","payload":{"data":"hoje"}}'
 \`\`\`

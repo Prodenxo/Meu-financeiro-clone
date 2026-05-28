@@ -852,12 +852,69 @@ export const listCalendarEventsAgendaForUser = async (userId, options = {}) => {
 };
 
 /**
+ * @param {Record<string, unknown>} payload
+ * @returns {{ skipCount: number, afterStart: Date | null, afterEventId: string | null }}
+ */
+export const resolveFindNextCalendarOptionsFromPayload = (payload = {}) => {
+  const skipRaw = payload.skipCount
+    ?? payload.pular
+    ?? payload.skip
+    ?? payload.indice
+    ?? null;
+  let skipCount = skipRaw != null ? Number(skipRaw) : 0;
+  if (!Number.isFinite(skipCount) || skipCount < 0) skipCount = 0;
+  skipCount = Math.min(Math.floor(skipCount), 50);
+
+  let afterStart = null;
+  const afterRaw = payload.afterStart
+    ?? payload.depoisDe
+    ?? payload.depois_de
+    ?? payload.after
+    ?? null;
+  if (afterRaw != null && String(afterRaw).trim() !== '') {
+    const parsed = parseGoogleCalendarDateTimeToInstant(String(afterRaw), SAO_PAULO_TZ);
+    if (parsed && Number.isFinite(parsed.getTime())) {
+      afterStart = parsed;
+    } else {
+      const d = new Date(String(afterRaw));
+      if (Number.isFinite(d.getTime())) afterStart = d;
+    }
+  }
+
+  const afterEventId = String(
+    payload.afterEventId ?? payload.depoisEventId ?? payload.excluirEventId ?? '',
+  ).trim() || null;
+
+  return { skipCount, afterStart, afterEventId };
+};
+
+/**
+ * @param {Array<{ event: object, start: Date, day: object }>} candidates
+ * @param {{ skipCount?: number, afterStart?: Date | null, afterEventId?: string | null }} filters
+ */
+export const pickNextCalendarCandidate = (candidates, filters = {}) => {
+  const skipCount = filters.skipCount ?? 0;
+  const afterEventId = filters.afterEventId ?? null;
+  const afterStart = filters.afterStart ?? null;
+
+  let filtered = [...candidates];
+  if (afterEventId) {
+    filtered = filtered.filter((c) => String(c.event?.id || '') !== afterEventId);
+  }
+  if (afterStart && Number.isFinite(afterStart.getTime())) {
+    filtered = filtered.filter((c) => c.start.getTime() > afterStart.getTime());
+  }
+  return filtered[skipCount] || null;
+};
+
+/**
  * Próximo compromisso a partir de agora (fuso São Paulo), hoje → dias seguintes.
  * @param {string} userId
- * @param {{ maxDays?: number }} [options]
+ * @param {{ maxDays?: number, skipCount?: number, afterStart?: string|Date, afterEventId?: string }} [options]
  */
 export const findNextCalendarEventForUser = async (userId, options = {}) => {
   const maxDays = Math.min(Math.max(Number(options.maxDays) || 14, 1), 31);
+  const findOpts = resolveFindNextCalendarOptionsFromPayload(options);
   const now = new Date();
   /** @type {Array<{ event: object, start: Date, day: object }>} */
   const candidates = [];
@@ -874,21 +931,28 @@ export const findNextCalendarEventForUser = async (userId, options = {}) => {
 
   candidates.sort((a, b) => a.start.getTime() - b.start.getTime());
 
-  const next = candidates[0] || null;
+  const next = pickNextCalendarCandidate(candidates, findOpts);
   if (!next) {
+    const hadAny = candidates.length > 0;
+    const message = hadAny && (findOpts.skipCount > 0 || findOpts.afterEventId || findOpts.afterStart)
+      ? 'Não há mais compromissos futuros após o que você já consultou.'
+      : 'Não há compromissos futuros na agenda nos próximos dias consultados.';
     return {
       empty: true,
-      message: 'Não há compromissos futuros na agenda nos próximos dias consultados.',
+      message,
       nextEvent: null,
       searchedDays: maxDays,
+      skipCount: findOpts.skipCount,
+      totalCandidates: candidates.length,
     };
   }
 
   const e = enrichCalendarEventForDisplay(next.event, {
     dateDisplay: next.day.dateDisplay,
   });
+  const ordinal = findOpts.skipCount > 0 ? ' (seguinte na agenda)' : '';
   const message = [
-    `Próximo compromisso (${next.day.dateDisplay}):`,
+    `Próximo compromisso${ordinal} (${next.day.dateDisplay}):`,
     '',
     e.whatsappDetail,
     '',
@@ -900,6 +964,9 @@ export const findNextCalendarEventForUser = async (userId, options = {}) => {
     message,
     nextEvent: e,
     searchedDays: maxDays,
+    skipCount: findOpts.skipCount,
+    afterEventId: findOpts.afterEventId,
+    eventId: e.id || null,
   };
 };
 

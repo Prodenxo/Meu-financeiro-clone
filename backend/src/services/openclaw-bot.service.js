@@ -507,6 +507,11 @@ export const runOpenclawAction = async (input) => {
   const actionAliases = {
     proximo_compromisso: 'get_next_calendar_event',
     next_calendar_event: 'get_next_calendar_event',
+    depois_dela: 'get_next_calendar_event',
+    depois_dele: 'get_next_calendar_event',
+    depois_compromisso: 'get_next_calendar_event',
+    e_a_proxima: 'get_next_calendar_event',
+    e_o_proximo: 'get_next_calendar_event',
     proximos_compromissos: 'list_upcoming_calendar_events',
     proximos_compromissos_hoje: 'list_upcoming_calendar_events',
     list_upcoming_calendar_events: 'list_upcoming_calendar_events',
@@ -546,6 +551,24 @@ export const runOpenclawAction = async (input) => {
     && !payload.date
   ) {
     payload = { data: 'hoje', ...payload };
+  }
+  if (action === 'get_next_calendar_event') {
+    const hasSkipHint = payload.skipCount != null
+      || payload.pular != null
+      || payload.afterEventId
+      || payload.depoisEventId;
+    if (
+      ['depois_dela', 'depois_dele', 'depois_compromisso'].includes(rawAction)
+      && !hasSkipHint
+    ) {
+      payload = { ...payload, skipCount: 1 };
+    }
+    if (
+      ['e_a_proxima', 'e_o_proximo'].includes(rawAction)
+      && !hasSkipHint
+    ) {
+      payload = { ...payload, skipCount: 2 };
+    }
   }
 
   if (!action) throw badRequest('action é obrigatório');
@@ -788,6 +811,9 @@ export const runOpenclawAction = async (input) => {
   if (action === 'get_next_calendar_event') {
     const next = await calendarEventsService.findNextCalendarEventForUser(userId, {
       maxDays: payload?.maxDays ?? payload?.dias ?? 14,
+      skipCount: payload?.skipCount ?? payload?.pular ?? payload?.skip,
+      afterStart: payload?.afterStart ?? payload?.depoisDe ?? payload?.after,
+      afterEventId: payload?.afterEventId ?? payload?.depoisEventId,
     });
     return {
       ok: true,
@@ -798,9 +824,10 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'UM único compromisso: o próximo na agenda (pode ser hoje ou outro dia). '
-          + 'Repita só message. Início = nextEvent.time. '
-          + 'Para TODOS do dia use list_upcoming_calendar_events; para o dia inteiro use list_calendar_events com data hoje.',
+          'UM compromisso por chamada. Repita só message. Início = nextEvent.time. '
+          + 'Guarde nextEvent.id para follow-up: depois dela → skipCount 1 ou afterEventId; '
+          + 'e a próxima (no fio) → skipCount 2 ou afterEventId do último citado. '
+          + 'skipCount 0 = primeiro futuro. Lista completa do dia → list_upcoming_calendar_events.',
       },
     };
   }
