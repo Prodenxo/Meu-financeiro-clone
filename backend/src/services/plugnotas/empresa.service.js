@@ -719,6 +719,20 @@ export const resolverCertificadoIdPorCnpj = async (cpfCnpjInput) => {
   return null;
 };
 
+/**
+ * Exclui um certificado no PlugNotas por ID (DELETE /certificado/:id).
+ * Best-effort do ponto de vista do chamador — aqui propaga erro (404/5xx) para
+ * quem chamar decidir tratar como não-fatal.
+ * @param {string} certId
+ */
+export const excluirCertificadoPlugNotas = async (certId) => {
+  const id = String(certId || '').trim();
+  if (!id) {
+    throw badRequest('ID do certificado é obrigatório para exclusão');
+  }
+  return requestJson('DELETE', `/certificado/${encodeURIComponent(id)}`);
+};
+
 export const cadastrarCertificadoPlugNotas = async ({
   fileBuffer,
   fileName,

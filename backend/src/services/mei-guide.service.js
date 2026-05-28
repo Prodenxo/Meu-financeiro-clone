@@ -16,11 +16,15 @@ import {
   patchEmitenteNfseFields,
   getEmitenteNfseSnapshot,
   getDocumentosAtivosMirror,
-  savePlugNotasCertId
+  savePlugNotasCertId,
+  hasCertificatePfx,
+  countOtherUsersWithPlugnotasCertId,
+  getPlugNotasCertId
 } from './mei-certificate-store.js';
 import {
   cadastrarCertificadoPlugNotas,
-  resolverCertificadoIdPorCnpj
+  resolverCertificadoIdPorCnpj,
+  excluirCertificadoPlugNotas
 } from './plugnotas/empresa.service.js';
 import {
   isCompetenciaPaid,
@@ -432,8 +436,9 @@ export const userHasMeiCertificate = async (userId) => {
   await ensureUserCertLoaded(userId);
   if (hasUserCertificate(userId)) return true;
   try {
-    const doc = await getCertificateDocument(userId);
-    return Boolean(doc && validateDoc(normalizeDoc(doc)));
+    // Baseado no .pfx persistido — NÃO em cert_document, que é preservado após a
+    // exclusão (senão a remoção do certificado nunca refletiria no status/UI).
+    return await hasCertificatePfx(userId);
   } catch {
     return false;
   }
@@ -1473,6 +1478,32 @@ export const removeCertificate = async (userId) => {
   if (!userId) {
     throw badRequest('Usuário não identificado');
   }
+
+  // Só exclui no PlugNotas se NENHUM outro usuário ainda apontar para o mesmo
+  // certificado (evita derrubar o cert de quem compartilha o mesmo .pfx/CNPJ).
+  const plugnotasCertId = await getPlugNotasCertId(userId).catch(() => null);
+  if (plugnotasCertId) {
+    let onlyThisUser = false;
+    try {
+      const others = await countOtherUsersWithPlugnotasCertId(userId, plugnotasCertId);
+      onlyThisUser = others === 0;
+    } catch {
+      onlyThisUser = false; // em dúvida, não apaga no PlugNotas
+    }
+    if (onlyThisUser) {
+      try {
+        await excluirCertificadoPlugNotas(plugnotasCertId);
+      } catch (err) {
+        // best-effort: não bloqueia a remoção local
+        // eslint-disable-next-line no-console
+        console.warn('[mei-guide.removeCertificate] falha ao excluir certificado no PlugNotas (não-fatal)', {
+          userId,
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
+    }
+  }
+
   if (env.MEI_CERT_ENCRYPTION_KEY) {
     await deleteCertificate(userId);
   }
