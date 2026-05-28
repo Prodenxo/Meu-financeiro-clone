@@ -506,8 +506,10 @@ export const resolveActorMembershipsForUser = async (userId) => {
 export const runOpenclawAction = async (input) => {
   const actionAliases = {
     proximo_compromisso: 'get_next_calendar_event',
-    proximo_compromisso_agenda: 'get_next_calendar_event',
     next_calendar_event: 'get_next_calendar_event',
+    proximos_compromissos: 'list_upcoming_calendar_events',
+    proximos_compromissos_hoje: 'list_upcoming_calendar_events',
+    list_upcoming_calendar_events: 'list_upcoming_calendar_events',
     excluir_compromisso: 'delete_calendar_event',
     cancelar_reuniao: 'delete_calendar_event',
     delete_calendar_event: 'delete_calendar_event',
@@ -523,10 +525,28 @@ export const runOpenclawAction = async (input) => {
     register_nfse_cliente: 'register_nfse_cliente',
     cadastrar_cliente_nfse: 'register_nfse_cliente',
     lookup_nfse_cliente: 'list_nfse_clientes',
+    minha_agenda: 'list_calendar_events',
+    compromissos_agenda: 'list_calendar_events',
+    agenda_compromissos: 'list_calendar_events',
   };
   let action = String(input?.action || '').trim();
+  const rawAction = action;
   action = actionAliases[action] || action;
-  const payload = input?.payload && typeof input.payload === 'object' ? input.payload : {};
+  let payload = input?.payload && typeof input.payload === 'object' ? { ...input.payload } : {};
+  if (
+    action === 'list_calendar_events'
+    && ['minha_agenda', 'compromissos_agenda', 'agenda_compromissos'].includes(rawAction)
+    && !payload.scope
+  ) {
+    payload = { scope: 'agenda', ...payload };
+  }
+  if (
+    action === 'list_upcoming_calendar_events'
+    && !payload.data
+    && !payload.date
+  ) {
+    payload = { data: 'hoje', ...payload };
+  }
 
   if (!action) throw badRequest('action é obrigatório');
 
@@ -778,19 +798,97 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Responda ao utilizador repetindo APENAS o texto de message (já formatado). '
-          + 'A hora de INÍCIO é nextEvent.time — NUNCA uses endTime como hora da reunião. '
-          + 'Se empty=true, diga que não há compromissos futuros.',
+          'UM único compromisso: o próximo na agenda (pode ser hoje ou outro dia). '
+          + 'Repita só message. Início = nextEvent.time. '
+          + 'Para TODOS do dia use list_upcoming_calendar_events; para o dia inteiro use list_calendar_events com data hoje.',
+      },
+    };
+  }
+
+  if (action === 'list_upcoming_calendar_events') {
+    const rawDate = payload?.data ?? payload?.date ?? 'hoje';
+    const upcoming = await calendarEventsService.listUpcomingCalendarEventsForUser(userId, {
+      date: rawDate,
+      data: rawDate,
+    });
+    return {
+      ok: true,
+      message: upcoming.message,
+      data: {
+        ...upcoming,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Próximos compromissos DO DIA pedido (só os que ainda não passaram). '
+          + 'Repita só message. NÃO é o próximo único (get_next_calendar_event). '
+          + 'NÃO inclui reuniões já realizadas hoje.',
       },
     };
   }
 
   if (action === 'list_calendar_events') {
     const rawDate = payload?.data ?? payload?.date;
+    const scope = String(payload?.scope || '').toLowerCase();
+    const wantsUpcomingOnDay =
+      scope === 'proximos'
+      || scope === 'upcoming'
+      || scope === 'proximos_dia'
+      || payload?.proximos === true;
     const wantsNext =
-      payload?.next === true
-      || payload?.proximo === true
-      || String(payload?.scope || '').toLowerCase() === 'next';
+      !wantsUpcomingOnDay
+      && (
+        payload?.next === true
+        || (payload?.proximo === true && payload?.proximos !== true)
+        || scope === 'next'
+      );
+    const wantsAgendaSummary =
+      scope === 'agenda'
+      || scope === 'minha_agenda'
+      || payload?.agenda === true
+      || payload?.minhaAgenda === true
+      || payload?.minha_agenda === true;
+
+    if (wantsUpcomingOnDay && !wantsNext) {
+      const rawUpcomingDate = rawDate ?? 'hoje';
+      const upcoming = await calendarEventsService.listUpcomingCalendarEventsForUser(userId, {
+        date: rawUpcomingDate,
+        data: rawUpcomingDate,
+      });
+      return {
+        ok: true,
+        message: upcoming.message,
+        data: {
+          ...upcoming,
+          userId,
+          actorContext,
+          ...linkDebug,
+          resolvedAs: 'list_upcoming_calendar_events',
+          agentInstructions:
+            'Próximos compromissos do dia — só os que faltam. Repita só message.',
+        },
+      };
+    }
+
+    if (wantsAgendaSummary && !wantsNext) {
+      const agenda = await calendarEventsService.listCalendarEventsAgendaForUser(userId, {
+        daysAhead: payload?.maxDays ?? payload?.dias ?? payload?.days ?? 7,
+      });
+      return {
+        ok: true,
+        message: agenda.message,
+        data: {
+          ...agenda,
+          userId,
+          actorContext,
+          ...linkDebug,
+          resolvedAs: 'list_calendar_events_agenda',
+          agentInstructions:
+            'Responda repetindo APENAS message. Inclui HOJE (mesmo reuniões já realizadas) '
+            + 'e os dias seguintes. NÃO diga que não há compromissos se message listou eventos.',
+        },
+      };
+    }
 
     if (wantsNext) {
       const next = await calendarEventsService.findNextCalendarEventForUser(userId, {
@@ -855,10 +953,10 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Agenda AO VIVO (fetchedAt) — só compromissos (Google Calendar / certificado); '
-          + 'NÃO inclui transações financeiras (use list_transactions). '
-          + 'SEMPRE chame de novo após excluir. Copie só message. Início ≠ Fim. '
-          + 'Sem Meet → add_calendar_event_meet. Horário ambíguo "8h" à noite → 20:00.',
+          'Compromissos do DIA INTEIRO (passados + futuros). Copie só message. '
+          + 'Próximo único → get_next_calendar_event. '
+          + 'Próximos que faltam hoje → list_upcoming_calendar_events. '
+          + 'Visão da semana → scope "agenda".',
       },
     };
   }
@@ -1542,6 +1640,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

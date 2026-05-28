@@ -130,12 +130,26 @@ const transactionStatusLabel = (status) => {
 
 /**
  * @param {string} dateIso YYYY-MM-DD
+ * @param {number} [addDays]
+ * @returns {string}
+ */
+export const calendarDateAddDaysFromIso = (dateIso, addDays = 1) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateIso || '').trim());
+  if (!m) return dateIso;
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + addDays));
+  return dt.toISOString().slice(0, 10);
+};
+
+/**
+ * Intervalo do dia civil em São Paulo para a API Google (timeMax exclusivo = 00:00 do dia seguinte).
+ * @param {string} dateIso YYYY-MM-DD
  * @returns {{ timeMin: string, timeMax: string }}
  */
 export const dayBoundsIsoInSaoPaulo = (dateIso) => {
+  const nextIso = calendarDateAddDaysFromIso(dateIso, 1);
   return {
     timeMin: `${dateIso}T00:00:00-03:00`,
-    timeMax: `${dateIso}T23:59:59.999-03:00`,
+    timeMax: `${nextIso}T00:00:00-03:00`,
   };
 };
 
@@ -157,20 +171,33 @@ export const googleEventOverlapsDate = (item, dateIso) => {
   const startRaw = item?.start?.dateTime || item?.start?.date;
   if (!startRaw) return false;
   const endRaw = item?.end?.dateTime || item?.end?.date || startRaw;
-
-  const start = new Date(startRaw.includes('T') ? startRaw : `${startRaw}T00:00:00`);
-  let end = new Date(endRaw.includes('T') ? endRaw : `${endRaw}T00:00:00`);
-
   const allDay = !!item?.start?.date && !item?.start?.dateTime;
-  if (allDay && item?.end?.date) {
-    end = new Date(`${item.end.date}T00:00:00`);
-    end.setDate(end.getDate() - 1);
-  }
 
   const { timeMin, timeMax } = dayBoundsIsoInSaoPaulo(dateIso);
   const dayStart = new Date(timeMin);
-  const dayEnd = new Date(timeMax);
-  return start <= dayEnd && end >= dayStart;
+  const dayEndExclusive = new Date(timeMax);
+
+  let start;
+  let end;
+
+  if (allDay) {
+    start = new Date(`${item.start.date}T00:00:00-03:00`);
+    const endDateExclusive = item?.end?.date || calendarDateAddDaysFromIso(item.start.date, 1);
+    end = new Date(`${endDateExclusive}T00:00:00-03:00`);
+  } else {
+    start = parseGoogleCalendarDateTimeToInstant(
+      String(startRaw),
+      item?.start?.timeZone || SAO_PAULO_TZ,
+    );
+    end = parseGoogleCalendarDateTimeToInstant(
+      String(endRaw),
+      item?.end?.timeZone || item?.start?.timeZone || SAO_PAULO_TZ,
+    );
+    if (!end && start) end = start;
+  }
+
+  if (!start || !end) return false;
+  return start < dayEndExclusive && end > dayStart;
 };
 
 /**
@@ -479,12 +506,30 @@ export const enrichCalendarEventForDisplay = (event, meta = {}) => {
   };
 };
 
-const buildDayAgendaMessage = (dateDisplay, events) => {
+const buildDayAgendaMessage = (dateDisplay, events, meta = {}) => {
   if (!events.length) {
-    return `Nenhum compromisso programado para ${dateDisplay}.`;
+    let msg = `Nenhum compromisso programado para ${dateDisplay}.`;
+    if (!meta.googleCalendarLinked && meta.googleCalendarNote) {
+      msg += `\n\n${meta.googleCalendarNote}`;
+    } else if (meta.googleCalendarLinked) {
+      msg += '\n\n(Sua agenda Google está conectada; não há eventos neste dia.)';
+    }
+    return msg;
   }
   const blocks = events.map((e, i) => `${i + 1}. ${e.whatsappDetail}`);
   return `Compromissos em ${dateDisplay}:\n\n${blocks.join('\n\n')}`;
+};
+
+const buildUpcomingDayAgendaMessage = (dateDisplay, events, meta = {}) => {
+  if (!events.length) {
+    let msg = `Não há mais compromissos a partir de agora para ${dateDisplay}.`;
+    if (!meta.googleCalendarLinked && meta.googleCalendarNote) {
+      msg += `\n\n${meta.googleCalendarNote}`;
+    }
+    return msg;
+  }
+  const blocks = events.map((e, i) => `${i + 1}. ${e.whatsappDetail}`);
+  return `Próximos compromissos (${dateDisplay}):\n\n${blocks.join('\n\n')}`;
 };
 
 /**
@@ -625,7 +670,10 @@ export const listCalendarEventsForUser = async (userId, options = {}) => {
 
   const enriched = events.map((e) => enrichCalendarEventForDisplay(e, { dateDisplay }));
   const count = enriched.length;
-  const message = buildDayAgendaMessage(dateDisplay, enriched);
+  const message = buildDayAgendaMessage(dateDisplay, enriched, {
+    googleCalendarLinked,
+    googleCalendarNote,
+  });
 
   return {
     date: dateIso,
@@ -639,6 +687,167 @@ export const listCalendarEventsForUser = async (userId, options = {}) => {
     empty: count === 0,
     fetchedAt: new Date().toISOString(),
     liveFromGoogle: googleCalendarLinked,
+    includesPastEvents: true,
+  };
+};
+
+/**
+ * Compromissos **futuros** (ou em curso) num único dia — ex.: "próximos compromissos de hoje".
+ * @param {string} userId
+ * @param {{ date?: string, data?: string }} [options]
+ */
+export const listUpcomingCalendarEventsForUser = async (userId, options = {}) => {
+  const day = await listCalendarEventsForUser(userId, options);
+  const now = new Date();
+  const todayIso = calendarDateTodayInSaoPaulo();
+  const isFutureDay = String(day.date) > todayIso;
+
+  const upcoming = (day.events || []).filter((e) => {
+    if (isFutureDay) return true;
+    return isCalendarEventStillRelevant(e, now);
+  });
+
+  const message = buildUpcomingDayAgendaMessage(day.dateDisplay, upcoming, {
+    googleCalendarLinked: day.googleCalendarLinked,
+    googleCalendarNote: day.googleCalendarNote,
+  });
+
+  return {
+    ...day,
+    events: upcoming,
+    count: upcoming.length,
+    message,
+    empty: upcoming.length === 0,
+    includesPastEvents: false,
+    scope: 'proximos_dia',
+  };
+};
+
+/**
+ * Agenda resumida: hoje (inclui reuniões já realizadas) + próximos dias.
+ * @param {string} userId
+ * @param {{ daysAhead?: number }} [options]
+ */
+export const listCalendarEventsAgendaForUser = async (userId, options = {}) => {
+  const daysAhead = Math.min(Math.max(Number(options.daysAhead) || 7, 1), 31);
+  const startIso = calendarDateTodayInSaoPaulo();
+  const endIso = calendarDateAddDaysFromIso(startIso, daysAhead);
+  const range = {
+    timeMin: `${startIso}T00:00:00-03:00`,
+    timeMax: `${endIso}T00:00:00-03:00`,
+  };
+
+  /** @type {Map<string, { dateDisplay: string, events: object[] }>} */
+  const byDay = new Map();
+  for (let offset = 0; offset < daysAhead; offset += 1) {
+    const iso = calendarDateAddDaysInSaoPaulo(offset);
+    byDay.set(iso, {
+      dateDisplay: formatCalendarDateDisplayPtBr(iso),
+      events: [],
+    });
+  }
+
+  let googleCalendarLinked = false;
+  let googleCalendarNote = null;
+
+  const googleResult = await fetchGoogleCalendarItems(userId, range);
+  if (googleResult.notLinked) {
+    googleCalendarNote = googleResult.error;
+  } else if (googleResult.error) {
+    googleCalendarNote = googleResult.error;
+  } else {
+    googleCalendarLinked = true;
+    for (const item of googleResult.items) {
+      if (!isGoogleCalendarItemActive(item)) continue;
+      for (const [iso, bucket] of byDay) {
+        if (!googleEventOverlapsDate(item, iso)) continue;
+        bucket.events.push(mapGoogleItemToCalendarEvent(item, iso));
+      }
+    }
+  }
+
+  try {
+    const validity = await getCertificateValidity(userId);
+    const certDay = isoDatePart(validity?.certValidTo);
+    if (certDay && byDay.has(certDay)) {
+      byDay.get(certDay).events.push({
+        id: null,
+        title: CERT_EXPIRATION_TITLE,
+        date: certDay,
+        time: null,
+        allDay: true,
+        source: 'certificate',
+      });
+    }
+  } catch {
+    /* certificado opcional */
+  }
+
+  const sections = [];
+  let totalCount = 0;
+
+  for (const [iso, bucket] of byDay) {
+    bucket.events.sort((a, b) => {
+      if (a.allDay && !b.allDay) return -1;
+      if (!a.allDay && b.allDay) return 1;
+      if (a.time && b.time) return a.time.localeCompare(b.time);
+      if (a.time) return -1;
+      if (b.time) return 1;
+      return a.title.localeCompare(b.title, 'pt-BR');
+    });
+    const enriched = bucket.events.map((e) =>
+      enrichCalendarEventForDisplay(e, { dateDisplay: bucket.dateDisplay }),
+    );
+    totalCount += enriched.length;
+
+    const label = iso === startIso ? 'Hoje' : bucket.dateDisplay;
+    if (!enriched.length) {
+      if (iso === startIso) {
+        sections.push(`**${label} (${bucket.dateDisplay}):** nenhum compromisso.`);
+      }
+      continue;
+    }
+    const lines = enriched.map((e, i) => `${i + 1}. ${e.whatsappDetail}`);
+    sections.push(`**${label} (${bucket.dateDisplay}):**\n${lines.join('\n')}`);
+  }
+
+  let message;
+  if (!totalCount) {
+    message = buildDayAgendaMessage(
+      formatCalendarDateDisplayPtBr(startIso),
+      [],
+      { googleCalendarLinked, googleCalendarNote },
+    );
+    message = message.replace(
+      /^Nenhum compromisso programado/,
+      'Nenhum compromisso na sua agenda nos próximos dias',
+    );
+  } else {
+    message = `Sua agenda (próximos ${daysAhead} dia(s)):\n\n${sections.filter(Boolean).join('\n\n')}`;
+  }
+
+  const todayBucket = byDay.get(startIso);
+  const todayEvents = (todayBucket?.events || []).map((e) =>
+    enrichCalendarEventForDisplay(e, { dateDisplay: todayBucket.dateDisplay }),
+  );
+
+  return {
+    scope: 'agenda',
+    date: startIso,
+    dateDisplay: formatCalendarDateDisplayPtBr(startIso),
+    daysAhead,
+    events: todayEvents,
+    eventsByDay: Object.fromEntries(
+      [...byDay.entries()].map(([iso, b]) => [iso, b.events]),
+    ),
+    count: totalCount,
+    googleCalendarLinked,
+    googleCalendarNote,
+    message,
+    empty: totalCount === 0,
+    fetchedAt: new Date().toISOString(),
+    liveFromGoogle: googleCalendarLinked,
+    includesPastEvents: true,
   };
 };
 

@@ -57,19 +57,23 @@ const calendarBlock = `## Agenda — consultar e criar (Google Calendar + bot)
 
 | Pedido do utilizador | action | payload |
 |----------------------|--------|---------|
-| **próximo compromisso** / próxima reunião / qual meu próximo | \`get_next_calendar_event\` | \`{}\` — **PROIBIDO** \`list_calendar_events\` com amanhã |
-| o que tenho hoje / compromissos de hoje | \`list_calendar_events\` | \`{"data":"hoje"}\` |
+| **próximo compromisso** (singular) / qual meu próximo | \`get_next_calendar_event\` | \`{}\` — **um só**, o mais próximo na agenda (qualquer dia) |
+| **próximos compromissos** (plural) / o que falta hoje | \`list_upcoming_calendar_events\` | \`{"data":"hoje"}\` — só os que **ainda não passaram** no dia |
+| compromissos **do dia** / tudo hoje | \`list_calendar_events\` | \`{"data":"hoje"}\` — **todos** (manhã + tarde + noite, inclusive já feitos) |
+| minha agenda / compromissos da agenda | \`list_calendar_events\` | \`{"scope":"agenda"}\` ou \`minha_agenda\` |
 | agenda amanhã / dia DD/MM | \`list_calendar_events\` | \`{"data":"amanhã"}\` ou data |
 
 \`\`\`bash
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"get_next_calendar_event"}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_upcoming_calendar_events","payload":{"data":"hoje"}}'
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_calendar_events","payload":{"data":"hoje"}}'
 \`\`\`
 
 - Resposta = **somente** o campo JSON \`message\` (já vem formatada). **PROIBIDO** reescrever horários.
 - **Agenda ao vivo** — não há cache no servidor. Depois de **excluir**, chama \`list_calendar_events\` de novo; **PROIBIDO** citar reunião que já não veio na API.
 - **Hora da reunião = \`time\` (início).** \`endTime\` é só o fim — **NUNCA** digas que a reunião é às endTime.
-- \`[lançamento financeiro]\` = movimento da app, **não** é reunião Google.
+- Lista de agenda = **só Google Calendar** (não misturar com \`list_transactions\`).
+- Se \`googleCalendarLinked=false\`, diga para conectar Google Calendar na app.
 
 ### Excluir compromisso
 

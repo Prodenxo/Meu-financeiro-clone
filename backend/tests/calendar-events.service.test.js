@@ -26,10 +26,10 @@ test('calendarDateTodayInSaoPaulo devolve YYYY-MM-DD', () => {
   assert.match(calendarDateTodayInSaoPaulo(), /^\d{4}-\d{2}-\d{2}$/);
 });
 
-test('dayBoundsIsoInSaoPaulo usa offset -03:00', () => {
+test('dayBoundsIsoInSaoPaulo usa offset -03:00 e timeMax exclusivo no dia seguinte', () => {
   const b = dayBoundsIsoInSaoPaulo('2026-05-16');
   assert.equal(b.timeMin, '2026-05-16T00:00:00-03:00');
-  assert.equal(b.timeMax, '2026-05-16T23:59:59.999-03:00');
+  assert.equal(b.timeMax, '2026-05-17T00:00:00-03:00');
 });
 
 test('formatCalendarDateDisplayPtBr', () => {
@@ -51,4 +51,13 @@ test('googleEventOverlapsDate — evento noutro dia', () => {
     end: { date: '2026-05-18' },
   };
   assert.equal(googleEventOverlapsDate(item, '2026-05-16'), false);
+});
+
+test('googleEventOverlapsDate — reunião 8h com timeZone São Paulo', () => {
+  const item = {
+    summary: 'Meeting',
+    start: { dateTime: '2026-05-28T08:00:00', timeZone: 'America/Sao_Paulo' },
+    end: { dateTime: '2026-05-28T09:00:00', timeZone: 'America/Sao_Paulo' },
+  };
+  assert.equal(googleEventOverlapsDate(item, '2026-05-28'), true);
 });
