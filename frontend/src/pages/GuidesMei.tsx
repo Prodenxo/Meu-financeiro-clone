@@ -112,7 +112,7 @@ import {
   readMeiPlugnotasEmpresaCadastroBlockedExternally,
   resolvePlugnotasEmpresaP0Overlay
 } from '../utils/plugnotasEmpresaP0Overlay';
-import { fetchBrasilApiCnpj, type BrasilApiCnpjResponse } from '../utils/brasilApi';
+import { lookupEmpresaCnpj, type CnpjLookupResult } from '../services/usersService';
 import { DevApiHealthIndicator } from '../components/DevApiHealthIndicator';
 import {
   PlugnotasMunicipalRequirementOperacaoBody,
@@ -2399,20 +2399,20 @@ export default function GuidesMei() {
     return result;
   };
 
-  const applyBrasilApiToEmitente = (data: BrasilApiCnpjResponse) => {
+  const applyCnpjLookupToEmitente = (data: CnpjLookupResult) => {
     setNfEmissionCompanyForm((prev) => mergeIfEmpty(prev, {
-      razaoSocial: data.razao_social ?? '',
-      nomeFantasia: data.nome_fantasia ?? '',
+      razaoSocial: data.razaoSocial ?? '',
+      nomeFantasia: data.nomeFantasia ?? '',
       email: data.email ?? '',
-      logradouro: data.logradouro ?? '',
-      numero: data.numero ?? '',
-      complemento: data.complemento ?? '',
-      bairro: data.bairro ?? '',
-      cep: (data.cep ?? '').replace('-', ''),
-      descricaoCidade: data.municipio ?? '',
-      codigoCidade: normalizeIbgeMunicipioCodigo(data.codigo_municipio ?? ''),
-      estado: data.uf ?? '',
-      simplesNacional: data.simples?.optante_simples_nacional ?? prev.simplesNacional,
+      logradouro: data.endereco.logradouro ?? '',
+      numero: data.endereco.numero ?? '',
+      complemento: data.endereco.complemento ?? '',
+      bairro: data.endereco.bairro ?? '',
+      cep: (data.endereco.cep ?? '').replace(/\D/g, ''),
+      descricaoCidade: data.endereco.descricaoCidade ?? '',
+      codigoCidade: normalizeIbgeMunicipioCodigo(data.endereco.codigoCidade ?? ''),
+      estado: data.endereco.estado ?? '',
+      simplesNacional: data.opcaoSimples ?? prev.simplesNacional,
     }));
   };
 
@@ -2423,8 +2423,8 @@ export default function GuidesMei() {
     setBrasilApiError(null);
     setBrasilApiLoading(true);
     try {
-      const data = await fetchBrasilApiCnpj(digits);
-      applyBrasilApiToEmitente(data);
+      const data = await lookupEmpresaCnpj(digits);
+      applyCnpjLookupToEmitente(data);
     } catch (err) {
       setBrasilApiError(err instanceof Error ? err.message : 'Erro ao consultar CNPJ.');
     } finally {
@@ -2438,14 +2438,14 @@ export default function GuidesMei() {
     setNfsePrestadorBrasilApiError(null);
     setNfsePrestadorBrasilApiLoading(true);
     try {
-      const data = await fetchBrasilApiCnpj(digits);
+      const data = await lookupEmpresaCnpj(digits);
       updateNfseForm(mergeIfEmpty(
         {
           prestadorRazaoSocial: nfseForm.prestadorRazaoSocial,
           prestadorEmail: nfseForm.prestadorEmail,
         } as Record<string, unknown>,
         {
-          prestadorRazaoSocial: data.razao_social ?? '',
+          prestadorRazaoSocial: data.razaoSocial ?? '',
           prestadorEmail: data.email ?? '',
         }
       ) as { prestadorRazaoSocial: string; prestadorEmail: string });
@@ -2453,14 +2453,14 @@ export default function GuidesMei() {
       const merged = mergeIfEmpty(
         currentEndereco as Record<string, unknown>,
         {
-          logradouro: data.logradouro ?? '',
-          numero: data.numero ?? '',
-          complemento: data.complemento ?? '',
-          bairro: data.bairro ?? '',
-          cep: (data.cep ?? '').replace('-', ''),
-          codigoCidade: normalizeIbgeMunicipioCodigo(data.codigo_municipio ?? ''),
-          descricaoCidade: data.municipio ?? '',
-          estado: data.uf ?? '',
+          logradouro: data.endereco.logradouro ?? '',
+          numero: data.endereco.numero ?? '',
+          complemento: data.endereco.complemento ?? '',
+          bairro: data.endereco.bairro ?? '',
+          cep: (data.endereco.cep ?? '').replace(/\D/g, ''),
+          codigoCidade: normalizeIbgeMunicipioCodigo(data.endereco.codigoCidade ?? ''),
+          descricaoCidade: data.endereco.descricaoCidade ?? '',
+          estado: data.endereco.estado ?? '',
         }
       );
       updateNfsePrestadorEndereco(merged as Parameters<typeof updateNfsePrestadorEndereco>[0]);

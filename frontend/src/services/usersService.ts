@@ -177,6 +177,7 @@ export interface CnpjLookupResult {
   };
   situacaoCadastral?: string | null;
   porte?: string | null;
+  opcaoSimples?: boolean | null;
 }
 
 /** Consulta dados cadastrais (PlugNotas com fallback BrasilAPI) via backend. */

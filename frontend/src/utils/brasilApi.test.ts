@@ -14,7 +14,8 @@ const MOCK_RESPONSE = {
   uf: 'SP',
   cep: '01310-100',
   email: 'contato@empresa.com',
-  codigo_municipio: '3550308',
+  codigo_municipio: '7107', // TOM/SIAFI (São Paulo) — NÃO é o IBGE
+  codigo_municipio_ibge: '3550308', // IBGE (São Paulo) — correto para codigoCidade
   simples: { optante_simples_nacional: true },
 };
 

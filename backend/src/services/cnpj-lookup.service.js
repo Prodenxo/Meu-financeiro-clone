@@ -4,6 +4,9 @@ import { getPlugnotasRootUrl } from './plugnotas/root-url.js';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
+/** Endpoint público da BrasilAPI para consulta de CNPJ (v1). */
+const BRASILAPI_URL = 'https://brasilapi.com.br/api/cnpj/v1';
+
 const padZeros = (value, length) => {
   const str = String(value || '').replace(/\D/g, '');
   return str.padStart(length, '0').slice(-length);
