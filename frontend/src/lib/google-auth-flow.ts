@@ -1,5 +1,6 @@
 import { apiClient } from '../services/apiClient';
 import { startGoogleAuth, checkGoogleAuth } from './google-calendar';
+import { buildGoogleOAuthReturnTo } from './google-calendar-oauth-return';
 
 const TOKEN_STORAGE_KEY = 'financas-pessoais-auth-token';
 
@@ -34,17 +35,8 @@ const waitForAccessToken = async (attempts = 4, delayMs = 150): Promise<string |
  * Inicia o fluxo de autenticação OAuth do Google Calendar
  * Redireciona o usuário para a página de autorização do Google
  */
-function buildOAuthReturnTo(): string {
-  const url = new URL(window.location.href);
-  url.searchParams.delete('googleCalendar');
-  url.searchParams.delete('code');
-  url.searchParams.delete('state');
-  url.searchParams.delete('error');
-  return url.toString();
-}
-
 export async function initiateGoogleAuthFlow(): Promise<void> {
-  const { url, error } = await startGoogleAuth(buildOAuthReturnTo());
+  const { url, error } = await startGoogleAuth(buildGoogleOAuthReturnTo());
 
   if (error) {
     throw new Error(error);

@@ -26,6 +26,11 @@ import MeiCatalogoClientes from './pages/MeiCatalogoClientes';
 import MeiCatalogoServicosProdutos from './pages/MeiCatalogoServicosProdutos';
 import Layout from './Layout/Layout';
 import { handleGoogleAuthCallback } from './lib/google-auth-flow';
+import {
+  captureGoogleCalendarReturnFromUrl,
+  consumeGoogleCalendarOAuthReturn,
+} from './lib/google-calendar-oauth-return';
+import { toast } from './lib/toast';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -91,7 +96,12 @@ function GoogleOAuthCallback() {
 
     const processCallback = async () => {
       try {
-        await handleGoogleAuthCallback();
+        const result = await handleGoogleAuthCallback();
+        if (result.success) {
+          toast.success('Google Agenda vinculada com sucesso!');
+        } else if (result.error) {
+          toast.error(result.error);
+        }
       } finally {
         redirectToSettings();
       }
@@ -105,6 +115,38 @@ function GoogleOAuthCallback() {
       window.clearTimeout(safetyTimeout);
     };
   }, [location.search, navigate]);
+
+  return null;
+}
+
+function GoogleCalendarOAuthReturnHandler() {
+  const user = useAuthStore((s) => s.user);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const handled = useRef(false);
+
+  useEffect(() => {
+    if (!user || handled.current) return;
+
+    const status = consumeGoogleCalendarOAuthReturn();
+    if (!status) return;
+
+    handled.current = true;
+
+    if (status === 'connected') {
+      toast.success('Google Agenda vinculada com sucesso!');
+      window.dispatchEvent(new CustomEvent('mf-google-calendar-oauth-done'));
+      const onSettings =
+        location.pathname.startsWith('/settings') ||
+        location.pathname.startsWith('/configuracoes');
+      if (!onSettings) {
+        navigate('/settings', { replace: true });
+      }
+      return;
+    }
+
+    toast.error('Não foi possível vincular o Google Agenda. Tente novamente.');
+  }, [user, navigate, location.pathname]);
 
   return null;
 }
@@ -127,6 +169,7 @@ export function AppRoutes() {
     <>
       <PasswordRecoveryRedirect />
       <GoogleOAuthCallback />
+      <GoogleCalendarOAuthReturnHandler />
       <Routes>
         {/* Rotas públicas sempre acessíveis */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -184,6 +227,7 @@ export function AppRoutes() {
                     }
                   />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/configuracoes" element={<Settings />} />
                   <Route
                     path="/settings/users"
                     element={
@@ -238,6 +282,8 @@ export function AppRoutes() {
 }
 
 function App() {
+  captureGoogleCalendarReturnFromUrl();
+
   const { sessionRestored, initAuth } = useAuthStore();
   const { isDarkMode } = useThemeStore();
   const initDone = useRef(false);
