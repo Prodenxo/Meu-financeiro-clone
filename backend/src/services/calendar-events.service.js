@@ -481,16 +481,71 @@ export const enrichCalendarEventForDisplay = (event, meta = {}) => {
 
 const buildDayAgendaMessage = (dateDisplay, events) => {
   if (!events.length) {
-    return `Nenhum compromisso ou atividade programada para ${dateDisplay}.`;
+    return `Nenhum compromisso programado para ${dateDisplay}.`;
   }
   const blocks = events.map((e, i) => `${i + 1}. ${e.whatsappDetail}`);
   return `Compromissos em ${dateDisplay}:\n\n${blocks.join('\n\n')}`;
 };
 
 /**
- * Compromissos do utilizador numa data (lançamentos, Google Calendar, certificado MEI).
+ * Hora/minuto atuais em America/Sao_Paulo.
+ * @param {Date} [now]
+ */
+export const getSaoPauloHourMinute = (now = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: SAO_PAULO_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return { hour: 0, minute: 0 };
+  }
+  return { hour, minute };
+};
+
+/**
+ * "8h" à noite no mesmo dia: se o horário já passou e ainda é manhã/tarde no relógio,
+ * assume período da tarde/noite (+12h) para horas 1–11.
+ * @param {{ dateIso: string, startHour: number, startMinute: number, now?: Date }} input
+ */
+export const disambiguatePastAmbiguousHourForToday = ({
+  dateIso,
+  startHour,
+  startMinute,
+  now = new Date(),
+}) => {
+  const todayIso = calendarDateTodayInSaoPaulo();
+  if (dateIso !== todayIso) {
+    return { hour: startHour, minute: startMinute, adjusted: false };
+  }
+  if (startHour < 1 || startHour > 11) {
+    return { hour: startHour, minute: startMinute, adjusted: false };
+  }
+
+  const { hour: nowHour, minute: nowMinute } = getSaoPauloHourMinute(now);
+  const startTotal = startHour * 60 + startMinute;
+  const nowTotal = nowHour * 60 + nowMinute;
+  if (startTotal >= nowTotal) {
+    return { hour: startHour, minute: startMinute, adjusted: false };
+  }
+  if (nowHour < 13) {
+    return { hour: startHour, minute: startMinute, adjusted: false };
+  }
+
+  const eveningHour = startHour + 12;
+  if (eveningHour > 23) {
+    return { hour: startHour, minute: startMinute, adjusted: false };
+  }
+  return { hour: eveningHour, minute: startMinute, adjusted: true };
+};
+
+/**
+ * Compromissos do utilizador numa data (Google Calendar, certificado MEI; transações só se pedido).
  * @param {string} userId
- * @param {{ date?: string, data?: string }} [options] — `YYYY-MM-DD` ou `DD/MM/YYYY`; omitir = hoje (SP)
+ * @param {{ date?: string, data?: string, includeTransactions?: boolean }} [options]
  */
 export const listCalendarEventsForUser = async (userId, options = {}) => {
   const rawDate = options.date ?? options.data;
@@ -506,11 +561,14 @@ export const listCalendarEventsForUser = async (userId, options = {}) => {
 
   const { iso: dateIso, display: dateDisplay } = parsed;
   const events = [];
+  const includeTransactions = options.includeTransactions === true;
 
-  const transactions = await transactionsService.listTransactions(userId);
-  const dayTransactions = (transactions || []).filter((t) => t.data === dateIso);
-  for (const t of dayTransactions) {
-    events.push(mapTransactionToCalendarEvent(t, dateIso));
+  if (includeTransactions) {
+    const transactions = await transactionsService.listTransactions(userId);
+    const dayTransactions = (transactions || []).filter((t) => t.data === dateIso);
+    for (const t of dayTransactions) {
+      events.push(mapTransactionToCalendarEvent(t, dateIso));
+    }
   }
 
   try {
@@ -658,6 +716,20 @@ export const parseCalendarEventTimeHm = (raw) => {
     || s === '12h00'
   ) {
     return { hour: 12, minute: 0 };
+  }
+
+  const periodMatch = /^(\d{1,2})\s*(?:h(?:\s*(\d{2}))?)?\s*(?:da\s+)?(manha|tarde|noite|madrugada)$/.exec(s);
+  if (periodMatch) {
+    let hour = Number(periodMatch[1]);
+    const minute = periodMatch[2] != null ? Number(periodMatch[2]) : 0;
+    const period = periodMatch[3];
+    if (hour >= 1 && hour <= 12 && (period === 'tarde' || period === 'noite')) {
+      if (hour < 12) hour += 12;
+    }
+    if (period === 'madrugada' && hour === 12) hour = 0;
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return { hour, minute };
+    }
   }
 
   const hOnly = /^(\d{1,2})h$/.exec(s);
@@ -840,9 +912,10 @@ export const resolveCalendarEventTitleFromPayload = (payload = {}) => {
 
 /**
  * @param {Record<string, unknown>} payload
- * @returns {{ startHour: number, startMinute: number, endHour: number, endMinute: number, allDay: boolean }}
+ * @param {{ dateIso?: string, referenceNow?: Date }} [context]
+ * @returns {{ startHour: number, startMinute: number, endHour: number, endMinute: number, allDay: boolean, timeAdjustedToEvening?: boolean }}
  */
-export const resolveCreateCalendarTimesFromPayload = (payload = {}) => {
+export const resolveCreateCalendarTimesFromPayload = (payload = {}, context = {}) => {
   const hasExplicitTime = [
     'time',
     'hora',
@@ -869,11 +942,30 @@ export const resolveCreateCalendarTimesFromPayload = (payload = {}) => {
     ?? payload.inicio
     ?? payload.horaInicio;
 
+  let timeAdjustedToEvening = false;
+
   if (startRaw != null && String(startRaw).trim() !== '') {
     const tm = parseCalendarEventTimeHm(startRaw);
     if (!tm) throw badRequest('hora inválida; use HH:MM (ex.: 14:30) em payload.time.');
     startHour = tm.hour;
     startMinute = tm.minute;
+  }
+
+  const dateIso = context.dateIso
+    ? String(context.dateIso).trim()
+    : null;
+  if (dateIso && !allDay && hasExplicitTime) {
+    const disambig = disambiguatePastAmbiguousHourForToday({
+      dateIso,
+      startHour,
+      startMinute,
+      now: context.referenceNow,
+    });
+    if (disambig.adjusted) {
+      startHour = disambig.hour;
+      startMinute = disambig.minute;
+      timeAdjustedToEvening = true;
+    }
   }
 
   const endFromPayload = payload.endTime
@@ -919,7 +1011,14 @@ export const resolveCreateCalendarTimesFromPayload = (payload = {}) => {
     endMinute = 59;
   }
 
-  return { startHour, startMinute, endHour, endMinute, allDay };
+  return {
+    startHour,
+    startMinute,
+    endHour,
+    endMinute,
+    allDay,
+    timeAdjustedToEvening,
+  };
 };
 
 export const parseCreateMeetLinkFlag = (payload = {}) => {
@@ -974,8 +1073,14 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     );
   }
 
-  const { startHour, startMinute, endHour, endMinute, allDay } =
-    resolveCreateCalendarTimesFromPayload(payload);
+  const {
+    startHour,
+    startMinute,
+    endHour,
+    endMinute,
+    allDay,
+    timeAdjustedToEvening,
+  } = resolveCreateCalendarTimesFromPayload(payload, { dateIso: parsed.iso });
 
   const endDateParsed = payload.endDate ?? payload.dataFim
     ? parseCalendarQueryDate(String(payload.endDate ?? payload.dataFim))
@@ -1094,6 +1199,9 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
   let message = allDay
     ? `Compromisso criado: "${title}" em ${parsed.display} (dia inteiro).`
     : `Compromisso criado: "${title}" em ${parsed.display} — início ${timeLabel}${endLabel ? `, fim ${endLabel}` : ''}.`;
+  if (timeAdjustedToEvening) {
+    message += ' (horário interpretado como período da tarde/noite, pois o horário da manhã já tinha passado).';
+  }
   if (wantsMeet) {
     message += meetUri
       ? ` Link Google Meet: ${meetUri}`
@@ -1121,6 +1229,7 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     reminders,
     reminderSummary: reminders.map((r) => r.label).join('; ') || null,
     source: 'google',
+    timeAdjustedToEvening: !!timeAdjustedToEvening,
   };
 };
 

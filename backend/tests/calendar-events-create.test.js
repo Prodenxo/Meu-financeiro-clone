@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  calendarDateTodayInSaoPaulo,
+  disambiguatePastAmbiguousHourForToday,
   parseCalendarEventTimeHm,
   parseCalendarQueryDate,
   parseCreateMeetLinkFlag,
@@ -34,6 +36,36 @@ test('parseCalendarQueryDate aceita hoje e amanhã', () => {
 test('parseCalendarEventTimeHm aceita meio dia', () => {
   assert.deepEqual(parseCalendarEventTimeHm('meio dia'), { hour: 12, minute: 0 });
   assert.deepEqual(parseCalendarEventTimeHm('12h'), { hour: 12, minute: 0 });
+});
+
+test('parseCalendarEventTimeHm aceita da tarde e da noite', () => {
+  assert.deepEqual(parseCalendarEventTimeHm('8 da noite'), { hour: 20, minute: 0 });
+  assert.deepEqual(parseCalendarEventTimeHm('3h da tarde'), { hour: 15, minute: 0 });
+  assert.deepEqual(parseCalendarEventTimeHm('8h30 da noite'), { hour: 20, minute: 30 });
+});
+
+test('disambiguatePastAmbiguousHourForToday: 8h à noite vira 20h', () => {
+  const today = calendarDateTodayInSaoPaulo();
+  const evening = new Date(`${today}T22:30:00-03:00`);
+  const result = disambiguatePastAmbiguousHourForToday({
+    dateIso: today,
+    startHour: 8,
+    startMinute: 0,
+    now: evening,
+  });
+  assert.equal(result.adjusted, true);
+  assert.equal(result.hour, 20);
+});
+
+test('resolveCreateCalendarTimesFromPayload ajusta 8h passado no mesmo dia', () => {
+  const today = calendarDateTodayInSaoPaulo();
+  const evening = new Date(`${today}T22:00:00-03:00`);
+  const t = resolveCreateCalendarTimesFromPayload(
+    { time: '8h' },
+    { dateIso: today, referenceNow: evening },
+  );
+  assert.equal(t.startHour, 20);
+  assert.equal(t.timeAdjustedToEvening, true);
 });
 
 test('resolveCalendarEventTitleFromPayload ignora nome do utilizador', () => {

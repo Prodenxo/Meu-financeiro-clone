@@ -855,11 +855,10 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Agenda AO VIVO (fetchedAt) — sem cache. SEMPRE chame de novo após excluir; '
-          + 'NUNCA repitas compromissos só porque apareceram numa mensagem anterior. '
-          + 'Copie só message. Início ≠ Fim. Excluir = delete_calendar_event. '
-          + 'Sem Meet na lista → add_calendar_event_meet (não inventar link). '
-          + 'Itens [lançamento financeiro] não são reunião Google.',
+          'Agenda AO VIVO (fetchedAt) — só compromissos (Google Calendar / certificado); '
+          + 'NÃO inclui transações financeiras (use list_transactions). '
+          + 'SEMPRE chame de novo após excluir. Copie só message. Início ≠ Fim. '
+          + 'Sem Meet → add_calendar_event_meet. Horário ambíguo "8h" à noite → 20:00.',
       },
     };
   }
@@ -964,6 +963,7 @@ export const runOpenclawAction = async (input) => {
         ...linkDebug,
         agentInstructions:
           'Repita APENAS a message (título, data, início e fim). NUNCA troque início por fim. '
+          + 'Se timeAdjustedToEvening, confirme o horário da tarde/noite indicado na message. '
           + 'Se houver meetLink/hangoutLink, envie o link.',
       },
     };
