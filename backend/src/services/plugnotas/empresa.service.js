@@ -449,7 +449,11 @@ const requestJson = async (method, path, body) => {
       );
     }
 
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    // Arrays (ex.: listagem GET /certificado) devem passar direto; só colapsamos
+    // respostas que não são objeto (string/null) em { message }. Antes, o
+    // Array.isArray descartava a listagem de certificados, quebrando a
+    // recuperação do ID após 409 (cert duplicado entre usuários).
+    if (!payload || typeof payload !== 'object') {
       return { message: toMessage(payload, null) };
     }
     return payload;
@@ -515,7 +519,11 @@ const requestFormData = async (method, path, body) => {
       );
     }
 
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    // Arrays (ex.: listagem GET /certificado) devem passar direto; só colapsamos
+    // respostas que não são objeto (string/null) em { message }. Antes, o
+    // Array.isArray descartava a listagem de certificados, quebrando a
+    // recuperação do ID após 409 (cert duplicado entre usuários).
+    if (!payload || typeof payload !== 'object') {
       return { message: toMessage(payload, null) };
     }
     return payload;
