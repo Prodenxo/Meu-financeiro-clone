@@ -68,10 +68,12 @@ export async function listCalendarEvents(params?: {
 
 /**
  * Inicia o fluxo de autenticação OAuth do Google Calendar
+ * @param returnTo URL de retorno após autorização (ex.: página de configurações)
  */
-export async function startGoogleAuth(): Promise<{ url?: string; error?: string }> {
+export async function startGoogleAuth(returnTo?: string): Promise<{ url?: string; error?: string }> {
   try {
-    const data = await apiClient.get<{ authUrl?: string; url?: string }>('/google-calendar/auth');
+    const query = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : '';
+    const data = await apiClient.get<{ authUrl?: string; url?: string }>(`/google-calendar/auth${query}`);
     const authUrl = data.authUrl || data.url;
     if (!authUrl) {
       throw new Error('URL de autorização não foi retornada pelo backend');

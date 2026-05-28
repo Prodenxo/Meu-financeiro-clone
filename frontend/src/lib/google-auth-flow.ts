@@ -34,8 +34,17 @@ const waitForAccessToken = async (attempts = 4, delayMs = 150): Promise<string |
  * Inicia o fluxo de autenticação OAuth do Google Calendar
  * Redireciona o usuário para a página de autorização do Google
  */
+function buildOAuthReturnTo(): string {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('googleCalendar');
+  url.searchParams.delete('code');
+  url.searchParams.delete('state');
+  url.searchParams.delete('error');
+  return url.toString();
+}
+
 export async function initiateGoogleAuthFlow(): Promise<void> {
-  const { url, error } = await startGoogleAuth();
+  const { url, error } = await startGoogleAuth(buildOAuthReturnTo());
 
   if (error) {
     throw new Error(error);

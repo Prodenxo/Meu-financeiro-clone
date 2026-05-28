@@ -45,22 +45,117 @@ function parseOAuthState(state: string | null): OAuthStatePayload | null {
   return null;
 }
 
+const FRONTEND_ORIGIN_HINTS = (Deno.env.get('FRONTEND_URL') || Deno.env.get('PUBLIC_APP_URL') || '')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
 function isAllowedReturnTo(returnTo: string): boolean {
   try {
     const u = new URL(returnTo);
     if (u.protocol === 'financas-pessoais:') return true;
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
     const host = u.hostname.toLowerCase();
-    return (
+    if (
       host === 'localhost' ||
       host === '127.0.0.1' ||
       host.endsWith('.vercel.app') ||
       host.includes('meufinanceiro') ||
+      host.includes('meiinfinito') ||
       host.includes('contabhub')
-    );
+    ) {
+      return true;
+    }
+    return FRONTEND_ORIGIN_HINTS.some((hint) => host === hint || host.endsWith(`.${hint}`) || hint.includes(host));
   } catch {
     return false;
   }
+}
+
+function createServiceClient() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+  );
+}
+
+async function resolveRefreshTokenForUpsert(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+  incomingRefresh?: string,
+): Promise<string | null> {
+  if (incomingRefresh) return incomingRefresh;
+  const { data } = await serviceClient
+    .from('google_tokens_id')
+    .select('refresh_token')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return data?.refresh_token ?? null;
+}
+
+async function saveGoogleTokens(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+  tokens: GoogleTokenResponse,
+): Promise<{ ok: boolean; error?: string }> {
+  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+  const refresh_token = await resolveRefreshTokenForUpsert(serviceClient, userId, tokens.refresh_token);
+  const row: Record<string, string | null> = {
+    user_id: userId,
+    access_token: tokens.access_token,
+    expires_at: expiresAt,
+  };
+  if (refresh_token) row.refresh_token = refresh_token;
+  const { error } = await serviceClient.from('google_tokens_id').upsert(row, { onConflict: 'user_id' });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+async function refreshGoogleAccessToken(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+  refreshToken: string,
+): Promise<{ accessToken: string } | { error: string }> {
+  const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  });
+  if (!refreshResponse.ok) {
+    return { error: 'Não foi possível renovar o token do Google Calendar.' };
+  }
+  const refreshed: GoogleTokenResponse = await refreshResponse.json();
+  const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
+  await serviceClient
+    .from('google_tokens_id')
+    .update({ access_token: refreshed.access_token, expires_at: newExpiresAt })
+    .eq('user_id', userId);
+  return { accessToken: refreshed.access_token };
+}
+
+async function hasValidGoogleCalendarSession(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<boolean> {
+  const { data: tokenData } = await serviceClient
+    .from('google_tokens_id')
+    .select('access_token, refresh_token, expires_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!tokenData?.access_token) return false;
+
+  const expired = tokenData.expires_at && new Date(tokenData.expires_at) <= new Date();
+  if (!expired) return true;
+  if (!tokenData.refresh_token) return false;
+
+  const refreshed = await refreshGoogleAccessToken(serviceClient, userId, tokenData.refresh_token);
+  return 'accessToken' in refreshed;
 }
 
 function oauthFinishResponse(
@@ -112,9 +207,11 @@ function oauthFinishResponse(
 </html>`;
 
   return new Response(html, {
+    status: 200,
     headers: {
       ...corsHeaders,
       'Content-Type': 'text/html; charset=UTF-8',
+      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'no-store',
     },
   });
@@ -164,15 +261,9 @@ serve(async (req) => {
           });
           if (tokenResponse.ok) {
             const tokens: GoogleTokenResponse = await tokenResponse.json();
-            const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
-            const serviceClient = createClient(
-              Deno.env.get('SUPABASE_URL') ?? '',
-              Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-            );
-            const { error: dbError } = await serviceClient
-              .from('google_tokens_id')
-              .upsert({ user_id: userId, access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_at: expiresAt }, { onConflict: 'user_id' });
-            tokensSaved = !dbError;
+            const serviceClient = createServiceClient();
+            const saved = await saveGoogleTokens(serviceClient, userId, tokens);
+            tokensSaved = saved.ok;
           }
         } catch (_e) { tokensSaved = false; }
       }
@@ -266,17 +357,15 @@ serve(async (req) => {
         }
 
         const tokens: GoogleTokenResponse = await tokenResponse.json();
-        const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
         const dbClient = useServiceClient
-          ? createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '')
+          ? createServiceClient()
           : createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_ANON_KEY') ?? '', { global: { headers: { Authorization: req.headers.get('Authorization')! } } });
 
-        const { error: dbError } = await dbClient
-          .from('google_tokens_id')
-          .upsert({ user_id: userId, access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_at: expiresAt }, { onConflict: 'user_id' });
-
-        if (dbError) return new Response(JSON.stringify({ error: 'Erro ao salvar tokens: ' + dbError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const saved = await saveGoogleTokens(dbClient, userId, tokens);
+        if (!saved.ok) {
+          return new Response(JSON.stringify({ error: 'Erro ao salvar tokens: ' + (saved.error || 'desconhecido') }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
 
         return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } catch (e) {
@@ -309,26 +398,29 @@ serve(async (req) => {
       const returnToParam = url.searchParams.get('returnTo')?.trim() || '';
       const returnTo = returnToParam && isAllowedReturnTo(returnToParam) ? returnToParam : undefined;
       const state = encodeOAuthState(userId, returnTo);
+      const serviceClient = createServiceClient();
+      const { data: existingToken } = await serviceClient
+        .from('google_tokens_id')
+        .select('refresh_token')
+        .eq('user_id', userId)
+        .maybeSingle();
+      const needsConsent = !existingToken?.refresh_token;
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
       authUrl.searchParams.set('redirect_uri', GOOGLE_REDIRECT_URI);
       authUrl.searchParams.set('response_type', 'code');
       authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.events');
       authUrl.searchParams.set('access_type', 'offline');
-      authUrl.searchParams.set('prompt', 'consent');
+      authUrl.searchParams.set('prompt', needsConsent ? 'consent' : 'select_account');
       authUrl.searchParams.set('state', state);
       return new Response(JSON.stringify({ authUrl: authUrl.toString(), redirectUri: GOOGLE_REDIRECT_URI }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // GET /check-auth — verificar autenticação Google
+    // GET /check-auth — verificar autenticação Google (renova access token se expirado)
     if (path === 'check-auth' && req.method === 'GET') {
-      const { data: tokenData } = await supabaseClient
-        .from('google_tokens_id')
-        .select('access_token, expires_at')
-        .eq('user_id', userId)
-        .single();
-      const isAuthenticated = tokenData && (!tokenData.expires_at || new Date(tokenData.expires_at) > new Date());
-      return new Response(JSON.stringify({ authenticated: !!isAuthenticated }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const serviceClient = createServiceClient();
+      const isAuthenticated = await hasValidGoogleCalendarSession(serviceClient, userId);
+      return new Response(JSON.stringify({ authenticated: isAuthenticated }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // GET /events — listar eventos do Google Calendar

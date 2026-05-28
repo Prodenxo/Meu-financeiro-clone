@@ -46,6 +46,29 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const googleStatus = params.get('googleCalendar');
+    if (!googleStatus) return;
+
+    params.delete('googleCalendar');
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}`;
+    window.history.replaceState({}, document.title, nextUrl);
+
+    if (googleStatus === 'connected') {
+      void checkGoogleAuthStatus().then(() => {
+        setSuccess('Google Agenda conectada com sucesso!');
+        setTimeout(() => setSuccess(''), 5000);
+      });
+      return;
+    }
+
+    if (googleStatus === 'error') {
+      setError(new Error('Não foi possível conectar o Google Agenda. Tente novamente.'));
+    }
+  }, [location.search]);
+
+  useEffect(() => {
     console.log('[Settings] role atual:', role, 'userId:', userId, 'email:', user?.email);
   }, [role, userId, user?.email]);
 
