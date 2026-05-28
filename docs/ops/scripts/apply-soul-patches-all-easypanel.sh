@@ -117,12 +117,37 @@ Pedidos: *marca reunião*, *agenda*, *lembrar no calendário*:
 
 `;
 
+const nfseBlock = `## NFSe — cliente no catálogo (obrigatório)
+
+### Antes de emitir nota
+1. \`list_nfse_clientes\` com nome ou CPF/CNPJ do tomador.
+2. Se **não** existir: peça **CPF/CNPJ válido** (dígitos reais), **nome/razão social** e **e-mail** → \`register_nfse_cliente\`.
+3. Depois \`preview_nfse\` → confirme com o utilizador → \`emit_nfse\` com \`"confirm":true\`.
+
+### PROIBIDO
+- CPF/CNPJ inventado (ex.: 123456789000110) ou cliente fantasma.
+- \`emit_nfse\` sem cliente cadastrado (a API bloqueia).
+- Usar nome de pessoa aleatória que não está no catálogo.
+
+---
+
+`;
+
 const dasBlock = `## DAS MEI — PDF, saldo e telefone vinculado
 
 ### Antes de tudo
 1. \`resolve_user\` com **TELEFONE do painel OpenClaw** (1º arg do mf-curl).
 2. Se \`PHONE_NOT_LINKED\` / não encontrado: diga **UMA vez** para guardar o telefone no Perfil da app — **não repita** na mesma conversa.
 3. **PROIBIDO** inventar saldo, DAS ou PDF se a API falhou.
+
+### Nome no DAS (certificado)
+- O PDF é do **MEI do certificado A1** na app.
+- Na resposta use **dasOwnerLabel** ou **meiCertificadoRazaoSocial** (nome no certificado).
+- **NUNCA** use só \`displayName\`, nome que o utilizador falou no chat, nem \`empresaNome\` como se fosse o contribuinte do DAS.
+
+### Pedido "manda o DAS de maio" / "DAS da fulana"
+- **OBRIGATÓRIO** enviar o **PDF** no WhatsApp: \`exec\` \`mf-das-send.sh\` ou action \`send_das_whatsapp\` com \`payload.mes\` (ex.: \`05/2026\`).
+- Não responda só com texto nem \`get_das_current\` sem enviar PDF.
 
 ### Saldo
 - \`list_transactions\` → resume entradas/saídas; não há action "saldo" separada.
@@ -213,6 +238,31 @@ if (calIdx >= 0) {
   changes.push('calendário (AVISO: já tem create_calendar_event mas sem secção Agenda — reveja SOUL)');
 }
 
+// NFSe — catálogo de clientes
+const nfseMarkers = ['## NFSe — cliente no catálogo', '## NFSe — emitir'];
+let nfseIdx = -1;
+for (const m of nfseMarkers) {
+  const i = cur.indexOf(m);
+  if (i >= 0 && (nfseIdx < 0 || i < nfseIdx)) nfseIdx = i;
+}
+const needsNfse = !cur.includes('register_nfse_cliente');
+if (nfseIdx >= 0) {
+  const nextH2 = cur.indexOf('\n## ', nfseIdx + 5);
+  const sliceEnd = nextH2 > nfseIdx ? nextH2 : cur.length;
+  cur = cur.slice(0, nfseIdx) + nfseBlock + cur.slice(sliceEnd);
+  changes.push('NFSe catálogo (substituído)');
+} else if (needsNfse) {
+  const insertAt = cur.indexOf('## DAS MEI');
+  if (insertAt >= 0) {
+    cur = cur.slice(0, insertAt) + nfseBlock + cur.slice(insertAt);
+  } else {
+    cur += '\n' + nfseBlock;
+  }
+  changes.push('NFSe catálogo (inserido)');
+} else {
+  changes.push('NFSe catálogo (já ok)');
+}
+
 // DAS + saldo
 const dasMarkers = ['## DAS MEI — PDF, saldo', '## DAS MEI', '### DAS no WhatsApp'];
 let dasIdx = -1;
@@ -221,7 +271,7 @@ for (const m of dasMarkers) {
   if (i >= 0 && (dasIdx < 0 || i < dasIdx)) dasIdx = i;
 }
 const phoneIdx3 = cur.indexOf(phoneSection);
-const needsDas = !cur.includes('mf-das-send.sh') || !cur.includes('send_das_whatsapp');
+const needsDas = !cur.includes('mf-das-send.sh') || !cur.includes('send_das_whatsapp') || !cur.includes('meiCertificadoRazaoSocial');
 
 if (dasIdx >= 0) {
   const sliceEnd = phoneIdx3 > dasIdx ? phoneIdx3 : cur.length;

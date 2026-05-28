@@ -32,8 +32,11 @@ import {
   listOpenclawNfseClientes,
   listOpenclawNfseNotas,
   previewOpenclawNfseEmit,
+  registerOpenclawNfseCliente,
   rethrowNfseErrorForBot,
 } from './openclaw-nfse.service.js';
+import { formatCnpjDisplay } from '../utils/cpf-cnpj.js';
+import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
 import {
   deliverOpenclawNfseWhatsappPdf,
   getOpenclawNfseWhatsappDeliveryState,
@@ -282,11 +285,33 @@ export const fetchOpenclawAccountSummary = async (userId) => {
     /* memberships opcional */
   }
 
+  let meiCertificadoRazaoSocial = null;
+  let meiCertificadoCnpj = null;
+  try {
+    const emitente = await getEmitenteNfseSnapshot(userId);
+    meiCertificadoRazaoSocial = String(
+      emitente?.razaoSocial || emitente?.nomeFantasia || '',
+    ).trim() || null;
+    const cnpjDigits = String(emitente?.certDocument || '').replace(/\D/g, '');
+    meiCertificadoCnpj = cnpjDigits.length === 14 ? cnpjDigits : null;
+  } catch {
+    /* certificado opcional */
+  }
+
+  const dasOwnerLabel = meiCertificadoRazaoSocial
+    ? (meiCertificadoCnpj
+      ? `${meiCertificadoRazaoSocial} (CNPJ ${formatCnpjDisplay(meiCertificadoCnpj)})`
+      : meiCertificadoRazaoSocial)
+    : null;
+
   return {
     userId,
     displayName: String(displayName || '').trim() || 'Utilizador',
     empresaNome,
     email,
+    meiCertificadoRazaoSocial,
+    meiCertificadoCnpj,
+    dasOwnerLabel,
   };
 };
 
@@ -493,6 +518,11 @@ export const runOpenclawAction = async (input) => {
     enviar_das: 'send_das_whatsapp',
     pdf_das: 'send_das_whatsapp',
     mandar_das: 'send_das_whatsapp',
+    pedir_das: 'send_das_whatsapp',
+    das_pdf: 'send_das_whatsapp',
+    register_nfse_cliente: 'register_nfse_cliente',
+    cadastrar_cliente_nfse: 'register_nfse_cliente',
+    lookup_nfse_cliente: 'list_nfse_clientes',
   };
   let action = String(input?.action || '').trim();
   action = actionAliases[action] || action;
@@ -952,9 +982,14 @@ export const runOpenclawAction = async (input) => {
   };
 
   const buildDasOwnerLabel = (account) => {
-    const name = account?.displayName || 'Utilizador';
-    const emp = account?.empresaNome ? ` — ${account.empresaNome}` : '';
-    return `${name}${emp}`;
+    if (account?.dasOwnerLabel) return account.dasOwnerLabel;
+    if (account?.meiCertificadoRazaoSocial) {
+      const cnpj = account?.meiCertificadoCnpj
+        ? ` (CNPJ ${formatCnpjDisplay(account.meiCertificadoCnpj)})`
+        : '';
+      return `${account.meiCertificadoRazaoSocial}${cnpj}`;
+    }
+    return 'MEI — cadastre o certificado A1 na app para identificar o contribuinte no DAS';
   };
 
   const resolveDasSubjectIfNeeded = async () => {
@@ -1033,20 +1068,24 @@ export const runOpenclawAction = async (input) => {
           whatsappError: whatsapp.whatsappError ?? null,
           hint: whatsapp.hint ?? null,
           dasAccount: dasSubject?.account ?? null,
+          dasOwnerLabel: dasSubject?.account?.dasOwnerLabel ?? null,
+          meiCertificadoRazaoSocial: dasSubject?.account?.meiCertificadoRazaoSocial ?? null,
           accessedAsSelf: dasSubject?.accessedAsSelf ?? true,
           execCommand: destinationPhone
             ? `/home/node/.openclaw/workspace/mf-das-send.sh ${destinationPhone} ${display}`
             : null,
+          agentInstructions:
+            'Use dasOwnerLabel/meiCertificadoRazaoSocial (certificado), NÃO displayName. Para enviar PDF: send_das_whatsapp ou mf-das-send.sh.',
           actorContext,
           ...(dasSubject?.dataLinkDebug ?? linkDebug),
         },
       };
     }
 
-    const owner = dasSubject ? buildDasOwnerLabel(dasSubject.account) : null;
-    return {
-      ok: true,
-      message: `DAS encontrado (${owner}).`,
+  const owner = dasSubject ? buildDasOwnerLabel(dasSubject.account) : null;
+  return {
+    ok: true,
+    message: `DAS encontrado (${owner}).`,
       data: {
         fileName,
         mimeType: 'application/pdf',
@@ -1136,12 +1175,14 @@ export const runOpenclawAction = async (input) => {
         whatsappError: whatsapp.whatsappError ?? null,
         hint: whatsapp.hint ?? null,
         dasAccount: dasSubject?.account ?? null,
+        dasOwnerLabel: dasSubject?.account?.dasOwnerLabel ?? null,
+        meiCertificadoRazaoSocial: dasSubject?.account?.meiCertificadoRazaoSocial ?? null,
         accessedAsSelf: dasSubject?.accessedAsSelf ?? true,
         useOpenclawScript: sent
           ? null
           : `/home/node/.openclaw/workspace/mf-das-send.sh ${destinationPhone} ${display}`,
         agentInstructions: sent
-          ? 'Confirme só que o PDF foi enviado (message).'
+          ? 'Confirme só que o PDF foi enviado. Use dasOwnerLabel (certificado) se mencionar o contribuinte.'
           : 'OBRIGATÓRIO exec mf-das-send.sh com telefone do PAINEL. Não diga que enviou sem whatsappStatus=sent.',
         actorContext,
         ...(dasSubject?.dataLinkDebug ?? linkDebug),
@@ -1161,14 +1202,41 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'list_nfse_clientes') {
-    const q = String(payload?.q ?? payload?.nome ?? payload?.busca ?? '').trim();
+    const q = String(
+      payload?.q ?? payload?.nome ?? payload?.busca ?? payload?.documento ?? '',
+    ).trim();
     const limit = payload?.limit;
     const clientes = await listOpenclawNfseClientes(userId, { q, limit });
+    const docHint = q
+      ? ' Se não aparecer o cliente certo, cadastre com register_nfse_cliente antes de emit_nfse.'
+      : '';
     return {
       ok: true,
-      message: `${clientes.length} cliente(s) no catálogo NFSe.`,
+      message: `${clientes.length} cliente(s) no catálogo NFSe.${docHint}`,
       data: { clientes, userId, actorContext, ...linkDebug },
     };
+  }
+
+  if (action === 'register_nfse_cliente') {
+    try {
+      const result = await registerOpenclawNfseCliente(userId, payload);
+      const nome = result.cliente?.nome || 'Cliente';
+      const doc = result.cliente?.documento || '';
+      return {
+        ok: true,
+        message: result.alreadyRegistered
+          ? `Cliente já cadastrado: ${nome} (${doc}). Pode usar preview_nfse e emit_nfse.`
+          : `Cliente cadastrado: ${nome} (${doc}). Agora use preview_nfse e emit_nfse com confirm:true.`,
+        data: {
+          ...result,
+          userId,
+          actorContext,
+          ...linkDebug,
+        },
+      };
+    } catch (err) {
+      rethrowNfseErrorForBot(err);
+    }
   }
 
   if (action === 'preview_nfse') {
@@ -1474,6 +1542,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

@@ -8,6 +8,7 @@ import {
 import { resolverCertificadoIdPorCnpj } from './plugnotas/empresa.service.js';
 import {
   baixarPdf,
+  criarCatalogoCliente,
   emitirNota,
   listarCatalogoClientes,
   listarCatalogoProdutos,
@@ -16,8 +17,9 @@ import {
   NFSE_SERVICO_CODIGO_MIN_LENGTH,
 } from './mei-notas.service.js';
 import { lookupCnpjBrasilApi } from './cnpj-lookup.service.js';
+import { isValidCpfOrCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
 
-const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
+const normalizeDoc = (value) => normalizeDocDigits(value);
 
 const firstNonEmpty = (...values) => {
   for (const v of values) {
@@ -183,18 +185,33 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
   };
 };
 
-const findClienteCatalogo = async (userId, { documento, nome }) => {
+const findClienteCatalogoByDocumento = async (userId, documento) => {
   const doc = normalizeDoc(documento);
-  if (doc) {
-    const rows = await listarCatalogoClientes(userId, { q: doc, limit: 5 });
-    const hit = (rows || []).find((r) => normalizeDoc(r.documento) === doc);
-    if (hit) return hit;
+  if (!doc) return null;
+  const rows = await listarCatalogoClientes(userId, { q: doc, limit: 20 });
+  return (rows || []).find((r) => normalizeDoc(r.documento) === doc) || null;
+};
+
+const assertTomadorDocumentoValido = (tomadorDoc) => {
+  if (!tomadorDoc) {
+    throw badRequest('CPF ou CNPJ do tomador é obrigatório.', {
+      code: 'NFSE_TOMADOR_DOC_MISSING',
+      botHint: 'Peça CPF (11 dígitos) ou CNPJ (14 dígitos) válidos do cliente.',
+    });
   }
-  const nomeQ = String(nome || '').trim();
-  if (!nomeQ) return null;
-  const rows = await listarCatalogoClientes(userId, { q: nomeQ, limit: 10 });
-  const lower = nomeQ.toLowerCase();
-  return (rows || []).find((r) => String(r.nome || '').toLowerCase().includes(lower)) || rows?.[0] || null;
+  if (tomadorDoc.length !== 11 && tomadorDoc.length !== 14) {
+    throw badRequest('CPF/CNPJ do tomador deve ter 11 ou 14 dígitos.', {
+      code: 'NFSE_TOMADOR_DOC_INVALID',
+      botHint: 'Não invente documentos. Use list_nfse_clientes ou peça o CPF/CNPJ real.',
+    });
+  }
+  if (!isValidCpfOrCnpj(tomadorDoc)) {
+    throw badRequest('CPF ou CNPJ do tomador inválido (dígitos verificadores).', {
+      code: 'NFSE_TOMADOR_DOC_INVALID',
+      botHint:
+        'PROIBIDO usar CPF/CNPJ inventado (ex.: 123456789000110). Confirme com o cliente ou cadastre via register_nfse_cliente.',
+    });
+  }
 };
 
 const resolveTomador = async (userId, payload) => {
@@ -203,56 +220,91 @@ const resolveTomador = async (userId, payload) => {
       || payload?.tomadorCnpj
       || payload?.cnpjTomador
       || payload?.cnpj
-      || payload?.cpfCnpj,
+      || payload?.cpfCnpj
+      || payload?.documento,
   );
-  if (!tomadorDoc) {
-    throw badRequest('CPF ou CNPJ do tomador é obrigatório.', {
-      code: 'NFSE_TOMADOR_DOC_MISSING',
-      botHint: 'Peça CPF (11 dígitos) ou CNPJ (14 dígitos) do cliente.',
+  assertTomadorDocumentoValido(tomadorDoc);
+
+  const catalogo = await findClienteCatalogoByDocumento(userId, tomadorDoc);
+  if (!catalogo) {
+    throw badRequest('Cliente não está cadastrado no catálogo NFSe.', {
+      code: 'NFSE_TOMADOR_NOT_IN_CATALOG',
+      tomadorDocumento: tomadorDoc,
+      botHint:
+        '1) list_nfse_clientes com nome ou documento. '
+        + '2) Se não existir: peça CPF/CNPJ válido, nome/razão social e e-mail; use register_nfse_cliente. '
+        + '3) Depois preview_nfse e emit_nfse com confirm:true. Não emita com cliente fantasma.',
     });
   }
-  if (tomadorDoc.length !== 11 && tomadorDoc.length !== 14) {
-    throw badRequest('CPF/CNPJ do tomador inválido.', { code: 'NFSE_TOMADOR_DOC_INVALID' });
-  }
 
-  let razaoSocial = firstNonEmpty(
-    payload?.tomadorRazaoSocial,
-    payload?.tomadorNome,
-    payload?.razaoSocial,
-    payload?.nomeTomador,
-    payload?.cliente,
-  );
-
-  const catalogo = await findClienteCatalogo(userId, {
-    documento: tomadorDoc,
-    nome: payload?.tomadorNome || payload?.cliente,
-  });
-  if (!razaoSocial && catalogo?.nome) razaoSocial = String(catalogo.nome).trim();
-  if (!razaoSocial && catalogo?.metadata_json?.razaoSocial) {
-    razaoSocial = String(catalogo.metadata_json.razaoSocial).trim();
-  }
-
-  if (!razaoSocial && tomadorDoc.length === 14) {
-    try {
-      const lookup = await lookupCnpjBrasilApi(tomadorDoc);
-      razaoSocial = String(lookup?.razaoSocial || lookup?.nomeFantasia || '').trim();
-    } catch {
-      /* segue sem razão social */
-    }
-  }
-
+  const razaoSocial = String(catalogo.nome || catalogo.metadata_json?.razaoSocial || '').trim();
   if (!razaoSocial) {
-    throw badRequest('Razão social ou nome do tomador é obrigatório.', {
+    throw badRequest('Cliente no catálogo sem nome. Atualize o cadastro na app ou register_nfse_cliente.', {
       code: 'NFSE_TOMADOR_NOME_MISSING',
-      botHint: 'Para CPF, peça o nome completo; para CNPJ pode consultar Receita se a API estiver disponível.',
+      catalogoClienteId: catalogo.id,
     });
   }
 
   return {
     tomadorCpfCnpj: tomadorDoc,
     tomadorRazaoSocial: razaoSocial,
-    tomadorEmail: firstNonEmpty(payload?.tomadorEmail, catalogo?.email) || undefined,
+    tomadorEmail: catalogo.email ? String(catalogo.email).trim() : undefined,
+    catalogoClienteId: catalogo.id,
   };
+};
+
+/**
+ * Cadastra tomador no catálogo NFSe (WhatsApp) antes da emissão.
+ */
+export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
+  const documento = normalizeDoc(
+    payload?.documento
+      || payload?.tomadorCpfCnpj
+      || payload?.cnpj
+      || payload?.cpfCnpj,
+  );
+  assertTomadorDocumentoValido(documento);
+
+  const existing = await findClienteCatalogoByDocumento(userId, documento);
+  if (existing) {
+    return {
+      alreadyRegistered: true,
+      cliente: existing,
+    };
+  }
+
+  let nome = firstNonEmpty(
+    payload?.nome,
+    payload?.tomadorRazaoSocial,
+    payload?.tomadorNome,
+    payload?.razaoSocial,
+    payload?.cliente,
+  );
+
+  if (!nome && documento.length === 14) {
+    try {
+      const lookup = await lookupCnpjBrasilApi(documento);
+      nome = String(lookup?.razaoSocial || lookup?.nomeFantasia || '').trim();
+    } catch {
+      /* segue */
+    }
+  }
+
+  if (!nome) {
+    throw badRequest('Nome ou razão social do cliente é obrigatório para cadastro.', {
+      code: 'NFSE_CLIENTE_NOME_MISSING',
+      botHint: 'Peça o nome completo (PF) ou razão social (PJ) antes de register_nfse_cliente.',
+    });
+  }
+
+  const emailRaw = firstNonEmpty(payload?.email, payload?.tomadorEmail);
+  const cliente = await criarCatalogoCliente(userId, {
+    documento,
+    nome,
+    ...(emailRaw ? { email: emailRaw } : {}),
+  });
+
+  return { alreadyRegistered: false, cliente };
 };
 
 /**
