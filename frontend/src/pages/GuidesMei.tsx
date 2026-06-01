@@ -1332,21 +1332,23 @@ export default function GuidesMei() {
     }
   }, [applyDocumento, canViewNfse, contribuinteDoc, userId]);
 
-  const loadMeiPeriods = useCallback(async () => {
+  const loadMeiPeriods = useCallback(async (options?: { refresh?: boolean }) => {
     if (!canLoadPeriods) {
       setMeiPeriods([]);
       setMeiPeriodsError(null);
       return;
     }
+    const refresh = Boolean(options?.refresh);
     setMeiPeriodsLoading(true);
     setMeiPeriodsError(null);
     try {
       const contribuinte = contribuinteTipo
         ? { numero: normalizedContribuinte, tipo: contribuinteTipo }
         : undefined;
+      const fetchOpts = refresh ? { refresh: true } : undefined;
       const periods = hasUserCertificate
-        ? await fetchMeiPeriods(normalizedContribuinte, contribuinte)
-        : await fetchMeiPeriodsByCnpj(normalizedContribuinte);
+        ? await fetchMeiPeriods(normalizedContribuinte, contribuinte, fetchOpts)
+        : await fetchMeiPeriodsByCnpj(normalizedContribuinte, fetchOpts);
       setMeiPeriods(periods || []);
     } catch (error) {
       setMeiPeriodsError(error instanceof Error ? error.message : 'Erro ao listar períodos do DAS.');
@@ -4484,11 +4486,13 @@ export default function GuidesMei() {
               <p className="admin-section-subtitle">Últimos períodos consultados e situação do pagamento.</p>
             </div>
             <button
+              type="button"
               className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={() => void loadMeiPeriods()}
+              onClick={() => void loadMeiPeriods({ refresh: true })}
               disabled={!canLoadPeriods || meiPeriodsLoading}
+              title="Consultar novamente a Receita/Serpro e atualizar o status de cada competência"
             >
-              {meiPeriodsLoading ? 'Atualizando...' : 'Atualizar histórico'}
+              {meiPeriodsLoading ? 'Atualizando...' : 'Atualizar'}
             </button>
           </div>
 

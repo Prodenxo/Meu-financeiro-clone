@@ -594,19 +594,21 @@ export default function AdminUserData() {
     }
   }, []);
 
-  const loadMeiPeriods = useCallback(async (userId: string) => {
+  const loadMeiPeriods = useCallback(async (userId: string, options?: { refresh?: boolean }) => {
     if (!canLoadMeiPeriods) {
       setMeiPeriods([]);
       setMeiPeriodsError(null);
       return;
     }
+    const refresh = Boolean(options?.refresh);
     setMeiPeriodsLoading(true);
     setMeiPeriodsError(null);
     const cnpjParam = normalizedMeiCnpj.length === 14 ? normalizedMeiCnpj : undefined;
     try {
+      const fetchOpts = refresh ? { refresh: true } : undefined;
       const data = meiCertificateStatus?.hasUserCertificate
-        ? await fetchAdminMeiPeriods(userId, cnpjParam)
-        : await fetchAdminMeiPeriodsByCnpj(userId, cnpjParam || '');
+        ? await fetchAdminMeiPeriods(userId, cnpjParam, fetchOpts)
+        : await fetchAdminMeiPeriodsByCnpj(userId, cnpjParam || '', fetchOpts);
       setMeiPeriods(data || []);
       await triggerAutoDownload(userId, data || []);
     } catch (err: unknown) {
@@ -1173,11 +1175,12 @@ export default function AdminUserData() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => selectedUserId && loadMeiPeriods(selectedUserId)}
+                  onClick={() => selectedUserId && loadMeiPeriods(selectedUserId, { refresh: true })}
                   disabled={!canLoadMeiPeriods || meiPeriodsLoading}
                   className="planner-button w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Consultar novamente a Receita/Serpro e atualizar o status de cada competência"
                 >
-                  {meiPeriodsLoading ? 'Atualizando...' : 'Atualizar histórico'}
+                  {meiPeriodsLoading ? 'Atualizando...' : 'Atualizar'}
                 </button>
               </div>
 

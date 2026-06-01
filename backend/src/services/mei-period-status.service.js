@@ -90,6 +90,28 @@ export const listPaidCompetencias = async ({ userId, competencias = [] } = {}) =
   );
 };
 
+/** Último status conhecido em `das_mensal_status` (fallback quando SERPRO está indisponível). */
+export const getKnownCompetenciaPeriodStatus = async ({ userId, competencia } = {}) => {
+  const normalizedCompetencia = normalizeCompetencia(competencia);
+  if (!userId || !normalizedCompetencia) return null;
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from(DAS_TABLE)
+    .select('status')
+    .eq('user_id', userId)
+    .eq('competencia', normalizedCompetencia)
+    .maybeSingle();
+
+  if (error) {
+    throw badRequest(error.message || 'Erro ao consultar status conhecido da competência');
+  }
+  const raw = String(data?.status || '').trim().toLowerCase();
+  if (raw === 'pago') return 'pago';
+  if (raw === 'pendente') return 'a_pagar';
+  return null;
+};
+
 export const isCompetenciaPaid = async ({ userId, competencia } = {}) => {
   const normalizedCompetencia = normalizeCompetencia(competencia);
   if (!userId || !normalizedCompetencia) return false;

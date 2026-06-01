@@ -118,20 +118,26 @@ export async function regenerateMeiGuide(
 
 export async function fetchMeiPeriods(
   cnpj: string,
-  contribuinte?: { numero: string; tipo: number }
+  contribuinte?: { numero: string; tipo: number },
+  options?: { refresh?: boolean }
 ): Promise<MeiPeriod[]> {
-  const query = new URLSearchParams({
-    cnpj,
-    ...(contribuinte ? {
-      contribuinteNumero: contribuinte.numero,
-      contribuinteTipo: String(contribuinte.tipo)
-    } : {})
-  });
+  const params: Record<string, string> = { cnpj };
+  if (contribuinte) {
+    params.contribuinteNumero = contribuinte.numero;
+    params.contribuinteTipo = String(contribuinte.tipo);
+  }
+  if (options?.refresh) params.refresh = 'true';
+  const query = new URLSearchParams(params);
   return await apiClient.get<MeiPeriod[]>(`/mei-guide/periods?${query.toString()}`);
 }
 
-export async function fetchMeiPeriodsByCnpj(cnpj: string): Promise<MeiPeriod[]> {
-  const query = new URLSearchParams({ cnpj });
+export async function fetchMeiPeriodsByCnpj(
+  cnpj: string,
+  options?: { refresh?: boolean }
+): Promise<MeiPeriod[]> {
+  const params: Record<string, string> = { cnpj };
+  if (options?.refresh) params.refresh = 'true';
+  const query = new URLSearchParams(params);
   return await apiClient.get<MeiPeriod[]>(`/mei-guide/periods-by-cnpj?${query.toString()}`);
 }
 

@@ -1,11 +1,5 @@
 import { badRequest } from '../utils/errors.js';
-import {
-  getEmitenteNfseSnapshot,
-  getPlugNotasCertId,
-  hasCertificate,
-  savePlugNotasCertId,
-} from './mei-certificate-store.js';
-import { resolverCertificadoIdPorCnpj } from './plugnotas/empresa.service.js';
+import { getEmitenteNfseSnapshot, getPlugNotasCertId, hasCertificate } from './mei-certificate-store.js';
 import {
   baixarPdf,
   criarCatalogoCliente,
@@ -354,48 +348,15 @@ export const buildOpenclawNfseEmitInput = async (userId, payload = {}) => {
  * Estado de prontidão para emitir NFSe pelo WhatsApp.
  */
 export const getOpenclawNfseSetupStatus = async (userId) => {
-  const [certOk, plugIdLocal, emitente] = await Promise.all([
+  const [certOk, plugId, emitente] = await Promise.all([
     hasCertificate(userId),
     getPlugNotasCertId(userId),
     getEmitenteNfseSnapshot(userId),
   ]);
 
-  let plugnotasCertId = plugIdLocal;
-  /** @type {'local_db'|'plugnotas_api'|'prior_nfse_emission'|null} */
-  let plugnotasCertSource = plugIdLocal ? 'local_db' : null;
-
-  if (!plugnotasCertId && emitente?.certDocument) {
-    const cnpj = normalizeDoc(emitente.certDocument);
-    if (cnpj.length === 14) {
-      try {
-        const resolved = await resolverCertificadoIdPorCnpj(cnpj);
-        if (resolved) {
-          plugnotasCertId = resolved;
-          plugnotasCertSource = 'plugnotas_api';
-          savePlugNotasCertId(userId, resolved).catch(() => {});
-        }
-      } catch {
-        /* Plugnotas indisponível — tenta fallback abaixo */
-      }
-    }
-  }
-
-  if (!plugnotasCertId && certOk) {
-    try {
-      const notas = await listarNotas(userId, { documentType: 'NFSE', limit: 1 });
-      if ((notas || []).length > 0) {
-        plugnotasCertSource = 'prior_nfse_emission';
-      }
-    } catch {
-      /* opcional */
-    }
-  }
-
-  const plugnotasOk = Boolean(plugnotasCertId) || plugnotasCertSource === 'prior_nfse_emission';
-
   const missing = [];
   if (!certOk) missing.push('certificado_a1');
-  if (!plugnotasOk) missing.push('plugnotas_certificado');
+  if (!plugId) missing.push('plugnotas_certificado');
   if (!emitente) missing.push('dados_fiscais_prestador');
   else {
     const cnpj = normalizeDoc(emitente.certDocument || '');
@@ -426,9 +387,7 @@ export const getOpenclawNfseSetupStatus = async (userId) => {
     ready: missing.length === 0,
     missing,
     hasCertificate: certOk,
-    hasPlugnotasCertId: Boolean(plugnotasCertId),
-    plugnotasCertSource,
-    plugnotasEmissionReady: plugnotasOk,
+    hasPlugnotasCertId: Boolean(plugId),
     prestadorCnpj: emitente?.certDocument ? normalizeDoc(emitente.certDocument) : null,
     prestadorRazaoSocial: emitente?.razaoSocial || null,
     defaultServico,

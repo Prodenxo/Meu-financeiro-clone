@@ -16,6 +16,8 @@ import {
   getWhatsappAudioTranscriptionStatus,
   transcribeZapiInboundAudio,
 } from '../services/whatsapp-audio-transcription.service.js';
+import { evaluateChatGuard } from '../services/openclaw-chat-guard.service.js';
+import { sendWhatsappMessage } from '../services/whatsapp-outbound.service.js';
 
 export const getZapiMonitor = (_req, res) => {
   return res.json({
@@ -27,6 +29,8 @@ export const getZapiMonitor = (_req, res) => {
       'slash_skip_relay',
       'access_command_skip_relay',
       'access_whatsapp_inbound',
+      'chat_guard_off_topic',
+      'chat_guard_internal_probe',
     ],
     preferredAccessCommand: 'mf pendentes',
     accessRequestWhatsapp: isAccessRequestWhatsappNotifyEnabled(),
@@ -109,12 +113,38 @@ export const postInbound = async (req, res, next) => {
     }
 
     const relayDecision = getOpenclawRelaySkipDecision(parsed.text, accessRequestHandled);
-    const skipOpenclawRelay = relayDecision.skip;
-    if (skipOpenclawRelay) {
+    const chatGuard = evaluateChatGuard(parsed.text);
+    let skipOpenclawRelay = relayDecision.skip;
+    let chatGuardHandled = false;
+
+    if (!skipOpenclawRelay && chatGuard.block && chatGuard.reply) {
+      try {
+        await sendWhatsappMessage({
+          phone: parsed.phone,
+          message: chatGuard.reply,
+        });
+        chatGuardHandled = true;
+        skipOpenclawRelay = true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // eslint-disable-next-line no-console
+        console.warn('[ZAPI] chat-guard reply falhou:', msg);
+      }
+    }
+
+    if (skipOpenclawRelay && !chatGuardHandled) {
       // eslint-disable-next-line no-console
       console.info(
         '[ZAPI] openclaw relay ignorado:',
         relayDecision.reason,
+        'text=',
+        String(parsed.text || '').slice(0, 80),
+      );
+    } else if (chatGuardHandled) {
+      // eslint-disable-next-line no-console
+      console.info(
+        '[ZAPI] chat-guard bloqueou relay:',
+        chatGuard.reason,
         'text=',
         String(parsed.text || '').slice(0, 80),
       );
@@ -135,7 +165,12 @@ export const postInbound = async (req, res, next) => {
         accessRequestHandled,
         accessRequestReason,
         openclawSkipped: skipOpenclawRelay,
-        openclawSkipReason: relayDecision.reason,
+        openclawSkipReason: chatGuardHandled
+          ? `chat_guard_${chatGuard.reason}`
+          : relayDecision.reason,
+        chatGuard: chatGuard.block
+          ? { blocked: true, reason: chatGuard.reason, replied: chatGuardHandled }
+          : { blocked: false },
         inboundBridgeVersion: ZAPI_INBOUND_BRIDGE_VERSION,
         transcriptionSource,
       },

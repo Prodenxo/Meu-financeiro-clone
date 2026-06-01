@@ -177,17 +177,27 @@ export async function fetchAdminMeiCertificateStatus(userId: string): Promise<Ad
   return apiClient.get<AdminMeiCertificateStatus>(`/admin/mei-guide/${userId}/certificate/status`);
 }
 
-export async function fetchAdminMeiPeriods(userId: string, cnpj?: string): Promise<AdminMeiPeriod[]> {
+export async function fetchAdminMeiPeriods(
+  userId: string,
+  cnpj?: string,
+  options?: { refresh?: boolean }
+): Promise<AdminMeiPeriod[]> {
   const params = new URLSearchParams();
   if (cnpj) params.set('cnpj', cnpj);
+  if (options?.refresh) params.set('refresh', 'true');
   const query = params.toString();
   return apiClient.get<AdminMeiPeriod[]>(
     `/admin/mei-guide/${userId}/periods${query ? `?${query}` : ''}`
   );
 }
 
-export async function fetchAdminMeiPeriodsByCnpj(userId: string, cnpj: string): Promise<AdminMeiPeriod[]> {
+export async function fetchAdminMeiPeriodsByCnpj(
+  userId: string,
+  cnpj: string,
+  options?: { refresh?: boolean }
+): Promise<AdminMeiPeriod[]> {
   const params = new URLSearchParams({ cnpj });
+  if (options?.refresh) params.set('refresh', 'true');
   return apiClient.get<AdminMeiPeriod[]>(
     `/admin/mei-guide/${userId}/periods-by-cnpj?${params.toString()}`
   );

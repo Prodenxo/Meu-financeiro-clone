@@ -143,6 +143,97 @@ test('mei-guide marca período como pago quando resposta vem sem PDF', async () 
   assert.equal(persistedPaid, items.length);
 });
 
+test('mei-guide consulta SERPRO na listagem (skipLocalPdf) e marca pago quando não há débito', async () => {
+  const { __buildPeriodsFromPdfForTests } = await import('../src/services/mei-guide.service.js');
+  const calls = [];
+
+  const items = await __buildPeriodsFromPdfForTests('user-skip-local', {
+    cnpj: '12345678000199',
+    useCertificate: false
+  }, {
+    listPaidCompetenciasFn: async () => [],
+    createGuideByCnpjFn: async (_userId, payload) => {
+      calls.push(payload);
+      throw new Error('Não há débitos para o período informado');
+    },
+    markCompetenciaAsPaidFn: async () => {}
+  });
+
+  assert.equal(calls.length, 12);
+  assert.equal(calls.every((payload) => payload?.skipLocalPdf === true), true);
+  assert.equal(items.every((item) => item.status === 'pago'), true);
+});
+
+test('mei-guide marca pago quando SERPRO retorna MSG_23018', async () => {
+  const { __buildPeriodsFromPdfForTests } = await import('../src/services/mei-guide.service.js');
+  let persistedPaid = 0;
+
+  const items = await __buildPeriodsFromPdfForTests('user-23018', {
+    cnpj: '12345678000199',
+    useCertificate: false
+  }, {
+    listPaidCompetenciasFn: async () => [],
+    createGuideByCnpjFn: async () => {
+      throw new Error(
+        'DAS MEI indisponível (03/2026): Requisição efetuada com sucesso. 23018-Já foi efetuado pagamento para este PA. Não será gerado DAS.'
+      );
+    },
+    markCompetenciaAsPaidFn: async () => {
+      persistedPaid += 1;
+    }
+  });
+
+  assert.equal(items.every((item) => item.status === 'pago'), true);
+  assert.equal(persistedPaid, items.length);
+});
+
+test('mei-guide classifica SERPRO indisponível como indisponivel após retentativas', async () => {
+  const { __buildPeriodsFromPdfForTests } = await import('../src/services/mei-guide.service.js');
+  const { serviceUnavailable } = await import('../src/utils/errors.js');
+  const { MEI_GUIDE_SERPRO_UNAVAILABLE } = await import('../src/constants/mei-guide-error-codes.js');
+  let calls = 0;
+
+  const items = await __buildPeriodsFromPdfForTests('user-serpro-down', {
+    cnpj: '12345678000199',
+    useCertificate: false
+  }, {
+    listPaidCompetenciasFn: async () => [],
+    createGuideByCnpjFn: async () => {
+      calls += 1;
+      throw serviceUnavailable(
+        'O serviço da Receita Federal está temporariamente indisponível. Tente novamente em alguns minutos.',
+        { code: MEI_GUIDE_SERPRO_UNAVAILABLE }
+      );
+    },
+    markCompetenciaAsPaidFn: async () => {}
+  });
+
+  assert.equal(items.length, 12);
+  assert.equal(items.every((item) => item.status === 'indisponivel'), true);
+  assert.equal(calls, 12 * 3);
+});
+
+test('mei-guide usa status pago local quando SERPRO indisponível', async () => {
+  const { __buildPeriodsFromPdfForTests } = await import('../src/services/mei-guide.service.js');
+  const { serviceUnavailable } = await import('../src/utils/errors.js');
+  const { MEI_GUIDE_SERPRO_UNAVAILABLE } = await import('../src/constants/mei-guide-error-codes.js');
+
+  const items = await __buildPeriodsFromPdfForTests('user-serpro-fallback-pago', {
+    cnpj: '12345678000199',
+    useCertificate: false
+  }, {
+    listPaidCompetenciasFn: async () => [],
+    getKnownCompetenciaPeriodStatusFn: async () => 'pago',
+    createGuideByCnpjFn: async () => {
+      throw serviceUnavailable('Receita indisponível', { code: MEI_GUIDE_SERPRO_UNAVAILABLE });
+    },
+    markCompetenciaAsPaidFn: async () => {}
+  });
+
+  assert.equal(items.length, 12);
+  assert.equal(items.every((item) => item.status === 'pago'), true);
+});
+
 test('downloadGuide devolve PDF armazenado quando período já está pago', async () => {
   const { downloadGuide } = await import('../src/services/mei-guide.service.js');
   const stored = Buffer.from('%PDF-test').toString('base64');

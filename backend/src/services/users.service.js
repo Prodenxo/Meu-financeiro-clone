@@ -226,6 +226,9 @@ const resolveMeiValue = (value, defaultValue = true) => (
   typeof value === 'boolean' ? value : defaultValue
 );
 
+/** Vaga MEI ocupada só quando `role_x_user_x_empresa.mei === true`. */
+const isMeiSlotActive = (value) => value === true;
+
 const isUnlimitedLimit = (value) => value === null;
 
 const getEmpresaLimits = async (adminClient, empresaId) => {
@@ -254,7 +257,7 @@ const countActiveUsersByMei = async (adminClient, { empresaId, mei, ignoreUserId
     .eq('status', true);
 
   if (mei) {
-    query = query.or('mei.is.null,mei.eq.true');
+    query = query.eq('mei', true);
   } else {
     query = query.eq('mei', false);
   }
@@ -638,7 +641,7 @@ export const listUsers = async (accessToken, queryParams = {}) => {
         empresaId: link.empresas_id || null,
         empresaName: (() => { const e = empresaMap.get(link.empresas_id); return e ? (e.nome_fantasia || e.empresa) : (link.isOrphan ? 'SEM VÍNCULO' : null); })(),
         status: link.status ?? true,
-        mei: typeof link.mei === 'boolean' ? link.mei : true,
+        mei: typeof link.mei === 'boolean' ? link.mei : null,
         expiresAt: link.expires_at ? new Date(link.expires_at).toISOString() : null
       };
     })
@@ -911,8 +914,9 @@ export const updateUser = async (accessToken, userId, input) => {
 
   if (linkError) throw badRequest(linkError.message);
   const currentEmpresaId = linkData?.empresas_id || null;
-  const currentMei = resolveMeiValue(linkData?.mei);
-  let targetMei = requestedMei !== undefined ? requestedMei : currentMei;
+  const currentMeiSlot = isMeiSlotActive(linkData?.mei);
+  let targetMeiSlot =
+    requestedMei !== undefined ? requestedMei : currentMeiSlot;
   let targetEmpresaId = currentEmpresaId;
   let capacityChecked = false;
   let linkRecord = linkData;
@@ -950,12 +954,12 @@ export const updateUser = async (accessToken, userId, input) => {
     if (existingLinkError) throw badRequest(existingLinkError.message);
 
     targetEmpresaId = requestedEmpresaId;
-    const fallbackMei = resolveMeiValue(existingLink?.mei);
-    targetMei = requestedMei !== undefined ? requestedMei : fallbackMei;
+    const fallbackMeiSlot = isMeiSlotActive(existingLink?.mei);
+    targetMeiSlot = requestedMei !== undefined ? requestedMei : fallbackMeiSlot;
 
     await ensureEmpresaCapacity(adminClient, {
       empresaId: targetEmpresaId,
-      mei: targetMei,
+      mei: targetMeiSlot,
       ignoreUserId: userId
     });
     capacityChecked = true;
@@ -983,7 +987,7 @@ export const updateUser = async (accessToken, userId, input) => {
         roles_id: roleId,
         empresas_id: requestedEmpresaId,
         status: true,
-        mei: targetMei
+        mei: targetMeiSlot
       })
         .select('id, empresas_id, roles_id')
         .maybeSingle();
@@ -1027,11 +1031,12 @@ export const updateUser = async (accessToken, userId, input) => {
   targetEmpresaId = finalEmpresaId;
 
   if (!capacityChecked) {
-    const shouldCheckCapacity = targetEmpresaId !== currentEmpresaId || targetMei !== currentMei;
+    const shouldCheckCapacity =
+      targetEmpresaId !== currentEmpresaId || targetMeiSlot !== currentMeiSlot;
     if (shouldCheckCapacity) {
       await ensureEmpresaCapacity(adminClient, {
         empresaId: targetEmpresaId,
-        mei: targetMei,
+        mei: targetMeiSlot,
         ignoreUserId: userId
       });
     }

@@ -9,6 +9,7 @@ import {
   type EmpresaFullData,
   type ManagedUser
 } from '../../../services/usersService';
+import { getMeiUserTypeLabel, isMeiSlotUser } from '../../../lib/meiUserSlot';
 
 interface Empresa {
   id: string;
@@ -537,7 +538,7 @@ export const EmpresasTab: React.FC<EmpresasTabProps> = ({ empresas, users, fetch
                           {roleLabel[member.role] ?? member.role}
                         </span>
                         <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          {member.mei ? 'MEI' : 'PF / Outros'}
+                          {getMeiUserTypeLabel(member.mei)}
                         </span>
                         {member.status === false ? (
                           <span className="inline-flex items-center rounded-md bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">

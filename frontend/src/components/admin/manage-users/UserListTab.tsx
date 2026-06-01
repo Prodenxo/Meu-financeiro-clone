@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import Fuse from 'fuse.js';
 import { type ManagedUser, type EmpresaOption } from '../../../services/usersService';
+import { getMeiUserStatusShort, isMeiSlotUser } from '../../../lib/meiUserSlot';
 import { formatIsoDateUtcCalendarPtBr } from '../../../utils/formatIsoDateUtcCalendarPtBr';
 import LoadingOverlay from '../../LoadingOverlay';
 
@@ -268,8 +269,8 @@ export function UserListTab({
                               <span className="text-xs font-medium">
                                 {user.empresaName || user.empresaId || 'Sem empresa'}
                               </span>
-                              <span className={user.mei === false ? 'admin-badge-warning' : 'admin-badge-primary'}>
-                                {user.mei === false ? 'MEI desativado' : 'MEI ativo'}
+                              <span className={isMeiSlotUser(user.mei) ? 'admin-badge-primary' : 'admin-badge-warning'}>
+                                {getMeiUserStatusShort(user.mei)}
                               </span>
                             </div>
                           </td>

@@ -51,7 +51,7 @@ export async function listUsers(search?: string) {
   return (result.users || []).map((user) => ({
     ...user,
     role: normalizeRole(user.role) || user.role,
-    mei: user.mei ?? true
+    mei: typeof user.mei === 'boolean' ? user.mei : null,
   }));
 }
 

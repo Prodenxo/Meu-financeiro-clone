@@ -199,8 +199,12 @@ export const listAdminMeiPeriods = async (req, res, next) => {
     const userId = req.params.userId;
     await ensureCanViewUser(req.accessToken, userId);
     await ensureMeiEnabledForUser(req.accessToken, userId);
+    const refresh =
+      String(req.query?.refresh || '').toLowerCase() === 'true'
+      || String(req.query?.refresh || '') === '1';
     const data = await meiGuideServiceRef.listPeriods(userId, {
-      cnpj: req.query?.cnpj
+      cnpj: req.query?.cnpj,
+      refresh,
     });
     return sendSuccess(res, data, 'Períodos MEI listados');
   } catch (error) {
@@ -213,8 +217,12 @@ export const listAdminMeiPeriodsByCnpj = async (req, res, next) => {
     const userId = req.params.userId;
     await ensureCanViewUser(req.accessToken, userId);
     await ensureMeiEnabledForUser(req.accessToken, userId);
+    const refresh =
+      String(req.query?.refresh || '').toLowerCase() === 'true'
+      || String(req.query?.refresh || '') === '1';
     const data = await meiGuideServiceRef.listPeriodsByCnpj(userId, {
-      cnpj: req.query?.cnpj
+      cnpj: req.query?.cnpj,
+      refresh,
     });
     return sendSuccess(res, data, 'Períodos MEI listados');
   } catch (error) {

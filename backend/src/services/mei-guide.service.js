@@ -26,7 +26,8 @@ import {
   isCompetenciaPaid,
   listPaidCompetencias,
   markCompetenciaAsPaid,
-  periodoApuracaoToCompetencia
+  periodoApuracaoToCompetencia,
+  getKnownCompetenciaPeriodStatus,
 } from './mei-period-status.service.js';
 import {
   deleteDasBase64,
@@ -43,7 +44,10 @@ import {
   competenciaLabelFromPeriod,
   isPeriodoIndisponivelSerproError,
   isPeriodoIndisponivelSerproMessage,
-  periodoIndisponivelError
+  isPeriodoPagoSerproError,
+  isPeriodoPagoSerproMessage,
+  periodoIndisponivelError,
+  isSerproUnavailableError,
 } from './mei-guide-serpro-period-guard.js';
 
 const MEI_DAS_PAID_NO_PDF_CODE = 'MEI_DAS_PAID_NO_PDF';
@@ -310,26 +314,10 @@ const PAID_PERIOD_BUSINESS_MESSAGE =
 const paidPeriodNoPdfError = () =>
   badRequest(PAID_PERIOD_BUSINESS_MESSAGE, { code: MEI_DAS_PAID_NO_PDF_CODE });
 const HISTORICO_DAS_ERROR_FALLBACK = 'Falha técnica ao consultar período no Serpro.';
-const SERPRO_PAID_ERROR_PATTERNS = [
-  /j[aá]\s*est[aá]\s*pago/i,
-  /j[aá]\s*foi\s*pago/i,
-  /d[ée]bitos?\s+inexistentes?/i,
-  /n[aã]o\s+h[aá]\s+d[ée]bitos?/i,
-  /n[aã]o\s+existem\s+d[ée]bitos?/i,
-  /sem\s+d[ée]bitos?/i,
-  /n[aã]o\s+possui\s+pend[êe]ncias?/i,
-  /guia\s+j[aá]\s+quitada/i
-];
 const SERPRO_SEM_PDF_PATTERNS = [
   /pdf\s+do\s+das\s+n[aã]o\s+retornado/i,
   /arquivo\s+da\s+guia\s+mei\s+n[aã]o\s+dispon[íi]vel/i
 ];
-
-const isPeriodoPagoSerproError = (error) => {
-  const message = String(error?.message || '').trim();
-  if (!message) return false;
-  return SERPRO_PAID_ERROR_PATTERNS.some((pattern) => pattern.test(message));
-};
 
 const isPeriodoSemPdfError = (error) => {
   const message = String(error?.message || '').trim();
@@ -338,8 +326,9 @@ const isPeriodoSemPdfError = (error) => {
 };
 
 const shouldMarkCompetenciaAsPaid = (error) => {
+  if (isPeriodoPagoSerproError(error)) return true;
   if (isPeriodoIndisponivelSerproError(error)) return false;
-  return isPeriodoPagoSerproError(error) || isPeriodoSemPdfError(error);
+  return isPeriodoSemPdfError(error);
 };
 
 const getPeriodHistoryErrorMessage = (error) => {
@@ -368,6 +357,7 @@ const persistPaidCompetenciaSafely = async ({
       documentoFiscal,
       source
     });
+    invalidatePeriodsListCache(userId, documentoFiscal);
   } catch (error) {
     if (env.NODE_ENV !== 'production') {
       console.warn('[mei-guide] Falha ao persistir competência paga', {
@@ -1517,9 +1507,7 @@ export const getCertificateStatus = async (userId) => {
     documentosAtivos = null;
   }
   const docResolved = docFromCache || docFromDb || null;
-  const hasCert =
-    Boolean(userCert) ||
-    (await userHasMeiCertificate(userId).catch(() => false));
+  const hasCert = Boolean(userCert);
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
@@ -1714,7 +1702,7 @@ const tryStoredDasPdfFile = async ({ userId, competencia, periodoApuracao, perio
 /** Gera DAS MEI pelo CNPJ (fluxo contador/procurador), sem certificado do cliente. */
 export const createGuideByCnpj = async (userId, payload) => {
   ensureConfigured();
-  const { cnpj, periodoApuracao, mes, ano } = payload || {};
+  const { cnpj, periodoApuracao, mes, ano, skipLocalPdf = false } = payload || {};
   const cnpjNumerico = normalizeDoc(cnpj);
   if (!cnpjNumerico || !validateDoc(cnpjNumerico)) {
     throw badRequest('CNPJ do MEI inválido');
@@ -1732,7 +1720,7 @@ export const createGuideByCnpj = async (userId, payload) => {
     throw badRequest('Período de apuração inválido');
   }
 
-  const localPdf = userId ? await tryLoadLocalDasPdfBase64(userId, period) : null;
+  const localPdf = !skipLocalPdf && userId ? await tryLoadLocalDasPdfBase64(userId, period) : null;
   if (localPdf) {
     return {
       id: period,
@@ -1762,7 +1750,7 @@ export const createGuideByCnpj = async (userId, payload) => {
 export const createGuide = async (userId, payload) => {
   ensureConfigured();
   await ensureClientCertificate(userId);
-  const { cnpj, periodoApuracao, mes, ano, contribuinte } = payload || {};
+  const { cnpj, periodoApuracao, mes, ano, contribuinte, skipLocalPdf = false } = payload || {};
 
   const contrib = resolveContribuinte(userId, contribuinte, cnpj);
   const autor = contrib;
@@ -1777,7 +1765,7 @@ export const createGuide = async (userId, payload) => {
     throw badRequest('Período de apuração inválido');
   }
 
-  const localPdf = await tryLoadLocalDasPdfBase64(userId, period);
+  const localPdf = !skipLocalPdf ? await tryLoadLocalDasPdfBase64(userId, period) : null;
   if (localPdf) {
     return {
       id: period,
@@ -1993,6 +1981,40 @@ const buildRecentCompetencias = (count = 12, includeCurrent = false) => {
   return competencias;
 };
 
+const PERIODS_SERPRO_CONCURRENCY = 2;
+const SERPRO_PERIOD_PROBE_ATTEMPTS = 3;
+const SERPRO_PERIOD_PROBE_RETRY_MS = 900;
+
+const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const SERPRO_UNAVAILABLE_PERIOD_MESSAGE =
+  'O serviço da Receita Federal está temporariamente indisponível. Toque em Atualizar em alguns minutos.';
+
+const probeSerproForPeriod = async ({
+  userId,
+  period,
+  cnpj,
+  contribuinte,
+  useCertificate,
+  createGuideFn,
+  createGuideByCnpjFn,
+}) => {
+  if (useCertificate) {
+    await createGuideFn(userId, {
+      cnpj,
+      periodoApuracao: period,
+      contribuinte,
+      skipLocalPdf: true,
+    });
+  } else {
+    await createGuideByCnpjFn(userId, {
+      cnpj,
+      periodoApuracao: period,
+      skipLocalPdf: true,
+    });
+  }
+};
+
 const resolvePeriodItemFromSerpro = async ({
   userId,
   competencia,
@@ -2003,7 +2025,8 @@ const resolvePeriodItemFromSerpro = async ({
   documentoFiscal,
   createGuideFn,
   createGuideByCnpjFn,
-  markCompetenciaAsPaidFn
+  markCompetenciaAsPaidFn,
+  getKnownCompetenciaPeriodStatusFn = getKnownCompetenciaPeriodStatus,
 }) => {
   const period = normalizePeriodoApuracao(competencia);
   if (!period) return null;
@@ -2011,47 +2034,86 @@ const resolvePeriodItemFromSerpro = async ({
     return { competencia, status: 'pago', guideId: period };
   }
 
-  try {
-    if (useCertificate) {
-      await createGuideFn(userId, {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= SERPRO_PERIOD_PROBE_ATTEMPTS; attempt += 1) {
+    try {
+      await probeSerproForPeriod({
+        userId,
+        period,
         cnpj,
-        periodoApuracao: period,
-        contribuinte
+        contribuinte,
+        useCertificate,
+        createGuideFn,
+        createGuideByCnpjFn,
       });
-    } else {
-      await createGuideByCnpjFn(userId, {
-        cnpj,
-        periodoApuracao: period
-      });
+      return { competencia, status: 'a_pagar', guideId: period };
+    } catch (error) {
+      lastError = error;
+      if (shouldMarkCompetenciaAsPaid(error)) {
+        paidCompetencias.add(competencia);
+        await persistPaidCompetenciaSafely({
+          userId,
+          competencia,
+          documentoFiscal,
+          source: 'consulta_serpro',
+          markCompetenciaAsPaidFn,
+        });
+        return { competencia, status: 'pago', guideId: period };
+      }
+      if (isPeriodoIndisponivelSerproError(error)) {
+        return {
+          competencia,
+          status: 'indisponivel',
+          guideId: period,
+          errorMessage: String(error?.message || 'Período indisponível para DAS MEI').slice(0, 220),
+        };
+      }
+      if (isSerproUnavailableError(error) && attempt < SERPRO_PERIOD_PROBE_ATTEMPTS) {
+        if (process.env.NODE_ENV !== 'test') {
+          await sleepMs(SERPRO_PERIOD_PROBE_RETRY_MS * attempt);
+        }
+        continue;
+      }
+      break;
     }
-    return { competencia, status: 'a_pagar', guideId: period };
-  } catch (error) {
-    if (isPeriodoIndisponivelSerproError(error)) {
-      return {
-        competencia,
-        status: 'indisponivel',
-        guideId: period,
-        errorMessage: String(error?.message || 'Período indisponível para DAS MEI').slice(0, 220)
-      };
-    }
-    if (!shouldMarkCompetenciaAsPaid(error)) {
-      return {
-        competencia,
-        status: 'erro',
-        guideId: period,
-        errorMessage: getPeriodHistoryErrorMessage(error)
-      };
-    }
-    paidCompetencias.add(competencia);
-    await persistPaidCompetenciaSafely({
-      userId,
-      competencia,
-      documentoFiscal,
-      source: 'consulta_serpro',
-      markCompetenciaAsPaidFn
-    });
-    return { competencia, status: 'pago', guideId: period };
   }
+
+  if (lastError && isSerproUnavailableError(lastError)) {
+    if (userId) {
+      try {
+        const known = await getKnownCompetenciaPeriodStatusFn({ userId, competencia });
+        if (known === 'pago') {
+          paidCompetencias.add(competencia);
+          return { competencia, status: 'pago', guideId: period };
+        }
+        if (known === 'a_pagar') {
+          return {
+            competencia,
+            status: 'indisponivel',
+            guideId: period,
+            errorMessage:
+              'Receita indisponível no momento. Última consulta bem-sucedida indicou DAS a pagar — tente Atualizar em alguns minutos.',
+          };
+        }
+      } catch {
+        /* ignora fallback local */
+      }
+    }
+    return {
+      competencia,
+      status: 'indisponivel',
+      guideId: period,
+      errorMessage: SERPRO_UNAVAILABLE_PERIOD_MESSAGE,
+    };
+  }
+
+  return {
+    competencia,
+    status: 'erro',
+    guideId: period,
+    errorMessage: getPeriodHistoryErrorMessage(lastError),
+  };
 };
 
 const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
@@ -2060,7 +2122,8 @@ const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
     listPaidCompetenciasFn = listPaidCompetencias,
     markCompetenciaAsPaidFn = markCompetenciaAsPaid,
     createGuideFn = createGuide,
-    createGuideByCnpjFn = createGuideByCnpj
+    createGuideByCnpjFn = createGuideByCnpj,
+    getKnownCompetenciaPeriodStatusFn = getKnownCompetenciaPeriodStatus,
   } = dependencies;
   const competencias = buildRecentCompetencias(12, false);
   const paidCompetencias = userId
@@ -2083,7 +2146,8 @@ const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
           documentoFiscal,
           createGuideFn,
           createGuideByCnpjFn,
-          markCompetenciaAsPaidFn
+          markCompetenciaAsPaidFn,
+          getKnownCompetenciaPeriodStatusFn,
         })
       )
     );
@@ -2106,13 +2170,17 @@ export const __isPeriodoPagoSerproErrorForTests = (error) => {
 export const listPeriods = async (userId, payload) => {
   ensureConfigured();
   await ensureClientCertificate(userId);
-  const { cnpj, contribuinte } = payload || {};
+  const { cnpj, contribuinte, refresh = false } = payload || {};
   const contrib = resolveContribuinte(userId, contribuinte, cnpj);
   const autor = contrib;
   const cnpjNumerico = normalizeDoc(contrib.numero);
   const cacheKey = getPeriodsListCacheKey(userId, cnpjNumerico, true);
-  const cached = readPeriodsListCache(cacheKey);
-  if (cached) return cached;
+  if (refresh) {
+    periodsListCache.delete(cacheKey);
+  } else {
+    const cached = readPeriodsListCache(cacheKey);
+    if (cached) return cached;
+  }
 
   const data = await buildPeriodsFromPdf(userId, {
     cnpj: cnpjNumerico,
@@ -2125,13 +2193,18 @@ export const listPeriods = async (userId, payload) => {
 
 export const listPeriodsByCnpj = async (userId, payload) => {
   ensureConfigured();
+  const { refresh = false } = payload || {};
   const cnpjNumerico = normalizeCnpj(payload?.cnpj);
   if (!validateCnpj(cnpjNumerico)) {
     throw badRequest('CNPJ do MEI inválido');
   }
   const cacheKey = getPeriodsListCacheKey(userId, cnpjNumerico, false);
-  const cached = readPeriodsListCache(cacheKey);
-  if (cached) return cached;
+  if (refresh) {
+    periodsListCache.delete(cacheKey);
+  } else {
+    const cached = readPeriodsListCache(cacheKey);
+    if (cached) return cached;
+  }
 
   const data = await buildPeriodsFromPdf(userId, {
     cnpj: cnpjNumerico,
@@ -2177,7 +2250,13 @@ const writePeriodsListCache = (key, data) => {
   periodsListCache.set(key, { data, expiresAt: Date.now() + PERIODS_LIST_CACHE_TTL_MS });
 };
 
-const PERIODS_SERPRO_CONCURRENCY = 4;
+const invalidatePeriodsListCache = (userId, cnpj) => {
+  if (!userId) return;
+  const doc = normalizeDoc(cnpj);
+  for (const useCertificate of [true, false]) {
+    periodsListCache.delete(getPeriodsListCacheKey(userId, doc, useCertificate));
+  }
+};
 
 /**
  * Mapeamento para obter PDF por parcelamento: Consultar Parcelamento (numero -> detalhes com periodoApuracao)
