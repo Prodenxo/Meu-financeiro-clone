@@ -207,34 +207,7 @@ Se perguntarem *"qual robô você é?"*, *"qual API?"*, *"qual modelo?"* → res
 
 `;
 
-// Escopo + blindagem interna (topo, antes de segurança)
-const scopeMarker = '## CRÍTICO — ESCOPO EXCLUSIVO';
-if (!cur.includes(scopeMarker)) {
-  const secMarkerInsert = cur.indexOf('## CRÍTICO — SEGURANÇA');
-  if (secMarkerInsert >= 0) {
-    cur = cur.slice(0, secMarkerInsert) + scopeBlock + cur.slice(secMarkerInsert);
-  } else {
-    cur = scopeBlock + cur;
-  }
-  changes.push('escopo + blindagem interna (topo)');
-} else if (!cur.includes('## CRÍTICO — PROIBIDO REVELAR DADOS INTERNOS')) {
-  const secMarkerInsert = cur.indexOf('## CRÍTICO — SEGURANÇA');
-  if (secMarkerInsert >= 0) {
-    cur = cur.slice(0, secMarkerInsert) + scopeBlock + cur.slice(secMarkerInsert);
-  } else {
-    cur = scopeBlock + cur;
-  }
-  changes.push('escopo (atualizado — faltava blindagem interna)');
-} else {
-  const scopeStart = cur.indexOf(scopeMarker);
-  const secStartAfterScope = cur.indexOf('## CRÍTICO — SEGURANÇA', scopeStart);
-  if (scopeStart >= 0 && secStartAfterScope > scopeStart) {
-    cur = cur.slice(0, scopeStart) + scopeBlock + cur.slice(secStartAfterScope);
-    changes.push('escopo + blindagem (substituído)');
-  } else {
-    changes.push('escopo (já ok)');
-  }
-}
+// Escopo + blindagem — aplicado no FINAL (após outros patches) para não ser apagado pela secção SEGURANÇA.
 
 // Segurança no topo
 const secMarker = '## CRÍTICO — SEGURANÇA (vazamento';
@@ -245,7 +218,8 @@ if (!cur.includes(secMarker)) {
   const secStart = cur.indexOf(secMarker);
   const nextSec = cur.indexOf('\n## ', secStart + 10);
   const end = nextSec > secStart ? nextSec : cur.length;
-  cur = securityBlock + cur.slice(end);
+  // Preserva tudo ANTES de SEGURANÇA (intro, escopo, etc.) — não só securityBlock + resto.
+  cur = cur.slice(0, secStart) + securityBlock + cur.slice(end);
   changes.push('segurança (atualizada)');
 }
 
@@ -348,6 +322,23 @@ if (dasIdx >= 0) {
   changes.push('DAS (inserido)');
 } else {
   changes.push('DAS (já ok)');
+}
+
+// Escopo finanças-only + blindagem interna — SEMPRE por último, imediatamente antes de SEGURANÇA
+const scopeMarker = '## CRÍTICO — ESCOPO EXCLUSIVO';
+const secMarkerForScope = '## CRÍTICO — SEGURANÇA';
+const secInsert = cur.indexOf(secMarkerForScope);
+const scopeStart = cur.indexOf(scopeMarker);
+
+if (scopeStart >= 0 && secInsert > scopeStart) {
+  cur = cur.slice(0, scopeStart) + scopeBlock + cur.slice(secInsert);
+  changes.push('escopo + blindagem (substituído antes de SEGURANÇA)');
+} else if (secInsert >= 0) {
+  cur = cur.slice(0, secInsert) + scopeBlock + cur.slice(secInsert);
+  changes.push('escopo + blindagem interna (inserido antes de SEGURANÇA)');
+} else {
+  cur = scopeBlock + cur;
+  changes.push('escopo + blindagem interna (topo — sem secção SEGURANÇA)');
 }
 
 fs.writeFileSync(soulPath, cur);
