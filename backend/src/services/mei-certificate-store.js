@@ -648,12 +648,50 @@ export const deleteCertificate = async (userId) => {
       passphrase_iv: null,
       cert_valid_from: null,
       cert_valid_to: null,
+      plugnotas_cert_id: null,
       updated_at: new Date().toISOString()
     })
     .eq('user_id', userId);
   if (error) {
     throw badRequest(error.message || 'Falha ao remover certificado');
   }
+};
+
+/**
+ * `true` se há blob de certificado (.pfx) persistido para o usuário.
+ * Diferente de `hasCertificate` (que só checa existência da linha): aqui importa
+ * o certificado em si, não os dados de empresa preservados após a exclusão.
+ */
+export const hasCertificatePfx = async (userId) => {
+  if (!userId) return false;
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from(TABLE)
+    .select('pfx_base64')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return Boolean(data?.pfx_base64);
+};
+
+/**
+ * Conta quantos OUTROS usuários (user_id != informado) ainda apontam para o
+ * mesmo certificado no PlugNotas. Usado para decidir se é seguro excluir o
+ * certificado no PlugNotas (0 = só este usuário) ou apenas localmente.
+ * Lança em erro de query (o chamador deve tratar como "não é seguro apagar").
+ */
+export const countOtherUsersWithPlugnotasCertId = async (userId, plugnotasCertId) => {
+  const id = String(plugnotasCertId || '').trim();
+  if (!userId || !id) return 0;
+  const supabase = getSupabase();
+  const { count, error } = await supabase
+    .from(TABLE)
+    .select('id', { count: 'exact', head: true })
+    .eq('plugnotas_cert_id', id)
+    .neq('user_id', userId);
+  if (error) {
+    throw badRequest(error.message || 'Falha ao contar usos do certificado');
+  }
+  return count || 0;
 };
 
 /**

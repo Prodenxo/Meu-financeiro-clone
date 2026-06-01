@@ -449,7 +449,11 @@ const requestJson = async (method, path, body) => {
       );
     }
 
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    // Arrays (ex.: listagem GET /certificado) devem passar direto; só colapsamos
+    // respostas que não são objeto (string/null) em { message }. Antes, o
+    // Array.isArray descartava a listagem de certificados, quebrando a
+    // recuperação do ID após 409 (cert duplicado entre usuários).
+    if (!payload || typeof payload !== 'object') {
       return { message: toMessage(payload, null) };
     }
     return payload;
@@ -515,7 +519,11 @@ const requestFormData = async (method, path, body) => {
       );
     }
 
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    // Arrays (ex.: listagem GET /certificado) devem passar direto; só colapsamos
+    // respostas que não são objeto (string/null) em { message }. Antes, o
+    // Array.isArray descartava a listagem de certificados, quebrando a
+    // recuperação do ID após 409 (cert duplicado entre usuários).
+    if (!payload || typeof payload !== 'object') {
       return { message: toMessage(payload, null) };
     }
     return payload;
@@ -709,6 +717,20 @@ export const resolverCertificadoIdPorCnpj = async (cpfCnpjInput) => {
   }
 
   return null;
+};
+
+/**
+ * Exclui um certificado no PlugNotas por ID (DELETE /certificado/:id).
+ * Best-effort do ponto de vista do chamador — aqui propaga erro (404/5xx) para
+ * quem chamar decidir tratar como não-fatal.
+ * @param {string} certId
+ */
+export const excluirCertificadoPlugNotas = async (certId) => {
+  const id = String(certId || '').trim();
+  if (!id) {
+    throw badRequest('ID do certificado é obrigatório para exclusão');
+  }
+  return requestJson('DELETE', `/certificado/${encodeURIComponent(id)}`);
 };
 
 export const cadastrarCertificadoPlugNotas = async ({

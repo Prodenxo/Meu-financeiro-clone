@@ -10,8 +10,10 @@ export interface BrasilApiCnpjResponse {
   uf: string | null;
   cep: string | null;
   email: string | null;
-  /** Brasil API pode devolver número em JSON — normalizar com `normalizeIbgeMunicipioCodigo`. */
+  /** Código TOM/SIAFI (4 díg.) — NÃO é o IBGE. Não usar como `codigoCidade` do Plugnotas. */
   codigo_municipio: string | number | null;
+  /** Código IBGE de 7 dígitos — correto para `endereco.codigoCidade` do Plugnotas. Normalizar com `normalizeIbgeMunicipioCodigo`. */
+  codigo_municipio_ibge: string | number | null;
   simples: { optante_simples_nacional: boolean } | null;
 }
 
