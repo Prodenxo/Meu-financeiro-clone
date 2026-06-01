@@ -207,6 +207,36 @@ Se perguntarem *"qual robô você é?"*, *"qual API?"*, *"qual modelo?"* → res
 
 `;
 
+const whatsappFormatBlock = `## CRÍTICO — FORMATO WHATSAPP (todas as respostas)
+
+Canal = **WhatsApp no telemóvel**. Respostas curtas e legíveis — **não** como artigo ou fórmula académica.
+
+### PROIBIDO
+- LaTeX: \\[ \\], \\( \\), \\times, \\frac, \\approx, fórmulas TeX.
+- Markdown: #, ##, ###, #### (títulos com hashtag).
+- Negrito Markdown **texto** — no WhatsApp usa *texto* (1 asterisco).
+- Mensagens gigantes (>12 linhas) ou resumo repetido 2x no fim.
+
+### OBRIGATÓRIO
+- Negrito WhatsApp: *Montante final:* R$ 12.785,65
+- Quebras de linha entre blocos; valores pt-BR (R$ 8.934,90).
+- Cálculos em texto: \`620 x 1,03^12 ≈ R$ 887,05\`
+- Estrutura: (1) resumo 1 frase → (2) 2–4 bullets *Entradas* → (3) *Resultado* com números em negrito → (4) 1 linha opcional de aviso.
+
+Exemplo curto:
+*Resumo:* em 12 meses, R$ 620/mês a 3% a.m. ≈ *R$ 8.935*.
+
+*Entradas*
+• Aporte: R$ 620/mês
+• Taxa: 3% a.m. | Prazo: 12 meses
+
+*Resultado*
+• Montante estimado: *R$ 8.934,90*
+
+---
+
+`;
+
 // Escopo + blindagem — aplicado no FINAL (após outros patches) para não ser apagado pela secção SEGURANÇA.
 
 // Segurança no topo
@@ -324,21 +354,29 @@ if (dasIdx >= 0) {
   changes.push('DAS (já ok)');
 }
 
-// Escopo finanças-only + blindagem interna — SEMPRE por último, imediatamente antes de SEGURANÇA
+// Escopo finanças-only + blindagem interna + formato WhatsApp — SEMPRE por último, antes de SEGURANÇA
 const scopeMarker = '## CRÍTICO — ESCOPO EXCLUSIVO';
+const whatsappMarker = '## CRÍTICO — FORMATO WHATSAPP';
 const secMarkerForScope = '## CRÍTICO — SEGURANÇA';
 const secInsert = cur.indexOf(secMarkerForScope);
 const scopeStart = cur.indexOf(scopeMarker);
+const whatsappStart = cur.indexOf(whatsappMarker);
+
+const topBlocks = scopeBlock + whatsappFormatBlock;
 
 if (scopeStart >= 0 && secInsert > scopeStart) {
-  cur = cur.slice(0, scopeStart) + scopeBlock + cur.slice(secInsert);
-  changes.push('escopo + blindagem (substituído antes de SEGURANÇA)');
+  cur = cur.slice(0, scopeStart) + topBlocks + cur.slice(secInsert);
+  changes.push('escopo + blindagem + formato WA (substituído antes de SEGURANÇA)');
 } else if (secInsert >= 0) {
-  cur = cur.slice(0, secInsert) + scopeBlock + cur.slice(secInsert);
-  changes.push('escopo + blindagem interna (inserido antes de SEGURANÇA)');
+  cur = cur.slice(0, secInsert) + topBlocks + cur.slice(secInsert);
+  changes.push('escopo + blindagem + formato WA (inserido antes de SEGURANÇA)');
 } else {
-  cur = scopeBlock + cur;
-  changes.push('escopo + blindagem interna (topo — sem secção SEGURANÇA)');
+  cur = topBlocks + cur;
+  changes.push('escopo + blindagem + formato WA (topo — sem secção SEGURANÇA)');
+}
+
+if (whatsappStart >= 0 && whatsappStart < scopeStart) {
+  changes.push('formato WA antigo removido (reordenado)');
 }
 
 fs.writeFileSync(soulPath, cur);
@@ -368,9 +406,13 @@ else
 fi
 
 echo "--- Verificação (tem de aparecer get_next_calendar_event) ---"
-grep -n "ESCOPO EXCLUSIVO\|PROIBIDO REVELAR\|get_next_calendar_event\|delete_calendar_event\|add_calendar_event_meet\|SEGURANÇA" "$SOUL" | head -n 14
+grep -n "ESCOPO EXCLUSIVO\|FORMATO WHATSAPP\|PROIBIDO REVELAR\|get_next_calendar_event\|delete_calendar_event\|add_calendar_event_meet\|SEGURANÇA" "$SOUL" | head -n 16
 if ! grep -q "ESCOPO EXCLUSIVO" "$SOUL"; then
   echo "ERRO: SOUL sem ESCOPO EXCLUSIVO — secção finanças-only não aplicou"
+  exit 1
+fi
+if ! grep -q "FORMATO WHATSAPP" "$SOUL"; then
+  echo "ERRO: SOUL sem FORMATO WHATSAPP — secção legibilidade não aplicou"
   exit 1
 fi
 if ! grep -q "PROIBIDO REVELAR DADOS INTERNOS" "$SOUL"; then
