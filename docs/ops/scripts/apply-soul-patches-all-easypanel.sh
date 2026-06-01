@@ -209,29 +209,31 @@ Se perguntarem *"qual robô você é?"*, *"qual API?"*, *"qual modelo?"* → res
 
 const whatsappFormatBlock = `## CRÍTICO — FORMATO WHATSAPP (todas as respostas)
 
-Canal = **WhatsApp no telemóvel**. Respostas curtas e legíveis — **não** como artigo ou fórmula académica.
+Canal = **WhatsApp no telemóvel**. **Nunca** LaTeX, \`###\`, nem \`**negrito**\`.
+
+### CHECKLIST — antes de enviar
+1. Sem \\[ \\], \\times, \\frac
+2. Sem #, ##, ###, ####
+3. Negrito = *texto* (1 asterisco)
+4. Máx. ~12 linhas; 1 resumo; não repetir no fim
 
 ### PROIBIDO
-- LaTeX: \\[ \\], \\( \\), \\times, \\frac, \\approx, fórmulas TeX.
-- Markdown: #, ##, ###, #### (títulos com hashtag).
-- Negrito Markdown **texto** — no WhatsApp usa *texto* (1 asterisco).
-- Mensagens gigantes (>12 linhas) ou resumo repetido 2x no fim.
+- \`### Cálculo...\` / \`#### Exemplos...\` / blocos \\[ ... \\]
+- Listas numeradas longas com fórmulas
 
 ### OBRIGATÓRIO
-- Negrito WhatsApp: *Montante final:* R$ 12.785,65
-- Quebras de linha entre blocos; valores pt-BR (R$ 8.934,90).
-- Cálculos em texto: \`620 x 1,03^12 ≈ R$ 887,05\`
-- Estrutura: (1) resumo 1 frase → (2) 2–4 bullets *Entradas* → (3) *Resultado* com números em negrito → (4) 1 linha opcional de aviso.
+*Resumo:* → *Entradas* (•) → *Cenário* ou *Resultado*
+Cálculo: \`7.440 x 6% ≈ R$ 446\` numa linha
 
-Exemplo curto:
-*Resumo:* em 12 meses, R$ 620/mês a 3% a.m. ≈ *R$ 8.935*.
+Exemplo FII:
+*Resumo:* R$ 620/mês x 12 = *R$ 7.440*.
 
 *Entradas*
-• Aporte: R$ 620/mês
-• Taxa: 3% a.m. | Prazo: 12 meses
+• Salário R$ 3.100 | Aporte 20% = R$ 620/mês
 
-*Resultado*
-• Montante estimado: *R$ 8.934,90*
+*Cenários*
+• 6% a.a.: líquido ~*R$ 7.819*
+• 10% a.a.: líquido ~*R$ 8.071*
 
 ---
 
