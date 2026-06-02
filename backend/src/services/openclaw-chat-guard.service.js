@@ -38,7 +38,18 @@ const FINANCE_HINTS = [
 ];
 
 const GREETING_ONLY =
-  /^(oi|ola|olá|bom dia|boa tarde|boa noite|e ai|e aí|tudo bem|obrigad|valeu|thanks|ok+|sim|nao|não|pode|podes|quero|preciso)[\s!.?]*$/i;
+  /^(oi|ola|olá|bom dia|boa tarde|boa noite|e ai|e aí|tudo bem|tudo bom|blz|beleza|fala|opa|salve|obrigad|valeu|thanks|ok+|sim|nao|não|pode|podes|quero|preciso)[\s!.?]*$/i;
+
+/**
+ * Saudação curta (sem pedido concreto) — usada para boas-vindas WhatsApp no inbound.
+ * @param {string} text
+ */
+export const isGreetingOnlyMessage = (text) => {
+  const raw = String(text || '').trim();
+  if (!raw) return false;
+  const normalized = normalizeForGuard(raw);
+  return GREETING_ONLY.test(normalized);
+};
 
 /** Off-topic com alta confiança — bloqueia no webhook antes do OpenClaw. */
 const HIGH_CONFIDENCE_OFF_TOPIC = [

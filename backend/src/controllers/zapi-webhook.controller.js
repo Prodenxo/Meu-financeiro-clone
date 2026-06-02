@@ -18,6 +18,7 @@ import {
 } from '../services/whatsapp-audio-transcription.service.js';
 import { evaluateChatGuard } from '../services/openclaw-chat-guard.service.js';
 import { sendWhatsappMessage } from '../services/whatsapp-outbound.service.js';
+import { maybeSendWhatsappWelcome } from '../services/whatsapp-welcome.service.js';
 
 export const getZapiMonitor = (_req, res) => {
   return res.json({
@@ -31,6 +32,7 @@ export const getZapiMonitor = (_req, res) => {
       'access_whatsapp_inbound',
       'chat_guard_off_topic',
       'chat_guard_internal_probe',
+      'whatsapp_welcome_on_greeting',
     ],
     preferredAccessCommand: 'mf pendentes',
     accessRequestWhatsapp: isAccessRequestWhatsappNotifyEnabled(),
@@ -112,9 +114,21 @@ export const postInbound = async (req, res, next) => {
       }
     }
 
+    let welcomeResult = { sent: false, skipRelay: false, reason: null };
+    try {
+      welcomeResult = await maybeSendWhatsappWelcome({
+        phone: parsed.phone,
+        text: parsed.text,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.warn('[ZAPI] whatsapp welcome falhou:', msg);
+    }
+
     const relayDecision = getOpenclawRelaySkipDecision(parsed.text, accessRequestHandled);
     const chatGuard = evaluateChatGuard(parsed.text);
-    let skipOpenclawRelay = relayDecision.skip;
+    let skipOpenclawRelay = relayDecision.skip || welcomeResult.skipRelay;
     let chatGuardHandled = false;
 
     if (!skipOpenclawRelay && chatGuard.block && chatGuard.reply) {
@@ -167,7 +181,10 @@ export const postInbound = async (req, res, next) => {
         openclawSkipped: skipOpenclawRelay,
         openclawSkipReason: chatGuardHandled
           ? `chat_guard_${chatGuard.reason}`
-          : relayDecision.reason,
+          : welcomeResult.skipRelay
+            ? welcomeResult.reason
+            : relayDecision.reason,
+        whatsappWelcome: welcomeResult,
         chatGuard: chatGuard.block
           ? { blocked: true, reason: chatGuard.reason, replied: chatGuardHandled }
           : { blocked: false },

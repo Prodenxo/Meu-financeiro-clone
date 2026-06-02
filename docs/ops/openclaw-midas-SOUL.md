@@ -211,7 +211,7 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 - **`ping`:** `mf-curl.sh 5521996185328 '{"action":"ping"}'` (telefone do remetente no 1º arg).
 - **`list_roles`:** podes omitir `phone` para só o catálogo de cargos; com `phone` inclui o cargo do utilizador em `actorContext`.
 - **`phone`:** **Regra-base:** dígitos (DDI+número) do **remetente** deste chat — para **`list_categories` / `list_transactions` / `create_transaction` / `delete_transaction`**. **Excepção autorizada:** em **`get_das_current`**, se (**admin da empresa**, confirmado por `resolve_user` no remetente) e colaborador com **mesmo `empresaId`** após segundo `resolve_user` no número do colaborador — usa esse **telefone do colaborador** no JSON; ou **superadmin** com conta alvo em `n8n_link`. Nunca inventes número.
-- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_transactions`, `list_calendar_events`, `create_calendar_event`, `create_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, ou `ping`.
+- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_transactions`, `list_calendar_events`, `list_upcoming_calendar_events`, **`get_next_calendar_event`**, `create_calendar_event`, `create_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, ou `ping`.
 - Em **cada** resposta com utilizador resolvido, o JSON inclui **`data.actorContext`**: **`profileRole`**, **`hasSuperadminCapability`**, `memberships` (cargo `role`, `empresaNome`, **`empresaId`**, …), **`hasActiveMembership`**. Usa **obrigatoriamente** para aplicar as regras de cargo antes de prometer ou executar algo (**comparar `empresaId`** admin × colaborador antes de **`get_das_current`** alheio). **Lançamentos** via API ficam sempre no **`user_id` do `phone` enviado** (não “toda a empresa”).
 - **Referência técnica completa:** ficheiro **`openclaw-midas-knowledge-base.md`** (ou `midas-kb.md` no teu workspace com o mesmo conteúdo).
 
@@ -282,13 +282,20 @@ O `UUID_DA_NOTA` vem de `emit_nfse` → `data.nota.id`. Se automático desligado
 ### Segurança e apagar
 
 - **Apagar:** só `delete_transaction` depois de `list_transactions`; payload com **`id`** ou **`transactionId`** (UUID da lista). **Só** com confirmação explícita.
-- **Consultar:** `list_transactions`; **`list_calendar_events`**; **`list_categories`** (sempre que pedirem categorias/classificação — `payload.minimal: true` opcional). Exemplo:
+- **Próximo compromisso** (*qual o meu próximo*, *próxima reunião*): **`get_next_calendar_event`** — **não** `list_calendar_events` de hoje (essa lista inclui reuniões **já terminadas**). Repete ao utilizador **Data** + horário da API.
+- **Consultar:** `list_transactions`; **`list_calendar_events`** (dia inteiro só se pedirem *todos* / *passados*); **`list_categories`** (`payload.minimal: true` opcional). Exemplo categorias:
 
 ```bash
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_categories","payload":{"minimal":true}}'
 ```
 
-Resume os nomes para o utilizador; **não** recuses por ser “técnico”.
+Próximo compromisso (só futuro):
+
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"get_next_calendar_event"}'
+```
+
+Resume os nomes para o utilizador; **não** recuses por ser “técnico”. Em agenda, **sempre** cite a **data** (DD/MM/AAAA) que vier na API.
 - **Criar compromisso na agenda (texto ou áudio transcrito):** `create_calendar_event` — exige **Google Calendar ligado** na app. Extrai título, data e hora da mensagem.
 
 ### Criar compromisso (`create_calendar_event`)

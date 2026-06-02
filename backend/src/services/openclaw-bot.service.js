@@ -846,10 +846,10 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'UM compromisso por chamada. Repita só message. Início = nextEvent.time. '
-          + 'Guarde nextEvent.id para follow-up: depois dela → skipCount 1 ou afterEventId; '
-          + 'e a próxima (no fio) → skipCount 2 ou afterEventId do último citado. '
-          + 'skipCount 0 = primeiro futuro. Lista completa do dia → list_upcoming_calendar_events.',
+          'UM compromisso FUTURO por chamada. Repita só message (inclui Data: DD/MM/AAAA). '
+          + 'NUNCA cite reunião que já terminou hoje. Início = nextEvent.time. '
+          + 'Guarde nextEvent.id para follow-up: depois dela → skipCount 1 ou afterEventId. '
+          + 'skipCount 0 = primeiro futuro. Lista do dia sem passados → list_upcoming_calendar_events.',
       },
     };
   }
@@ -956,6 +956,51 @@ export const runOpenclawAction = async (input) => {
             'Responda repetindo APENAS message. Hora de início = nextEvent.time, não endTime.',
         },
       };
+    }
+
+    const todayIso = calendarEventsService.calendarDateTodayInSaoPaulo();
+    const parsedDate = rawDate
+      ? calendarEventsService.parseCalendarQueryDate(rawDate)
+      : null;
+    const isTodayLike =
+      !rawDate
+      || String(rawDate).toLowerCase() === 'hoje'
+      || parsedDate?.iso === todayIso;
+    const includePast =
+      payload?.includePast === true
+      || payload?.passados === true
+      || String(payload?.scope || '').toLowerCase() === 'todos'
+      || String(payload?.scope || '').toLowerCase() === 'completo';
+
+    if (isTodayLike && !includePast) {
+      const upcomingToday = await calendarEventsService.listUpcomingCalendarEventsForUser(
+        userId,
+        { date: 'hoje', data: 'hoje' },
+      );
+      if (!upcomingToday.empty) {
+        const next = await calendarEventsService.findNextCalendarEventForUser(userId, {
+          maxDays: payload?.maxDays ?? payload?.dias ?? 14,
+          skipCount: payload?.skipCount,
+          afterEventId: payload?.afterEventId,
+          afterStart: payload?.afterStart,
+        });
+        return {
+          ok: true,
+          message: next.empty ? upcomingToday.message : next.message,
+          data: {
+            ...(next.empty ? upcomingToday : next),
+            userId,
+            actorContext,
+            ...linkDebug,
+            resolvedAs: next.empty
+              ? 'list_upcoming_calendar_events'
+              : 'get_next_calendar_event',
+            agentInstructions:
+              'Próximo compromisso = só FUTURO (não cite reunião que já terminou). '
+              + 'Repita message com Data + horário. action get_next_calendar_event para "próximo".',
+          },
+        };
+      }
     }
 
     const calendar = await calendarEventsService.listCalendarEventsForUser(userId, {

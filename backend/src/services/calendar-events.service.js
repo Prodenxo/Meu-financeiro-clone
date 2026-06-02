@@ -457,6 +457,12 @@ export const formatCalendarEventDisplayLine = (e, opts = {}) => {
 export const formatCalendarEventWhatsappDetail = (e) => {
   const title = String(e?.title || 'Compromisso').trim();
   const lines = [title];
+  const dateLabel =
+    String(e?.dateDisplay || '').trim()
+    || (e?.date ? formatCalendarDateDisplayPtBr(String(e.date)) : '');
+  if (dateLabel) {
+    lines.push(`Data: ${dateLabel}`);
+  }
   if (e?.allDay || !e?.time) {
     lines.push('Horário: dia inteiro');
   } else {
@@ -487,6 +493,24 @@ export const isCalendarEventStillRelevant = (event, now = new Date()) => {
     return String(event.date) >= today;
   }
   return false;
+};
+
+/**
+ * Próximo compromisso único: exclui reuniões já terminadas (ex.: 10h–11h quando já são 17h).
+ * @param {object} event
+ * @param {Date} [now]
+ */
+export const isCalendarEventUpcomingStrict = (event, now = new Date()) => {
+  const nowMs = now.getTime();
+  if (event?.allDay && event?.date) {
+    const today = calendarDateTodayInSaoPaulo();
+    return String(event.date) >= today;
+  }
+  const start = eventStartsAtInstant(event);
+  const end = eventEndsAtInstant(event);
+  if (!start) return false;
+  if (end) return end.getTime() > nowMs;
+  return start.getTime() > nowMs;
 };
 
 /**
@@ -923,7 +947,7 @@ export const findNextCalendarEventForUser = async (userId, options = {}) => {
     const dateIso = calendarDateAddDaysInSaoPaulo(offset);
     const day = await listCalendarEventsForUser(userId, { date: dateIso });
     for (const event of day.events || []) {
-      if (!isCalendarEventStillRelevant(event, now)) continue;
+      if (!isCalendarEventUpcomingStrict(event, now)) continue;
       const start = eventStartsAtInstant(event) || new Date(`${dateIso}T23:59:59-03:00`);
       candidates.push({ event, start, day });
     }
@@ -951,12 +975,15 @@ export const findNextCalendarEventForUser = async (userId, options = {}) => {
     dateDisplay: next.day.dateDisplay,
   });
   const ordinal = findOpts.skipCount > 0 ? ' (seguinte na agenda)' : '';
+  const dateLabel = e.dateDisplay || next.day.dateDisplay || '';
   const message = [
-    `Próximo compromisso${ordinal} (${next.day.dateDisplay}):`,
+    `Próximo compromisso${ordinal}:`,
     '',
     e.whatsappDetail,
     '',
-    `Hora de início: ${e.time || 'dia inteiro'}${e.endTime ? ` (termina ${e.endTime})` : ''}.`,
+    `Resumo: ${dateLabel}${e.time ? ` às ${String(e.time).slice(0, 5)}` : ' (dia inteiro)'}${
+      e.endTime ? ` até ${String(e.endTime).slice(0, 5)}` : ''
+    }.`,
   ].join('\n');
 
   return {

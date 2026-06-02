@@ -40,6 +40,7 @@ test('evaluateChatGuard permite finanças e comandos MEI', () => {
 test('evaluateChatGuard permite cumprimentos e pedidos curtos', () => {
   assert.equal(evaluateChatGuard('oi').block, false);
   assert.equal(evaluateChatGuard('bom dia!').block, false);
+  assert.equal(evaluateChatGuard('tudo bom?').block, false);
   assert.equal(evaluateChatGuard('preciso').block, false);
   assert.equal(evaluateChatGuard('quero').block, false);
 });

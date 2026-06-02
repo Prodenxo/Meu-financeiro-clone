@@ -180,6 +180,13 @@ export const env = {
   OPENCLAW_ZAPI_RELAY_SECRET: (process.env.OPENCLAW_ZAPI_RELAY_SECRET || '').trim(),
   /** Timeout ms do POST de relay (1000–60000). Padrão 8000. */
   OPENCLAW_ZAPI_RELAY_TIMEOUT_MS: process.env.OPENCLAW_ZAPI_RELAY_TIMEOUT_MS || '8000',
+  /**
+   * `true`: em saudações curtas (oi, tudo bom…) envia boas-vindas pela Z-API antes do OpenClaw.
+   * O `/new` no painel OpenClaw não envia WhatsApp — isto cobre o primeiro contacto no chat.
+   */
+  WHATSAPP_WELCOME_ENABLED: process.env.WHATSAPP_WELCOME_ENABLED || 'true',
+  /** Texto opcional (mesma linha WhatsApp: *negrito* com um asterisco). */
+  WHATSAPP_WELCOME_MESSAGE: (process.env.WHATSAPP_WELCOME_MESSAGE || '').trim(),
   /** Transcrição de notas de voz Z-API → texto antes do relay OpenClaw. */
   WHATSAPP_AUDIO_TRANSCRIPTION_ENABLED:
     process.env.WHATSAPP_AUDIO_TRANSCRIPTION_ENABLED || 'true',
