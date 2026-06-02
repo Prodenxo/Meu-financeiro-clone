@@ -33,6 +33,35 @@ node print-soul-deploy-one-liner.mjs --url="COLE_A_URL_RAW_AQUI"
 
 **Dica:** no Easypanel, variável `OPENCLAW_SOUL_RAW_URL` com a mesma URL (para documentar; o curl manual basta).
 
+### Aviso `[Bootstrap truncation warning]` após `/new`
+
+O OpenClaw **não injeta o SOUL inteiro** no modelo se passar do limite `bootstrapMaxChars` (no teu caso ~30 172 chars → só ~18 106 entram, **~40% cortado**, normalmente o **fim** do ficheiro).
+
+**Sintoma:** Midas “esquece” DAS, agenda cron, NFSe, `mf-curl` 2 args — mesmo com `wc -c` correto no disco.
+
+**Correção no Console OpenClaw** (ajusta `openclaw.json` e reinicia o serviço):
+
+```bash
+node -e "
+const fs=require('fs');
+const p=process.env.HOME+'/.openclaw/openclaw.json';
+let c={};
+try{c=JSON.parse(fs.readFileSync(p,'utf8'));}catch(e){}
+c.agents=c.agents||{};
+c.agents.defaults=c.agents.defaults||{};
+c.agents.defaults.bootstrapMaxChars=45000;
+c.agents.defaults.bootstrapTotalMaxChars=120000;
+fs.writeFileSync(p,JSON.stringify(c,null,2));
+console.log('bootstrapMaxChars=',c.agents.defaults.bootstrapMaxChars);
+"
+```
+
+Ou CLI (se existir): `openclaw config set agents.defaults.bootstrapMaxChars 45000`
+
+Depois: reiniciar contentor → `/new` → no chat deve **deixar de aparecer** o aviso (ou `SOUL.md` com `injected` ≈ `raw` em `/context`).
+
+**Alternativa:** enxugar o SOUL e deixar detalhes em `MF-API.md` / `midas-kb.md` (o agente lê com `read` quando precisa).
+
 ---
 
 ## Método 2 — `docker cp` (SSH no VPS)
