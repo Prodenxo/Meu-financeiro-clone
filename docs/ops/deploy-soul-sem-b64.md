@@ -11,6 +11,8 @@ Comandos com **barra** (`/pendentes`, `/aprovar email@…`) são tratados **no b
 | Aprovar cadastro pelo WhatsApp | **Deploy do backend** + usar `/pendentes`, `/aprovar …` |
 | Bot não confundir com transações | Já resolvido no backend (skip relay) |
 | Mudar tom do Midas, DAS, NFSe, áudio | Aí sim atualiza o SOUL (métodos abaixo) |
+| Bot bloqueia finanças / só diz “outro canal” | **Deploy do backend** (`openclaw-chat-guard`) **+** SOUL atualizado |
+| Lembretes 7h / 21h | **Backend** `AGENDA_WHATSAPP_REMINDERS_ENABLED=true` — ver `openclaw-agenda-cron.md` |
 
 ---
 

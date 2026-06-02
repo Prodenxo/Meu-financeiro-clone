@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeOpenclawTransactionPayload } from '../src/services/openclaw-transaction-payload.js';
+import {
+  normalizeOpenclawTransactionPayload,
+  resolveOpenclawTransactionId,
+} from '../src/services/openclaw-transaction-payload.js';
 
 const categories = [
   { id: 1, nome: 'Salário', tipo: 'entrada' },
@@ -32,6 +35,13 @@ test('rejeita código numérico inventado (ex.: 1110)', () => {
       ),
     /classificacao/,
   );
+});
+
+test('resolveOpenclawTransactionId aceita id e transactionId', () => {
+  const uuid = '72838e46-b426-410e-93bf-034617b9a89c';
+  assert.equal(resolveOpenclawTransactionId({ id: uuid }), uuid);
+  assert.equal(resolveOpenclawTransactionId({ transactionId: uuid }), uuid);
+  assert.equal(resolveOpenclawTransactionId({}), null);
 });
 
 test('parse valor pt-BR', () => {

@@ -16,20 +16,43 @@ const normalizeForGuard = (text) => {
   return t.normalize('NFD').replace(/\p{M}/gu, '');
 };
 
+/** Pedido claramente financeiro / app — sempre deixa passar para o OpenClaw. */
 const FINANCE_HINTS = [
   /\b(financeir|financas|dinheiro|saldo|transac|lancament|despesa|receita|gasto|orcament|orcamento)\b/,
   /\b(fluxo de caixa|contas a pagar|contas a receber)\b/,
-  /\b(mei\b|das\b|nfse|nota fiscal|imposto|tribut|faturament|divida|invest|juros|credito|debito)\b/,
-  /\b(conta\b|extrato|banco|pix\b|pagamento|receb|agenda|calendario|compromiss)\b/,
-  /\b(mf\b|meu financeiro|midas|aprovar|pendente|cadastro|categoria|categorias|classificacao)\b/,
-  /\b(reais|real\b|rs\b|r\$|salario|salário|prolabore|aluguel|mercado)\b/,
+  /\b(mei\b|das\b|nfse|nfs-e|nota fiscal|nota\b|imposto|tribut|faturament|divida|invest|juros|credito|debito)\b/,
+  /\b(conta\b|extrato|banco|pix\b|pagamento|receb|agenda|calendario|compromiss|reuniao|reunião|evento)\b/,
+  /\b(mf\b|meu financeiro|midas|mei infinito|infinito mei)\b/,
+  /\b(aprovar|recusar|pendente|cadastro|acesso|convite|categoria|categorias|classificacao)\b/,
+  /\b(reais|real\b|rs\b|r\$|salario|salário|prolabore|aluguel|mercado|holerite|folha)\b/,
   /\b(entrada|saida|saída|lucro|prejuizo|prejuízo|economia|economizar|gastei|recebi|paguei)\b/,
-  /\b(visao geral|dashboard|transacoes|lançamento|lancar|registrar|registra)\b/,
+  /\b(visao geral|dashboard|transacoes|lançamento|lancar|registrar|registra|apagar|remover|excluir|deletar)\b/,
+  /\b(lista|listar|consulta|consultar|mostra|mostrar|ver\b|envia|enviar|manda|mandar|emitir|emite)\b/,
+  /\b(cliente|tomador|servico|serviço|prestador|cnpj|certificado|serpro|plugnotas)\b/,
+  /\b(google calendar|meet\b|videochamada|marcar|marca\b|agendar|agenda\b)\b/,
+  /\b(vencimento|boleto|fatura|parcela|guia\b|pdf\b|whatsapp)\b/,
+  /\b(empresa|colaborador|funcionario|funcionário|admin|superadmin|permiss|cargo|papel)\b/,
+  /\b(ajuda|ajudar|como usar|usar a app|no app|na app)\b/,
+  /\b(hoje|amanha|amanhã|ontem|este mes|esse mes|mes passado)\b/,
+  /\b(valor|quanto|total|quanto gastei|quanto recebi)\b/,
 ];
 
 const GREETING_ONLY =
-  /^(oi|ola|olá|bom dia|boa tarde|boa noite|e ai|e aí|tudo bem|obrigad|valeu|thanks|ok+|sim|nao|não)[\s!.?]*$/i;
+  /^(oi|ola|olá|bom dia|boa tarde|boa noite|e ai|e aí|tudo bem|obrigad|valeu|thanks|ok+|sim|nao|não|pode|podes|quero|preciso)[\s!.?]*$/i;
 
+/** Off-topic com alta confiança — bloqueia no webhook antes do OpenClaw. */
+const HIGH_CONFIDENCE_OFF_TOPIC = [
+  /\b(porn|pornograf|xxx|hentai|sexo explicit|conteudo adult|site adult|sites adult)\b/,
+  /\b(melhor|qual|quais)\s+(site|sites)\s+(de|para)\s+(porn|adult|xxx|sexo)\b/,
+  /\b(receita de|como fazer)\s+(bolo|pizza|macarrao|macarrão)\b/,
+  /\b(melhor|qual)\s+(filme|serie|série|novela|musica|música|jogo|games)\b/,
+  /\b(conte|conta)\s+(uma\s+)?(piada|historia|história)\b/,
+  /\b(quem\s+ganhou|placar|campeonato)\b(?!.*\b(aposta|invest|finance)\b)/,
+  /\b(receita\s+culinaria|cozinhar)\b/,
+  /\b(hackear|invadir|keygen|crack)\b/,
+];
+
+/** Sondagem técnica — só depois de descartar finanças; o SOUL também recusa no modelo. */
 const INTERNAL_PROBE_PATTERNS = [
   /\b(qual|que|which)\s+(api|modelo|model|llm|ia|inteligencia artificial|gpt|claude|gemini|openai|anthropic)\b/,
   /\b(qual|que)\s+(robo|robô|bot|agente)\s+(voce|você|vc|é|eh|usa|usas)\b/,
@@ -41,34 +64,35 @@ const INTERNAL_PROBE_PATTERNS = [
   /\b(z-api|zapi|webhook secret|openclaw_webhook)\b/,
   /\b(seu|teu)\s+(prompt|system prompt|instrucoes|instruções|codigo|código)\b/,
   /\b(webhook|token|secret)\s+(intern|interno|sistema|seu|teu|do bot)\b/,
-  /\bcomo\s+(voce|você|vc)\s+(funciona|foi feito|foi criado|programado|treinado)\b/,
+  /\bcomo\s+(voce|você|vc)\s+(foi feito|foi criado|programado|treinado)\b/,
   /\b(stack|backend|infraestrutura|servidor)\s+(do|da)\s+(bot|robo|robô|sistema|assistente)\b/,
   /\b(revela|mostra|informa|diz)\s+(o|a|seu|teu)?\s*(codigo|código|arquitetura|endpoint|endpoints)\b/,
   /\bqual\s+(servico|serviço|tecnologia|framework)\s+(voce|você|vc)\s+(usa|usas|utiliza)\b/,
 ];
 
-const OFF_TOPIC_PATTERNS = [
-  /\b(porn|pornograf|xxx|hentai|sexo explicit|conteudo adult|site adult|sites adult)\b/,
-  /\b(melhor|qual|quais)\s+(site|sites)\s+(de|para)\s+(porn|adult|xxx|sexo)\b/,
-  /\b(receita de|como fazer)\s+(bolo|pizza|macarrao|macarrão)\b/,
-  /\b(melhor|qual)\s+(filme|serie|série|novela|musica|música|jogo|games)\b/,
-  /\b(conte|conta)\s+(uma\s+)?(piada|historia|história)\b/,
-  /\b(quem\s+ganhou|placar|campeonato)\b(?!.*\b(aposta|invest|finance)\b)/,
-  /\b(receita\s+culinaria|cozinhar)\b/,
-  /\b(hackear|invadir|keygen|crack)\b/,
-];
-
-const RECOMMENDATION_WITHOUT_FINANCE =
+const RECOMMENDATION_HINT =
   /\b(melhor|pior|top|recomenda|me indica|me sugere|qual site|quais sites)\b/;
+
+const ENTERTAINMENT_OFF_TOPIC =
+  /\b(filme|serie|série|novela|jogo|games|porn|adult|xxx|musica|música|piada|futebol|campeonato)\b/;
 
 /**
  * @param {string} normalized
  */
-const hasFinanceHint = (normalized) =>
+export const hasFinanceHint = (normalized) =>
   FINANCE_HINTS.some((re) => re.test(normalized));
 
 /**
- * Pré-filtro antes do relay OpenClaw (defesa em profundidade; SOUL.md é a regra principal).
+ * @param {string} normalized
+ */
+export const isHighConfidenceOffTopic = (normalized) =>
+  HIGH_CONFIDENCE_OFF_TOPIC.some((re) => re.test(normalized));
+
+/**
+ * Pré-filtro antes do relay OpenClaw.
+ * Regra: **finanças passam**; bloqueia só off-topic explícito (porn, entretenimento, etc.)
+ * e sondagem técnica pura. Mensagens ambíguas → OpenClaw (Midas decide no SOUL).
+ *
  * @param {string} text
  * @returns {{
  *   block: boolean,
@@ -88,40 +112,35 @@ export const evaluateChatGuard = (text) => {
     return { block: false, reason: null, reply: null };
   }
 
+  if (hasFinanceHint(normalized)) {
+    return { block: false, reason: null, reply: null };
+  }
+
+  if (isHighConfidenceOffTopic(normalized)) {
+    return {
+      block: true,
+      reason: 'off_topic',
+      reply: CHAT_GUARD_REPLY.off_topic,
+    };
+  }
+
+  if (
+    RECOMMENDATION_HINT.test(normalized)
+    && ENTERTAINMENT_OFF_TOPIC.test(normalized)
+  ) {
+    return {
+      block: true,
+      reason: 'off_topic',
+      reply: CHAT_GUARD_REPLY.off_topic,
+    };
+  }
+
   for (const re of INTERNAL_PROBE_PATTERNS) {
     if (re.test(normalized)) {
       return {
         block: true,
         reason: 'internal_probe',
         reply: CHAT_GUARD_REPLY.internal_probe,
-      };
-    }
-  }
-
-  if (hasFinanceHint(normalized)) {
-    return { block: false, reason: null, reply: null };
-  }
-
-  for (const re of OFF_TOPIC_PATTERNS) {
-    if (re.test(normalized)) {
-      return {
-        block: true,
-        reason: 'off_topic',
-        reply: CHAT_GUARD_REPLY.off_topic,
-      };
-    }
-  }
-
-  if (RECOMMENDATION_WITHOUT_FINANCE.test(normalized)) {
-    const financeAdjacent =
-      /\b(financ|mei\b|das\b|nfse|app\b|invest|econom|divida|orcament|salario|salário)\b/.test(
-        normalized,
-      );
-    if (!financeAdjacent) {
-      return {
-        block: true,
-        reason: 'off_topic',
-        reply: CHAT_GUARD_REPLY.off_topic,
       };
     }
   }

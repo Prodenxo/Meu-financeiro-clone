@@ -6,7 +6,10 @@ import {
   normalizeWhatsappPhoneDigits,
 } from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
-import { normalizeOpenclawTransactionPayload } from './openclaw-transaction-payload.js';
+import {
+  normalizeOpenclawTransactionPayload,
+  resolveOpenclawTransactionId,
+} from './openclaw-transaction-payload.js';
 import * as categoriesService from './categories.service.js';
 import * as rbacCatalogService from './rbac-catalog.service.js';
 import {
@@ -813,11 +816,17 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'delete_transaction') {
-    await transactionsService.deleteTransaction(userId, payload, { id: payload?.id });
+    const txId = resolveOpenclawTransactionId(payload);
+    if (!txId) {
+      throw badRequest(
+        'ID da transação é obrigatório (payload.id ou transactionId)',
+      );
+    }
+    await transactionsService.deleteTransaction(userId, { id: txId }, { id: txId });
     return {
       ok: true,
       message: 'Transação removida',
-      data: { success: true, actorContext },
+      data: { success: true, id: txId, actorContext },
     };
   }
 

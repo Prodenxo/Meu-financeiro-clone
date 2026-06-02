@@ -1,5 +1,21 @@
 import { badRequest } from '../utils/errors.js';
 
+/**
+ * UUID do lançamento no payload do bot (aceita aliases comuns do modelo).
+ * @param {object | undefined} payload
+ * @returns {string | null}
+ */
+export const resolveOpenclawTransactionId = (payload) => {
+  const raw =
+    payload?.id ??
+    payload?.transactionId ??
+    payload?.transaction_id ??
+    payload?.lancamentoId ??
+    payload?.lancamento_id;
+  const id = raw != null ? String(raw).trim() : '';
+  return id || null;
+};
+
 const TIPO_ALIASES = {
   entrada: 'entrada',
   ingresso: 'entrada',

@@ -67,7 +67,7 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 | `list_categories` | Sim | Lista categorias do utilizador (`categorias_id`). Opcional no `payload`: **`minimal`** (`true`) → só `id` e `nome`; **`tipo`** ou **`type`** → filtra `entrada` / `saida`. |
 | `list_transactions` | Sim | Devolve até **40** lançamentos mais recentes (`criado_em` desc). |
 | `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. |
-| `delete_transaction` | Sim | Apaga por `id` (UUID), só se for **dono** do lançamento. |
+| `delete_transaction` | Sim | Apaga por `id` ou `transactionId` (UUID), só se for **dono** do lançamento. |
 | `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp). |
 | `list_calendar_events` | Sim | Compromissos numa data (`payload.data` / `payload.date`); ver secção Agenda abaixo. |
 | `get_nfse_setup_status` | Sim | Verifica certificado, Plugnotas e dados fiscais do prestador. |
@@ -259,7 +259,7 @@ Implementação: `calendar-events.service.js`.
 
 - **`list_categories`:** `data.categories`; formato completo inclui `id`, `nome`, `tipo`, `user_id`; com `minimal: true` só `id` e `nome`.
 - **`list_transactions`:** resposta inclui objetos com pelo menos `id`, `tipo`, `valor`, `classificacao`, `data`, `status`, etc.
-- **`delete_transaction`:** `payload` deve ter `{ "id": "<uuid>" }`. O utilizador **não sabe** o UUID — o fluxo seguro é: listar → identificar linha pela conversa → **pedir confirmação explícita** → só depois apagar.
+- **`delete_transaction`:** `payload` com `{ "id": "<uuid>" }` ou `{ "transactionId": "<uuid>" }`. O utilizador **não sabe** o UUID — o fluxo seguro é: listar → identificar linha pela conversa → **pedir confirmação explícita** → só depois apagar.
 
 ---
 
