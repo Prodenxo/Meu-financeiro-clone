@@ -10,6 +10,8 @@ router.get('/', requireAuth, controller.listUsers);
 router.get('/empresas', requireAuth, controller.listEmpresas);
 router.get('/empresas/cnpj-lookup/:cnpj', requireAuth, controller.lookupEmpresaCnpj);
 router.get('/empresas/current', requireAuth, controller.getEmpresa);
+router.get('/empresas/current/cnpj-onboarding', requireAuth, controller.getEmpresaCnpjOnboarding);
+router.post('/empresas/current/cnpj-onboarding', requireAuth, controller.completeEmpresaCnpjOnboarding);
 router.get('/empresas/:empresaId', requireAuth, controller.getEmpresaById);
 router.post('/empresas', requireAuth, controller.createEmpresa);
 router.put('/empresas/:empresaId', requireAuth, controller.updateEmpresa);

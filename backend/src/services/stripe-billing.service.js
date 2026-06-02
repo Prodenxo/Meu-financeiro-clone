@@ -4,6 +4,10 @@ import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { badRequest, forbidden } from '../utils/errors.js';
 import { getRequesterContext } from './users.service.js';
+import {
+  resolveMeiPricing as resolveMeiPricingRaw,
+  MEI_PRICING_INVALID_MESSAGE
+} from './mei-billing-pricing.js';
 
 const ONLY_DIGITS = (s) => String(s || '').replace(/\D/g, '');
 
@@ -15,30 +19,15 @@ const parseBoolEnv = (value, fallback = false) => {
   return fallback;
 };
 
-const validateMeiSlots = (meiSlots) => Number.isInteger(meiSlots) && meiSlots > 0;
-
 const resolveMeiPricing = (meiSlots) => {
-  if (!validateMeiSlots(meiSlots)) {
-    throw badRequest('meiSlots inválido');
+  const pricing = resolveMeiPricingRaw(meiSlots);
+  if (!pricing) {
+    if (!Number.isInteger(meiSlots) || meiSlots <= 0) {
+      throw badRequest('meiSlots inválido');
+    }
+    throw badRequest(MEI_PRICING_INVALID_MESSAGE);
   }
-
-  if (meiSlots >= 1 && meiSlots <= 19) {
-    return {
-      total: meiSlots * 20,
-      unit: 20,
-      tier: 'unit_1_19'
-    };
-  }
-
-  if (meiSlots === 50) {
-    return {
-      total: 500,
-      unit: 10,
-      tier: 'fixed_50'
-    };
-  }
-
-  throw badRequest('Pacote inválido: permitido apenas 1 a 19 MEIs ou pacote fechado de 50 MEIs');
+  return pricing;
 };
 
 const mapStripeSubscriptionStatus = (stripeStatus) => {

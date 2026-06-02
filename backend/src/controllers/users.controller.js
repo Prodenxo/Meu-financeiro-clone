@@ -1,6 +1,7 @@
 import * as usersService from '../services/users.service.js';
+import * as empresaCnpjOnboardingService from '../services/empresa-cnpj-onboarding.service.js';
 import { lookupCnpjCascade } from '../services/cnpj-lookup.service.js';
-import { sendSuccess } from '../utils/response.js';
+import { sendCreated, sendSuccess } from '../utils/response.js';
 
 export const listUsers = async (req, res, next) => {
   try {
@@ -119,6 +120,29 @@ export const getEmpresa = async (req, res, next) => {
   try {
     const result = await usersService.getEmpresa(req.accessToken);
     return sendSuccess(res, result, 'Empresa carregada');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getEmpresaCnpjOnboarding = async (req, res, next) => {
+  try {
+    const result = await empresaCnpjOnboardingService.getEmpresaCnpjOnboardingStatus(
+      req.accessToken
+    );
+    return sendSuccess(res, result, 'Status do cadastro de CNPJ');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const completeEmpresaCnpjOnboarding = async (req, res, next) => {
+  try {
+    const result = await empresaCnpjOnboardingService.completeEmpresaCnpjOnboarding(
+      req.accessToken,
+      req.body
+    );
+    return sendCreated(res, result, 'CNPJ e dados da empresa salvos');
   } catch (error) {
     return next(error);
   }

@@ -8,6 +8,7 @@ import {
   type BillingTimingOption,
   type StripeMeiSubscriptionLine
 } from '../../../services/adminBillingService';
+import { MEI_SLOT_PACKAGE_OPTIONS, resolveMeiPackagePrice } from '../../../lib/meiBillingPricing';
 
 export interface EmpresaStripeMeiBillingContext {
   id: string;
@@ -48,8 +49,6 @@ const statusLabel = (s: string) => {
   if (s === 'cancelled' || s === 'canceled') return 'Cancelado';
   return s || '—';
 };
-
-const MEI_SLOT_OPTIONS: number[] = [...Array.from({ length: 19 }, (_, i) => i + 1), 50];
 
 export function EmpresaStripeMeiBillingModal({
   open,
@@ -110,11 +109,7 @@ export function EmpresaStripeMeiBillingModal({
     setBillingTiming(hasActiveSubscription ? 'next_cycle' : 'checkout');
   }, [open, listLoading, hasActiveSubscription]);
 
-  const pricePreview = useMemo(() => {
-    if (meiSlots >= 1 && meiSlots <= 19) return meiSlots * 20;
-    if (meiSlots === 50) return 500;
-    return 0;
-  }, [meiSlots]);
+  const pricePreview = useMemo(() => resolveMeiPackagePrice(meiSlots), [meiSlots]);
 
   /** Soma `mei_slots` das linhas de assinatura já ativas (alinhado ao sync `max_mei`). */
   const activeMeiSlotsTotal = useMemo(
@@ -356,10 +351,10 @@ export function EmpresaStripeMeiBillingModal({
                   onChange={(e) => setMeiSlots(Number(e.target.value))}
                   className="planner-input"
                 >
-                  {MEI_SLOT_OPTIONS.map((n) => (
+                  {MEI_SLOT_PACKAGE_OPTIONS.map((n) => (
                     <option key={n} value={n}>
                       {n} MEI{n > 1 ? 's' : ''} —{' '}
-                      {n <= 19 ? formatBrl(n * 20) : formatBrl(500)}/mês
+                      {formatBrl(resolveMeiPackagePrice(n))}/mês
                     </option>
                   ))}
                 </select>
