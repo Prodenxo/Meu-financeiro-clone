@@ -55,6 +55,21 @@ test('evaluateChatGuard permite recomendação financeira ambígua', () => {
   assert.equal(evaluateChatGuard('me indica um bom controle de gastos').block, false);
 });
 
+test('evaluateChatGuard bloqueia dicas de investimento', () => {
+  const r = evaluateChatGuard('onde devo investir meu dinheiro em acoes');
+  assert.equal(r.block, true);
+  assert.equal(r.reason, 'investment_advice');
+});
+
+test('evaluateChatGuard permite MEI Infinito e app', () => {
+  assert.equal(evaluateChatGuard('como funciona o mei infinito').block, false);
+  assert.equal(evaluateChatGuard('quais minhas categorias no meu financeiro').block, false);
+});
+
+test('evaluateChatGuard ainda permite organizar financas sem investir', () => {
+  assert.equal(evaluateChatGuard('melhor forma de organizar minhas financas').block, false);
+});
+
 test('evaluateChatGuard permite pedidos operacionais do bot', () => {
   assert.equal(evaluateChatGuard('quais minhas categorias').block, false);
   assert.equal(evaluateChatGuard('lista categorias de entrada').block, false);

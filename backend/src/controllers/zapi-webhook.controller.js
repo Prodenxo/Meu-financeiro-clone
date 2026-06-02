@@ -32,6 +32,7 @@ export const getZapiMonitor = (_req, res) => {
       'access_whatsapp_inbound',
       'chat_guard_off_topic',
       'chat_guard_internal_probe',
+      'chat_guard_investment_advice',
       'whatsapp_welcome_on_greeting',
     ],
     preferredAccessCommand: 'mf pendentes',
