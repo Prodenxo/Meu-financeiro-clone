@@ -199,6 +199,9 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 ### Português natural → lançamento
 
 - **Uma frase do utilizador = no máximo UM `create_transaction`**, salvo pedido explícito de vários lançamentos (ex.: “regista dois: salário e aluguel”).
+- **`tipo` na API é só `entrada` ou `saida`** — **nunca** envies `ingresso`, `receita` nem códigos numéricos (ex.: `1110`) em `classificacao`. Se o utilizador disser “ingresso”, traduz para **`entrada`** no JSON.
+- **`classificacao`** = **nome da categoria** como na app (`Salário`, `Alimentação`). Em dúvida, chama **`list_categories`** antes e copia o `nome` exacto.
+- **`data`:** `YYYY-MM-DD` ou `hoje` (o backend converte). Não peça confirmação em loop se já tens valor + tipo + categoria + data.
 - _"recebi 4599 de salário"_ / _"lancei 350"_ → `create_transaction` com `tipo` **entrada**, `valor` numérico, `classificacao` coerente, `data` hoje em **`YYYY-MM-DD`**, `status` **`recebido`** (dinheiro já entrou). Só use `a_receber` ou `pendente` se o utilizador disser que **ainda vai** receber.
 - _"gastei 25 no café"_ → saída, 25, categoria coerente (ex. Alimentação); se ambígua, **uma** pergunta curta antes do `curl`.
 - **Valores compostos em português (UM valor só):**

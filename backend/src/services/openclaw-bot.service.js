@@ -6,6 +6,7 @@ import {
   normalizeWhatsappPhoneDigits,
 } from '../utils/whatsapp-phone.js';
 import * as transactionsService from './transactions.service.js';
+import { normalizeOpenclawTransactionPayload } from './openclaw-transaction-payload.js';
 import * as categoriesService from './categories.service.js';
 import * as rbacCatalogService from './rbac-catalog.service.js';
 import {
@@ -774,15 +775,16 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'create_transaction') {
-    const tipo = String(payload?.tipo || '').trim();
-    const tipoNorm = tipo === 'saída' ? 'saida' : tipo;
+    const allCategories = await categoriesService.listCategories(userId);
+    const normalized = normalizeOpenclawTransactionPayload(payload, {
+      categories: allCategories,
+    });
     const statusNorm = transactionsService.normalizeTransactionStatus(
-      tipoNorm,
-      payload?.status,
+      normalized.tipo,
+      normalized.status,
     );
     const created = await transactionsService.createTransaction(userId, {
-      ...payload,
-      tipo: tipoNorm,
+      ...normalized,
       status: statusNorm,
     });
     const statusLabel =
