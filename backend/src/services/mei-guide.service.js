@@ -702,6 +702,19 @@ const buildAutorizacaoXml = (authContext, options = {}) => {
   ].join('');
 };
 
+export const MEI_CERT_INVALID_PASSWORD = 'MEI_CERT_INVALID_PASSWORD';
+
+const isInvalidPfxPasswordError = (error) => {
+  const msg = String(error?.message || error || '').toLowerCase();
+  return (
+    msg.includes('mac could not be verified') ||
+    msg.includes('mac verify failure') ||
+    msg.includes('invalid password') ||
+    msg.includes('password may be incorrect') ||
+    msg.includes('unable to decrypt')
+  );
+};
+
 const extractPfxKeyAndCert = (pfxBuffer, passphrase) => {
   const pfxDer = forge.util.createBuffer(pfxBuffer.toString('binary'));
   const pfxAsn1 = forge.asn1.fromDer(pfxDer);
@@ -1380,6 +1393,11 @@ export const uploadCertificate = async (userId, payload) => {
     const extracted = extractPfxKeyAndCert(file.buffer, password);
     certInfo = extracted?.certInfo || null;
   } catch (error) {
+    if (isInvalidPfxPasswordError(error)) {
+      throw badRequest('A senha do certificado está inválida.', {
+        code: MEI_CERT_INVALID_PASSWORD
+      });
+    }
     throw badRequest('Certificado inválido ou senha incorreta');
   }
 
