@@ -15,9 +15,10 @@ const soulPath = path.join(__dirname, '..', 'openclaw-midas-SOUL.md')
 const workspaceSoul = '/home/node/.openclaw/workspace/SOUL.md'
 
 const urlArg = process.argv.find((a) => a.startsWith('--url='))
-const rawUrl = urlArg
+const rawUrl = (urlArg
   ? urlArg.slice('--url='.length)
   : process.env.OPENCLAW_SOUL_RAW_URL || ''
+).trim()
 
 if (!fs.existsSync(soulPath)) {
   console.error('ERRO: não encontrado', soulPath)
@@ -44,7 +45,10 @@ if (rawUrl) {
   console.log('cp', workspaceSoul + '.bak 2>/dev/null || true')
   console.log(`curl -fsSL "${rawUrl}" -o "${workspaceSoul}"`)
   console.log(`wc -c "${workspaceSoul}"`)
-  console.log(`grep -E "mensagens com .*/" "${workspaceSoul}" | head -n 1 || true`)
+  console.log(
+    `grep -E "Prioridade 1|list_categories|finanças SIM" "${workspaceSoul}" | head -n 3 || true`,
+  )
+  console.log('# Esperado wc -c: ~31264 (se der ~30817 o curl falhou — confira URL sem espaço no fim)')
   console.log('openclaw gateway restart')
   console.log('')
   console.log('Depois no WhatsApp: /new')
