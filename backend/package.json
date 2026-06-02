@@ -9,6 +9,7 @@
     "lint": "node --check src/server.js",
     "typecheck": "node --check src/server.js",
     "test": "node --test \"tests/**/*.test.js\"",
+    "test:activation": "node --test tests/activation.service.test.js tests/users-activation-routes.contract.test.js",
     "test:openclaw:salario": "node scripts/test-openclaw-transaction.mjs",
     "test:openclaw:nfse": "node scripts/test-openclaw-nfse.mjs",
     "test:openclaw:nfse:local": "node scripts/test-openclaw-nfse.mjs --local"
