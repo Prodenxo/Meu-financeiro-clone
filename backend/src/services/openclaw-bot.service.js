@@ -770,7 +770,15 @@ export const runOpenclawAction = async (input) => {
     return {
       ok: true,
       message: `Lista de categorias (${categories.length}).`,
-      data: { categories, userId, actorContext, ...linkDebug },
+      data: {
+        categories,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Formate nomes para o utilizador (entrada/saída). Nunca diga "problemas técnicos" — '
+          + 'estes dados já vieram da app. Para lançamento use o nome exacto em classificacao.',
+      },
     };
   }
 
@@ -797,6 +805,9 @@ export const runOpenclawAction = async (input) => {
         userId,
         actorContext,
         ...linkDebug,
+        agentInstructions:
+          'Confirme ao utilizador SOMENTE após este ok. Cite valor, classificacao e data. '
+          + 'Se ainda não mostrou confirmação, não diga que já registrou antes desta resposta.',
       },
     };
   }

@@ -46,3 +46,10 @@ test('evaluateChatGuard bloqueia recomendações genéricas sem contexto finance
   assert.equal(r.block, true);
   assert.equal(r.reason, 'off_topic');
 });
+
+test('evaluateChatGuard permite pedidos de categorias e lançamentos', () => {
+  assert.equal(evaluateChatGuard('quais minhas categorias').block, false);
+  assert.equal(evaluateChatGuard('lista categorias de entrada').block, false);
+  assert.equal(evaluateChatGuard('recebi salario hoje').block, false);
+  assert.equal(evaluateChatGuard('me indica categoria para alimentacao').block, false);
+});

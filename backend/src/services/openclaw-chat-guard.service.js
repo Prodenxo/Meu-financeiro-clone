@@ -3,7 +3,7 @@ import { normalizeInboundCommandText } from './zapi-inbound-text.service.js';
 /** Respostas fixas — não revelam stack, modelo nem detalhes internos. */
 export const CHAT_GUARD_REPLY = {
   internal_probe:
-    'Sou o assistente financeiro do Meu Financeiro. Ajudo apenas com finanças, MEI, DAS, notas fiscais e uso da app. Não compartilho detalhes técnicos ou internos do sistema.',
+    'Sou o Midas, assistente do Meu Financeiro. Ajudo com finanças, MEI, DAS, NFSe, categorias, lançamentos e a app. Não falo sobre como o sistema foi construído por dentro.',
   off_topic:
     'Atendo somente assuntos financeiros: organização, transações, MEI, DAS, NFSe e a app Meu Financeiro. Para outros temas, use outro canal.',
 };
@@ -17,13 +17,14 @@ const normalizeForGuard = (text) => {
 };
 
 const FINANCE_HINTS = [
-  /\b(financeir|financas|dinheiro|saldo|transac|lancament|despesa|receita|gasto|orcament)\b/,
+  /\b(financeir|financas|dinheiro|saldo|transac|lancament|despesa|receita|gasto|orcament|orcamento)\b/,
   /\b(fluxo de caixa|contas a pagar|contas a receber)\b/,
   /\b(mei\b|das\b|nfse|nota fiscal|imposto|tribut|faturament|divida|invest|juros|credito|debito)\b/,
   /\b(conta\b|extrato|banco|pix\b|pagamento|receb|agenda|calendario|compromiss)\b/,
-  /\b(mf\b|meu financeiro|aprovar|pendente|cadastro|categoria|categorias)\b/,
-  /\b(reais|real\b|rs\b|r\$)\b/,
-  /\b(entrada|saida|saída|lucro|prejuizo|prejuízo|economia|economizar)\b/,
+  /\b(mf\b|meu financeiro|midas|aprovar|pendente|cadastro|categoria|categorias|classificacao)\b/,
+  /\b(reais|real\b|rs\b|r\$|salario|salário|prolabore|aluguel|mercado)\b/,
+  /\b(entrada|saida|saída|lucro|prejuizo|prejuízo|economia|economizar|gastei|recebi|paguei)\b/,
+  /\b(visao geral|dashboard|transacoes|lançamento|lancar|registrar|registra)\b/,
 ];
 
 const GREETING_ONLY =
@@ -112,11 +113,17 @@ export const evaluateChatGuard = (text) => {
   }
 
   if (RECOMMENDATION_WITHOUT_FINANCE.test(normalized)) {
-    return {
-      block: true,
-      reason: 'off_topic',
-      reply: CHAT_GUARD_REPLY.off_topic,
-    };
+    const financeAdjacent =
+      /\b(financ|mei\b|das\b|nfse|app\b|invest|econom|divida|orcament|salario|salário)\b/.test(
+        normalized,
+      );
+    if (!financeAdjacent) {
+      return {
+        block: true,
+        reason: 'off_topic',
+        reply: CHAT_GUARD_REPLY.off_topic,
+      };
+    }
   }
 
   return { block: false, reason: null, reply: null };
