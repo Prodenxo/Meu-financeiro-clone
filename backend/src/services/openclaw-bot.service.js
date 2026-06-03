@@ -786,6 +786,7 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'create_transaction') {
+    const account = await fetchOpenclawAccountSummary(userId);
     const allCategories = await categoriesService.listCategories(userId);
     const normalized = normalizeOpenclawTransactionPayload(payload, {
       categories: allCategories,
@@ -800,17 +801,33 @@ export const runOpenclawAction = async (input) => {
     });
     const statusLabel =
       statusNorm === 'recebido' || statusNorm === 'pago' ? ' (já contabiliza no saldo)' : '';
+    const accountLabel = account.displayName || account.email || userId;
+    // eslint-disable-next-line no-console
+    console.info(
+      '[OpenClaw] create_transaction',
+      JSON.stringify({
+        phoneDigits,
+        matchedUserNumber,
+        userId,
+        account: accountLabel,
+        valor: normalized.valor,
+        classificacao: normalized.classificacao,
+      }),
+    );
     return {
       ok: true,
-      message: `Transação criada${statusLabel}`,
+      message: `Transação criada na conta de ${accountLabel}${statusLabel}`,
       data: {
         transaction: created,
         userId,
+        account,
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Confirme ao utilizador SOMENTE após este ok. Cite valor, classificacao e data. '
-          + 'Se ainda não mostrou confirmação, não diga que já registrou antes desta resposta.',
+          'Confirme ao utilizador SOMENTE após este ok. Na mensagem WhatsApp inclua '
+          + `*Conta:* ${accountLabel} (telefone ${phoneDigits}). `
+          + 'Se o nome não for de quem está a falar, NÃO diga que registrou — reporte erro interno. '
+          + 'Cite valor, classificacao e data.',
       },
     };
   }

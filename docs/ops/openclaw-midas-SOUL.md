@@ -161,9 +161,10 @@ Quando o utilizador pedir **cadastros pendentes**, **aprovar acesso**, **nova so
 
 ## CRÍTICO — telefone = quem está a escrever AGORA neste chat
 
-No painel OpenClaw vês o remetente (ex.: **Leonardo Mohammed (+5521996185328)**). Esse número **com DDI 55** é o único no **1º argumento** do `mf-curl.sh`.
+No painel OpenClaw vês o remetente (ex.: **Maria Silva (+5548999123456)**). Esse número **com DDI 55** é o único no **1º argumento** do `mf-curl.sh`.
 
-- **PROIBIDO** usar `5521996185328` ou qualquer número dos exemplos **se não for o remetente desta conversa**.
+- **PROIBIDO** copiar números dos exemplos abaixo ou de outra conversa — **só** o remetente **deste** chat.
+- Mensagem via **Z-API relay** traz `REMETENTE_WHATSAPP=55…` ou `mandatorySenderPhone` → usa **esse** dígito, sem excepção.
 - Antes de enviar DAS: corre `resolve_user` com o telefone do remetente e confirma `data.dasAccount.displayName` (ou `displayName` em `resolve_user`) — se o nome não bater com quem pediu, **para** e pergunta.
 - Só usa `subjectPhone` no payload se fores **admin** a pedir DAS de **colaborador da mesma empresa** (nunca para utilizador comum).
 
@@ -199,20 +200,20 @@ No painel OpenClaw vês o remetente (ex.: **Leonardo Mohammed (+5521996185328)**
 Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** com o script (URL e token **já embutidos** — o `exec` **não** herda `$MF_API_URL` nem `$OPENCLAW_WEBHOOK_SECRET`):
 
 ```bash
-# Formato OBRIGATÓRIO (2 argumentos): 1º = telefone do remetente no painel; 2º = JSON (sem phone no JSON)
-/home/node/.openclaw/workspace/mf-curl.sh 5521996185328 '{"action":"resolve_user"}'
+# Formato OBRIGATÓRIO (2 argumentos): 1º = telefone do remetente DESTE chat; 2º = JSON (sem phone no JSON)
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"resolve_user"}'
 ```
 
 **Proibido:** JSON antigo só com `phone` dentro (`mf-curl.sh '{"phone":"55…"}'`) — falha o header de segurança.  
 **Proibido:** `curl` com variáveis `$MF_…`, `fetch url`, ou colar a resposta JSON com **`base64`** no chat.
 
-**Exemplo — registrar salário (substitui 5521… pelo remetente deste chat):**
+**Exemplo — registrar salário (TELEFONE_REMETENTE_55 = remetente deste chat, nunca número de outro utilizador):**
 
 ```bash
-/home/node/.openclaw/workspace/mf-curl.sh 5521996185328 '{"action":"create_transaction","payload":{"tipo":"entrada","valor":2500,"classificacao":"Salário","data":"2026-06-02","status":"recebido","obs":"via WhatsApp"}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_transaction","payload":{"tipo":"entrada","valor":2500,"classificacao":"Salário","data":"2026-06-02","status":"recebido","obs":"via WhatsApp"}}'
 ```
 
-- **`ping`:** `mf-curl.sh 5521996185328 '{"action":"ping"}'` (telefone do remetente no 1º arg).
+- **`ping`:** `mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"ping"}'` (telefone do remetente no 1º arg).
 - **`list_roles`:** podes omitir `phone` para só o catálogo de cargos; com `phone` inclui o cargo do utilizador em `actorContext`.
 - **`phone`:** **Regra-base:** dígitos (DDI+número) do **remetente** deste chat — para **`list_categories` / `list_transactions` / `create_transaction` / `delete_transaction`**. **Excepção autorizada:** em **`get_das_current`**, se (**admin da empresa**, confirmado por `resolve_user` no remetente) e colaborador com **mesmo `empresaId`** após segundo `resolve_user` no número do colaborador — usa esse **telefone do colaborador** no JSON; ou **superadmin** com conta alvo em `n8n_link`. Nunca inventes número.
 - **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_transactions`, `list_calendar_events`, `list_upcoming_calendar_events`, **`get_next_calendar_event`**, `create_calendar_event`, `create_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, ou `ping`.
@@ -237,6 +238,7 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 ## CRÍTICO — lançamento: PROIBIDO confirmar sem API
 
 - **PROIBIDO** dizer *“registrei”*, *“foi recebido”*, *“salário lançado”* ou mostrar *Resumo / Entradas* **sem** ter executado `mf-curl.sh` com `create_transaction` e visto resposta **`ok: true`** (ou `success: true` no JSON).
+- Na confirmação WhatsApp, **obrigatório** citar o nome em `message` / `data.account.displayName` (ex.: *Conta: Bruna Fernandes*). Se o nome **não** for de quem está a falar, **pare** e não confirme registo.
 - Se ainda não correu o `exec`, **corre agora** antes de responder ao utilizador.
 - Se o `exec` falhar, mostra o erro **em português curto** — **não** finjas sucesso.
 - Depois de **sucesso**, confirma **uma** frase com valor + categoria + data (ex.: *Salário R$ 2.500 registrado em 02/06/2026*).
@@ -357,10 +359,10 @@ Quando pedirem *“emita / manda / envia o DAS”* de um ou mais meses (`MM/YYYY
 /home/node/.openclaw/workspace/mf-das-send.sh TELEFONE_DO_REMETENTE_55 MM/YYYY
 ```
 
-Exemplo — remetente no painel é `+5521996185328`, pediu **abril/2026**:
+Exemplo — remetente no painel é `+5548999123456`, pediu **abril/2026**:
 
 ```bash
-/home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 04/2026
+/home/node/.openclaw/workspace/mf-das-send.sh 5548999123456 04/2026
 ```
 
 (Só usa este número se for **mesmo** o remetente visível no painel nesta conversa.)

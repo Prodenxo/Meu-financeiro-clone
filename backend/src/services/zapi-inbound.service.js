@@ -101,12 +101,18 @@ export const relayZapiInbound = async (normalized) => {
   const payload = {
     source: 'zapi',
     phone: normalized.phone,
+    /** Mesmo valor — para o gateway OpenClaw injetar no 1º arg do mf-curl.sh */
+    mandatorySenderPhone: normalized.phone,
+    mfCurlFirstArg: normalized.phone,
     /** Texto já transcrito (nota de voz) ou mensagem escrita — o agente deve executar, não perguntar o que fazer. */
     text: normalized.text,
     messageType: normalized.hasAudio ? 'transcribed_voice' : 'text',
     messageId: normalized.messageId,
     instanceId: normalized.instanceId,
     receivedAt: new Date().toISOString(),
+    agentHint:
+      `REMETENTE_WHATSAPP=${normalized.phone}. O 1º argumento de mf-curl.sh DEVE ser exatamente ${normalized.phone}. `
+      + 'Nunca uses número de outro chat nem exemplos do SOUL.',
   };
 
   /** @type {Record<string, string>} */
