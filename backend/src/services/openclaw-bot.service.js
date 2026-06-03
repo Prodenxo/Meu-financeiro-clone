@@ -5,6 +5,7 @@ import {
   expandBrazilMobilePhoneVariants,
   normalizeWhatsappPhoneDigits,
 } from '../utils/whatsapp-phone.js';
+import { pickUserIdFromN8nLinkRows } from './n8n-link-phone.service.js';
 import * as transactionsService from './transactions.service.js';
 import {
   normalizeOpenclawTransactionPayload,
@@ -232,15 +233,16 @@ export const resolveUserIdByPhoneDetailed = async (rawPhone) => {
   const admin = createSupabaseClient({ useServiceRole: true });
   const lookupCandidates = buildPhoneLookupCandidates(phoneDigits);
   for (const num of lookupCandidates) {
-    const { data, error } = await admin
+    const { data: rows, error } = await admin
       .from('n8n_link')
       .select('user_id')
       .eq('user_number', num)
-      .maybeSingle();
+      .limit(20);
     if (error) throw badRequest(error.message);
-    if (data?.user_id) {
+    const userId = pickUserIdFromN8nLinkRows(rows, num);
+    if (userId) {
       return {
-        userId: String(data.user_id),
+        userId,
         phoneDigits,
         matchedUserNumber: num,
         lookupCandidates,
