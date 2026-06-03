@@ -47,12 +47,21 @@ if (rawUrl) {
   console.log('')
 }
 
-console.log('--- Método 2 (sempre funciona): colar o script inteiro ---')
+console.log('--- Método 2 (recomendado agora): colar o script inteiro ---')
 console.log('')
 console.log('No PC: abra e copie TUDO de:')
 console.log('  Site/docs/ops/easypanel-console-install-mf-pin-and-curl.sh')
 console.log('Cole no Easypanel → OpenClaw → Console → Bash → Enter')
 console.log('')
+
+const b64 = fs.readFileSync(installPath).toString('base64')
+console.log('--- Método 3: uma colagem (base64 → /tmp/install-mf-pin.sh) ---')
+console.log('')
+console.log(`echo '${b64}' | base64 -d > /tmp/install-mf-pin.sh && bash /tmp/install-mf-pin.sh`)
+console.log('')
+
 console.log('Requer MF_API_URL e OPENCLAW_WEBHOOK_SECRET no Environment do OpenClaw.')
 console.log('Depois: Restart contentor + WhatsApp /new')
+console.log('')
+console.log('GitHub 404: copie o .sh para docs/ops/ no repo Meu-financeiro e push.')
 console.log('')
