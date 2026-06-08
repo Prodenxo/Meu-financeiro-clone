@@ -22,8 +22,17 @@ PINFILE="\$WS_DIR/.mf-inbound-sender"
 AGENT_ARG="\${1:?mf-curl: falta telefone (1º arg)}"
 shift
 JSON="\${1:?mf-curl: falta JSON (2º arg)}"
-MF_URL='$MF_API_URL'
-MF_SEC='$OPENCLAW_WEBHOOK_SECRET'
+MF_URL="\${MF_API_URL:-$MF_API_URL}"
+MF_SEC="\${OPENCLAW_WEBHOOK_SECRET:-$OPENCLAW_WEBHOOK_SECRET}"
+case "\$MF_URL" in
+  https://*) ;;
+  *)
+    echo "mf-curl: MF_API_URL inválida (defina no Easypanel Environment e regenere mf-curl.sh)" >&2
+    echo "mf-curl: valor atual=\$MF_URL" >&2
+    exit 1
+    ;;
+esac
+[ -n "\$MF_SEC" ] || { echo "mf-curl: OPENCLAW_WEBHOOK_SECRET vazio" >&2; exit 1; }
 digits() { echo "\$1" | tr -cd '0-9'; }
 PIN=""
 [ -f "\$PINFILE" ] && PIN="\$(digits "\$(cat "\$PINFILE" 2>/dev/null)")"
@@ -49,8 +58,9 @@ exec curl -sS -X POST "\$MF_URL" \\
   -d "\$BODY"
 CURL_EOF
 chmod +x "$WS/mf-curl.sh"
-head -n 3 "$WS/mf-curl.sh"
 echo "[ok] mf-curl.sh"
+grep -n 'MF_URL=' "$WS/mf-curl.sh" | head -n 1 || true
+head -n 12 "$WS/mf-curl.sh"
 
 echo "=== 2/3 hook mf-pin-sender ==="
 mkdir -p "$HOOK_DIR"
