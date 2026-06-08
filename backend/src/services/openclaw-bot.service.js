@@ -7,8 +7,10 @@ import {
 } from '../utils/whatsapp-phone.js';
 import { pickUserIdFromN8nLinkRows } from './n8n-link-phone.service.js';
 import * as transactionsService from './transactions.service.js';
+import * as contasFinanceirasService from './contas-financeiras.service.js';
 import {
   normalizeOpenclawTransactionPayload,
+  normalizeOpenclawTransactionUpdate,
   resolveOpenclawTransactionId,
 } from './openclaw-transaction-payload.js';
 import * as categoriesService from './categories.service.js';
@@ -745,6 +747,67 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'list_contas' || action === 'get_saldo') {
+    const summary = await contasFinanceirasService.listContasWithSaldo(userId);
+    const filterPayload = action === 'get_saldo' ? payload : {};
+    const filtered =
+      action === 'get_saldo'
+        ? await contasFinanceirasService.getSaldoResumo(userId, filterPayload)
+        : summary;
+    const contas = filtered.contas ?? summary.contas;
+    const totalSaldo = filtered.totalSaldo ?? summary.totalSaldo;
+    const defaultNome = filtered.defaultContaNome ?? summary.defaultContaNome;
+    return {
+      ok: true,
+      message:
+        action === 'get_saldo'
+          ? `Saldo total R$ ${totalSaldo.toFixed(2).replace('.', ',')} (${contas.length} carteira(s)).`
+          : `Carteiras activas (${contas.length}). Padrão: ${defaultNome || 'nenhuma'}. Saldo total R$ ${totalSaldo.toFixed(2).replace('.', ',')}.`,
+      data: {
+        contas,
+        totalSaldo,
+        defaultContaId: filtered.defaultContaId ?? summary.defaultContaId,
+        defaultContaNome: defaultNome,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Carteiras: create_conta, update_conta, delete_conta. '
+          + 'Lançamentos: create_transaction, update_transaction, delete_transaction. '
+          + 'Saldo: get_saldo (opcional carteira/conta_id). '
+          + 'create_transaction sem carteira → conta padrão '
+          + `(geralmente "${defaultNome || 'Meu Financeiro'}").`,
+      },
+    };
+  }
+
+  if (action === 'create_conta') {
+    const created = await contasFinanceirasService.createContaFinanceira(userId, payload);
+    return {
+      ok: true,
+      message: `Carteira "${created.nome}" criada`,
+      data: { conta: created, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'update_conta') {
+    const updated = await contasFinanceirasService.updateContaFinanceira(userId, payload);
+    return {
+      ok: true,
+      message: `Carteira "${updated.nome}" actualizada`,
+      data: { conta: updated, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'delete_conta') {
+    const removed = await contasFinanceirasService.deleteContaFinanceira(userId, payload);
+    return {
+      ok: true,
+      message: `Carteira "${removed.nome}" desactivada`,
+      data: { conta: removed, userId, actorContext, ...linkDebug },
+    };
+  }
+
   if (action === 'list_transactions') {
     const rows = await transactionsService.listTransactions(userId);
     const sliced = (rows || []).slice(0, MAX_LIST);
@@ -790,8 +853,10 @@ export const runOpenclawAction = async (input) => {
   if (action === 'create_transaction') {
     const account = await fetchOpenclawAccountSummary(userId);
     const allCategories = await categoriesService.listCategories(userId);
+    const contas = await transactionsService.listActiveContasFinanceiras(userId);
     const normalized = normalizeOpenclawTransactionPayload(payload, {
       categories: allCategories,
+      contas,
     });
     const statusNorm = transactionsService.normalizeTransactionStatus(
       normalized.tipo,
@@ -814,13 +879,18 @@ export const runOpenclawAction = async (input) => {
         account: accountLabel,
         valor: normalized.valor,
         classificacao: normalized.classificacao,
+        conta_id: normalized.conta_id,
+        conta_nome: normalized.conta_nome,
       }),
     );
+    const carteiraLabel = normalized.conta_nome || 'sem carteira';
     return {
       ok: true,
-      message: `Transação criada na conta de ${accountLabel}${statusLabel}`,
+      message: `Transação criada na conta de ${accountLabel} · carteira ${carteiraLabel}${statusLabel}`,
       data: {
         transaction: created,
+        contaId: normalized.conta_id,
+        contaNome: normalized.conta_nome,
         userId,
         account,
         actorContext,
@@ -828,9 +898,40 @@ export const runOpenclawAction = async (input) => {
         agentInstructions:
           'Confirme ao utilizador SOMENTE após este ok. Na mensagem WhatsApp inclua '
           + `*Conta:* ${accountLabel} (telefone ${phoneDigits}). `
+          + `*Carteira:* ${carteiraLabel}. `
           + 'Se o nome não for de quem está a falar, NÃO diga que registrou — reporte erro interno. '
-          + 'Cite valor, classificacao e data.',
+          + 'Cite valor, classificacao, data e carteira.',
       },
+    };
+  }
+
+  if (action === 'update_transaction') {
+    const allCategories = await categoriesService.listCategories(userId);
+    const contas = await transactionsService.listActiveContasFinanceiras(userId);
+    const patch = normalizeOpenclawTransactionUpdate(payload, {
+      categories: allCategories,
+      contas,
+    });
+    if (patch.tipo && patch.status == null) {
+      patch.status = transactionsService.normalizeTransactionStatus(patch.tipo, payload?.status);
+    } else if (patch.status != null && patch.tipo) {
+      patch.status = transactionsService.normalizeTransactionStatus(patch.tipo, patch.status);
+    } else if (patch.status != null) {
+      const { data: existing } = await createSupabaseClient({ useServiceRole: true })
+        .from('lancamentos_id')
+        .select('tipo')
+        .eq('id', patch.id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (existing?.tipo) {
+        patch.status = transactionsService.normalizeTransactionStatus(existing.tipo, patch.status);
+      }
+    }
+    const updated = await transactionsService.updateTransaction(userId, patch);
+    return {
+      ok: true,
+      message: 'Lançamento actualizado',
+      data: { transaction: updated, userId, actorContext, ...linkDebug },
     };
   }
 
@@ -1753,6 +1854,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_transactions, list_calendar_events, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, create_transaction, delete_transaction, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

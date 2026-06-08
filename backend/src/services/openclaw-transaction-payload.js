@@ -1,4 +1,9 @@
 import { badRequest } from '../utils/errors.js';
+import {
+  matchContaByName,
+  pickDefaultContaFinanceira,
+  resolveContaIdFromPayload,
+} from './conta-financeira-default.js';
 
 /**
  * UUID do lançamento no payload do bot (aceita aliases comuns do modelo).
@@ -156,6 +161,38 @@ export const normalizeOpenclawTransactionPayload = (payload = {}, options = {}) 
     );
   }
 
+  const contas = options.contas || [];
+  let conta_id = resolveContaIdFromPayload(contas, payload);
+  const requestedName = String(
+    payload?.conta
+    ?? payload?.conta_nome
+    ?? payload?.contaNome
+    ?? payload?.carteira
+    ?? payload?.wallet
+    ?? '',
+  ).trim();
+
+  if (requestedName && contas.length && !conta_id) {
+    throw badRequest(
+      `Carteira/conta "${requestedName}" não encontrada. `
+      + 'Chame list_contas e use o nome exacto ou conta_id (UUID).',
+    );
+  }
+
+  const defaultConta = pickDefaultContaFinanceira(contas);
+  if (!conta_id && defaultConta?.id) {
+    conta_id = defaultConta.id;
+  }
+
+  let conta_nome = null;
+  if (conta_id && contas.length) {
+    conta_nome = contas.find((c) => String(c?.id) === String(conta_id))?.nome ?? null;
+  } else if (requestedName && conta_id) {
+    conta_nome = matchContaByName(contas, requestedName)?.nome ?? requestedName;
+  } else if (defaultConta?.nome) {
+    conta_nome = defaultConta.nome;
+  }
+
   return {
     tipo,
     valor,
@@ -163,6 +200,89 @@ export const normalizeOpenclawTransactionPayload = (payload = {}, options = {}) 
     data,
     status: payload?.status,
     obs: payload?.obs ?? payload?.observacao ?? null,
-    conta_id: payload?.conta_id ?? payload?.contaId ?? null,
+    conta_id,
+    conta_nome,
   };
+};
+
+/** Campos parciais para update_transaction (OpenClaw). */
+export const normalizeOpenclawTransactionUpdate = (payload = {}, options = {}) => {
+  const id = resolveOpenclawTransactionId(payload);
+  if (!id) {
+    throw badRequest('ID da transação é obrigatório (payload.id ou transactionId)');
+  }
+
+  const patch = { id };
+  const categories = options.categories || [];
+  const contas = options.contas || [];
+
+  if (payload?.tipo != null || payload?.type != null) {
+    const tipoRaw = String(payload?.tipo ?? payload?.type ?? '').trim().toLowerCase();
+    const tipo = TIPO_ALIASES[tipoRaw] || (tipoRaw === 'saída' ? 'saida' : tipoRaw);
+    if (tipo !== 'entrada' && tipo !== 'saida') {
+      throw badRequest('tipo inválido (entrada ou saida)');
+    }
+    patch.tipo = tipo;
+  }
+
+  if (payload?.valor != null || payload?.value != null || payload?.amount != null) {
+    const valor = parseValor(payload?.valor ?? payload?.value ?? payload?.amount);
+    if (valor == null || valor <= 0) throw badRequest('valor inválido');
+    patch.valor = valor;
+  }
+
+  if (
+    payload?.classificacao != null
+    || payload?.categoria != null
+    || payload?.category != null
+  ) {
+    let classificacao = String(
+      payload?.classificacao ?? payload?.categoria ?? payload?.category ?? '',
+    ).trim();
+    if (isNumericCategoryCode(classificacao)) classificacao = '';
+    if (!classificacao) throw badRequest('classificacao inválida');
+    if (categories.length) {
+      const key = normalizeCategoryKey(classificacao);
+      const match = categories.find((c) => normalizeCategoryKey(c?.nome) === key);
+      if (match?.nome) classificacao = match.nome;
+    }
+    patch.classificacao = classificacao;
+  }
+
+  if (payload?.data != null || payload?.date != null) {
+    const data = resolveDataIso(payload?.data ?? payload?.date);
+    if (!data) throw badRequest('data inválida');
+    patch.data = data;
+  }
+
+  if (payload?.status != null) patch.status = payload.status;
+  if (payload?.obs != null || payload?.observacao != null) {
+    patch.obs = payload?.obs ?? payload?.observacao ?? null;
+  }
+
+  const hasCarteiraField =
+    payload?.conta_id != null
+    || payload?.contaId != null
+    || payload?.conta != null
+    || payload?.conta_nome != null
+    || payload?.carteira != null
+    || payload?.wallet != null;
+  if (hasCarteiraField && contas.length) {
+    const conta_id = resolveContaIdFromPayload(contas, payload);
+    const requestedName = String(
+      payload?.conta ?? payload?.conta_nome ?? payload?.carteira ?? payload?.wallet ?? '',
+    ).trim();
+    if (requestedName && !conta_id) {
+      throw badRequest(
+        `Carteira "${requestedName}" não encontrada. Use list_contas.`,
+      );
+    }
+    if (conta_id) patch.conta_id = conta_id;
+  }
+
+  if (Object.keys(patch).length === 1) {
+    throw badRequest('Nenhum campo para actualizar além do id');
+  }
+
+  return patch;
 };

@@ -65,8 +65,14 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 | `get_permissions` | Sim | Sem `payload.role`: permissões **efectivas** do utilizador do `phone`. Com **`payload.role`**: permissões desse cargo (catálogo). |
 | `check_permission` | Sim | **`payload.permission`** (ex.: `bot.das_colaborador_same_company`) → `{ allowed, primaryRole, reason }`. |
 | `list_categories` | Sim | Lista categorias do utilizador (`categorias_id`). Opcional no `payload`: **`minimal`** (`true`) → só `id` e `nome`; **`tipo`** ou **`type`** → filtra `entrada` / `saida`. |
+| `list_contas` | Sim | Carteiras/contas activas com **`saldoAtual`** e **`totalSaldo`**; indica qual é a padrão (`Meu Financeiro` quando existir). |
+| `get_saldo` | Sim | Igual a `list_contas` com foco em saldos; opcional **`carteira`** / **`conta_id`** para uma só carteira. |
+| `create_conta` | Sim | Cria carteira em `contas_financeiras` (`nome`/`carteira`, `tipo`, `saldo_inicial` opcional). |
+| `update_conta` | Sim | Actualiza carteira por `conta_id` ou nome (`carteira`/`conta`); campos: `nome`, `tipo`, `saldo_inicial`, `ativo`. |
+| `delete_conta` | Sim | Desactiva carteira (`ativo=false`); não apaga lançamentos históricos. |
 | `list_transactions` | Sim | Devolve até **40** lançamentos mais recentes (`criado_em` desc). |
-| `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. |
+| `create_transaction` | Sim | Insere uma linha em `lancamentos_id` para esse utilizador. Sem `carteira` → conta padrão. |
+| `update_transaction` | Sim | Altera lançamento por `id`/`transactionId`; campos parciais: `tipo`, `valor`, `classificacao`, `data`, `status`, `obs`, `carteira`. |
 | `delete_transaction` | Sim | Apaga por `id` ou `transactionId` (UUID), só se for **dono** do lançamento. |
 | `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp). |
 | `list_calendar_events` | Sim | Compromissos numa data (`payload.data` / `payload.date`); ver secção Agenda abaixo. |
@@ -177,9 +183,30 @@ Implementação: `calendar-events.service.js`.
 
 ---
 
+## Carteiras / saldo (`list_contas`, `get_saldo`, `create_conta`, `update_conta`, `delete_conta`)
+
+- **Padrão:** se existir carteira **Meu Financeiro**, é a default para `create_transaction` sem `carteira`.
+- **`list_contas`:** devolve `contas[]` com `id`, `nome`, `tipo`, `saldoInicial`, `saldoAtual`, `isDefault` e `totalSaldo` (soma de todas as carteiras activas).
+- **`get_saldo`:** mesmo cálculo; com `payload.carteira` ou `payload.conta_id` filtra uma carteira e `totalSaldo` passa a ser só dessa carteira.
+- **Saldo:** `saldo_inicial` + entradas **realizadas** (`recebido`) − saídas **realizadas** (`pago`). Pendências (`a_receber` / `a_pagar`) não entram.
+- **`create_conta`:** `nome` ou `carteira` (default `Meu Financeiro` se omitir); `tipo` (`dinheiro`, `corrente`, `poupanca`, `cartao_credito`, `outro`); `saldo_inicial` opcional.
+- **`update_conta` / `delete_conta`:** identificar por `conta_id` (UUID) ou nome exacto (`carteira` / `conta`). Apagar = desactivar, não remove histórico.
+
+```json
+{
+  "phone": "5548999999999",
+  "action": "get_saldo",
+  "payload": { "carteira": "Meu Financeiro" }
+}
+```
+
+---
+
 ## Criar lançamento (`create_transaction`)
 
 **Regra:** uma mensagem do utilizador → **um** `create_transaction`, exceto se pedir vários lançamentos de forma explícita.
+
+**Carteira:** opcional `carteira`, `conta`, `conta_id` ou `conta_nome`. Se omitir, usa a conta padrão do utilizador.
 
 **Valores em português (um número só no `valor`):**
 
@@ -255,10 +282,12 @@ Implementação: `calendar-events.service.js`.
 
 ---
 
-## Listar e apagar
+## Listar, editar e apagar
 
 - **`list_categories`:** `data.categories`; formato completo inclui `id`, `nome`, `tipo`, `user_id`; com `minimal: true` só `id` e `nome`.
+- **`list_contas` / `get_saldo`:** saldos por carteira e total; use antes de responder “quanto tenho”.
 - **`list_transactions`:** resposta inclui objetos com pelo menos `id`, `tipo`, `valor`, `classificacao`, `data`, `status`, etc.
+- **`update_transaction`:** `id` obrigatório + campos a alterar (`valor`, `classificacao`, `data`, `status`, `carteira`, …). Para corrigir valor ou mover para outra carteira.
 - **`delete_transaction`:** `payload` com `{ "id": "<uuid>" }` ou `{ "transactionId": "<uuid>" }`. O utilizador **não sabe** o UUID — o fluxo seguro é: listar → identificar linha pela conversa → **pedir confirmação explícita** → só depois apagar.
 
 ---
@@ -275,7 +304,7 @@ Implementação: `calendar-events.service.js`.
 ## Onde está no código (dev)
 
 - Rota: `backend/src/routes/openclaw.routes.js` → `POST /openclaw/action` sob `/api` + `/bot`.
-- Lógica: `backend/src/services/openclaw-bot.service.js`, `transactions.service.js`, `categories.service.js`.
+- Lógica: `backend/src/services/openclaw-bot.service.js`, `transactions.service.js`, `contas-financeiras.service.js`, `categories.service.js`.
 - Guia operacional: `docs/ops/meu-financeiro-openclaw.md`, `docs/ops/whatsapp-n8n-openclaw-backend.md`.
 
 ---

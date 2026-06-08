@@ -1,5 +1,6 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest } from '../utils/errors.js';
+import { resolveContaIdFromPayload } from './conta-financeira-default.js';
 
 const normalizeTipo = (tipo) => {
   if (!tipo) return tipo;
@@ -20,15 +21,17 @@ export const normalizeTransactionStatus = (tipo, status) => {
   return raw || 'pago';
 };
 
-const resolveDefaultContaId = async (dbClient, userId, explicitContaId) => {
-  if (explicitContaId) return explicitContaId;
+export { listContasFinanceiras as listActiveContasFinanceiras } from './contas-financeiras.service.js';
+
+const resolveContaIdForUser = async (dbClient, userId, contaPayload = {}) => {
   const { data, error } = await dbClient
     .from('contas_financeiras')
-    .select('id')
+    .select('id, nome, tipo, ativo, criado_em')
     .eq('user_id', userId)
-    .eq('ativo', true);
-  if (error || !Array.isArray(data) || data.length !== 1) return null;
-  return data[0]?.id ?? null;
+    .eq('ativo', true)
+    .order('criado_em', { ascending: true });
+  if (error) throw badRequest(error.message);
+  return resolveContaIdFromPayload(data || [], contaPayload);
 };
 
 const shouldRetryTipo = (errorMessage, tipoValue) => {
@@ -61,7 +64,14 @@ export const createTransaction = async (userId, payload) => {
 
   const statusNormalizado = normalizeTransactionStatus(tipoNormalizado, status || 'recebido');
   const dbClient = createSupabaseClient({ useServiceRole: true });
-  const contaId = await resolveDefaultContaId(dbClient, userId, contaIdRaw || null);
+  const contaId = await resolveContaIdForUser(dbClient, userId, {
+    conta_id: contaIdRaw,
+    conta: payload?.conta,
+    conta_nome: payload?.conta_nome,
+    contaNome: payload?.contaNome,
+    carteira: payload?.carteira,
+    wallet: payload?.wallet,
+  });
 
   const tryInsert = async (tipoToUse) => {
     const row = {
