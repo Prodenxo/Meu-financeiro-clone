@@ -24,7 +24,11 @@ export const DOCUMENTOS_ATIVOS_DEFAULT = Object.freeze({
 const PLUGNOTAS_EMPRESA_DOC_INATIVO = Object.freeze({ ativo: false, tipoContrato: 0 });
 
 /** Config mínimo para blocos ativos — alinhado a spike sandbox; revisar com doc oficial Plugnotas. */
-const PLUGNOTAS_NFE_ATIVO_CONFIG_MIN = Object.freeze({ producao: true });
+const PLUGNOTAS_NFE_ATIVO_CONFIG_MIN = Object.freeze({
+  producao: true,
+  serie: 1,
+  numero: 1
+});
 const PLUGNOTAS_NFCE_ATIVO_CONFIG_MIN = Object.freeze({
   producao: true,
   serie: 1,

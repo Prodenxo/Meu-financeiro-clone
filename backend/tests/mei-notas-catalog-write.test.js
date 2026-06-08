@@ -298,6 +298,25 @@ test('criarCatalogoCliente — sucesso com stub getDb (user_id e dedupe no upser
   assert.equal(row.dedupe_key, 'doc:12345678000199');
 });
 
+test('criarCatalogoCliente — sucesso NFE (destinatario no payload interno)', async () => {
+  const mock = createCatalogSupabaseMock();
+  const mod = await import('../src/services/mei-notas.service.js');
+  mod.__setGetDbForTests(() => mock.client);
+
+  const out = await mod.criarCatalogoCliente(mock.userId, {
+    nome: 'Leonardo de Lima',
+    documento: '11953257704',
+    documentType: 'NFE',
+  });
+
+  assert.equal(out.nome, 'Leonardo de Lima');
+  assert.equal(out.documento, '11953257704');
+  const row = mock.getLastClienteUpsertRow();
+  assert.ok(row);
+  assert.equal(row.document_type, 'NFE');
+  assert.equal(row.dedupe_key, 'doc:11953257704');
+});
+
 test('atualizarCatalogoCliente — sucesso PATCH nome com stub getDb', async () => {
   const mock = createCatalogSupabaseMock();
   const mod = await import('../src/services/mei-notas.service.js');

@@ -1327,18 +1327,20 @@ export const listarRelatorioNfe = async (_userId, filters = {}) => {
 
 export const listarCatalogoClientes = async (
   userId,
-  { q = '', limit = 20, documentType = DOCUMENT_TYPE_NFSE } = {}
+  { q = '', limit = 20, documentType } = {}
 ) => {
-  const normalizedType = normalizeDocumentType(documentType);
   const safeLimit = toCatalogLimit(limit);
   const dbClient = getDb();
   let query = dbClient
     .from(CLIENTS_TABLE)
     .select('id, document_type, documento, nome, email, metadata_json, last_used_at, created_at, updated_at')
     .eq('user_id', userId)
-    .eq('document_type', normalizedType)
     .order('last_used_at', { ascending: false })
     .limit(safeLimit);
+
+  if (documentType) {
+    query = query.eq('document_type', normalizeDocumentType(documentType));
+  }
 
   query = applyCatalogSearch(query, q, ['documento', 'nome', 'email']);
 
@@ -1349,18 +1351,20 @@ export const listarCatalogoClientes = async (
 
 export const listarCatalogoProdutos = async (
   userId,
-  { q = '', limit = 20, documentType = DOCUMENT_TYPE_NFSE } = {}
+  { q = '', limit = 20, documentType } = {}
 ) => {
-  const normalizedType = normalizeDocumentType(documentType);
   const safeLimit = toCatalogLimit(limit);
   const dbClient = getDb();
   let query = dbClient
     .from(PRODUCTS_TABLE)
     .select('id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, last_used_at, created_at, updated_at')
     .eq('user_id', userId)
-    .eq('document_type', normalizedType)
     .order('last_used_at', { ascending: false })
     .limit(safeLimit);
+
+  if (documentType) {
+    query = query.eq('document_type', normalizeDocumentType(documentType));
+  }
 
   query = applyCatalogSearch(query, q, ['codigo', 'cnae', 'discriminacao']);
 
@@ -1452,14 +1456,18 @@ export const criarCatalogoCliente = async (userId, body = {}) => {
     assertEmailFormat(String(emailRaw).trim());
   }
 
-  const tomador = {
+  const party = {
     cpfCnpj: documentoDigits,
     razaoSocial: nome
   };
   if (emailRaw !== undefined && emailRaw !== null && String(emailRaw).trim()) {
-    tomador.email = String(emailRaw).trim();
+    party.email = String(emailRaw).trim();
   }
-  const entry = buildClienteCatalogEntry({ tomador }, { documentType });
+  const catalogPayload =
+    documentType === DOCUMENT_TYPE_NFSE
+      ? { tomador: party }
+      : { destinatario: party };
+  const entry = buildClienteCatalogEntry(catalogPayload, { documentType });
   if (!entry) {
     throw badRequest('Não foi possível montar registo de cliente');
   }
