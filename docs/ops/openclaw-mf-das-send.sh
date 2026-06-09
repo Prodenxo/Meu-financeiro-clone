@@ -1,13 +1,20 @@
 #!/bin/sh
 # Envia PDF DAS no WhatsApp. Tenta Z-API via backend; senão mf-das.sh + openclaw message send.
-# Uso: mf-das-send.sh TELEFONE_DO_REMETENTE_55 03/2026
+# Uso: mf-das-send.sh TELEFONE_DO_REMETENTE_55 [MM/YYYY]
+# Sem MM/YYYY → competência do vencimento dia 20 corrente (ex.: em jun → 05/2026).
 set -e
 WS="$(cd "$(dirname "$0")" && pwd)"
 PHONE="${1:?phone com DDI 55}"
-MES="${2:?MM/YYYY}"
+MES="${2:-}"
 TARGET="${3:-$PHONE}"
 
-API_RAW="$("$WS/mf-curl.sh" "$PHONE" "{\"action\":\"send_das_whatsapp\",\"payload\":{\"mes\":\"$MES\"}}" 2>/dev/null)" || API_RAW=""
+if [ -n "$MES" ]; then
+  PAYLOAD="{\"action\":\"send_das_whatsapp\",\"payload\":{\"mes\":\"$MES\"}}"
+else
+  PAYLOAD='{"action":"send_das_whatsapp"}'
+fi
+
+API_RAW="$("$WS/mf-curl.sh" "$PHONE" "$PAYLOAD" 2>/dev/null)" || API_RAW=""
 if [ -n "$API_RAW" ]; then
   API_OK=$(echo "$API_RAW" | node -e "
 let j;
@@ -23,6 +30,12 @@ process.exit(1);
     echo "$API_RAW"
     exit 0
   fi
+fi
+
+if [ -z "$MES" ]; then
+  echo '{"success":false,"step":"send_das_whatsapp","message":"backend nao enviou; passe MM/YYYY ou deploy das-vencimento-v6"}'
+  [ -n "$API_RAW" ] && echo "$API_RAW"
+  exit 1
 fi
 
 OUT="$("$WS/mf-das.sh" "$PHONE" "$MES")" || {

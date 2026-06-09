@@ -121,7 +121,20 @@ export const parseMesCompetenciaMmYyyy = (raw) => {
   return { display, periodoDigits };
 };
 
-/** Competência actual (UTC) em MM/YYYY + dígitos YYYYMM para a tabela DAS_mei. */
+/** Mês/ano calendário em America/Sao_Paulo (1–12). */
+export const brCalendarMonthYear = (refDate = new Date()) => {
+  const d = refDate instanceof Date ? refDate : new Date(refDate);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(d);
+  const year = Number(parts.find((p) => p.type === 'year')?.value);
+  const month = Number(parts.find((p) => p.type === 'month')?.value);
+  return { year, month };
+};
+
+/** Competência calendário actual (UTC) em MM/YYYY — uso legado; DAS em aberto usa mesCompetenciaDasVencimentoDia20. */
 export const mesCompetenciaAtualUtc = () => {
   const now = new Date();
   const month = now.getUTCMonth() + 1;
@@ -129,6 +142,54 @@ export const mesCompetenciaAtualUtc = () => {
   const display = `${String(month).padStart(2, '0')}/${year}`;
   const periodoDigits = `${year}${String(month).padStart(2, '0')}`;
   return { display, periodoDigits };
+};
+
+/**
+ * DAS MEI: vence dia 20 do mês M → competência = mês anterior (M-1).
+ * Ex.: em 09/06/2026 o DAS do vencimento 20/06 é competência 05/2026.
+ */
+export const mesCompetenciaDasVencimentoDia20 = (refDate = new Date()) => {
+  const { year, month } = brCalendarMonthYear(refDate);
+  let compMonth = month - 1;
+  let compYear = year;
+  if (compMonth < 1) {
+    compMonth = 12;
+    compYear -= 1;
+  }
+  const display = `${String(compMonth).padStart(2, '0')}/${compYear}`;
+  const periodoDigits = `${compYear}${String(compMonth).padStart(2, '0')}`;
+  const vencimentoDisplay = `20/${String(month).padStart(2, '0')}/${year}`;
+  return {
+    display,
+    periodoDigits,
+    vencimentoDisplay,
+    vencimentoMes: month,
+    vencimentoAno: year,
+  };
+};
+
+const isTruthyPayloadFlag = (value) =>
+  value === true || String(value || '').toLowerCase() === 'true' || value === 1;
+
+/**
+ * Resolve competência DAS a partir do payload OpenClaw.
+ * Sem mes: DAS em aberto (vencimento dia 20 do mês corrente → competência anterior).
+ */
+export const resolveDasCompetenciaFromPayload = (payload = {}, refDate = new Date()) => {
+  const rawMes = payload?.mes;
+  if (rawMes !== undefined && rawMes !== null && String(rawMes).trim() !== '') {
+    const competencia = parseMesCompetenciaMmYyyy(rawMes);
+    if (!competencia) {
+      throw badRequest('mes inválido; use MM/YYYY, ex.: 05/2026');
+    }
+    return { ...competencia, resolvedBy: 'explicit_mes' };
+  }
+  if (isTruthyPayloadFlag(payload?.mesCalendarioAtual)) {
+    const cal = mesCompetenciaAtualUtc();
+    return { ...cal, resolvedBy: 'calendario_atual' };
+  }
+  const venc = mesCompetenciaDasVencimentoDia20(refDate);
+  return { ...venc, resolvedBy: 'vencimento_dia_20' };
 };
 
 /** Telefone destino WhatsApp (55 + dígitos) a partir do lookup OpenClaw. */
@@ -1296,17 +1357,7 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
-  const resolveDasCompetencia = () => {
-    const rawMes = payload?.mes;
-    if (rawMes === undefined || rawMes === null || String(rawMes).trim() === '') {
-      return mesCompetenciaAtualUtc();
-    }
-    const competencia = parseMesCompetenciaMmYyyy(rawMes);
-    if (!competencia) {
-      throw badRequest('mes inválido; use MM/YYYY, ex.: 05/2026');
-    }
-    return competencia;
-  };
+  const resolveDasCompetencia = () => resolveDasCompetenciaFromPayload(payload);
 
   const buildDasOwnerLabel = (account) => {
     if (account?.dasOwnerLabel) return account.dasOwnerLabel;
@@ -1340,7 +1391,8 @@ export const runOpenclawAction = async (input) => {
   const dasUserId = dasSubject?.dataUserId ?? userId;
 
   if (action === 'get_das_current') {
-    const { display, periodoDigits } = resolveDasCompetencia();
+    const dasComp = resolveDasCompetencia();
+    const { display, periodoDigits } = dasComp;
     let pdfResult;
     try {
       pdfResult = await meiGuideService.fetchDasPdfBase64ForUser(dasUserId, {
@@ -1402,7 +1454,12 @@ export const runOpenclawAction = async (input) => {
             ? `/home/node/.openclaw/workspace/mf-das-send.sh ${destinationPhone} ${display}`
             : null,
           agentInstructions:
-            'Use dasOwnerLabel/meiCertificadoRazaoSocial (certificado), NÃO displayName. Para enviar PDF: send_das_whatsapp ou mf-das-send.sh.',
+            'Use dasOwnerLabel/meiCertificadoRazaoSocial (certificado), NÃO displayName. Para enviar PDF: send_das_whatsapp ou mf-das-send.sh.'
+            + (dasComp.resolvedBy === 'vencimento_dia_20'
+              ? ` Competência ${display} (vencimento ${dasComp.vencimentoDisplay || 'dia 20'}).`
+              : ''),
+          competenciaResolvida: dasComp.resolvedBy ?? null,
+          vencimentoDisplay: dasComp.vencimentoDisplay ?? null,
           actorContext,
           ...(dasSubject?.dataLinkDebug ?? linkDebug),
         },
@@ -1418,6 +1475,8 @@ export const runOpenclawAction = async (input) => {
         mimeType: 'application/pdf',
         base64: pdfBase64,
         mes: display,
+        competenciaResolvida: dasComp.resolvedBy ?? null,
+        vencimentoDisplay: dasComp.vencimentoDisplay ?? null,
         dasAccount: dasSubject?.account ?? null,
         accessedAsSelf: dasSubject?.accessedAsSelf ?? true,
         actorContext,
@@ -1427,7 +1486,8 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'get_das_payment_status') {
-    const { display, periodoDigits } = resolveDasCompetencia();
+    const dasComp = resolveDasCompetencia();
+    const { display, periodoDigits } = dasComp;
     const competenciaIso = `${periodoDigits.slice(0, 4)}-${periodoDigits.slice(4, 6)}`;
     const refreshFromSerpro =
       payload?.refreshFromSerpro === true ||
@@ -1456,6 +1516,12 @@ export const runOpenclawAction = async (input) => {
         updatedAt: statusInfo.updatedAt,
         isPaid: statusInfo.status === 'pago',
         isPending: statusInfo.status === 'pendente',
+        competenciaResolvida: dasComp.resolvedBy ?? null,
+        vencimentoDisplay: dasComp.vencimentoDisplay ?? null,
+        agentInstructions:
+          dasComp.resolvedBy === 'vencimento_dia_20'
+            ? `DAS competência ${display} (vence ${dasComp.vencimentoDisplay}). Não confundir com mês calendário.`
+            : null,
         dasAccount: dasSubject?.account ?? null,
         accessedAsSelf: dasSubject?.accessedAsSelf ?? true,
         actorContext,
@@ -1465,7 +1531,8 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'send_das_whatsapp') {
-    const { display, periodoDigits } = resolveDasCompetencia();
+    const dasComp = resolveDasCompetencia();
+    const { display, periodoDigits } = dasComp;
     let pdfResult;
     try {
       pdfResult = await meiGuideService.fetchDasPdfBase64ForUser(dasUserId, {
@@ -1498,6 +1565,8 @@ export const runOpenclawAction = async (input) => {
       data: {
         mes: display,
         fileName,
+        competenciaResolvida: dasComp.resolvedBy ?? null,
+        vencimentoDisplay: dasComp.vencimentoDisplay ?? null,
         whatsappStatus: whatsapp.whatsappStatus,
         whatsappError: whatsapp.whatsappError ?? null,
         hint: whatsapp.hint ?? null,
@@ -1509,7 +1578,8 @@ export const runOpenclawAction = async (input) => {
           ? null
           : `/home/node/.openclaw/workspace/mf-das-send.sh ${destinationPhone} ${display}`,
         agentInstructions: sent
-          ? 'Confirme só que o PDF foi enviado. Use dasOwnerLabel (certificado) se mencionar o contribuinte.'
+          ? `Confirme só que o PDF da competência ${display} foi enviado.`
+            + (dasComp.vencimentoDisplay ? ` Vencimento ${dasComp.vencimentoDisplay}.` : '')
           : 'OBRIGATÓRIO exec mf-das-send.sh com telefone do PAINEL. Não diga que enviou sem whatsappStatus=sent.',
         actorContext,
         ...(dasSubject?.dataLinkDebug ?? linkDebug),

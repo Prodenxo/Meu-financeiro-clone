@@ -5,6 +5,8 @@ import {
   buildPhoneLookupCandidates,
   parseMesCompetenciaMmYyyy,
   mesCompetenciaAtualUtc,
+  mesCompetenciaDasVencimentoDia20,
+  resolveDasCompetenciaFromPayload,
   resolveOpenclawWhatsappPhone,
   assertActorCanAccessDasForUser,
 } from '../src/services/openclaw-bot.service.js';
@@ -45,6 +47,25 @@ test('mesCompetenciaAtualUtc devolve display e periodoDigits coerentes', () => {
   assert.match(r.periodoDigits, /^\d{6}$/);
   const parsed = parseMesCompetenciaMmYyyy(r.display);
   assert.deepEqual(parsed?.periodoDigits, r.periodoDigits);
+});
+
+test('mesCompetenciaDasVencimentoDia20 — junho/2026 → competência 05/2026', () => {
+  const r = mesCompetenciaDasVencimentoDia20(new Date('2026-06-09T15:00:00Z'));
+  assert.equal(r.display, '05/2026');
+  assert.equal(r.periodoDigits, '202605');
+  assert.equal(r.vencimentoDisplay, '20/06/2026');
+});
+
+test('resolveDasCompetenciaFromPayload sem mes usa vencimento dia 20', () => {
+  const r = resolveDasCompetenciaFromPayload({}, new Date('2026-06-09T15:00:00Z'));
+  assert.equal(r.display, '05/2026');
+  assert.equal(r.resolvedBy, 'vencimento_dia_20');
+});
+
+test('resolveDasCompetenciaFromPayload com mes explícito', () => {
+  const r = resolveDasCompetenciaFromPayload({ mes: '06/2026' });
+  assert.equal(r.display, '06/2026');
+  assert.equal(r.resolvedBy, 'explicit_mes');
 });
 
 test('resolveOpenclawWhatsappPhone normaliza DDI 55', () => {

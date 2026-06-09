@@ -2174,7 +2174,7 @@ const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
     createGuideByCnpjFn = createGuideByCnpj,
     getKnownCompetenciaPeriodStatusFn = getKnownCompetenciaPeriodStatus,
   } = dependencies;
-  const competencias = buildRecentCompetencias(12, false);
+  const competencias = buildRecentCompetencias(12, true);
   const paidCompetencias = userId
     ? new Set(await listPaidCompetenciasFn({ userId, competencias }))
     : new Set();

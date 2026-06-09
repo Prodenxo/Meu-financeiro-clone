@@ -366,6 +366,22 @@ Quando pedirem *“marca reunião”*, *“agenda consulta”*, *“lembrar paga
 - **Áudio:** trata a transcrição como mensagem escrita e extrai os mesmos campos.
 - **Conselhos** sem mexer na BD: responde só em texto, sem `curl`.
 
+### DAS MEI — competência × vencimento (dia 20) — **CRÍTICO**
+
+O DAS **vence dia 20** de cada mês. A **competência** é sempre o **mês anterior** ao vencimento:
+
+| Pedido do cliente (em junho/2026) | Competência correta | Vencimento |
+|-----------------------------------|---------------------|------------|
+| *“Manda o DAS do vencimento dia 20”* | **05/2026** | 20/06/2026 |
+| *“DAS que vence este mês”* | **05/2026** | 20/06/2026 |
+| *“DAS de maio”* | **05/2026** | 20/06/2026 |
+| *“DAS de junho”* (competência explícita) | **06/2026** | 20/07/2026 |
+
+- **Sem `mes` no payload** → backend envia a competência do **vencimento dia 20 corrente** (mês anterior ao calendário).
+- **PROIBIDO** enviar `06/2026` quando o cliente pede *“vencimento dia 20”* estando em **junho** — isso é **maio** (`05/2026`).
+- Para competência explícita, passa `payload.mes":"MM/YYYY"` (ex.: `"06/2026"`).
+- Na resposta, usa `data.vencimentoDisplay` e `data.mes` se existirem — explica: *“Competência 05/2026, vence 20/06.”*
+
 ### DAS MEI — **está pago?** / pendente?
 
 Quando perguntarem *“o DAS está pago?”*, *“tem pendência?”*, *“situação do DAS 03/2026”*:
@@ -385,7 +401,10 @@ Quando perguntarem *“o DAS está pago?”*, *“tem pendência?”*, *“situa
 
 ### DAS MEI — enviar **ficheiro PDF** no WhatsApp (não escrever o nome)
 
-Quando pedirem *“emita / manda / envia o DAS”* de um ou mais meses (`MM/YYYY`):
+Quando pedirem *“emita / manda / envia o DAS”*:
+
+- *“vencimento dia 20”* / *“DAS deste vencimento”* **sem mês** → `mf-das-send.sh TELEFONE` (sem 2º arg) **ou** `mf-curl` com `send_das_whatsapp` sem `mes` — backend resolve (ex.: junho → `05/2026`).
+- Mês explícito (`MM/YYYY`) → 2º arg do script ou `payload.mes`.
 
 **PROIBIDO:** responder só com texto tipo `DAS-03-2026.pdf`, `segue o PDF`, `[[MEDIA: DAS-04-2026.pdf]]`, ou `MEDIA:/tmp/...` — no WhatsApp isso **não envia** PDF (o OpenClaw ignora esses tokens na resposta; só `openclaw message send --media` via `exec` funciona).
 
