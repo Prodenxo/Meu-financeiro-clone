@@ -1615,7 +1615,7 @@ export default function AdminUserData() {
                               <AdminMeiCatalogClienteCombobox
                                 key={`emit-catalog-${selectedUserId}-${emitirModalInstance}`}
                                 userId={selectedUserId}
-                                meiEnabled={selectedUser?.mei !== false}
+                                meiEnabled={selectedUser?.mei === true}
                                 formatDocument={formatDocument}
                                 catalogRefreshToken={meiCatalogRefresh}
                                 onApplyCliente={(fields) =>
@@ -1623,7 +1623,7 @@ export default function AdminUserData() {
                                 }
                               />
                             </div>
-                            {selectedUser?.mei !== false ? (
+                            {selectedUser?.mei === true ? (
                               <button
                                 ref={gerirMeiCatalogBtnRef}
                                 type="button"
@@ -1693,7 +1693,7 @@ export default function AdminUserData() {
                             <AdminMeiCatalogProdutoCombobox
                               key={`emit-prod-${selectedUserId}-${emitirModalInstance}`}
                               userId={selectedUserId}
-                              meiEnabled={selectedUser?.mei !== false}
+                              meiEnabled={selectedUser?.mei === true}
                               catalogRefreshToken={meiCatalogRefresh}
                               onApplyServico={(fields) =>
                                 setEmitirNotaForm((prev) => ({
@@ -1943,7 +1943,7 @@ export default function AdminUserData() {
                 onClose={() => setShowMeiClientesDrawer(false)}
                 userId={selectedUserId}
                 userDisplayName={getUserLabel(selectedUser)}
-                meiEnabled={selectedUser.mei !== false}
+                meiEnabled={selectedUser.mei === true}
                 formatDocument={formatDocument}
                 returnFocusRef={gerirMeiCatalogBtnRef}
                 onInvalidateCatalog={() => setMeiCatalogRefresh((n) => n + 1)}

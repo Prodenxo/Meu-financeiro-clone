@@ -102,7 +102,7 @@ const getRoleAndCompanyFromLink = async ({ accessToken, userId }) => {
     }
 
     if (roleData?.roles) {
-      const mei = typeof linkData?.mei === 'boolean' ? linkData.mei : true;
+      const mei = typeof linkData?.mei === 'boolean' ? linkData.mei : false;
       return {
         role: normalizeRoleValue(roleData.roles),
         empresaId: linkData.empresas_id || null,
@@ -171,7 +171,7 @@ const getResolvedRoleAndCompany = async ({ accessToken, userId }) => {
   }
 
   const profileRole = await getOrCreateProfileRole({ accessToken, userId });
-  const mei = typeof linkResult.mei === 'boolean' ? linkResult.mei : true;
+  const mei = typeof linkResult.mei === 'boolean' ? linkResult.mei : false;
   return { role: profileRole, empresaId: linkResult.empresaId || null, mei };
 };
 

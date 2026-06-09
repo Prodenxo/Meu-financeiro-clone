@@ -239,7 +239,7 @@ router.post('/submit', requireInternalSecret, async (req, res, next) => {
         roles_id: userRole.id,
         empresas_id: empresaRow.id,
         status: false,
-        mei: true,
+        mei: false,
       });
       if (linkErr) throw new Error(linkErr.message);
 

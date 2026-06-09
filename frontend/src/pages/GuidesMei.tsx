@@ -687,9 +687,7 @@ export default function GuidesMei() {
   const meiGuideValidateConsCTitleId = useId();
   const prefeituraPortalCredentialsTitleId = useId();
   const { role, mei, userId } = useAuthStore();
-  const canViewNfse = role === 'superadmin'
-    || role === 'admin'
-    || (role === 'usuario' && mei !== false);
+  const canViewNfse = role === 'superadmin' || mei === true;
   const inRouter = useInRouterContext();
   const [contribuinteDoc, setContribuinteDoc] = useState('');
   const [activeWorkspace, setActiveWorkspace] = useState<GuidesMeiWorkspace>(() =>

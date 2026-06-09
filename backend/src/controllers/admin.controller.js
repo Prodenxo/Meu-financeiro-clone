@@ -52,7 +52,7 @@ const ensureMeiEnabledForUser = async (accessToken, targetUserId) => {
     return { mei: true };
   }
   const user = await resolveAdminUserContext(accessToken, targetUserId);
-  if (user?.mei === false) {
+  if (user?.mei !== true) {
     throw forbidden('Acesso MEI desabilitado para este usuário');
   }
   return user;

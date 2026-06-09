@@ -2,17 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { canAccessMeiArea } from './meiAccess';
 
 describe('canAccessMeiArea', () => {
-  it('superadmin e admin sempre têm acesso', () => {
+  it('superadmin sempre tem acesso', () => {
     expect(canAccessMeiArea('superadmin', false)).toBe(true);
-    expect(canAccessMeiArea('admin', false)).toBe(true);
+    expect(canAccessMeiArea('superadmin', null)).toBe(true);
   });
 
-  it('usuario com mei=false não tem acesso', () => {
-    expect(canAccessMeiArea('usuario', false)).toBe(false);
+  it('admin exige mei=true', () => {
+    expect(canAccessMeiArea('admin', true)).toBe(true);
+    expect(canAccessMeiArea('admin', false)).toBe(false);
+    expect(canAccessMeiArea('admin', null)).toBe(false);
   });
 
-  it('usuario com mei true ou null tem acesso', () => {
+  it('usuario exige mei=true', () => {
     expect(canAccessMeiArea('usuario', true)).toBe(true);
-    expect(canAccessMeiArea('usuario', null)).toBe(true);
+    expect(canAccessMeiArea('usuario', false)).toBe(false);
+    expect(canAccessMeiArea('usuario', null)).toBe(false);
   });
 });

@@ -30,8 +30,25 @@ test('requireMeiEnabled bloqueia usuario com mei=false', async () => {
   assert.match(String(nextArg?.message || ''), /Acesso MEI desabilitado/);
 });
 
-test('requireMeiEnabled permite admin com mei=false', async () => {
+test('requireMeiEnabled bloqueia admin com mei=false', async () => {
   const context = { role: 'admin', mei: false };
+  const { req, nextArg } = await runMiddleware(async () => context);
+
+  assert.equal(req.requesterContext, undefined);
+  assert.equal(nextArg?.status, 403);
+  assert.match(String(nextArg?.message || ''), /Acesso MEI desabilitado/);
+});
+
+test('requireMeiEnabled bloqueia admin com mei=null', async () => {
+  const context = { role: 'admin', mei: null };
+  const { req, nextArg } = await runMiddleware(async () => context);
+
+  assert.equal(req.requesterContext, undefined);
+  assert.equal(nextArg?.status, 403);
+});
+
+test('requireMeiEnabled permite admin com mei=true', async () => {
+  const context = { role: 'admin', mei: true };
   const { req, nextArg } = await runMiddleware(async () => context);
 
   assert.equal(nextArg, undefined);

@@ -128,7 +128,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
   });
 
-  it('exibe elementos de NFSe para admin mesmo com mei=false', async () => {
+  it('oculta elementos de NFSe para admin com mei=false', async () => {
     authState.role = 'admin';
     authState.mei = false;
 
@@ -139,8 +139,8 @@ describe('GuidesMei permissões NFSe', () => {
       root.render(<GuidesMei />);
     });
 
-    expect(container.textContent).toContain('Notas exibidas');
-    expect(container.textContent).toContain('NFS-e');
+    expect(container.textContent).not.toContain('Notas exibidas');
+    expect(container.textContent).not.toContain('Emitir NFSe');
 
     await act(async () => {
       root.unmount();

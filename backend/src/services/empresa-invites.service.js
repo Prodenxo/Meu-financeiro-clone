@@ -264,7 +264,7 @@ const SELECT_INVITE_FOR_ACCEPT = 'id, empresas_id, expires_at, used_at, revoked_
  */
 export const acceptInvite = async (accessToken, rawToken, deps = {}) => {
   const ensureCap = deps.ensureEmpresaCapacity ?? ensureEmpresaCapacity;
-  const targetMei = typeof deps.mei === 'boolean' ? deps.mei : true;
+  const targetMei = typeof deps.mei === 'boolean' ? deps.mei : false;
 
   if (rawToken == null || typeof rawToken !== 'string' || rawToken.trim().length < INVITE_TOKEN_MIN_LENGTH) {
     throw badRequest('Convite inválido');

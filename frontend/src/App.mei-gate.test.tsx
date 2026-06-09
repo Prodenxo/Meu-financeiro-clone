@@ -170,7 +170,7 @@ describe('AppRoutes mei gate', () => {
     });
   });
 
-  it('permite /guias-mei para admin mesmo com mei=false', async () => {
+  it('redireciona /guias-mei para / quando admin tem mei=false', async () => {
     authState.role = 'admin';
     authState.mei = false;
 
@@ -188,8 +188,9 @@ describe('AppRoutes mei gate', () => {
       );
     });
 
-    expect(container.textContent).toContain('GUIAS_MEI_PAGE');
-    expect(container.textContent).not.toContain('DASHBOARD_PAGE');
+    expect(container.textContent).toContain('DASHBOARD_PAGE');
+    expect(container.textContent).not.toContain('GUIAS_MEI_PAGE');
+    expect(container.textContent).toContain('Área Mei Infinito não disponível');
 
     await act(async () => {
       root.unmount();
@@ -317,7 +318,7 @@ describe('AppRoutes mei gate', () => {
     });
   });
 
-  it('permite /mei-catalogo/servicos-produtos para admin mesmo com mei=false', async () => {
+  it('redireciona /mei-catalogo/servicos-produtos para / quando admin tem mei=false', async () => {
     authState.role = 'admin';
     authState.mei = false;
 
@@ -335,7 +336,9 @@ describe('AppRoutes mei gate', () => {
       );
     });
 
-    expect(container.textContent).toContain('MEI_CATALOGO_SERVICOS_PRODUTOS_PAGE');
+    expect(container.textContent).toContain('DASHBOARD_PAGE');
+    expect(container.textContent).not.toContain('MEI_CATALOGO_SERVICOS_PRODUTOS_PAGE');
+    expect(container.textContent).toContain('Área Mei Infinito não disponível');
 
     await act(async () => {
       root.unmount();

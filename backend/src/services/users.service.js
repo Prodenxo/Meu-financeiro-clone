@@ -482,7 +482,7 @@ export const getRequesterContext = async (accessToken) => {
     }
 
     if (roleData?.roles) {
-      const mei = typeof linkData?.mei === 'boolean' ? linkData.mei : true;
+      const mei = typeof linkData?.mei === 'boolean' ? linkData.mei : false;
       return {
         userId: user.id,
         role: normalizeRoleValue(roleData.roles),
@@ -502,7 +502,7 @@ export const getRequesterContext = async (accessToken) => {
     userId: user.id,
     role: normalizeRoleValue(profile?.role) || 'usuario',
     empresaId: null,
-    mei: true
+    mei: false
   };
 };
 
@@ -571,7 +571,7 @@ export const listUsers = async (accessToken, queryParams = {}) => {
           empresas_id: null,
           roles_id: null,
           status: true,
-          mei: true,
+          mei: false,
           expires_at: null,
           isOrphan: true
         });
