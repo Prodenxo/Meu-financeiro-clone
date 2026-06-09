@@ -94,11 +94,12 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 **Fluxo recomendado**
 
 1. `get_nfse_setup_status`
-2. Recolher tomador (CPF/CNPJ), valor, descrição
-3. `preview_nfse` ou `emit_nfse` **sem** `confirm` → mostrar resumo
-4. Utilizador confirma no chat
-5. `emit_nfse` com `"confirm": true`
-6. Quando `consult_nfse` → `pdfReady: true` (status concluido), enviar PDF:
+2. Tomador: se o utilizador disser **nome** → `list_nfse_clientes` com `payload.q` ou `preview_nfse` com `tomadorNome` (não pedir CPF/CNPJ se já está no catálogo). Só pedir documento se cliente não existir ou houver homónimos.
+3. Recolher **valor** e **descrição**
+4. `preview_nfse` ou `emit_nfse` **sem** `confirm` → mostrar resumo
+5. Utilizador confirma no chat
+6. `emit_nfse` com `"confirm": true`
+7. Quando `consult_nfse` → `pdfReady: true` (status concluido), enviar PDF:
 
 ```bash
 /home/node/.openclaw/workspace/mf-nfse-send.sh 5521996185328 UUID_DA_NOTA
@@ -108,8 +109,9 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 
 | Campo | Obrigatório | Notas |
 |-------|-------------|--------|
-| `tomadorCpfCnpj` | Sim* | 11 (CPF) ou 14 (CNPJ) dígitos |
-| `tomadorRazaoSocial` | Condicional | Obrigatório se lookup CNPJ falhar; CNPJ pode vir da BrasilAPI |
+| `tomadorCpfCnpj` | Condicional* | 11 ou 14 dígitos; omitir se usar `tomadorNome` |
+| `tomadorNome` | Condicional* | Nome no catálogo (ex.: "Rafael Reis") — backend resolve o documento |
+| `tomadorRazaoSocial` | Condicional | Alias de `tomadorNome`; só obrigatório em `register_nfse_cliente` sem catálogo |
 | `valor` | Sim | Número ou texto (`1200`, `1.200,00`) |
 | `descricao` | Recomendado | Discriminação do serviço |
 | `codigoServico` | Condicional | Mín. 6 caracteres; senão usa último do catálogo |

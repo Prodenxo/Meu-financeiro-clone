@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isNfsePdfReadyStatus, parseValorReais } from '../src/services/openclaw-nfse.service.js';
+import {
+  isNfsePdfReadyStatus,
+  parseValorReais,
+  pickClienteCatalogoByNomeResult,
+} from '../src/services/openclaw-nfse.service.js';
 
 /** Valor da nota fiscal (emit_nfse), não lançamento financeiro. */
 test('parseValorReais NFSe — número e formato BR', () => {
@@ -26,4 +30,41 @@ test('isNfsePdfReadyStatus', () => {
   assert.equal(isNfsePdfReadyStatus('concluido'), true);
   assert.equal(isNfsePdfReadyStatus('processando'), false);
   assert.equal(isNfsePdfReadyStatus('autorizado'), true);
+});
+
+test('pickClienteCatalogoByNomeResult — match exato', () => {
+  const rows = [
+    { id: '1', nome: 'Rafael Reis', documento: '12345678901' },
+    { id: '2', nome: 'Maria Silva', documento: '98765432100' },
+  ];
+  const r = pickClienteCatalogoByNomeResult(rows, 'Rafael Reis');
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.cliente.id, '1');
+});
+
+test('pickClienteCatalogoByNomeResult — match por palavras', () => {
+  const rows = [
+    { id: '1', nome: 'Rafael Reis Ltda', documento: '65805583000173' },
+    { id: '2', nome: 'Rafael Costa', documento: '11122233344' },
+  ];
+  const r = pickClienteCatalogoByNomeResult(rows, 'Rafael Reis');
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.cliente.id, '1');
+});
+
+test('pickClienteCatalogoByNomeResult — ambíguo', () => {
+  const rows = [
+    { id: '1', nome: 'Rafael Reis', documento: '12345678901' },
+    { id: '2', nome: 'Rafael Costa', documento: '98765432100' },
+  ];
+  const r = pickClienteCatalogoByNomeResult(rows, 'Rafael');
+  assert.equal(r.kind, 'ambiguous');
+  assert.equal(r.matches.length, 2);
+});
+
+test('pickClienteCatalogoByNomeResult — único resultado da busca', () => {
+  const rows = [{ id: '1', nome: 'José Antônio', documento: '12345678901' }];
+  const r = pickClienteCatalogoByNomeResult(rows, 'Jose');
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.cliente.id, '1');
 });

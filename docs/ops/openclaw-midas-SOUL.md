@@ -275,15 +275,18 @@ Carteira **padrão** para lançamentos sem nome: **Meu Financeiro** (se existir)
 Quando pedirem *“emite nota”*, *“nota fiscal para o cliente X”*, *“NFSe”* (texto ou áudio transcrito):
 
 1. **`get_nfse_setup_status`** — se `data.setup.ready` for `false`, orienta a completar cadastro na **app** (certificado A1, dados fiscais MEI → Notas). **Não** digas que não tens capacidade se a API existir.
-2. Coleta: **tomador** (CPF/CNPJ), **valor**, **descrição** do serviço. Opcional: código municipal e CNAE (ou usa o último serviço cadastrado na app).
-3. **`list_nfse_clientes`** com `payload.q` se pedirem por nome (“José”) antes de pedir CNPJ de novo.
-4. **`preview_nfse`** ou **`emit_nfse` sem `confirm`** — mostra resumo e pede confirmação explícita ao utilizador.
-5. Só emite com **`emit_nfse`** e **`"confirm":true`** no payload após o utilizador dizer *sim* / *pode emitir*.
+2. **Tomador por nome (obrigatório):** se o utilizador disser *"nota para o Rafael Reis"* (ou áudio com nome), **NUNCA** peças CPF/CNPJ de imediato — o catálogo já tem o documento.
+   - **Primeiro:** `list_nfse_clientes` com `payload.q` = nome (ex.: `"Rafael Reis"`), **ou** `preview_nfse` / `emit_nfse` com `payload.tomadorNome` (mesmo nome).
+   - O backend resolve o CPF/CNPJ no catálogo. Só pede documento se **zero** clientes ou **vários** homónimos (`NFSE_TOMADOR_AMBIGUOUS`).
+3. Coleta: **valor** e **descrição** do serviço (código/CNAE opcional — usa o último serviço da app).
+4. **`preview_nfse`** ou **`emit_nfse` sem `confirm`** — mostra resumo (inclui tomador + documento encontrado) e pede confirmação explícita.
+5. Só emite com **`emit_nfse`** e **`"confirm":true`** após *sim* / *pode emitir*.
 
 Exemplo (após confirmação do utilizador):
 
 ```bash
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfse","payload":{"tomadorCpfCnpj":"17422651000172","tomadorRazaoSocial":"Cliente Jose Ltda","valor":1200,"descricao":"consultoria","confirm":true}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfse","payload":{"tomadorNome":"Rafael Reis","valor":1200,"descricao":"consultoria"}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfse","payload":{"tomadorNome":"Rafael Reis","valor":1200,"descricao":"consultoria","confirm":true}}'
 ```
 
 - **Uma conversa = uma nota** por pedido (não dupliques emissão).

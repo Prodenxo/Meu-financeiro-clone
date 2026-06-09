@@ -191,6 +191,49 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
   };
 };
 
+const normalizeNameForMatch = (value) =>
+  stripDiacritics(String(value || '').trim().toLowerCase()).replace(/\s+/g, ' ');
+
+const pickTomadorNomeFromPayload = (payload) =>
+  firstNonEmpty(
+    payload?.tomadorNome,
+    payload?.tomadorRazaoSocial,
+    payload?.cliente,
+    payload?.nome,
+    payload?.tomador,
+  );
+
+/**
+ * Escolhe um cliente do catálogo a partir do resultado de busca por nome.
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {string} nome
+ */
+export const pickClienteCatalogoByNomeResult = (rows, nome) => {
+  const q = normalizeNameForMatch(nome);
+  if (!q) return { kind: 'missing' };
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return { kind: 'not_found', q: nome };
+
+  const exact = list.filter((r) => normalizeNameForMatch(r.nome) === q);
+  if (exact.length === 1) return { kind: 'ok', cliente: exact[0] };
+
+  const allWordsMatch = list.filter((r) => {
+    const n = normalizeNameForMatch(r.nome);
+    const words = q.split(' ').filter((w) => w.length >= 2);
+    if (!words.length) return false;
+    return words.every((w) => n.includes(w));
+  });
+  if (allWordsMatch.length === 1) return { kind: 'ok', cliente: allWordsMatch[0] };
+
+  if (list.length === 1) return { kind: 'ok', cliente: list[0] };
+
+  return {
+    kind: 'ambiguous',
+    matches: list,
+    q: nome,
+  };
+};
+
 const findClienteCatalogoByDocumento = async (userId, documento) => {
   const doc = normalizeDoc(documento);
   if (!doc) return null;
@@ -198,11 +241,28 @@ const findClienteCatalogoByDocumento = async (userId, documento) => {
   return (rows || []).find((r) => normalizeDoc(r.documento) === doc) || null;
 };
 
+const findClienteCatalogoByNome = async (userId, nome) => {
+  const q = String(nome || '').trim();
+  if (!q) return { kind: 'missing' };
+  const rows = await listarCatalogoClientes(userId, { q, limit: 20 });
+  return pickClienteCatalogoByNomeResult(rows, q);
+};
+
+const mapClienteResumo = (cliente) => ({
+  id: cliente.id,
+  nome: cliente.nome,
+  documento: cliente.documento,
+  email: cliente.email ?? null,
+});
+
 const assertTomadorDocumentoValido = (tomadorDoc) => {
   if (!tomadorDoc) {
     throw badRequest('CPF ou CNPJ do tomador é obrigatório.', {
       code: 'NFSE_TOMADOR_DOC_MISSING',
-      botHint: 'Peça CPF (11 dígitos) ou CNPJ (14 dígitos) válidos do cliente.',
+      botHint:
+        'Se o utilizador disse o nome do cliente, use payload.tomadorNome em preview_nfse/emit_nfse '
+        + 'ou list_nfse_clientes com payload.q — o CPF/CNPJ já está no catálogo. '
+        + 'Só peça documento se o cliente não existir no catálogo.',
     });
   }
   if (tomadorDoc.length !== 11 && tomadorDoc.length !== 14) {
@@ -221,7 +281,7 @@ const assertTomadorDocumentoValido = (tomadorDoc) => {
 };
 
 const resolveTomador = async (userId, payload) => {
-  const tomadorDoc = normalizeDoc(
+  let tomadorDoc = normalizeDoc(
     payload?.tomadorCpfCnpj
       || payload?.tomadorCnpj
       || payload?.cnpjTomador
@@ -229,9 +289,44 @@ const resolveTomador = async (userId, payload) => {
       || payload?.cpfCnpj
       || payload?.documento,
   );
-  assertTomadorDocumentoValido(tomadorDoc);
 
-  const catalogo = await findClienteCatalogoByDocumento(userId, tomadorDoc);
+  let catalogo = null;
+
+  if (tomadorDoc) {
+    assertTomadorDocumentoValido(tomadorDoc);
+    catalogo = await findClienteCatalogoByDocumento(userId, tomadorDoc);
+  } else {
+    const tomadorNome = pickTomadorNomeFromPayload(payload);
+    if (!tomadorNome) {
+      throw badRequest('Informe o cliente (nome ou CPF/CNPJ).', {
+        code: 'NFSE_TOMADOR_MISSING',
+        botHint:
+          'Quando o utilizador disser "nota para Rafael Reis", use tomadorNome no payload '
+          + 'ou list_nfse_clientes com q=Rafael Reis — não peça CPF se o cliente já está cadastrado.',
+      });
+    }
+    const lookup = await findClienteCatalogoByNome(userId, tomadorNome);
+    if (lookup.kind === 'not_found') {
+      throw badRequest(`Cliente "${tomadorNome}" não encontrado no catálogo NFSe.`, {
+        code: 'NFSE_TOMADOR_NOT_IN_CATALOG',
+        tomadorNome,
+        botHint:
+          'Use register_nfse_cliente para cadastrar ou list_nfse_clientes para confirmar o nome.',
+      });
+    }
+    if (lookup.kind === 'ambiguous') {
+      throw badRequest(`Vários clientes encontrados para "${tomadorNome}".`, {
+        code: 'NFSE_TOMADOR_AMBIGUOUS',
+        tomadorNome,
+        matches: (lookup.matches || []).map(mapClienteResumo),
+        botHint: 'Liste nome + documento de cada match e peça ao utilizador para escolher um.',
+      });
+    }
+    catalogo = lookup.cliente;
+    tomadorDoc = normalizeDoc(catalogo?.documento || '');
+    assertTomadorDocumentoValido(tomadorDoc);
+  }
+
   if (!catalogo) {
     throw badRequest('Cliente não está cadastrado no catálogo NFSe.', {
       code: 'NFSE_TOMADOR_NOT_IN_CATALOG',
