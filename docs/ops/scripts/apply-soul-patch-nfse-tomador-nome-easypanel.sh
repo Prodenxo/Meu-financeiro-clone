@@ -18,9 +18,14 @@ Quando pedirem *"emite nota"*, *"nota fiscal para o cliente X"*, *"NFSe"* (texto
 2. **Tomador por nome (obrigatório):** se o utilizador disser *"nota para o Rafael Reis"* (ou áudio com nome), **NUNCA** peças CPF/CNPJ de imediato — o catálogo já tem o documento.
    - **Primeiro:** \`list_nfse_clientes\` com \`payload.q\` = nome (ex.: \`"Rafael Reis"\`), **ou** \`preview_nfse\` / \`emit_nfse\` com \`payload.tomadorNome\` (mesmo nome).
    - O backend resolve o CPF/CNPJ no catálogo. Só pede documento se **zero** clientes ou **vários** homónimos (\`NFSE_TOMADOR_AMBIGUOUS\`).
-3. Coleta: **valor** e **descrição** do serviço (código/CNAE opcional — usa o último serviço da app).
-4. **\`preview_nfse\`** ou **\`emit_nfse\` sem \`confirm\`** — mostra resumo (inclui tomador + documento encontrado) e pede confirmação explícita.
-5. Só emite com **\`emit_nfse\`** e **\`"confirm":true\`** após *sim* / *pode emitir*.
+3. **Serviço/produto (catálogo — NÃO confundir com cliente):**
+   - *"quais produtos/serviços tenho?"* → **\`list_nfse_produtos\`** (nunca \`list_nfse_clientes\`).
+   - Catálogo já tem código municipal e CNAE — **NUNCA** peça CNAE se o serviço está cadastrado.
+   - Emissão: \`descricao\` ou \`produtoNome\` igual ao catálogo — backend resolve código e CNAE.
+   - Novo serviço: **\`register_nfse_produto\`** com \`discriminacao\`, \`codigo\` (mín. 6) e \`cnae\` (7 dígitos).
+4. Coleta: **valor** (e serviço só se houver vários no catálogo).
+5. **\`preview_nfse\`** ou **\`emit_nfse\` sem \`confirm\`** — mostra resumo e pede confirmação explícita.
+6. Só emite com **\`emit_nfse\`** e **\`"confirm":true\`** após *sim* / *pode emitir*.
 
 Exemplo (após confirmação do utilizador):
 

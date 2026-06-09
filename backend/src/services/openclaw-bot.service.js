@@ -38,10 +38,13 @@ import {
   getOpenclawNfseSetupStatus,
   syncOpenclawNfseEmitente,
   isNfsePdfReadyStatus,
+  formatOpenclawNfseProdutosMessage,
   listOpenclawNfseClientes,
   listOpenclawNfseNotas,
+  listOpenclawNfseProdutos,
   previewOpenclawNfseEmit,
   registerOpenclawNfseCliente,
+  registerOpenclawNfseProduto,
   rethrowNfseErrorForBot,
 } from './openclaw-nfse.service.js';
 import { formatCnpjDisplay } from '../utils/cpf-cnpj.js';
@@ -540,6 +543,12 @@ export const runOpenclawAction = async (input) => {
     register_nfse_cliente: 'register_nfse_cliente',
     cadastrar_cliente_nfse: 'register_nfse_cliente',
     lookup_nfse_cliente: 'list_nfse_clientes',
+    list_nfse_produtos: 'list_nfse_produtos',
+    list_nfse_servicos: 'list_nfse_produtos',
+    lookup_nfse_produto: 'list_nfse_produtos',
+    register_nfse_produto: 'register_nfse_produto',
+    cadastrar_produto_nfse: 'register_nfse_produto',
+    cadastrar_servico_nfse: 'register_nfse_produto',
     minha_agenda: 'list_calendar_events',
     compromissos_agenda: 'list_calendar_events',
     agenda_compromissos: 'list_calendar_events',
@@ -1569,6 +1578,42 @@ export const runOpenclawAction = async (input) => {
     }
   }
 
+  if (action === 'list_nfse_produtos') {
+    const q = String(
+      payload?.q ?? payload?.nome ?? payload?.busca ?? payload?.produto ?? payload?.servico ?? '',
+    ).trim();
+    const limit = payload?.limit;
+    const produtos = await listOpenclawNfseProdutos(userId, { q, limit });
+    return {
+      ok: true,
+      message: formatOpenclawNfseProdutosMessage(produtos),
+      data: { produtos, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'register_nfse_produto') {
+    try {
+      const result = await registerOpenclawNfseProduto(userId, payload);
+      const nome = result.produto?.discriminacao || 'Serviço';
+      const codigo = result.produto?.codigo || '';
+      const cnae = result.produto?.cnae || '';
+      return {
+        ok: true,
+        message: result.alreadyRegistered
+          ? `Serviço já cadastrado: ${nome} (cód. ${codigo}, CNAE ${cnae}).`
+          : `Serviço cadastrado: ${nome} (cód. ${codigo}, CNAE ${cnae}). Pode usar em preview_nfse e emit_nfse.`,
+        data: {
+          ...result,
+          userId,
+          actorContext,
+          ...linkDebug,
+        },
+      };
+    } catch (err) {
+      rethrowNfseErrorForBot(err);
+    }
+  }
+
   if (action === 'preview_nfse') {
     try {
       const preview = await previewOpenclawNfseEmit(userId, payload);
@@ -1872,6 +1917,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, register_nfse_produto, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

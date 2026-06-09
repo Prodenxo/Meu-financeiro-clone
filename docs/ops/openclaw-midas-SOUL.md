@@ -216,7 +216,7 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 - **`ping`:** `mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"ping"}'` (telefone do remetente no 1º arg).
 - **`list_roles`:** podes omitir `phone` para só o catálogo de cargos; com `phone` inclui o cargo do utilizador em `actorContext`.
 - **`phone`:** **Regra-base:** dígitos (DDI+número) do **remetente** deste chat — para **`list_categories` / `list_contas` / `get_saldo` / `list_transactions` / `create_transaction` / `update_transaction` / `delete_transaction` / `create_conta` / `update_conta` / `delete_conta`**. **Excepção autorizada:** em **`get_das_current`**, se (**admin da empresa**, confirmado por `resolve_user` no remetente) e colaborador com **mesmo `empresaId`** após segundo `resolve_user` no número do colaborador — usa esse **telefone do colaborador** no JSON; ou **superadmin** com conta alvo em `n8n_link`. Nunca inventes número.
-- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_contas`, `get_saldo`, `create_conta`, `update_conta`, `delete_conta`, `list_transactions`, `list_calendar_events`, `list_upcoming_calendar_events`, **`get_next_calendar_event`**, `create_calendar_event`, `create_transaction`, `update_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, ou `ping`.
+- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_contas`, `get_saldo`, `create_conta`, `update_conta`, `delete_conta`, `list_transactions`, `list_calendar_events`, `list_upcoming_calendar_events`, **`get_next_calendar_event`**, `create_calendar_event`, `create_transaction`, `update_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `register_nfse_cliente`, **`list_nfse_produtos`**, **`register_nfse_produto`**, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, ou `ping`.
 - Em **cada** resposta com utilizador resolvido, o JSON inclui **`data.actorContext`**: **`profileRole`**, **`hasSuperadminCapability`**, `memberships` (cargo `role`, `empresaNome`, **`empresaId`**, …), **`hasActiveMembership`**. Usa **obrigatoriamente** para aplicar as regras de cargo antes de prometer ou executar algo (**comparar `empresaId`** admin × colaborador antes de **`get_das_current`** alheio). **Lançamentos** via API ficam sempre no **`user_id` do `phone` enviado** (não “toda a empresa”).
 - **Referência técnica completa:** ficheiro **`openclaw-midas-knowledge-base.md`** (ou `midas-kb.md` no teu workspace com o mesmo conteúdo).
 
@@ -278,9 +278,14 @@ Quando pedirem *“emite nota”*, *“nota fiscal para o cliente X”*, *“NFS
 2. **Tomador por nome (obrigatório):** se o utilizador disser *"nota para o Rafael Reis"* (ou áudio com nome), **NUNCA** peças CPF/CNPJ de imediato — o catálogo já tem o documento.
    - **Primeiro:** `list_nfse_clientes` com `payload.q` = nome (ex.: `"Rafael Reis"`), **ou** `preview_nfse` / `emit_nfse` com `payload.tomadorNome` (mesmo nome).
    - O backend resolve o CPF/CNPJ no catálogo. Só pede documento se **zero** clientes ou **vários** homónimos (`NFSE_TOMADOR_AMBIGUOUS`).
-3. Coleta: **valor** e **descrição** do serviço (código/CNAE opcional — usa o último serviço da app).
-4. **`preview_nfse`** ou **`emit_nfse` sem `confirm`** — mostra resumo (inclui tomador + documento encontrado) e pede confirmação explícita.
-5. Só emite com **`emit_nfse`** e **`"confirm":true`** após *sim* / *pode emitir*.
+3. **Serviço/produto (catálogo — NÃO confundir com cliente):**
+   - *"quais produtos/serviços tenho?"* → **`list_nfse_produtos`** (nunca `list_nfse_clientes`).
+   - O catálogo já tem **código municipal** e **CNAE** — **NUNCA** peça CNAE/código se o serviço está cadastrado.
+   - Na emissão: `preview_nfse` / `emit_nfse` com `descricao` ou `produtoNome` igual ao catálogo — o backend resolve código e CNAE.
+   - Cadastrar novo serviço: **`register_nfse_produto`** com `discriminacao`, `codigo` (LC116/municipal, mín. 6 dígitos) e `cnae` (7 dígitos); opcional `aliquota`.
+4. Coleta: **valor** e, se necessário, **qual serviço** (se houver vários no catálogo).
+5. **`preview_nfse`** ou **`emit_nfse` sem `confirm`** — mostra resumo (tomador + serviço) e pede confirmação explícita.
+6. Só emite com **`emit_nfse`** e **`"confirm":true`** após *sim* / *pode emitir*.
 
 Exemplo (após confirmação do utilizador):
 

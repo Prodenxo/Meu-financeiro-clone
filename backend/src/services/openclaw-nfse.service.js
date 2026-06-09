@@ -15,6 +15,7 @@ import { consultarEmpresaAndReconcileMirror } from './mei-notas-documentos-mirro
 import {
   baixarPdf,
   criarCatalogoCliente,
+  criarCatalogoProduto,
   emitirNota,
   listarCatalogoClientes,
   listarCatalogoProdutos,
@@ -39,6 +40,9 @@ const stripDiacritics = (value) =>
   String(value)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+
+const normalizeNameForMatch = (value) =>
+  stripDiacritics(String(value || '').trim().toLowerCase()).replace(/\s+/g, ' ');
 
 /** Número em formato BR (1.200,50 / 1.200 / 1200). */
 const parseBrNumericToken = (token) => {
@@ -121,33 +125,135 @@ const emitenteToPrestadorInput = (emitente) => {
   };
 };
 
+const pickServicoNomeFromPayload = (payload) =>
+  firstNonEmpty(
+    payload?.produtoNome,
+    payload?.produto,
+    payload?.servicoNome,
+    payload?.servico,
+    payload?.discriminacao,
+    payload?.descricaoServico,
+    payload?.descricao,
+  );
+
+/**
+ * Escolhe produto/serviço do catálogo NFSe por nome ou discriminação.
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {string} nome
+ */
+export const pickProdutoCatalogoByNomeResult = (rows, nome) => {
+  const q = normalizeNameForMatch(nome);
+  if (!q) return { kind: 'missing' };
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return { kind: 'not_found', q: nome };
+
+  const exact = list.filter((r) => normalizeNameForMatch(r.discriminacao) === q);
+  if (exact.length === 1) return { kind: 'ok', produto: exact[0] };
+
+  const allWordsMatch = list.filter((r) => {
+    const n = normalizeNameForMatch(r.discriminacao);
+    const words = q.split(' ').filter((w) => w.length >= 2);
+    if (!words.length) return false;
+    return words.every((w) => n.includes(w));
+  });
+  if (allWordsMatch.length === 1) return { kind: 'ok', produto: allWordsMatch[0] };
+
+  if (list.length === 1) return { kind: 'ok', produto: list[0] };
+
+  return { kind: 'ambiguous', matches: list, q: nome };
+};
+
+const findProdutoCatalogoByNome = async (userId, nome) => {
+  const q = String(nome || '').trim();
+  if (!q) return { kind: 'missing' };
+  const rows = await listarCatalogoProdutos(userId, { q, limit: 20 });
+  return pickProdutoCatalogoByNomeResult(rows, q);
+};
+
+const applyProdutoCatalogoToServico = (produto, refs) => {
+  if (!produto) return refs;
+  const next = { ...refs };
+  if (!next.codigo && produto.codigo) next.codigo = String(produto.codigo);
+  if (!next.cnae && produto.cnae) next.cnae = String(produto.cnae);
+  if (
+    (next.aliquotaRaw === undefined || next.aliquotaRaw === null || next.aliquotaRaw === '')
+    && produto.aliquota != null
+  ) {
+    next.aliquotaRaw = produto.aliquota;
+  }
+  if (!next.discriminacao && produto.discriminacao) {
+    next.discriminacao = String(produto.discriminacao).trim();
+  }
+  return next;
+};
+
 const resolveServicoDefaults = async (userId, payload, emitente) => {
-  const discriminacao = firstNonEmpty(
+  let discriminacao = firstNonEmpty(
     payload?.discriminacao,
     payload?.descricaoServico,
     payload?.descricao,
     payload?.servico,
-    'Prestação de serviços',
   );
 
   let codigo = firstNonEmpty(payload?.codigoServico, payload?.codigo);
   let cnae = firstNonEmpty(payload?.cnae);
   let aliquotaRaw = payload?.aliquota ?? payload?.aliquotaIss;
 
-  const produtos = await listarCatalogoProdutos(userId, { limit: 1 });
-  const ultimo = produtos?.[0];
-  if (!codigo && ultimo?.codigo) codigo = String(ultimo.codigo);
-  if (!cnae && ultimo?.cnae) cnae = String(ultimo.cnae);
-  if ((aliquotaRaw === undefined || aliquotaRaw === null || aliquotaRaw === '') && ultimo?.aliquota != null) {
-    aliquotaRaw = ultimo.aliquota;
+  const servicoNome = pickServicoNomeFromPayload(payload);
+  if (servicoNome && (!codigo || !cnae || !discriminacao)) {
+    const lookup = await findProdutoCatalogoByNome(userId, servicoNome);
+    if (lookup.kind === 'ok') {
+      ({ codigo, cnae, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(lookup.produto, {
+        codigo,
+        cnae,
+        aliquotaRaw,
+        discriminacao,
+      }));
+    } else if (lookup.kind === 'ambiguous') {
+      throw badRequest(`Vários serviços encontrados para "${servicoNome}".`, {
+        code: 'NFSE_SERVICO_AMBIGUOUS',
+        servicoNome,
+        matches: (lookup.matches || []).map((p) => ({
+          id: p.id,
+          discriminacao: p.discriminacao,
+          codigo: p.codigo,
+          cnae: p.cnae,
+        })),
+        botHint: 'Use list_nfse_produtos e peça ao utilizador para escolher um serviço.',
+      });
+    }
   }
+
+  if (!codigo || !cnae) {
+    const todos = await listarCatalogoProdutos(userId, { limit: 20 });
+    if (todos.length === 1) {
+      ({ codigo, cnae, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(todos[0], {
+        codigo,
+        cnae,
+        aliquotaRaw,
+        discriminacao,
+      }));
+    } else if (!codigo || !cnae) {
+      const ultimo = todos?.[0];
+      ({ codigo, cnae, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(ultimo, {
+        codigo,
+        cnae,
+        aliquotaRaw,
+        discriminacao,
+      }));
+    }
+  }
+
+  if (!discriminacao) discriminacao = 'Prestação de serviços';
 
   if (!codigo) {
     throw badRequest(
       `Informe o código do serviço municipal (mín. ${NFSE_SERVICO_CODIGO_MIN_LENGTH} caracteres) ou cadastre um serviço na app.`,
       {
         code: 'NFSE_CODIGO_SERVICO_MISSING',
-        botHint: 'Pergunte o código LC116/municipal ou oriente cadastro em MEI → Notas → catálogo.',
+        botHint:
+          'Use list_nfse_produtos para ver o catálogo. Se não existir: register_nfse_produto com '
+          + 'discriminacao, codigo (LC116/municipal) e cnae (7 dígitos). Não peça CNAE se já está no catálogo.',
       },
     );
   }
@@ -163,7 +269,9 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
   if (!cnae) {
     throw badRequest('Informe o CNAE do serviço ou cadastre um serviço padrão na app.', {
       code: 'NFSE_CNAE_MISSING',
-      botHint: 'CNAE de 7 dígitos (ex.: 6201500 para TI).',
+      botHint:
+        'Use list_nfse_produtos — o CNAE já pode estar no catálogo. '
+        + 'Só peça CNAE se não houver produto cadastrado; senão register_nfse_produto.',
     });
   }
 
@@ -190,9 +298,6 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
     aliquota,
   };
 };
-
-const normalizeNameForMatch = (value) =>
-  stripDiacritics(String(value || '').trim().toLowerCase()).replace(/\s+/g, ' ');
 
 const pickTomadorNomeFromPayload = (payload) =>
   firstNonEmpty(
@@ -406,6 +511,73 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
   });
 
   return { alreadyRegistered: false, cliente };
+};
+
+const assertProdutoCodigoValido = (codigo) => {
+  const codigoNorm = normalizeDoc(codigo) || String(codigo || '').replace(/\s/g, '');
+  if (codigoNorm.length < NFSE_SERVICO_CODIGO_MIN_LENGTH) {
+    throw badRequest(
+      `Código do serviço inválido (mín. ${NFSE_SERVICO_CODIGO_MIN_LENGTH} caracteres).`,
+      { code: 'NFSE_CODIGO_SERVICO_INVALID' },
+    );
+  }
+  return codigoNorm.length >= NFSE_SERVICO_CODIGO_MIN_LENGTH ? codigoNorm : String(codigo).trim();
+};
+
+const assertProdutoCnaeValido = (cnae) => {
+  const cnaeNorm = normalizeDoc(cnae).slice(0, 7);
+  if (cnaeNorm.length !== 7) {
+    throw badRequest('CNAE deve ter 7 dígitos.', { code: 'NFSE_CNAE_INVALID' });
+  }
+  return cnaeNorm;
+};
+
+/**
+ * Cadastra serviço/produto no catálogo NFSe (WhatsApp).
+ */
+export const registerOpenclawNfseProduto = async (userId, payload = {}) => {
+  const discriminacao = firstNonEmpty(
+    payload?.discriminacao,
+    payload?.descricao,
+    payload?.descricaoServico,
+    payload?.produtoNome,
+    payload?.produto,
+    payload?.servico,
+    payload?.nome,
+  );
+  if (!discriminacao) {
+    throw badRequest('Descrição do serviço (discriminação) é obrigatória.', {
+      code: 'NFSE_PRODUTO_DISCRIMINACAO_MISSING',
+      botHint: 'Peça: nome/descrição do serviço, código municipal (LC116) e CNAE (7 dígitos).',
+    });
+  }
+
+  const existingLookup = await findProdutoCatalogoByNome(userId, discriminacao);
+  if (existingLookup.kind === 'ok') {
+    return { alreadyRegistered: true, produto: existingLookup.produto };
+  }
+
+  const codigo = assertProdutoCodigoValido(
+    firstNonEmpty(payload?.codigoServico, payload?.codigo),
+  );
+  const cnae = assertProdutoCnaeValido(firstNonEmpty(payload?.cnae));
+
+  const aliquotaRaw = payload?.aliquota ?? payload?.aliquotaIss;
+  const valorRaw = payload?.valorSugerido ?? payload?.valor_sugerido ?? payload?.valor;
+
+  const produto = await criarCatalogoProduto(userId, {
+    discriminacao,
+    codigo,
+    cnae,
+    ...(aliquotaRaw !== undefined && aliquotaRaw !== null && aliquotaRaw !== ''
+      ? { aliquota: aliquotaRaw }
+      : {}),
+    ...(valorRaw !== undefined && valorRaw !== null && valorRaw !== ''
+      ? { valor_sugerido: valorRaw }
+      : {}),
+  });
+
+  return { alreadyRegistered: false, produto };
 };
 
 const emitenteMissingAddressFields = (emitente) => {
@@ -772,6 +944,24 @@ export const fetchOpenclawNfsePdfBase64 = async (userId, { id, sync = true } = {
 
 export const listOpenclawNfseClientes = async (userId, { q = '', limit = 20 } = {}) =>
   listarCatalogoClientes(userId, { q, limit });
+
+export const listOpenclawNfseProdutos = async (userId, { q = '', limit = 20 } = {}) =>
+  listarCatalogoProdutos(userId, { q, limit });
+
+export const formatOpenclawNfseProdutosMessage = (produtos) => {
+  const list = Array.isArray(produtos) ? produtos : [];
+  if (!list.length) {
+    return 'Nenhum serviço/produto no catálogo NFSe. Cadastre na app (MEI → Notas) ou use register_nfse_produto.';
+  }
+  const lines = list.map((p, i) => {
+    const nome = String(p.discriminacao || '—').trim();
+    const codigo = p.codigo ? `cód. ${p.codigo}` : 'sem código';
+    const cnae = p.cnae ? `CNAE ${p.cnae}` : 'sem CNAE';
+    const ali = p.aliquota != null ? `ISS ${p.aliquota}%` : '';
+    return `${i + 1}. ${nome} (${codigo}, ${cnae}${ali ? `, ${ali}` : ''})`;
+  });
+  return `${list.length} serviço(s) no catálogo NFSe:\n${lines.join('\n')}`;
+};
 
 export const rethrowNfseErrorForBot = (err) => {
   const code = err?.errors?.code || err?.code;

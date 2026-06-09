@@ -77,7 +77,10 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 | `get_das_current` | Sim | Lê **`DAS_mei`** por `user_id` + competência; devolve o PDF em **base64** (não envia WhatsApp). |
 | `list_calendar_events` | Sim | Compromissos numa data (`payload.data` / `payload.date`); ver secção Agenda abaixo. |
 | `get_nfse_setup_status` | Sim | Verifica certificado, Plugnotas e dados fiscais do prestador. |
-| `list_nfse_clientes` | Sim | Catálogo de tomadores (`payload.q` opcional). |
+| `list_nfse_clientes` | Sim | Catálogo de **tomadores/clientes** (`payload.q` opcional). |
+| `register_nfse_cliente` | Sim | Cadastra tomador (CPF/CNPJ, nome, e-mail). |
+| `list_nfse_produtos` | Sim | Catálogo de **serviços/produtos** (`payload.q` opcional). **Não** confundir com clientes. |
+| `register_nfse_produto` | Sim | Cadastra serviço: `discriminacao`, `codigo`, `cnae`; opcional `aliquota`. |
 | `preview_nfse` | Sim | Pré-visualização sem emitir. |
 | `emit_nfse` | Sim | Emite NFSe (Plugnotas); exige `payload.confirm: true` após confirmação do utilizador. |
 | `list_nfse_notas` | Sim | Últimas notas NFSe (`payload.limit` opcional, máx. 40). |
@@ -95,11 +98,12 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 
 1. `get_nfse_setup_status`
 2. Tomador: se o utilizador disser **nome** → `list_nfse_clientes` com `payload.q` ou `preview_nfse` com `tomadorNome` (não pedir CPF/CNPJ se já está no catálogo). Só pedir documento se cliente não existir ou houver homónimos.
-3. Recolher **valor** e **descrição**
-4. `preview_nfse` ou `emit_nfse` **sem** `confirm` → mostrar resumo
-5. Utilizador confirma no chat
-6. `emit_nfse` com `"confirm": true`
-7. Quando `consult_nfse` → `pdfReady: true` (status concluido), enviar PDF:
+3. Serviço: `list_nfse_produtos` se perguntarem produtos; na emissão usa catálogo (código + CNAE automáticos). Cadastro: `register_nfse_produto`.
+4. Recolher **valor** (e serviço só se houver vários no catálogo)
+5. `preview_nfse` ou `emit_nfse` **sem** `confirm` → mostrar resumo
+6. Utilizador confirma no chat
+7. `emit_nfse` com `"confirm": true`
+8. Quando `consult_nfse` → `pdfReady: true` (status concluido), enviar PDF:
 
 ```bash
 /home/node/.openclaw/workspace/mf-nfse-send.sh 5521996185328 UUID_DA_NOTA
@@ -113,9 +117,9 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 | `tomadorNome` | Condicional* | Nome no catálogo (ex.: "Rafael Reis") — backend resolve o documento |
 | `tomadorRazaoSocial` | Condicional | Alias de `tomadorNome`; só obrigatório em `register_nfse_cliente` sem catálogo |
 | `valor` | Sim | Número ou texto (`1200`, `1.200,00`) |
-| `descricao` | Recomendado | Discriminação do serviço |
-| `codigoServico` | Condicional | Mín. 6 caracteres; senão usa último do catálogo |
-| `cnae` | Condicional | 7 dígitos; senão usa catálogo |
+| `descricao` / `produtoNome` | Recomendado | Nome do serviço no catálogo — backend resolve código e CNAE |
+| `codigoServico` | Condicional | Mín. 6 caracteres; omitir se serviço está no catálogo |
+| `cnae` | Condicional | 7 dígitos; omitir se serviço está no catálogo |
 | `confirm` | Só em `emit_nfse` | `true` para emitir de facto |
 
 **Exemplo — José, R$ 1.200, consultoria**

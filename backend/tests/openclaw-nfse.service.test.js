@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  formatOpenclawNfseProdutosMessage,
   isNfsePdfReadyStatus,
   parseValorReais,
   pickClienteCatalogoByNomeResult,
+  pickProdutoCatalogoByNomeResult,
 } from '../src/services/openclaw-nfse.service.js';
 
 /** Valor da nota fiscal (emit_nfse), não lançamento financeiro. */
@@ -67,4 +69,23 @@ test('pickClienteCatalogoByNomeResult — único resultado da busca', () => {
   const r = pickClienteCatalogoByNomeResult(rows, 'Jose');
   assert.equal(r.kind, 'ok');
   assert.equal(r.cliente.id, '1');
+});
+
+test('pickProdutoCatalogoByNomeResult — match por palavras na discriminação', () => {
+  const rows = [
+    { id: '1', discriminacao: 'Pintura para sinalização em pistas', codigo: '140101', cnae: '4330404' },
+    { id: '2', discriminacao: 'Consultoria em TI', codigo: '010701', cnae: '6201500' },
+  ];
+  const r = pickProdutoCatalogoByNomeResult(rows, 'pintura sinalização');
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.produto.id, '1');
+});
+
+test('formatOpenclawNfseProdutosMessage — lista formatada', () => {
+  const msg = formatOpenclawNfseProdutosMessage([
+    { discriminacao: 'Pintura', codigo: '140101', cnae: '4330404', aliquota: 2 },
+  ]);
+  assert.match(msg, /1 serviço/);
+  assert.match(msg, /Pintura/);
+  assert.match(msg, /CNAE 4330404/);
 });
