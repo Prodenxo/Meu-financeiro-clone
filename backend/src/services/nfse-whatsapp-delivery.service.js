@@ -2,7 +2,6 @@ import { env } from '../config/env.js';
 import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest } from '../utils/errors.js';
 import {
-  consultOpenclawNfse,
   fetchOpenclawNfsePdfBase64,
   isNfsePdfReadyStatus,
 } from './openclaw-nfse.service.js';
@@ -261,17 +260,11 @@ export const deliverOpenclawNfseWhatsappPdf = async (userId, notaId, phone) => {
     return { whatsappStatus: 'skipped_no_phone', notaId };
   }
 
-  const deliveryKey = `${userId}:${notaId}`;
-  if (deliveryInFlight.has(deliveryKey)) {
-    return { whatsappStatus: 'skipped_in_flight', notaId };
-  }
-
   const claim = await claimOpenclawNfseWhatsappDeliverySlot(userId, notaId);
   if (!claim.ok) {
     return { whatsappStatus: claim.reason, notaId };
   }
 
-  deliveryInFlight.add(deliveryKey);
   try {
     const pdfResult = await fetchOpenclawNfsePdfBase64(userId, { id: notaId, sync: true });
     const whatsapp = await trySendNfsePdfZapi({
@@ -301,8 +294,13 @@ export const deliverOpenclawNfseWhatsappPdf = async (userId, notaId, phone) => {
       [OPENCLAW_NFSE_META.SENDING_AT]: null,
     });
     return { ...whatsapp, notaId };
-  } finally {
-    deliveryInFlight.delete(deliveryKey);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await markOpenclawNfseWhatsappFailed(userId, notaId, message);
+    await mergeNotaMetadata(userId, notaId, {
+      [OPENCLAW_NFSE_META.SENDING_AT]: null,
+    });
+    return { whatsappStatus: 'error', whatsappError: message, notaId };
   }
 };
 
@@ -328,11 +326,28 @@ export const tryDeliverPendingOpenclawNfseIfReady = async (userId, record) => {
   if (meta[OPENCLAW_NFSE_META.PENDING] !== true) return null;
   if (isOpenclawWhatsappPdfAlreadySent(meta)) return null;
 
+  const phone = normalizePhone55(meta[OPENCLAW_NFSE_META.PHONE]);
+  if (!phone) return null;
+
   const key = `${userId}:${record.id}`;
   if (deliveryInFlight.has(key)) return null;
   deliveryInFlight.add(key);
 
   try {
+    if (isNfsePdfReadyStatus(record.status)) {
+      const delivered = await deliverOpenclawNfseWhatsappPdf(userId, record.id, phone);
+      const result = {
+        notaId: record.id,
+        userId,
+        status: delivered.whatsappStatus === 'sent' ? 'sent' : delivered.whatsappStatus,
+        whatsappError: delivered.whatsappError ?? null,
+      };
+      if (result.status === 'sent') {
+        clearScheduledRetries(userId, record.id);
+      }
+      return result;
+    }
+
     const row = {
       id: record.id,
       user_id: userId,
@@ -426,9 +441,10 @@ const processPendingRow = async (row) => {
 
   let noteStatus = row.status;
   try {
-    const consulted = await consultOpenclawNfse(userId, { id: notaId, sync: true });
-    noteStatus = consulted.status;
-    if (!consulted.pdfReady) {
+    const { obterNota } = await import('./mei-notas.service.js');
+    const synced = await obterNota(userId, notaId, { sync: true, skipWhatsappDelivery: true });
+    noteStatus = synced.status;
+    if (!isNfsePdfReadyStatus(noteStatus)) {
       const statusKey = normalizeStatusKey(noteStatus);
       if (TERMINAL_FAILURE_STATUSES.has(statusKey)) {
         await markOpenclawNfseWhatsappFailed(userId, notaId, `nota_${statusKey}`, { clearPending: true });

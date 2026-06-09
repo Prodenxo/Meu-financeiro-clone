@@ -1823,7 +1823,7 @@ export const eliminarCatalogoProduto = async (userId, id) => {
   }
 };
 
-export const obterNota = async (userId, id, { sync = false } = {}) => {
+export const obterNota = async (userId, id, { sync = false, skipWhatsappDelivery = false } = {}) => {
   const record = await findRecord(userId, id);
   if (!sync) return record;
 
@@ -1844,15 +1844,17 @@ export const obterNota = async (userId, id, { sync = false } = {}) => {
     response_json: response
   });
 
-  void import('./nfse-whatsapp-delivery.service.js')
-    .then(({ tryDeliverPendingOpenclawNfseIfReady }) =>
-      tryDeliverPendingOpenclawNfseIfReady(userId, updated))
-    .catch((err) => {
-      console.warn('[mei-notas] entrega WhatsApp pós-sync falhou', {
-        notaId: updated.id,
-        message: err instanceof Error ? err.message : String(err),
+  if (!skipWhatsappDelivery) {
+    void import('./nfse-whatsapp-delivery.service.js')
+      .then(({ tryDeliverPendingOpenclawNfseIfReady }) =>
+        tryDeliverPendingOpenclawNfseIfReady(userId, updated))
+      .catch((err) => {
+        console.warn('[mei-notas] entrega WhatsApp pós-sync falhou', {
+          notaId: updated.id,
+          message: err instanceof Error ? err.message : String(err),
+        });
       });
-    });
+  }
 
   return updated;
 };
