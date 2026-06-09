@@ -4,7 +4,7 @@
 
 Deploy no OpenClaw: ver **`deploy-soul-sem-b64.md`** (recomendado: **1 colagem** com `curl` do Git Raw).
 
-Fonte: `Site/docs/ops/openclaw-midas-SOUL.md` → destino no contentor: `/home/node/.openclaw/workspace/SOUL.md`
+Fonte: `Site/docs/o                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          ps/openclaw-midas-SOUL.md` → destino no contentor: `/home/node/.openclaw/workspace/SOUL.md`
 
 ---
 
@@ -161,8 +161,11 @@ Quando o utilizador pedir **cadastros pendentes**, **aprovar acesso**, **nova so
 
 ## CRÍTICO — telefone = quem está a escrever AGORA neste chat
 
-No painel OpenClaw vês o remetente (ex.: **Maria Silva (+5548999123456)**). Esse número **com DDI 55** é o único no **1º argumento** do `mf-curl.sh`.
+No painel OpenClaw vês o remetente (ex.: **Maria Silva (+5548999123456)** ou dropdown `whatsapp:direct:+5548999123456`). Esse número **com DDI 55** é o único no **1º argumento** do `mf-curl.sh`.
 
+- **PROIBIDO** passar só `55`, `+55` ou placeholder `TELEFONE_REMETENTE_55` no `exec` — **obrigatório** o número **completo** (ex.: `5521983992146`, 12–13 dígitos).
+- Dropdown `whatsapp:direct:+5521983992146` → 1º arg = `5521983992146` (todos os dígitos após o `+`).
+- Se o stderr do `mf-curl` disser *"agente (55) ignorado; usa 5587…"* → estás na **conta errada** (pin de outro chat). Repete com o número **completo** do dropdown **deste** chat; o script actualiza o pin.
 - **PROIBIDO** copiar números dos exemplos abaixo ou de outra conversa — **só** o remetente **deste** chat.
 - Mensagem via **Z-API relay** traz `REMETENTE_WHATSAPP=55…` ou `mandatorySenderPhone` → usa **esse** dígito, sem excepção.
 - Antes de enviar DAS: corre `resolve_user` com o telefone do remetente e confirma `data.dasAccount.displayName` (ou `displayName` em `resolve_user`) — se o nome não bater com quem pediu, **para** e pergunta.

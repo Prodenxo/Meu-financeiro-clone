@@ -6,6 +6,17 @@ const workspaceDir = (): string =>
 
 const digitsOnly = (value: unknown): string => String(value ?? '').replace(/\D/g, '');
 
+const parseChannelPhone = (raw: unknown): string => {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  const direct = s.match(/whatsapp:direct:\+?(\d{10,15})/i);
+  if (direct) return digitsOnly(direct[1]);
+  const plus = s.match(/\+(\d{10,15})/);
+  if (plus) return digitsOnly(plus[1]);
+  const d = digitsOnly(s);
+  return d.length >= 10 ? d : '';
+};
+
 const resolveInboundDigits = (context: Record<string, unknown>): string => {
   const meta =
     context.metadata && typeof context.metadata === 'object'
@@ -17,9 +28,15 @@ const resolveInboundDigits = (context: Record<string, unknown>): string => {
     meta.senderId,
     context.from,
     meta.from,
+    context.channel,
+    context.channelId,
+    meta.channel,
+    meta.sessionChannel,
   ];
 
   for (const raw of candidates) {
+    const fromChannel = parseChannelPhone(raw);
+    if (fromChannel.length >= 10) return fromChannel;
     const d = digitsOnly(raw);
     if (d.length >= 10) return d;
   }

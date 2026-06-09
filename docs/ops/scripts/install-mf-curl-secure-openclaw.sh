@@ -2,6 +2,7 @@
 # Easypanel OpenClaw Console — mf-curl com remetente verificado (header + pin do hook).
 # Requer MF_API_URL e OPENCLAW_WEBHOOK_SECRET no Environment.
 set -e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WS="${OPENCLAW_WORKSPACE:-/home/node/.openclaw/workspace}"
 mkdir -p "$WS"
 test -n "$MF_API_URL" && test -n "$OPENCLAW_WEBHOOK_SECRET" || {
@@ -9,41 +10,29 @@ test -n "$MF_API_URL" && test -n "$OPENCLAW_WEBHOOK_SECRET" || {
   exit 1
 }
 
+cp "$SCRIPT_DIR/mf-curl-resolve-sender.mjs" "$WS/mf-curl-resolve-sender.mjs"
+chmod 644 "$WS/mf-curl-resolve-sender.mjs"
+
 cat > "$WS/mf-curl.sh" << 'CURL_EOF'
 #!/bin/sh
 # Uso: mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_transactions"}'
-# O 1º arg é fallback; prioridade: .mf-inbound-sender (hook) > env > arg.
+# 1º arg = número COMPLETO do canal no painel (ex.: 5521983992146). Nunca só "55".
+# Resolver: mf-curl-resolve-sender.mjs (arg válido > env > pin).
 set -e
 WS_DIR="$(cd "$(dirname "$0")" && pwd)"
-PINFILE="$WS_DIR/.mf-inbound-sender"
 AGENT_ARG="${1:?mf-curl.sh: falta TELEFONE_REMETENTE (1º arg)}"
 shift
 JSON="${1:?mf-curl.sh: falta JSON (2º arg)}"
 MF_URL='MF_URL_PLACEHOLDER'
 MF_SEC='MF_SEC_PLACEHOLDER'
+RESOLVER="$WS_DIR/mf-curl-resolve-sender.mjs"
 
-digits() { echo "$1" | tr -cd '0-9'; }
-
-PIN=""
-if [ -f "$PINFILE" ]; then
-  PIN="$(digits "$(cat "$PINFILE" 2>/dev/null)")"
-fi
-for envv in "$OPENCLAW_INBOUND_PHONE" "$MF_MANDATORY_SENDER" "$REMETENTE_WHATSAPP"; do
-  if [ -z "$PIN" ] && [ -n "$envv" ]; then
-    PIN="$(digits "$envv")"
-  fi
-done
-AGENT="$(digits "$AGENT_ARG")"
-
-if [ -n "$PIN" ]; then
-  if [ -n "$AGENT" ] && [ "$AGENT" != "$PIN" ]; then
-    echo "mf-curl: telefone do agente ($AGENT) ignorado; usa remetente $PIN" >&2
-  fi
-  SENDER="$PIN"
-else
-  SENDER="$AGENT"
+if [ ! -f "$RESOLVER" ]; then
+  echo "mf-curl: falta $RESOLVER — corre install-mf-curl-secure-openclaw.sh" >&2
+  exit 1
 fi
 
+SENDER="$(node "$RESOLVER" "$WS_DIR" "$AGENT_ARG")" || exit 1
 test -n "$SENDER" || { echo "mf-curl: remetente vazio" >&2; exit 1; }
 
 BODY="$(node -e "
@@ -65,5 +54,5 @@ sed -i "s|MF_URL_PLACEHOLDER|$MF_API_URL|g" "$WS/mf-curl.sh"
 sed -i "s|MF_SEC_PLACEHOLDER|$OPENCLAW_WEBHOOK_SECRET|g" "$WS/mf-curl.sh"
 chmod +x "$WS/mf-curl.sh"
 
-echo "[ok] $WS/mf-curl.sh (pin + 2 args + X-WhatsApp-Sender)"
-head -n 8 "$WS/mf-curl.sh"
+echo "[ok] $WS/mf-curl.sh + mf-curl-resolve-sender.mjs"
+head -n 10 "$WS/mf-curl.sh"

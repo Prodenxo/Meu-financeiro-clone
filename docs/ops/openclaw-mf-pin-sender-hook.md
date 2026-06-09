@@ -7,6 +7,17 @@
 
 O SOUL sozinho **não impede** o modelo de repetir o número antigo.
 
+### Variante: dropdown Yasmim mas pin de outro utilizador
+
+- Painel: `whatsapp:direct:+5521983992146` (Yasmim)
+- `mf-curl` stderr: `agente (55) ignorado; usa 558788546305` → conta **CF ELIS**, catálogo vazio
+
+**Causa:** `.mf-inbound-sender` ficou com o último WhatsApp **real** (outra pessoa); o modelo passou só `55` no 1º arg.
+
+**Correção imediata:** `echo -n "5521983992146" > /home/node/.openclaw/workspace/.mf-inbound-sender`
+
+**Correção permanente:** `apply-mf-curl-sender-fix-easypanel.sh` — número completo no 1º arg **ganha** sobre pin antigo.
+
 ## Solução
 
 1. **Hook `mf-pin-sender`** — em cada `message:received`, grava o remetente em  
