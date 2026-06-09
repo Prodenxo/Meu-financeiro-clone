@@ -1349,6 +1349,33 @@ export const listarCatalogoClientes = async (
   return data || [];
 };
 
+const normalizeCatalogProdutoCnae = (value) => String(value || '').replace(/\D/g, '').slice(0, 7);
+
+/**
+ * Evita duplicar serviço com o mesmo código + CNAE (emissão WhatsApp / app).
+ * @returns {Promise<Record<string, unknown> | null>}
+ */
+export const findCatalogoProdutoByCodigoCnae = async (
+  userId,
+  codigo,
+  cnae,
+  documentType = DOCUMENT_TYPE_NFSE,
+) => {
+  const codigoNorm = normalizeNfseServicoCodigoForLength(String(codigo || '').trim());
+  const cnaeNorm = normalizeCatalogProdutoCnae(cnae);
+  if (!codigoNorm || cnaeNorm.length !== 7) return null;
+
+  const rows = await listarCatalogoProdutos(userId, {
+    limit: 100,
+    documentType: normalizeDocumentType(documentType),
+  });
+
+  return rows.find((row) => (
+    normalizeNfseServicoCodigoForLength(String(row?.codigo || '').trim()) === codigoNorm
+    && normalizeCatalogProdutoCnae(row?.cnae) === cnaeNorm
+  )) || null;
+};
+
 export const listarCatalogoProdutos = async (
   userId,
   { q = '', limit = 20, documentType } = {}
@@ -1571,6 +1598,17 @@ export const criarCatalogoProduto = async (userId, body = {}) => {
   }
   const codigo = String(body.codigo ?? '').trim();
   const cnae = String(body.cnae ?? '').trim();
+  const existing = await findCatalogoProdutoByCodigoCnae(userId, codigo, cnae, documentType);
+  if (existing) {
+    throw badRequest(
+      `Já existe serviço com código ${existing.codigo} e CNAE ${existing.cnae}. Edite o cadastro existente ou use-o na emissão.`,
+      {
+        code: 'CATALOGO_PRODUTO_DUPLICATE',
+        existingId: existing.id,
+        existingDiscriminacao: existing.discriminacao,
+      },
+    );
+  }
   const aliquota = toNumber(body.aliquota);
   const valor_sugerido = toNumber(body.valor_sugerido);
   const dedupe_key = `manual:${crypto.randomUUID()}`;

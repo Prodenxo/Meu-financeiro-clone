@@ -330,6 +330,53 @@ test('atualizarCatalogoCliente — sucesso PATCH nome com stub getDb', async () 
   assert.equal(out.nome, 'Novo Nome');
 });
 
+test('criarCatalogoProduto — rejeita duplicata mesmo código + CNAE', async () => {
+  const mock = createCatalogSupabaseMock();
+  const mod = await import('../src/services/mei-notas.service.js');
+  mod.__setGetDbForTests(() => mock.client);
+
+  const origFrom = mock.client.from.bind(mock.client);
+  mock.client.from = (table) => {
+    if (table === PRODUCTS_TABLE) {
+      const api = origFrom(table);
+      const origSelect = api.select.bind(api);
+      api.select = (...args) => {
+        const chain = origSelect(...args);
+        const origEq = chain.eq.bind(chain);
+        let eqCount = 0;
+        chain.eq = (...eqArgs) => {
+          eqCount += 1;
+          if (eqCount >= 2 && eqArgs[0] === 'user_id') {
+            chain.then = (resolve) => resolve({
+              data: [{
+                id: 'dup-1',
+                codigo: '140101',
+                cnae: '4520001',
+                discriminacao: 'Manutenção veículos',
+                document_type: 'NFSE',
+              }],
+              error: null,
+            });
+          }
+          return origEq(...eqArgs);
+        };
+        return chain;
+      };
+      return api;
+    }
+    return origFrom(table);
+  };
+
+  await assert.rejects(
+    () => mod.criarCatalogoProduto(mock.userId, {
+      discriminacao: 'Outra descrição longa',
+      codigo: '14.01.01',
+      cnae: '4520-0/01',
+    }),
+    (err) => /Já existe serviço/.test(String(err?.message || '')),
+  );
+});
+
 test('criarCatalogoProduto — sucesso com stub getDb (user_id e dedupe_key manual:)', async () => {
   const mock = createCatalogSupabaseMock();
   const mod = await import('../src/services/mei-notas.service.js');

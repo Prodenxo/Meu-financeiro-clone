@@ -1593,6 +1593,27 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'register_nfse_produto') {
     try {
+      const catalogoExistente = await listOpenclawNfseProdutos(userId, { limit: 20 });
+      const forceRegister = payload?.forceRegister === true || payload?.force_register === true;
+      if (catalogoExistente.length > 0 && !forceRegister) {
+        return {
+          ok: true,
+          message:
+            `Catálogo já tem ${catalogoExistente.length} serviço(s). `
+            + 'Use list_nfse_produtos e emit_nfse — não cadastre de novo pelo WhatsApp.',
+          data: {
+            alreadyRegistered: true,
+            registerBlocked: true,
+            produtos: catalogoExistente,
+            userId,
+            actorContext,
+            ...linkDebug,
+            botHint:
+              'PROIBIDO register_nfse_produto quando o catálogo não está vazio. '
+              + 'Emita com emit_nfse usando descricao do catálogo.',
+          },
+        };
+      }
       const result = await registerOpenclawNfseProduto(userId, payload);
       const nome = result.produto?.discriminacao || 'Serviço';
       const codigo = result.produto?.codigo || '';
