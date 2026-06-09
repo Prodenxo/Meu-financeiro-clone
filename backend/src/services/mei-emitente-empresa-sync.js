@@ -13,24 +13,53 @@ const firstNonEmpty = (...values) => {
 };
 
 /**
+ * GET /empresa devolve envelope `{ message, data: { ... } }`; POST/PATCH usam objeto plano.
+ * @param {unknown} empresaJson
+ * @returns {Record<string, unknown>|null}
+ */
+export function unwrapPlugnotasEmpresaRecord(empresaJson) {
+  if (!empresaJson || typeof empresaJson !== 'object' || Array.isArray(empresaJson)) {
+    return null;
+  }
+  const root = /** @type {Record<string, unknown>} */ (empresaJson);
+  if (root.endereco && typeof root.endereco === 'object') return root;
+
+  const data = root.data;
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const inner = /** @type {Record<string, unknown>} */ (data);
+    if (inner.endereco || inner.cpfCnpj || inner.razaoSocial) return inner;
+    const nested = inner.empresa;
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      return /** @type {Record<string, unknown>} */ (nested);
+    }
+  }
+
+  const empresa = root.empresa;
+  if (empresa && typeof empresa === 'object' && !Array.isArray(empresa)) {
+    return /** @type {Record<string, unknown>} */ (empresa);
+  }
+
+  return root;
+}
+
+/**
  * Extrai campos do emitente NFS-e a partir do JSON da empresa Plugnotas (GET ou payload de cadastro).
  * @param {unknown} empresaJson
  * @returns {Record<string, unknown>|null}
  */
 export function empresaJsonToEmitentePartial(empresaJson) {
-  if (!empresaJson || typeof empresaJson !== 'object' || Array.isArray(empresaJson)) {
-    return null;
-  }
-  const end = empresaJson.endereco;
+  const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
+  if (!empresa) return null;
+  const end = empresa.endereco;
   if (!end || typeof end !== 'object' || Array.isArray(end)) return null;
 
   const partial = {
-    razaoSocial: firstNonEmpty(empresaJson.razaoSocial, empresaJson.razao_social),
-    nomeFantasia: firstNonEmpty(empresaJson.nomeFantasia, empresaJson.nome_fantasia),
-    email: firstNonEmpty(empresaJson.email, empresaJson.fiscal_email),
+    razaoSocial: firstNonEmpty(empresa.razaoSocial, empresa.razao_social),
+    nomeFantasia: firstNonEmpty(empresa.nomeFantasia, empresa.nome_fantasia),
+    email: firstNonEmpty(empresa.email, empresa.fiscal_email),
     inscricaoMunicipal: firstNonEmpty(
-      empresaJson.inscricaoMunicipal,
-      empresaJson.inscricao_municipal,
+      empresa.inscricaoMunicipal,
+      empresa.inscricao_municipal,
     ),
     tipoLogradouro: firstNonEmpty(end.tipoLogradouro, end.tipo_logradouro) || 'Rua',
     logradouro: firstNonEmpty(end.logradouro),
@@ -104,8 +133,9 @@ export async function reconcileEmitenteMirrorFromEmpresaJson(userId, empresaJson
   const partial = empresaJsonToEmitentePartial(empresaJson);
   if (!partial) return;
 
+  const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
   const cnpj = normalizeDoc(
-    empresaJson?.cpfCnpj ?? empresaJson?.cpf_cnpj ?? empresaJson?.cnpj ?? '',
+    empresa?.cpfCnpj ?? empresa?.cpf_cnpj ?? empresa?.cnpj ?? '',
   );
 
   try {

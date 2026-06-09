@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   empresaJsonToEmitentePartial,
   mergeEmitenteWithEmpresaPartial,
+  unwrapPlugnotasEmpresaRecord,
 } from '../src/services/mei-emitente-empresa-sync.js';
 
 test('empresaJsonToEmitentePartial extrai IBGE e endereço do JSON Plugnotas', () => {
@@ -32,6 +33,26 @@ test('empresaJsonToEmitentePartial extrai IBGE e endereço do JSON Plugnotas', (
 
 test('empresaJsonToEmitentePartial retorna null sem endereco', () => {
   assert.equal(empresaJsonToEmitentePartial({ razaoSocial: 'X' }), null);
+});
+
+test('empresaJsonToEmitentePartial desembrulha GET Plugnotas { data: { ... } }', () => {
+  const partial = empresaJsonToEmitentePartial({
+    message: 'OK',
+    data: {
+      cpfCnpj: '65805583000173',
+      razaoSocial: 'YASMIM',
+      endereco: {
+        logradouro: 'Oliveira Belo',
+        numero: '441',
+        codigoCidade: '3304557',
+        cep: '21221300',
+        estado: 'RJ',
+        descricaoCidade: 'RIO DE JANEIRO',
+      },
+    },
+  });
+  assert.equal(partial?.codigoCidade, '3304557');
+  assert.equal(unwrapPlugnotasEmpresaRecord({ data: { cpfCnpj: '1' } })?.cpfCnpj, '1');
 });
 
 test('mergeEmitenteWithEmpresaPartial preenche IBGE sem apagar certDocument', () => {
