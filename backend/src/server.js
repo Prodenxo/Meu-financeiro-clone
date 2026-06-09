@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
+import { BACKEND_BUILD_ID } from './build-id.js';
 import { env } from './config/env.js';
 import { redactSensitiveUrlsForLog } from './utils/log-redact.js';
 import routes from './routes/index.js';
@@ -93,7 +94,7 @@ morgan.token('url', (req) => redactSensitiveUrlsForLog(req.originalUrl || req.ur
 app.use(morgan('dev'));
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', buildId: BACKEND_BUILD_ID });
 });
 
 app.get('/', (_req, res) => {

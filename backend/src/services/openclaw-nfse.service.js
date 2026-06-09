@@ -1,3 +1,4 @@
+import { BACKEND_BUILD_ID } from '../build-id.js';
 import { badRequest } from '../utils/errors.js';
 import {
   getCertificateDocument,
@@ -509,6 +510,7 @@ export const getOpenclawNfseSetupStatus = async (userId) => {
   }
 
   return {
+    buildId: BACKEND_BUILD_ID,
     ready: missing.length === 0,
     missing,
     hasCertificate: certOk,
@@ -517,6 +519,30 @@ export const getOpenclawNfseSetupStatus = async (userId) => {
     prestadorRazaoSocial: emitente?.razaoSocial || null,
     defaultServico,
     heal: heal || null,
+  };
+};
+
+/** Força heal do prestador (Plugnotas → BrasilAPI) e devolve diagnóstico completo. */
+export const syncOpenclawNfseEmitente = async (userId) => {
+  const [certOk, emitenteRaw] = await Promise.all([
+    hasCertificate(userId),
+    getEmitenteNfseSnapshot(userId),
+  ]);
+  const { emitente, heal } = await resolveEmitenteForNfseSetup(userId, emitenteRaw, certOk);
+  return {
+    buildId: BACKEND_BUILD_ID,
+    heal,
+    emitente: emitente
+      ? {
+        certDocument: emitente.certDocument || null,
+        razaoSocial: emitente.razaoSocial || null,
+        logradouro: emitente.logradouro || null,
+        numero: emitente.numero || null,
+        codigoCidade: emitente.codigoCidade || null,
+        cep: emitente.cep || null,
+      }
+      : null,
+    addressComplete: Boolean(emitente && !emitenteMissingAddressFields(emitente)),
   };
 };
 

@@ -1,3 +1,4 @@
+import { BACKEND_BUILD_ID } from '../build-id.js';
 import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
@@ -35,6 +36,7 @@ import {
   emitOpenclawNfse,
   fetchOpenclawNfsePdfBase64,
   getOpenclawNfseSetupStatus,
+  syncOpenclawNfseEmitente,
   isNfsePdfReadyStatus,
   listOpenclawNfseClientes,
   listOpenclawNfseNotas,
@@ -593,7 +595,11 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'ping') {
-    return { ok: true, message: 'OpenClaw online', data: { pong: true } };
+    return {
+      ok: true,
+      message: 'OpenClaw online',
+      data: { pong: true, buildId: BACKEND_BUILD_ID },
+    };
   }
 
   if (action === 'list_roles') {
@@ -1510,6 +1516,18 @@ export const runOpenclawAction = async (input) => {
         ? 'Conta pronta para emitir NFSe pelo WhatsApp.'
         : `Cadastro incompleto para NFSe: ${setup.missing.join(', ')}. Complete na app MEI → Notas.`,
       data: { setup, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'sync_nfse_emitente') {
+    const sync = await syncOpenclawNfseEmitente(userId);
+    const setup = await getOpenclawNfseSetupStatus(userId);
+    return {
+      ok: true,
+      message: setup.ready
+        ? 'Prestador NFSe sincronizado e pronto para emitir.'
+        : `Sync executado mas ainda incompleto: ${setup.missing.join(', ')}. Ver data.sync.heal.`,
+      data: { sync, setup, userId, actorContext, ...linkDebug },
     };
   }
 
