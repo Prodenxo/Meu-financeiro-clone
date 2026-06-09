@@ -55,6 +55,43 @@ test('empresaJsonToEmitentePartial desembrulha GET Plugnotas { data: { ... } }',
   assert.equal(unwrapPlugnotasEmpresaRecord({ data: { cpfCnpj: '1' } })?.cpfCnpj, '1');
 });
 
+test('empresaJsonToEmitentePartial aceita endereco plano no root da empresa', () => {
+  const partial = empresaJsonToEmitentePartial({
+    message: 'OK',
+    data: {
+      cpfCnpj: '65805583000173',
+      razaoSocial: 'YASMIM',
+      logradouro: 'Oliveira Belo',
+      numero: '441',
+      codigoCidade: '3304557',
+      cep: '21221300',
+      estado: 'RJ',
+      descricaoCidade: 'RIO DE JANEIRO',
+    },
+  });
+  assert.equal(partial?.codigoCidade, '3304557');
+  assert.equal(partial?.logradouro, 'Oliveira Belo');
+});
+
+test('empresaJsonToEmitentePartial desembrulha data como array', () => {
+  const partial = empresaJsonToEmitentePartial({
+    data: [
+      { id: 'x' },
+      {
+        cpfCnpj: '65805583000173',
+        endereco: {
+          logradouro: 'Rua B',
+          numero: '10',
+          codigoCidade: '3304557',
+          cep: '21221300',
+        },
+      },
+    ],
+  });
+  assert.equal(partial?.logradouro, 'Rua B');
+  assert.equal(partial?.codigoCidade, '3304557');
+});
+
 test('mergeEmitenteWithEmpresaPartial preenche IBGE sem apagar certDocument', () => {
   const partial = empresaJsonToEmitentePartial({
     razaoSocial: 'YASMIM',

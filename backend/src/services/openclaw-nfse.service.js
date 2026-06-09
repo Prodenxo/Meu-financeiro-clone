@@ -8,9 +8,8 @@ import {
 import {
   empresaJsonToEmitentePartial,
   mergeEmitenteWithEmpresaPartial,
-  reconcileEmitenteMirrorFromEmpresaJson,
 } from './mei-emitente-empresa-sync.js';
-import { consultarEmpresaPlugNotas } from './plugnotas/empresa.service.js';
+import { consultarEmpresaAndReconcileMirror } from './mei-notas-documentos-mirror.js';
 import {
   baixarPdf,
   criarCatalogoCliente,
@@ -321,6 +320,13 @@ const emitenteMissingAddressFields = (emitente) => {
   return false;
 };
 
+const sanitizeHealError = (err) => {
+  const code = err?.errors?.plugnotasCode || err?.code || null;
+  const status = err?.status || err?.errors?.status || null;
+  const message = String(err?.message || '').trim().slice(0, 180) || null;
+  return { code, status, message };
+};
+
 /** Preenche emitente a partir do Plugnotas quando o espelho local está incompleto. */
 const resolveEmitenteForNfseSetup = async (userId, emitenteRaw, certOk) => {
   let emitente = emitenteRaw || null;
@@ -332,18 +338,44 @@ const resolveEmitenteForNfseSetup = async (userId, emitenteRaw, certOk) => {
       emitente = { ...(emitente || {}), certDocument: cnpj };
     }
   }
-  if (cnpj.length !== 14) return emitente;
-  if (emitente && !emitenteMissingAddressFields(emitente)) return emitente;
+  if (cnpj.length !== 14) {
+    return { emitente, heal: { attempted: false, reason: 'cnpj_missing' } };
+  }
+  if (emitente && !emitenteMissingAddressFields(emitente)) {
+    return { emitente, heal: { attempted: false, reason: 'already_complete' } };
+  }
 
   try {
-    const empresa = await consultarEmpresaPlugNotas(cnpj);
+    const empresa = await consultarEmpresaAndReconcileMirror(userId, cnpj);
     const partial = empresaJsonToEmitentePartial(empresa);
-    await reconcileEmitenteMirrorFromEmpresaJson(userId, empresa).catch(() => {});
     const synced = await getEmitenteNfseSnapshot(userId);
-    if (synced && !emitenteMissingAddressFields(synced)) return synced;
-    return mergeEmitenteWithEmpresaPartial(emitente, partial);
-  } catch {
-    return emitente;
+    if (synced && !emitenteMissingAddressFields(synced)) {
+      return {
+        emitente: synced,
+        heal: { attempted: true, ok: true, source: 'supabase_mirror', hasPlugnotasEndereco: Boolean(partial) },
+      };
+    }
+    const merged = mergeEmitenteWithEmpresaPartial(emitente, partial);
+    if (merged && !emitenteMissingAddressFields(merged)) {
+      return {
+        emitente: merged,
+        heal: { attempted: true, ok: true, source: 'plugnotas_merge', hasPlugnotasEndereco: Boolean(partial) },
+      };
+    }
+    return {
+      emitente: merged || emitente,
+      heal: {
+        attempted: true,
+        ok: false,
+        reason: partial ? 'merge_incomplete' : 'plugnotas_sem_endereco',
+        hasPlugnotasEndereco: Boolean(partial),
+      },
+    };
+  } catch (err) {
+    return {
+      emitente,
+      heal: { attempted: true, ok: false, ...sanitizeHealError(err) },
+    };
   }
 };
 
@@ -355,7 +387,7 @@ const resolveEmitenteForNfseSetup = async (userId, emitenteRaw, certOk) => {
 export const buildOpenclawNfseEmitInput = async (userId, payload = {}) => {
   const certOk = await hasCertificate(userId);
   const emitenteRaw = await getEmitenteNfseSnapshot(userId);
-  const emitente = await resolveEmitenteForNfseSetup(userId, emitenteRaw, certOk);
+  const { emitente } = await resolveEmitenteForNfseSetup(userId, emitenteRaw, certOk);
   if (!emitente || emitenteMissingAddressFields(emitente)) {
     throw badRequest('Dados fiscais do prestador incompletos. Configure na app Meu Financeiro → MEI.', {
       code: 'NFSE_EMITENTE_MISSING',
@@ -402,7 +434,7 @@ export const getOpenclawNfseSetupStatus = async (userId) => {
     getEmitenteNfseSnapshot(userId),
   ]);
 
-  const emitente = await resolveEmitenteForNfseSetup(userId, emitenteRaw, certOk);
+  const { emitente, heal } = await resolveEmitenteForNfseSetup(userId, emitenteRaw, certOk);
 
   const missing = [];
   if (!certOk) missing.push('certificado_a1');
@@ -441,6 +473,7 @@ export const getOpenclawNfseSetupStatus = async (userId) => {
     prestadorCnpj: emitente?.certDocument ? normalizeDoc(emitente.certDocument) : null,
     prestadorRazaoSocial: emitente?.razaoSocial || null,
     defaultServico,
+    heal: heal || null,
   };
 };
 

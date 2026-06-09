@@ -17,17 +17,39 @@ const firstNonEmpty = (...values) => {
  * @param {unknown} empresaJson
  * @returns {Record<string, unknown>|null}
  */
+const isEmpresaLikeRecord = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = /** @type {Record<string, unknown>} */ (value);
+  return Boolean(
+    row.endereco
+    || row.cpfCnpj
+    || row.cpf_cnpj
+    || row.cnpj
+    || row.razaoSocial
+    || row.razao_social
+    || row.logradouro
+    || row.codigoCidade
+    || row.codigo_cidade,
+  );
+};
+
 export function unwrapPlugnotasEmpresaRecord(empresaJson) {
   if (!empresaJson || typeof empresaJson !== 'object' || Array.isArray(empresaJson)) {
     return null;
   }
   const root = /** @type {Record<string, unknown>} */ (empresaJson);
-  if (root.endereco && typeof root.endereco === 'object') return root;
+  if (isEmpresaLikeRecord(root)) return root;
 
   const data = root.data;
+  if (Array.isArray(data)) {
+    const match = data.find((item) => isEmpresaLikeRecord(item));
+    if (match && typeof match === 'object' && !Array.isArray(match)) {
+      return /** @type {Record<string, unknown>} */ (match);
+    }
+  }
   if (data && typeof data === 'object' && !Array.isArray(data)) {
     const inner = /** @type {Record<string, unknown>} */ (data);
-    if (inner.endereco || inner.cpfCnpj || inner.razaoSocial) return inner;
+    if (isEmpresaLikeRecord(inner)) return inner;
     const nested = inner.empresa;
     if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
       return /** @type {Record<string, unknown>} */ (nested);
@@ -42,6 +64,31 @@ export function unwrapPlugnotasEmpresaRecord(empresaJson) {
   return root;
 }
 
+const resolveEmpresaEnderecoRecord = (empresa) => {
+  if (!empresa || typeof empresa !== 'object' || Array.isArray(empresa)) return null;
+  const end = empresa.endereco;
+  if (end && typeof end === 'object' && !Array.isArray(end)) {
+    return /** @type {Record<string, unknown>} */ (end);
+  }
+  const hasFlatAddress = [
+    'logradouro',
+    'numero',
+    'codigoCidade',
+    'codigo_cidade',
+    'cep',
+    'bairro',
+    'descricaoCidade',
+    'descricao_cidade',
+    'estado',
+    'uf',
+  ].some((key) => {
+    const value = empresa[key];
+    return value !== undefined && value !== null && String(value).trim() !== '';
+  });
+  if (!hasFlatAddress) return null;
+  return /** @type {Record<string, unknown>} */ (empresa);
+};
+
 /**
  * Extrai campos do emitente NFS-e a partir do JSON da empresa Plugnotas (GET ou payload de cadastro).
  * @param {unknown} empresaJson
@@ -50,8 +97,8 @@ export function unwrapPlugnotasEmpresaRecord(empresaJson) {
 export function empresaJsonToEmitentePartial(empresaJson) {
   const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
   if (!empresa) return null;
-  const end = empresa.endereco;
-  if (!end || typeof end !== 'object' || Array.isArray(end)) return null;
+  const end = resolveEmpresaEnderecoRecord(empresa);
+  if (!end) return null;
 
   const partial = {
     razaoSocial: firstNonEmpty(empresa.razaoSocial, empresa.razao_social),
