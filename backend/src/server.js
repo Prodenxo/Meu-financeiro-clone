@@ -102,6 +102,7 @@ app.get('/', (_req, res) => {
     status: 'ok',
     service: 'backend',
     apiVersion: 2,
+    buildId: BACKEND_BUILD_ID,
     routes: {
       meiGuide: '/api/mei-guide',
       meiGuideValidate: 'POST /api/mei-guide/validate',
