@@ -1,0 +1,56 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  empresaJsonToEmitentePartial,
+  mergeEmitenteWithEmpresaPartial,
+} from '../src/services/mei-emitente-empresa-sync.js';
+
+test('empresaJsonToEmitentePartial extrai IBGE e endereço do JSON Plugnotas', () => {
+  const partial = empresaJsonToEmitentePartial({
+    cpfCnpj: '65805583000173',
+    razaoSocial: 'YASMIM DUQUE',
+    email: 'yasmim@example.com',
+    endereco: {
+      tipoLogradouro: 'Rua',
+      logradouro: 'Oliveira Belo',
+      numero: '441',
+      bairro: 'VILA DA PENHA',
+      codigoCidade: '3304557',
+      descricaoCidade: 'RIO DE JANEIRO',
+      estado: 'RJ',
+      cep: '21221300',
+    },
+  });
+
+  assert.equal(partial?.codigoCidade, '3304557');
+  assert.equal(partial?.logradouro, 'Oliveira Belo');
+  assert.equal(partial?.numero, '441');
+  assert.equal(partial?.cep, '21221300');
+  assert.equal(partial?.descricaoCidade, 'RIO DE JANEIRO');
+  assert.equal(partial?.estado, 'RJ');
+});
+
+test('empresaJsonToEmitentePartial retorna null sem endereco', () => {
+  assert.equal(empresaJsonToEmitentePartial({ razaoSocial: 'X' }), null);
+});
+
+test('mergeEmitenteWithEmpresaPartial preenche IBGE sem apagar certDocument', () => {
+  const partial = empresaJsonToEmitentePartial({
+    razaoSocial: 'YASMIM',
+    endereco: {
+      logradouro: 'Oliveira Belo',
+      numero: '441',
+      codigoCidade: '3304557',
+      cep: '21221300',
+      estado: 'RJ',
+      descricaoCidade: 'RIO DE JANEIRO',
+    },
+  });
+  const merged = mergeEmitenteWithEmpresaPartial(
+    { certDocument: '65805583000173', codigoCidade: '' },
+    partial,
+  );
+  assert.equal(merged?.certDocument, '65805583000173');
+  assert.equal(merged?.codigoCidade, '3304557');
+  assert.equal(merged?.logradouro, 'Oliveira Belo');
+});

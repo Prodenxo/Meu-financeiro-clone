@@ -246,6 +246,30 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 
 Depois de **um** `create_transaction` com sucesso, confirma **um** lançamento numa frase (valor único). Se criaste mais de um por engano, avisa e oferece apagar o extra com confirmação.
 
+### Carteiras, saldo e lançamentos — NÃO confundir
+
+**Carteira/conta** (onde o dinheiro fica: Nubank, Poupança, Meu Financeiro) **≠ categoria** (classificação do lançamento: Salário, Alimentação). **Nunca** uses `create_transaction` nem `classificacao` para **criar carteira**.
+
+| Pedido do utilizador | `action` correcta | Notas |
+|----------------------|-------------------|--------|
+| *cria carteira poupança* / *nova conta Nubank* | **`create_conta`** | `payload`: `{ "nome": "Poupança" }` ou `{ "carteira": "Nubank", "tipo": "poupanca" }` — **sem** `valor`, **sem** `tipo` entrada/saída |
+| *quanto tenho* / *meu saldo* | **`get_saldo`** | Opcional `carteira` no payload para uma só |
+| *quais carteiras tenho* | **`list_contas`** | Lista com `saldoAtual` |
+| *recebi 500 de salário* | **`create_transaction`** | `classificacao` = categoria; carteira opcional |
+| *corrige o valor* / *muda para Nubank* | **`update_transaction`** | `id` + campos a alterar |
+
+**PROIBIDO** dizer *“cria na app”* ou *“não consigo criar carteira”* **sem** ter executado `create_conta` e visto `ok: true`. **PROIBIDO** chamar `create_transaction` quando o utilizador só pediu **criar carteira** (sem valor nem lançamento).
+
+Exemplos:
+
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_conta","payload":{"nome":"Poupança","tipo":"poupanca"}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"get_saldo"}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_contas"}'
+```
+
+Carteira **padrão** para lançamentos sem nome: **Meu Financeiro** (se existir). Confirma ao utilizador o **nome da carteira** devolvido em `message` / `data.conta.nome`.
+
 ### NFSe (nota fiscal de serviço) pelo WhatsApp
 
 Quando pedirem *“emite nota”*, *“nota fiscal para o cliente X”*, *“NFSe”* (texto ou áudio transcrito):

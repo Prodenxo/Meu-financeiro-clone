@@ -1,5 +1,16 @@
 import { badRequest } from '../utils/errors.js';
-import { getEmitenteNfseSnapshot, getPlugNotasCertId, hasCertificate } from './mei-certificate-store.js';
+import {
+  getCertificateDocument,
+  getEmitenteNfseSnapshot,
+  getPlugNotasCertId,
+  hasCertificate,
+} from './mei-certificate-store.js';
+import {
+  empresaJsonToEmitentePartial,
+  mergeEmitenteWithEmpresaPartial,
+  reconcileEmitenteMirrorFromEmpresaJson,
+} from './mei-emitente-empresa-sync.js';
+import { consultarEmpresaPlugNotas } from './plugnotas/empresa.service.js';
 import {
   baixarPdf,
   criarCatalogoCliente,
@@ -301,14 +312,51 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
   return { alreadyRegistered: false, cliente };
 };
 
+const emitenteMissingAddressFields = (emitente) => {
+  if (!emitente) return true;
+  if (!buildPrestadorLogradouro(emitente)) return true;
+  if (!String(emitente.numero || '').trim()) return true;
+  if (!String(emitente.codigoCidade || '').trim()) return true;
+  if (normalizeDoc(emitente.cep).length !== 8) return true;
+  return false;
+};
+
+/** Preenche emitente a partir do Plugnotas quando o espelho local está incompleto. */
+const resolveEmitenteForNfseSetup = async (userId, emitenteRaw, certOk) => {
+  let emitente = emitenteRaw || null;
+  let cnpj = normalizeDoc(emitente?.certDocument || '');
+  if (cnpj.length !== 14 && certOk) {
+    const doc = await getCertificateDocument(userId);
+    cnpj = normalizeDoc(doc || '');
+    if (cnpj.length === 14) {
+      emitente = { ...(emitente || {}), certDocument: cnpj };
+    }
+  }
+  if (cnpj.length !== 14) return emitente;
+  if (emitente && !emitenteMissingAddressFields(emitente)) return emitente;
+
+  try {
+    const empresa = await consultarEmpresaPlugNotas(cnpj);
+    const partial = empresaJsonToEmitentePartial(empresa);
+    await reconcileEmitenteMirrorFromEmpresaJson(userId, empresa).catch(() => {});
+    const synced = await getEmitenteNfseSnapshot(userId);
+    if (synced && !emitenteMissingAddressFields(synced)) return synced;
+    return mergeEmitenteWithEmpresaPartial(emitente, partial);
+  } catch {
+    return emitente;
+  }
+};
+
 /**
  * Monta input de emissão NFSe para o bot (validação sem chamar Plugnotas).
  * @param {string} userId
  * @param {object} payload
  */
 export const buildOpenclawNfseEmitInput = async (userId, payload = {}) => {
-  const emitente = await getEmitenteNfseSnapshot(userId);
-  if (!emitente) {
+  const certOk = await hasCertificate(userId);
+  const emitenteRaw = await getEmitenteNfseSnapshot(userId);
+  const emitente = await resolveEmitenteForNfseSetup(userId, emitenteRaw, certOk);
+  if (!emitente || emitenteMissingAddressFields(emitente)) {
     throw badRequest('Dados fiscais do prestador incompletos. Configure na app Meu Financeiro → MEI.', {
       code: 'NFSE_EMITENTE_MISSING',
       botHint: 'Certificado A1 + endereço fiscal na app.',
@@ -348,11 +396,13 @@ export const buildOpenclawNfseEmitInput = async (userId, payload = {}) => {
  * Estado de prontidão para emitir NFSe pelo WhatsApp.
  */
 export const getOpenclawNfseSetupStatus = async (userId) => {
-  const [certOk, plugId, emitente] = await Promise.all([
+  const [certOk, plugId, emitenteRaw] = await Promise.all([
     hasCertificate(userId),
     getPlugNotasCertId(userId),
     getEmitenteNfseSnapshot(userId),
   ]);
+
+  const emitente = await resolveEmitenteForNfseSetup(userId, emitenteRaw, certOk);
 
   const missing = [];
   if (!certOk) missing.push('certificado_a1');

@@ -1,4 +1,5 @@
 import { saveDocumentosAtivosMirror } from './mei-certificate-store.js';
+import { reconcileEmitenteMirrorFromEmpresaJson } from './mei-emitente-empresa-sync.js';
 import { consultarEmpresaPlugNotas } from './plugnotas/empresa.service.js';
 import {
   assertAtLeastOneDocumentoAtivo,
@@ -17,7 +18,11 @@ export async function persistDocumentosAtivosMirrorAfterEmpresa(userId, payload,
   const save = deps.saveDocumentosAtivosMirror ?? saveDocumentosAtivosMirror;
   const normalize = deps.normalizeDocumentosAtivosShape ?? normalizeDocumentosAtivosShape;
   const assertOne = deps.assertAtLeastOneDocumentoAtivo ?? assertAtLeastOneDocumentoAtivo;
+  const syncEmitente = deps.reconcileEmitenteMirrorFromEmpresaJson ?? reconcileEmitenteMirrorFromEmpresaJson;
   if (!userId || !payload || typeof payload !== 'object') return;
+
+  await syncEmitente(userId, payload).catch(() => {});
+
   if (!Object.prototype.hasOwnProperty.call(payload, 'documentosAtivos')) return;
   try {
     const selection = normalize(payload.documentosAtivos);
@@ -41,7 +46,11 @@ export async function reconcileMirrorFromEmpresaJson(userId, empresaJson, deps =
   const save = deps.saveDocumentosAtivosMirror ?? saveDocumentosAtivosMirror;
   const extract = deps.extractDocumentosAtivosFromEmpresaResponse
     ?? extractDocumentosAtivosFromEmpresaResponse;
+  const syncEmitente = deps.reconcileEmitenteMirrorFromEmpresaJson ?? reconcileEmitenteMirrorFromEmpresaJson;
   if (!userId) return;
+
+  await syncEmitente(userId, empresaJson).catch(() => {});
+
   try {
     const selection = extract(empresaJson);
     if (!selection) return;
