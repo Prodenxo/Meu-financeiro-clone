@@ -1,11 +1,21 @@
 #!/bin/bash
-# Easypanel → OpenClaw → Console — patch NFSe tomadorNome (sem curl Git).
+# Easypanel → OpenClaw (NÃO backend) → Console → aba **Bash** — patch NFSe.
 # Use quando raw.githubusercontent.com der 404 (ficheiro não publicado ou repo privado).
 set -e
 SOUL=/home/node/.openclaw/workspace/SOUL.md
+NODE_BIN="$(command -v node 2>/dev/null || true)"
+if [ -z "$NODE_BIN" ]; then
+  for c in /usr/local/bin/node /usr/bin/node; do
+    if [ -x "$c" ]; then NODE_BIN="$c"; break; fi
+  done
+fi
+if [ -z "$NODE_BIN" ]; then
+  echo "ERRO: node não encontrado. Corre isto no contentor **OpenClaw**, aba Bash (não no backend)."
+  exit 1
+fi
 cp "$SOUL" "${SOUL}.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
 
-node << 'NODE'
+"$NODE_BIN" << 'NODE'
 const fs = require('fs');
 const soulPath = '/home/node/.openclaw/workspace/SOUL.md';
 let cur = fs.existsSync(soulPath) ? fs.readFileSync(soulPath, 'utf8') : '';
@@ -85,6 +95,8 @@ console.log('OK — grep tomadorNome:');
 console.log(cur.split('\n').filter((l) => l.includes('tomadorNome') || l.includes('Tomador por nome')).slice(0, 4).join('\n'));
 NODE
 
+echo "--- Verificação SOUL ---"
+grep -n "list_nfse_produtos\|tomadorNome\|Tomador por nome" "$SOUL" | head -n 8 || true
 echo "--- Teste mf-curl (caminho completo) ---"
 test -x /home/node/.openclaw/workspace/mf-curl.sh && echo "mf-curl.sh OK" || echo "AVISO: mf-curl.sh ausente — corre easypanel-console-install-mf-pin-and-curl.sh"
 echo ""
