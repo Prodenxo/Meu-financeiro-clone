@@ -1761,15 +1761,25 @@ export const runOpenclawAction = async (input) => {
       const delivery = await getOpenclawNfseWhatsappDeliveryState(userId, nota.id);
       const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
       const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
+      const autoJustSent = nota.whatsappDeliveryAttempt?.status === 'sent';
       const execCommand =
-        nota.pdfReady && !delivery.alreadySent && !autoEnabled
+        nota.pdfReady && !delivery.alreadySent && !autoJustSent && !autoEnabled
           ? buildNfseSendExecCommand(destinationPhone, nota.id)
           : null;
       let sendHint = '';
-      if (delivery.alreadySent) {
+      if (delivery.alreadySent || autoJustSent) {
         sendHint = ' PDF já enviado no WhatsApp.';
+      } else if (autoEnabled && nota.pdfReady) {
+        const attemptStatus = nota.whatsappDeliveryAttempt?.status;
+        if (attemptStatus === 'failed' || attemptStatus === 'error') {
+          sendHint = ' Envio automático falhou — use mf-nfse-send.sh.';
+        } else if (attemptStatus === 'waiting') {
+          sendHint = ' PDF ainda em fila de envio automático.';
+        } else {
+          sendHint = ' Envio automático activo — aguarde ou use mf-nfse-send.sh se não chegar.';
+        }
       } else if (autoEnabled) {
-        sendHint = ' Envio automático activo — não use mf-nfse-send.sh.';
+        sendHint = ' Envio automático activo quando a nota concluir.';
       } else if (nota.pdfReady) {
         sendHint = ' Para enviar no WhatsApp use mf-nfse-send.sh com o telefone do remetente.';
       }

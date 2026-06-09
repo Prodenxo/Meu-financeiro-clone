@@ -855,8 +855,11 @@ const buildProdutoCatalogEntries = (payload, { documentType = DOCUMENT_TYPE_NFSE
 
       if (!codigo && !cnae && !discriminacaoNorm) return null;
 
+      const codigoKey = normalizeNfseServicoCodigoForLength(codigo);
+      const cnaeKey = normalizeCatalogProdutoCnae(cnae);
+
       return {
-        dedupe_key: `servico:${normalizeText(codigo)}|${normalizeText(cnae)}|${discriminacaoNorm}|${aliquotaKey}`,
+        dedupe_key: `servico:${codigoKey}|${cnaeKey}`,
         codigo,
         cnae,
         discriminacao,
@@ -957,19 +960,79 @@ const upsertProdutosCatalogo = async (userId, payload, { documentType = DOCUMENT
   if (!entries.length) return 0;
 
   const now = new Date().toISOString();
-  const rows = entries.map((entry) => ({
-    ...entry,
-    user_id: userId,
-    document_type: normalizedType,
-    last_used_at: now,
-    updated_at: now
-  }));
   const dbClient = getDb();
-  const { error } = await dbClient
-    .from(PRODUCTS_TABLE)
-    .upsert(rows, { onConflict: 'user_id,document_type,dedupe_key' });
-  if (error) throw badRequest(error.message);
-  return rows.length;
+  let upserted = 0;
+
+  for (const entry of entries) {
+    const existing = await findCatalogoProdutoByCodigoCnae(
+      userId,
+      entry.codigo,
+      entry.cnae,
+      normalizedType,
+    );
+    if (existing?.id) {
+      const { error } = await dbClient
+        .from(PRODUCTS_TABLE)
+        .update({ last_used_at: now, updated_at: now })
+        .eq('id', existing.id)
+        .eq('user_id', userId);
+      if (error) throw badRequest(error.message);
+      upserted += 1;
+      continue;
+    }
+
+    const { error } = await dbClient
+      .from(PRODUCTS_TABLE)
+      .upsert({
+        ...entry,
+        user_id: userId,
+        document_type: normalizedType,
+        last_used_at: now,
+        updated_at: now,
+      }, { onConflict: 'user_id,document_type,dedupe_key' });
+    if (error) throw badRequest(error.message);
+    upserted += 1;
+  }
+
+  return upserted;
+};
+
+/**
+ * Pós-emissão NFSe: só marca last_used_at em serviço já cadastrado (código+CNAE).
+ * Não insere linhas novas — discriminação na nota costuma diferir do catálogo.
+ */
+const touchProdutosCatalogoOnEmit = async (userId, payload, { documentType = DOCUMENT_TYPE_NFSE } = {}) => {
+  const normalizedType = normalizeDocumentType(documentType);
+  if (normalizedType !== DOCUMENT_TYPE_NFSE) {
+    return upsertProdutosCatalogo(userId, payload, { documentType: normalizedType });
+  }
+
+  const entries = buildProdutoCatalogEntries(payload, { documentType: normalizedType });
+  if (!entries.length) return 0;
+
+  const now = new Date().toISOString();
+  const dbClient = getDb();
+  let touched = 0;
+
+  for (const entry of entries) {
+    const existing = await findCatalogoProdutoByCodigoCnae(
+      userId,
+      entry.codigo,
+      entry.cnae,
+      normalizedType,
+    );
+    if (!existing?.id) continue;
+
+    const { error } = await dbClient
+      .from(PRODUCTS_TABLE)
+      .update({ last_used_at: now, updated_at: now })
+      .eq('id', existing.id)
+      .eq('user_id', userId);
+    if (error) throw badRequest(error.message);
+    touched += 1;
+  }
+
+  return touched;
 };
 
 const hasCancelamentoSolicitado = (record) => {
@@ -1182,7 +1245,7 @@ export const emitirNota = async (userId, input) => {
 
     try {
       await upsertClienteCatalogo(userId, payload, { documentType });
-      await upsertProdutosCatalogo(userId, payload, { documentType });
+      await touchProdutosCatalogoOnEmit(userId, payload, { documentType });
     } catch (error) {
       console.warn(
         `[mei-notas] Falha ao atualizar catalogo ${documentType}`,
@@ -1773,13 +1836,25 @@ export const obterNota = async (userId, id, { sync = false } = {}) => {
   const status = resolveStatusAfterPlugnotasSync(record, providerStatus);
   const protocol = extractProtocol(response) || record.protocol;
 
-  return await updateRecord(userId, record.id, {
+  const updated = await updateRecord(userId, record.id, {
     plugnotas_id: plugnotasId,
     id_integracao: idIntegracao,
     protocol,
     status,
     response_json: response
   });
+
+  void import('./nfse-whatsapp-delivery.service.js')
+    .then(({ tryDeliverPendingOpenclawNfseIfReady }) =>
+      tryDeliverPendingOpenclawNfseIfReady(userId, updated))
+    .catch((err) => {
+      console.warn('[mei-notas] entrega WhatsApp pós-sync falhou', {
+        notaId: updated.id,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+
+  return updated;
 };
 
 export const atualizarNota = async (userId, id, input) => {

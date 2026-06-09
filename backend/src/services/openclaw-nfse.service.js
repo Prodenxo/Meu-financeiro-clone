@@ -933,6 +933,18 @@ export const consultOpenclawNfse = async (userId, { id, sync = true } = {}) => {
   const recordId = String(id || '').trim();
   if (!recordId) throw badRequest('payload.id da nota é obrigatório');
   const record = await obterNota(userId, recordId, { sync: sync !== false });
+
+  let whatsappDeliveryAttempt = null;
+  try {
+    const { tryDeliverPendingOpenclawNfseIfReady } = await import('./nfse-whatsapp-delivery.service.js');
+    whatsappDeliveryAttempt = await tryDeliverPendingOpenclawNfseIfReady(userId, record);
+  } catch (err) {
+    console.warn('[openclaw-nfse] entrega WhatsApp pós-consulta falhou', {
+      notaId: recordId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   return {
     id: record.id,
     status: record.status,
@@ -943,6 +955,7 @@ export const consultOpenclawNfse = async (userId, { id, sync = true } = {}) => {
     created_at: record.created_at,
     updated_at: record.updated_at,
     pdfReady: isNfsePdfReadyStatus(record?.status),
+    whatsappDeliveryAttempt,
   };
 };
 
