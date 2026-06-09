@@ -194,11 +194,13 @@ export async function createUser(input: {
   phone?: string;
   role?: 'admin' | 'usuario' | 'outsider';
   empresaId?: string;
+  mei?: boolean;
   expiresAt?: string | null;
 }) {
   const sanitizedRole = sanitizeUserRole(input.role);
   const payload = {
     ...input,
+    mei: input.mei === true,
     ...(sanitizedRole ? { role: sanitizedRole } : {})
   };
   return apiClient.post<{
