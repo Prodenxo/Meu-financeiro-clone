@@ -8,6 +8,7 @@ import {
 import {
   empresaJsonToEmitentePartial,
   mergeEmitenteWithEmpresaPartial,
+  reconcileEmitenteMirrorFromEmpresaJson,
 } from './mei-emitente-empresa-sync.js';
 import { consultarEmpresaAndReconcileMirror } from './mei-notas-documentos-mirror.js';
 import {
@@ -327,7 +328,28 @@ const sanitizeHealError = (err) => {
   return { code, status, message };
 };
 
-/** Preenche emitente a partir do Plugnotas quando o espelho local está incompleto. */
+const completeEmitenteFromEmpresaJson = async (userId, emitente, empresaJson, source) => {
+  const partial = empresaJsonToEmitentePartial(empresaJson);
+  if (!partial) return null;
+  await reconcileEmitenteMirrorFromEmpresaJson(userId, empresaJson).catch(() => {});
+  const synced = await getEmitenteNfseSnapshot(userId);
+  if (synced && !emitenteMissingAddressFields(synced)) {
+    return {
+      emitente: synced,
+      heal: { attempted: true, ok: true, source: `${source}_mirror` },
+    };
+  }
+  const merged = mergeEmitenteWithEmpresaPartial(emitente, partial);
+  if (merged && !emitenteMissingAddressFields(merged)) {
+    return {
+      emitente: merged,
+      heal: { attempted: true, ok: true, source: `${source}_merge` },
+    };
+  }
+  return null;
+};
+
+/** Preenche emitente a partir do Plugnotas (ou BrasilAPI) quando o espelho local está incompleto. */
 const resolveEmitenteForNfseSetup = async (userId, emitenteRaw, certOk) => {
   let emitente = emitenteRaw || null;
   let cnpj = normalizeDoc(emitente?.certDocument || '');
@@ -345,38 +367,59 @@ const resolveEmitenteForNfseSetup = async (userId, emitenteRaw, certOk) => {
     return { emitente, heal: { attempted: false, reason: 'already_complete' } };
   }
 
+  let plugnotasError = null;
   try {
     const empresa = await consultarEmpresaAndReconcileMirror(userId, cnpj);
-    const partial = empresaJsonToEmitentePartial(empresa);
-    const synced = await getEmitenteNfseSnapshot(userId);
-    if (synced && !emitenteMissingAddressFields(synced)) {
+    const fromPlugnotas = await completeEmitenteFromEmpresaJson(
+      userId,
+      emitente,
+      empresa,
+      'plugnotas_empresa',
+    );
+    if (fromPlugnotas) return fromPlugnotas;
+  } catch (err) {
+    plugnotasError = sanitizeHealError(err);
+  }
+
+  try {
+    const lookup = await lookupCnpjBrasilApi(cnpj);
+    const fromBrasilApi = await completeEmitenteFromEmpresaJson(
+      userId,
+      emitente,
+      lookup,
+      'brasilapi_cnpj',
+    );
+    if (fromBrasilApi) {
       return {
-        emitente: synced,
-        heal: { attempted: true, ok: true, source: 'supabase_mirror', hasPlugnotasEndereco: Boolean(partial) },
+        ...fromBrasilApi,
+        heal: {
+          ...fromBrasilApi.heal,
+          plugnotasError,
+        },
       };
     }
-    const merged = mergeEmitenteWithEmpresaPartial(emitente, partial);
-    if (merged && !emitenteMissingAddressFields(merged)) {
-      return {
-        emitente: merged,
-        heal: { attempted: true, ok: true, source: 'plugnotas_merge', hasPlugnotasEndereco: Boolean(partial) },
-      };
-    }
+  } catch (brasilApiError) {
     return {
-      emitente: merged || emitente,
+      emitente,
       heal: {
         attempted: true,
         ok: false,
-        reason: partial ? 'merge_incomplete' : 'plugnotas_sem_endereco',
-        hasPlugnotasEndereco: Boolean(partial),
+        reason: 'all_sources_failed',
+        plugnotasError,
+        brasilApiError: sanitizeHealError(brasilApiError),
       },
     };
-  } catch (err) {
-    return {
-      emitente,
-      heal: { attempted: true, ok: false, ...sanitizeHealError(err) },
-    };
   }
+
+  return {
+    emitente,
+    heal: {
+      attempted: true,
+      ok: false,
+      reason: 'endereco_nao_resolvido',
+      plugnotasError,
+    },
+  };
 };
 
 /**

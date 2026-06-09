@@ -92,6 +92,24 @@ test('empresaJsonToEmitentePartial desembrulha data como array', () => {
   assert.equal(partial?.codigoCidade, '3304557');
 });
 
+test('empresaJsonToEmitentePartial aceita payload BrasilAPI (lookup CNPJ)', () => {
+  const partial = empresaJsonToEmitentePartial({
+    cpfCnpj: '65805583000173',
+    razaoSocial: 'YASMIM DUQUE',
+    endereco: {
+      logradouro: 'RUA OLIVEIRA BELO',
+      numero: '441',
+      bairro: 'VILA DA PENHA',
+      codigoCidade: '3304557',
+      descricaoCidade: 'RIO DE JANEIRO',
+      estado: 'RJ',
+      cep: '21221300',
+    },
+  });
+  assert.equal(partial?.codigoCidade, '3304557');
+  assert.equal(partial?.razaoSocial, 'YASMIM DUQUE');
+});
+
 test('mergeEmitenteWithEmpresaPartial preenche IBGE sem apagar certDocument', () => {
   const partial = empresaJsonToEmitentePartial({
     razaoSocial: 'YASMIM',
