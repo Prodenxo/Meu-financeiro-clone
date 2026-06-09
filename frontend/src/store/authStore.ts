@@ -15,6 +15,7 @@ import {
 } from '../services/authService';
 import { apiClient } from '../services/apiClient';
 import { supabaseBrowser } from '../lib/supabaseBrowser';
+import { normalizeMeiFromSession } from '../lib/meiAccess';
 
 const ORIGINAL_TOKEN_KEY = 'financas-pessoais-original-token';
 
@@ -85,7 +86,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           displayName: session.user.displayName || session.user.user_metadata?.display_name || result.displayName || null,
           role: normalizeRole(session.role || null),
           empresaId: session.empresaId || session.user.user_metadata?.empresa_id || null,
-          mei: session.mei ?? true
+          mei: normalizeMeiFromSession(session.mei)
         });
         await useTransactionStore.getState().fetchTransactions();
         return;
@@ -113,7 +114,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       displayName: result.displayName,
       role: normalizeRole(result.role),
       empresaId: result.empresaId || null,
-      mei: result.mei ?? true,
+      mei: normalizeMeiFromSession(result.mei),
     });
     // Fetch transactions immediately after successful login
     await useTransactionStore.getState().fetchTransactions();
@@ -139,7 +140,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const role = normalizeRole(session.role || null);
       console.log('[AuthStore] initAuth session.role:', session.role, 'normalized:', role);
       const empresaId = session.empresaId || session.user.user_metadata?.empresa_id || null;
-      const mei = session.mei ?? true;
+      const mei = normalizeMeiFromSession(session.mei);
       console.log('Usuário encontrado:', session.user.email);
       set({ 
         user: session.user, 

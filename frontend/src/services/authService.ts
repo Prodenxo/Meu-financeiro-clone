@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { normalizeMeiFromSession } from '../lib/meiAccess';
 import {
   flagLoginPageForAccessExpired,
   flagLoginPageForLoginReason,
@@ -91,7 +92,7 @@ export async function signIn(email: string, password: string) {
       displayName: result.displayName,
       role: result.role,
       empresaId: result.empresaId || null,
-      mei: result.mei ?? true,
+      mei: normalizeMeiFromSession(result.mei),
     };
   } catch (error: any) {
     console.error('Erro ao fazer login:', error);
@@ -149,7 +150,7 @@ export async function getSession() {
         expires_at: parsed.expires_at,
         role: result.session.role,
         empresaId: result.session.empresaId || null,
-        mei: result.session.mei ?? true,
+        mei: normalizeMeiFromSession(result.session.mei),
       };
     }
     

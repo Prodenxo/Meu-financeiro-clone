@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { canAccessMeiArea } from './meiAccess';
+import { canAccessMeiArea, normalizeMeiFromSession } from './meiAccess';
+
+describe('normalizeMeiFromSession', () => {
+  it('null/undefined não viram true', () => {
+    expect(normalizeMeiFromSession(null)).toBe(null);
+    expect(normalizeMeiFromSession(undefined)).toBe(null);
+  });
+
+  it('preserva boolean explícito', () => {
+    expect(normalizeMeiFromSession(true)).toBe(true);
+    expect(normalizeMeiFromSession(false)).toBe(false);
+  });
+});
 
 describe('canAccessMeiArea', () => {
   it('superadmin sempre tem acesso', () => {
