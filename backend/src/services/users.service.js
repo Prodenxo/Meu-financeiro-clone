@@ -223,7 +223,7 @@ const getEmpresaRecordById = async (adminClient, empresaId) => {
   return data;
 };
 
-const resolveMeiValue = (value, defaultValue = true) => (
+const resolveMeiValue = (value, defaultValue = false) => (
   typeof value === 'boolean' ? value : defaultValue
 );
 
@@ -272,61 +272,128 @@ const countActiveUsersByMei = async (adminClient, { empresaId, mei, ignoreUserId
   return count || 0;
 };
 
-/**
- * Sincroniza o módulo MEI para empresas que já possuem vínculos MEI ativos,
- * mas ainda estão com `max_mei` em 0 (desligado).
- */
-const syncEmpresasMeiActivation = async (adminClient, scopedEmpresaIds = []) => {
-  let meiLinksQuery = adminClient
-    .from('role_x_user_x_empresa')
-    .select('empresas_id, mei')
-    .eq('status', true)
-    .not('empresas_id', 'is', null)
-    .or('mei.is.null,mei.eq.true');
+const sumActiveStripeMeiSlotsByEmpresa = async (adminClient, empresaIds) => {
+  const uniqueIds = Array.from(new Set((empresaIds || []).filter(Boolean)));
+  if (uniqueIds.length === 0) return new Map();
 
-  if (scopedEmpresaIds.length > 0) {
-    meiLinksQuery = meiLinksQuery.in('empresas_id', scopedEmpresaIds);
-  }
+  const { data: lines, error } = await adminClient
+    .from('empresa_mei_subscription_lines')
+    .select('empresa_id, mei_slots')
+    .in('empresa_id', uniqueIds)
+    .eq('status', 'active');
 
-  const { data: meiLinks, error: meiLinksError } = await meiLinksQuery;
-  if (meiLinksError) throw badRequest(meiLinksError.message);
+  if (error) throw badRequest(error.message);
 
-  const meiCountByEmpresa = new Map();
-  for (const link of meiLinks || []) {
-    const id = link?.empresas_id;
+  const sumByEmpresa = new Map();
+  for (const row of lines || []) {
+    const id = row?.empresa_id;
     if (!id) continue;
-    meiCountByEmpresa.set(id, (meiCountByEmpresa.get(id) || 0) + 1);
+    sumByEmpresa.set(id, (sumByEmpresa.get(id) || 0) + Number(row.mei_slots || 0));
+  }
+  return sumByEmpresa;
+};
+
+/**
+ * Corrige vínculos/empresas com MEI “fantasma”.
+ * Cadastro antigo criava `max_mei: 1` em todo pedido de acesso; o vínculo vinha com `mei: false`,
+ * mas a UI tratava admin como liberado. Aqui: links mei=true/null → false quando módulo desligado;
+ * `max_mei` > 0 sem ninguém com `mei=true` → volta para 0 (venda MEI é manual no admin).
+ */
+export const reconcileMeiModuleConsistency = async (
+  adminClient,
+  scopedEmpresaIds = [],
+  options = {}
+) => {
+  const dryRun = options.dryRun === true;
+  const uniqueIds = Array.from(new Set((scopedEmpresaIds || []).filter(Boolean)));
+  if (uniqueIds.length === 0) {
+    return { clearedLinks: 0, resetEmpresas: 0, details: [] };
   }
 
-  const empresaIds = Array.from(meiCountByEmpresa.keys());
-  if (empresaIds.length === 0) return new Map();
-
-  const { data: empresasData, error: empresasError } = await adminClient
+  const { data: empresas, error: empresasError } = await adminClient
     .from('empresas')
     .select('id, max_mei')
-    .in('id', empresaIds);
+    .in('id', uniqueIds);
 
   if (empresasError) throw badRequest(empresasError.message);
 
+  const stripeByEmpresa = await sumActiveStripeMeiSlotsByEmpresa(adminClient, uniqueIds);
+  const details = [];
+  let clearedLinks = 0;
+  let resetEmpresas = 0;
+
+  for (const empresa of empresas || []) {
+    const empresaId = empresa.id;
+    const stripeSlots = stripeByEmpresa.get(empresaId) || 0;
+    const dbMax = normalizeMaxMeiStored(empresa.max_mei);
+    const moduleShouldBeOff = dbMax <= 0 && stripeSlots <= 0;
+
+    if (moduleShouldBeOff) {
+      const { data: staleLinks, error: staleError } = await adminClient
+        .from('role_x_user_x_empresa')
+        .select('id, user_id, mei')
+        .eq('empresas_id', empresaId)
+        .eq('status', true)
+        .or('mei.is.null,mei.eq.true');
+
+      if (staleError) throw badRequest(staleError.message);
+
+      const linkIds = (staleLinks || []).map((link) => link.id).filter(Boolean);
+      if (linkIds.length > 0) {
+        clearedLinks += linkIds.length;
+        details.push({ empresaId, action: 'clear_link_mei', linkIds, dryRun });
+        if (!dryRun) {
+          const { error: updError } = await adminClient
+            .from('role_x_user_x_empresa')
+            .update({ mei: false })
+            .in('id', linkIds);
+          if (updError) throw badRequest(updError.message);
+        }
+      }
+    }
+
+    if (stripeSlots <= 0 && dbMax > 0) {
+      const { count, error: countError } = await adminClient
+        .from('role_x_user_x_empresa')
+        .select('id', { count: 'exact', head: true })
+        .eq('empresas_id', empresaId)
+        .eq('status', true)
+        .eq('mei', true);
+
+      if (countError) throw badRequest(countError.message);
+
+      if ((count || 0) === 0) {
+        resetEmpresas += 1;
+        details.push({
+          empresaId,
+          action: 'reset_max_mei',
+          from: dbMax,
+          to: 0,
+          dryRun
+        });
+        if (!dryRun) {
+          const { error: resetError } = await adminClient
+            .from('empresas')
+            .update({ max_mei: 0 })
+            .eq('id', empresaId);
+          if (resetError) throw badRequest(resetError.message);
+        }
+      }
+    }
+  }
+
+  return { clearedLinks, resetEmpresas, details };
+};
+
+/** @deprecated substituído por reconcileMeiModuleConsistency — mantém assinatura para listEmpresas. */
+const syncEmpresasMeiActivation = async (adminClient, scopedEmpresaIds = []) => {
+  const result = await reconcileMeiModuleConsistency(adminClient, scopedEmpresaIds);
   const fixedMaxMeiByEmpresa = new Map();
-  const updates = (empresasData || [])
-    .filter((empresa) => {
-      const current = normalizeMaxMeiStored(empresa.max_mei);
-      return current <= 0 && (meiCountByEmpresa.get(empresa.id) || 0) > 0;
-    })
-    .map(async (empresa) => {
-      const meiCount = meiCountByEmpresa.get(empresa.id) || 0;
-      const newMaxMei = Math.max(1, meiCount);
-      const { error: updateError } = await adminClient
-        .from('empresas')
-        .update({ max_mei: newMaxMei })
-        .eq('id', empresa.id);
-
-      if (updateError) throw badRequest(updateError.message);
-      fixedMaxMeiByEmpresa.set(empresa.id, newMaxMei);
-    });
-
-  await Promise.all(updates);
+  for (const detail of result.details) {
+    if (detail.action === 'reset_max_mei' && !detail.dryRun) {
+      fixedMaxMeiByEmpresa.set(detail.empresaId, detail.to);
+    }
+  }
   return fixedMaxMeiByEmpresa;
 };
 
@@ -482,6 +549,18 @@ export const getRequesterContext = async (accessToken) => {
     }
 
     if (roleData?.roles) {
+      if (linkData.empresas_id && (linkData.mei === true || linkData.mei === null)) {
+        await reconcileMeiModuleConsistency(linkClient, [linkData.empresas_id]);
+        const { data: refreshedLink } = await linkClient
+          .from('role_x_user_x_empresa')
+          .select('mei')
+          .eq('id', linkData.id)
+          .maybeSingle();
+        if (typeof refreshedLink?.mei === 'boolean') {
+          linkData.mei = refreshedLink.mei;
+        }
+      }
+
       const mei = typeof linkData?.mei === 'boolean' ? linkData.mei : false;
       return {
         userId: user.id,

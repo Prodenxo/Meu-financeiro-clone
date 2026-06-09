@@ -187,7 +187,7 @@ router.post('/submit', requireInternalSecret, async (req, res, next) => {
         estado: normalizeText(empresaInput.estado)?.toUpperCase()?.slice(0, 2) || null,
         telefone: normalizeText(empresaInput.telefone),
         email: normalizeText(empresaInput.email),
-        max_mei: 1,
+        max_mei: 0,
         status: 'pending',
       })
       .select('id')
