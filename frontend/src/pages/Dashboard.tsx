@@ -26,6 +26,7 @@ import {
   meiRequiredAccessBlockProps,
   type AccessBlockKind,
 } from '../lib/accessBlockPresets';
+import BpoBudgetMatrixPanel from '../components/dashboard/BpoBudgetMatrixPanel';
 
 ChartJS.register(
   CategoryScale,
@@ -67,6 +68,7 @@ export default function Dashboard() {
   const [bpoYear, setBpoYear] = useState<number>(new Date().getFullYear());
   const [bpoEntradaOpen, setBpoEntradaOpen] = useState(false);
   const [bpoSaidaOpen, setBpoSaidaOpen] = useState(false);
+  const [bpoViewMode, setBpoViewMode] = useState<'graficos' | 'matriz'>('matriz');
   const [despesaTab, setDespesaTab] = useState<'pagos' | 'a_pagar'>('pagos');
   const [budgetSummary, setBudgetSummary] = useState<Array<{
     categorias_id: number;
@@ -875,26 +877,72 @@ export default function Dashboard() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <span className="font-semibold text-slate-800 dark:text-white text-sm md:text-base block">
-                BPO - Comparativo mensal por categoria
+                BPO — Orçado × Realizado
               </span>
               <span className="text-xs text-slate-500 dark:text-gray-400">
                 Ano selecionado: {bpoYear}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 dark:text-gray-400">Ano</span>
-              <select
-                className="planner-input py-2 text-sm"
-                value={bpoYear}
-                onChange={(e) => setBpoYear(Number(e.target.value))}
+            <div className="flex flex-wrap items-center gap-3">
+              <div
+                role="tablist"
+                aria-label="Visão do BPO"
+                className="inline-flex rounded-lg border border-slate-200/90 dark:border-slate-700/80 p-0.5 bg-slate-100/90 dark:bg-slate-900/50"
               >
-                {bpoYearOptions.map((year) => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={bpoViewMode === 'matriz'}
+                  className={`px-3 py-2 text-sm font-medium rounded-md min-h-[40px] transition-colors ${
+                    bpoViewMode === 'matriz'
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                  onClick={() => setBpoViewMode('matriz')}
+                >
+                  Matriz
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={bpoViewMode === 'graficos'}
+                  className={`px-3 py-2 text-sm font-medium rounded-md min-h-[40px] transition-colors ${
+                    bpoViewMode === 'graficos'
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                  onClick={() => setBpoViewMode('graficos')}
+                >
+                  Gráficos
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 dark:text-gray-400">Ano</span>
+                <select
+                  className="planner-input py-2 text-sm"
+                  value={bpoYear}
+                  onChange={(e) => setBpoYear(Number(e.target.value))}
+                  aria-label="Ano do BPO"
+                >
+                  {bpoYearOptions.map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
+          {bpoViewMode === 'matriz' && userId ? (
+            <div className="mt-4">
+              <BpoBudgetMatrixPanel
+                userId={userId}
+                year={bpoYear}
+                transactions={transactions}
+              />
+            </div>
+          ) : null}
+
+          {bpoViewMode === 'graficos' ? (
           <div className="mt-4 space-y-6">
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -1084,6 +1132,7 @@ export default function Dashboard() {
               ) : null}
             </div>
           </div>
+          ) : null}
         </div>
       )}
     </PageShell>
