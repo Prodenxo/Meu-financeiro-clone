@@ -163,6 +163,39 @@ export const pickProdutoCatalogoByNomeResult = (rows, nome) => {
   return { kind: 'ambiguous', matches: list, q: nome };
 };
 
+const normalizeProdutoCodigoForMatch = (value) =>
+  normalizeDoc(value) || String(value || '').replace(/\s/g, '');
+
+const normalizeProdutoCnaeForMatch = (value) => normalizeDoc(value).slice(0, 7);
+
+/**
+ * Evita duplicar serviço quando o robô reenvia código + CNAE com outra discriminação.
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {string} codigo
+ * @param {string} cnae
+ */
+export const pickProdutoCatalogoByCodigoCnaeResult = (rows, codigo, cnae) => {
+  const codigoNorm = normalizeProdutoCodigoForMatch(codigo);
+  const cnaeNorm = normalizeProdutoCnaeForMatch(cnae);
+  if (!codigoNorm || cnaeNorm.length !== 7) return { kind: 'missing' };
+
+  const list = Array.isArray(rows) ? rows : [];
+  const matches = list.filter((row) => {
+    const rowCodigo = normalizeProdutoCodigoForMatch(row.codigo);
+    const rowCnae = normalizeProdutoCnaeForMatch(row.cnae);
+    return rowCodigo === codigoNorm && rowCnae === cnaeNorm;
+  });
+
+  if (matches.length === 1) return { kind: 'ok', produto: matches[0] };
+  if (matches.length > 1) return { kind: 'multiple', matches, codigo: codigoNorm, cnae: cnaeNorm };
+  return { kind: 'not_found', codigo: codigoNorm, cnae: cnaeNorm };
+};
+
+const findProdutoCatalogoByCodigoCnae = async (userId, codigo, cnae) => {
+  const rows = await listarCatalogoProdutos(userId, { limit: 50 });
+  return pickProdutoCatalogoByCodigoCnaeResult(rows, codigo, cnae);
+};
+
 const findProdutoCatalogoByNome = async (userId, nome) => {
   const q = String(nome || '').trim();
   if (!q) return { kind: 'missing' };
@@ -552,15 +585,31 @@ export const registerOpenclawNfseProduto = async (userId, payload = {}) => {
     });
   }
 
-  const existingLookup = await findProdutoCatalogoByNome(userId, discriminacao);
-  if (existingLookup.kind === 'ok') {
-    return { alreadyRegistered: true, produto: existingLookup.produto };
-  }
-
   const codigo = assertProdutoCodigoValido(
     firstNonEmpty(payload?.codigoServico, payload?.codigo),
   );
   const cnae = assertProdutoCnaeValido(firstNonEmpty(payload?.cnae));
+
+  const existingByCodigoCnae = await findProdutoCatalogoByCodigoCnae(userId, codigo, cnae);
+  if (existingByCodigoCnae.kind === 'ok') {
+    return {
+      alreadyRegistered: true,
+      produto: existingByCodigoCnae.produto,
+      dedupeReason: 'codigo_cnae',
+    };
+  }
+  if (existingByCodigoCnae.kind === 'multiple') {
+    return {
+      alreadyRegistered: true,
+      produto: existingByCodigoCnae.matches[0],
+      dedupeReason: 'codigo_cnae_duplicados',
+    };
+  }
+
+  const existingLookup = await findProdutoCatalogoByNome(userId, discriminacao);
+  if (existingLookup.kind === 'ok') {
+    return { alreadyRegistered: true, produto: existingLookup.produto, dedupeReason: 'discriminacao' };
+  }
 
   const aliquotaRaw = payload?.aliquota ?? payload?.aliquotaIss;
   const valorRaw = payload?.valorSugerido ?? payload?.valor_sugerido ?? payload?.valor;

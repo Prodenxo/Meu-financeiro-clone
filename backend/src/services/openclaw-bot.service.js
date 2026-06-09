@@ -1600,7 +1600,7 @@ export const runOpenclawAction = async (input) => {
       return {
         ok: true,
         message: result.alreadyRegistered
-          ? `Serviço já cadastrado: ${nome} (cód. ${codigo}, CNAE ${cnae}).`
+          ? `Serviço já existe no catálogo (cód. ${codigo}, CNAE ${cnae}): ${nome}. Use list_nfse_produtos e emit_nfse — não cadastre de novo.`
           : `Serviço cadastrado: ${nome} (cód. ${codigo}, CNAE ${cnae}). Pode usar em preview_nfse e emit_nfse.`,
         data: {
           ...result,

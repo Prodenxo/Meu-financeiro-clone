@@ -187,6 +187,23 @@ export default function MeiCatalogoProdutoModal({
           Itens reutilizáveis na emissão de NFS-e (discriminação, CNAE, valores sugeridos).
         </p>
 
+        <div
+          className="mb-4 rounded-lg border border-amber-200/80 bg-amber-50/90 p-3 text-sm text-slate-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-slate-200"
+          role="note"
+        >
+          <p className="font-medium">Código do serviço e CNAE são coisas diferentes</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs sm:text-sm">
+            <li>
+              <strong>Código (LC 116):</strong> item da lista da <strong>prefeitura</strong> para a NFS-e
+              (ex.: 14.01.01). Pesquisa abaixo na lista nacional de referência.
+            </li>
+            <li>
+              <strong>CNAE:</strong> atividade da empresa na <strong>Receita Federal</strong>, 7 dígitos
+              (ex.: 4211102). Não repita o mesmo valor no código municipal.
+            </li>
+          </ul>
+        </div>
+
         {apiError != null ? (
           <div id={errId} className="mb-4" role="alert">
             <UserFacingErrorBlock
@@ -223,9 +240,13 @@ export default function MeiCatalogoProdutoModal({
           </div>
 
           <div>
-            <label htmlFor="mei-cat-prod-cod" className="mb-2 block font-medium dark:text-gray-200">
-              Código interno <span className="text-slate-400">(opcional)</span>
+            <label htmlFor="mei-cat-prod-cod" className="mb-1 block font-medium dark:text-gray-200">
+              Código do serviço — LC 116 / prefeitura
+              <span className="text-slate-400"> (opcional no catálogo)</span>
             </label>
+            <p id="mei-cat-prod-cod-help" className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+              Item da tabela municipal de serviços. Mín. 6 caracteres sem máscara. Não é o CNAE.
+            </p>
             <MeiCodigoServicoCombobox
               ref={codigoRef}
               id="mei-cat-prod-cod"
@@ -233,7 +254,7 @@ export default function MeiCatalogoProdutoModal({
               onChange={setCodigo}
               aria-invalid={Boolean(fieldErrors.codigo)}
               aria-describedby={
-                fieldErrors.codigo ? 'mei-cat-prod-cod-err' : undefined
+                fieldErrors.codigo ? 'mei-cat-prod-cod-err mei-cat-prod-cod-help' : 'mei-cat-prod-cod-help'
               }
             />
             {fieldErrors.codigo ? (
@@ -244,18 +265,25 @@ export default function MeiCatalogoProdutoModal({
           </div>
 
           <div>
-            <label htmlFor="mei-cat-prod-cnae" className="mb-2 block font-medium dark:text-gray-200">
-              CNAE <span className="text-slate-400">(opcional)</span>
+            <label htmlFor="mei-cat-prod-cnae" className="mb-1 block font-medium dark:text-gray-200">
+              CNAE — atividade económica
+              <span className="text-slate-400"> (opcional no catálogo)</span>
             </label>
+            <p id="mei-cat-prod-cnae-help" className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+              7 dígitos da atividade (Receita Federal). Ex.: 4211102 ou 4211-1/02.
+            </p>
             <input
               ref={cnaeRef}
               id="mei-cat-prod-cnae"
               className="planner-input-compact w-full"
               value={cnae}
               onChange={(ev) => setCnae(ev.target.value)}
+              placeholder="Ex.: 4211102"
               inputMode="numeric"
               aria-invalid={Boolean(fieldErrors.cnae)}
-              aria-describedby={fieldErrors.cnae ? 'mei-cat-prod-cnae-err' : undefined}
+              aria-describedby={
+                fieldErrors.cnae ? 'mei-cat-prod-cnae-err mei-cat-prod-cnae-help' : 'mei-cat-prod-cnae-help'
+              }
               autoComplete="off"
             />
             {fieldErrors.cnae ? (

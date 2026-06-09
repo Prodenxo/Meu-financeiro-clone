@@ -98,7 +98,7 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 
 1. `get_nfse_setup_status`
 2. Tomador: se o utilizador disser **nome** → `list_nfse_clientes` com `payload.q` ou `preview_nfse` com `tomadorNome` (não pedir CPF/CNPJ se já está no catálogo). Só pedir documento se cliente não existir ou houver homónimos.
-3. Serviço: `list_nfse_produtos` se perguntarem produtos; na emissão usa catálogo (código + CNAE automáticos). Cadastro: `register_nfse_produto`.
+3. Serviço: `list_nfse_produtos` se perguntarem produtos; na emissão usa catálogo (código + CNAE automáticos). **Não** chamar `register_nfse_produto` na emissão se já houver itens — só quando pedirem cadastrar novo ou catálogo vazio.
 4. Recolher **valor** (e serviço só se houver vários no catálogo)
 5. `preview_nfse` ou `emit_nfse` **sem** `confirm` → mostrar resumo
 6. Utilizador confirma no chat

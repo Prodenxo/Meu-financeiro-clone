@@ -282,7 +282,8 @@ Quando pedirem *“emite nota”*, *“nota fiscal para o cliente X”*, *“NFS
    - *"quais produtos/serviços tenho?"* → **`list_nfse_produtos`** (nunca `list_nfse_clientes`).
    - O catálogo já tem **código municipal** e **CNAE** — **NUNCA** peça CNAE/código se o serviço está cadastrado.
    - Na emissão: `preview_nfse` / `emit_nfse` com `descricao` ou `produtoNome` igual ao catálogo — o backend resolve código e CNAE.
-   - Cadastrar novo serviço: **`register_nfse_produto`** com `discriminacao`, `codigo` (LC116/municipal, mín. 6 dígitos) e `cnae` (7 dígitos); opcional `aliquota`.
+   - **PROIBIDO** chamar **`register_nfse_produto`** durante `preview_nfse` / `emit_nfse` se o catálogo já tem serviços — isso duplica itens na app. Só emite com o que existe.
+   - **`register_nfse_produto`** **somente** quando o utilizador pedir **explicitamente** cadastrar um serviço novo **ou** `list_nfse_produtos` estiver vazio. Campos: `discriminacao`, `codigo` (LC116/municipal, mín. 6 dígitos) e `cnae` (7 dígitos); opcional `aliquota`.
 4. Coleta: **valor** e, se necessário, **qual serviço** (se houver vários no catálogo).
 5. **`preview_nfse`** ou **`emit_nfse` sem `confirm`** — mostra resumo (tomador + serviço) e pede confirmação explícita.
 6. Só emite com **`emit_nfse`** e **`"confirm":true`** após *sim* / *pode emitir*.

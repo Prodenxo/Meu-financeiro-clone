@@ -5,6 +5,7 @@ import {
   isNfsePdfReadyStatus,
   parseValorReais,
   pickClienteCatalogoByNomeResult,
+  pickProdutoCatalogoByCodigoCnaeResult,
   pickProdutoCatalogoByNomeResult,
 } from '../src/services/openclaw-nfse.service.js';
 
@@ -69,6 +70,26 @@ test('pickClienteCatalogoByNomeResult — único resultado da busca', () => {
   const r = pickClienteCatalogoByNomeResult(rows, 'Jose');
   assert.equal(r.kind, 'ok');
   assert.equal(r.cliente.id, '1');
+});
+
+test('pickProdutoCatalogoByCodigoCnaeResult — reutiliza serviço existente (evita duplicata)', () => {
+  const rows = [
+    {
+      id: '1',
+      discriminacao: 'Serviços de manutenção e reparação mecânica de veículos',
+      codigo: '140101',
+      cnae: '4520001',
+    },
+    {
+      id: '2',
+      discriminacao: 'serviço de pintura',
+      codigo: '070202',
+      cnae: '4211102',
+    },
+  ];
+  const r = pickProdutoCatalogoByCodigoCnaeResult(rows, '14.01.01', '4520-0/01');
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.produto.id, '1');
 });
 
 test('pickProdutoCatalogoByNomeResult — match por palavras na discriminação', () => {

@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-/** Easypanel/Docker às vezes guardam o valor com aspas — remove uma camada só se fechar o par. */
+/**  Easypanel/Docker às vezes guardam o valor com aspas — remove uma camada só se fechar o par. */
 export const normalizeEnvSecret = (raw) => {
   let s = String(raw ?? '').trim();
   if (
@@ -137,7 +137,7 @@ export const env = {
   PLUGNOTAS_WEBHOOK_REQUIRE_TOKEN: process.env.PLUGNOTAS_WEBHOOK_REQUIRE_TOKEN
     || (process.env.NODE_ENV === 'development' ? 'false' : 'true'),
   PLUGNOTAS_WEBHOOK_ALLOW_QUERY_TOKEN: process.env.PLUGNOTAS_WEBHOOK_ALLOW_QUERY_TOKEN || 'false',
-  PLUGNOTAS_NFSE_CANCEL_PATH: process.env.PLUGNOTAS_NFSE_CANCEL_PATH || '/nfse/:id/cancelar',
+  PLUGNOTAS_NFSE_CANCEL_PATH: process.env.PLUGNOTAS_NFSE_CANCEL_PATH || '/nfse/cancelar/:id',
   PLUGNOTAS_NFE_CANCEL_PATH: process.env.PLUGNOTAS_NFE_CANCEL_PATH || '/nfe/:id/cancelamento',
   PLUGNOTAS_NFCE_CANCEL_PATH: process.env.PLUGNOTAS_NFCE_CANCEL_PATH || '/nfce/:id/cancelamento',
   N8N_WHATSAPP_WEBHOOK_URL: process.env.N8N_WHATSAPP_WEBHOOK_URL || '',

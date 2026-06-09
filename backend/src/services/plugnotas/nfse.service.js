@@ -149,8 +149,9 @@ export const consultarNfsePorIdOuProtocolo = async (idOrProtocol) => {
   return await requestJson('GET', `/nfse/consultar/${encodeURIComponent(idOrProtocol)}`);
 };
 
-const resolveCancelPath = (id) => {
-  const template = String(env.PLUGNOTAS_NFSE_CANCEL_PATH || '/nfse/:id/cancelar').trim();
+/** Path Plugnotas: POST /nfse/cancelar/{idNota} — ver Central de Atendimento Tecnospeed. */
+export const resolveNfseCancelPath = (id) => {
+  const template = String(env.PLUGNOTAS_NFSE_CANCEL_PATH || '/nfse/cancelar/:id').trim();
   const safeId = encodeURIComponent(id);
   if (!template.includes(':id')) {
     return `${template.replace(/\/$/, '')}/${safeId}`;
@@ -158,10 +159,21 @@ const resolveCancelPath = (id) => {
   return template.replace(':id', safeId);
 };
 
-export const cancelarNfse = async (id, { reason } = {}) => {
+/** Corpo esperado pela API Plugnotas (codigo + motivo; default código 9 = Outros). */
+export const buildNfseCancelPayload = ({ reason, codigo } = {}) => ({
+  codigo: String(codigo || '9').trim() || '9',
+  motivo: String(
+    reason || 'Cancelamento a pedido do Prestador via Meu Financeiro',
+  ).trim(),
+});
+
+export const cancelarNfse = async (id, { reason, codigo } = {}) => {
   if (!id) throw badRequest('ID da NFSe é obrigatório');
-  const payload = reason ? { reason } : {};
-  return await requestJson('POST', resolveCancelPath(id), payload);
+  return await requestJson(
+    'POST',
+    resolveNfseCancelPath(id),
+    buildNfseCancelPayload({ reason, codigo }),
+  );
 };
 
 export const downloadNfsePdf = async (id) => {
