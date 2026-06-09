@@ -1,4 +1,4 @@
-import { normalizeDoc } from '../utils/cpf-cnpj.js';
+import { normalizeDocDigits } from '../utils/cpf-cnpj.js';
 import {
   patchEmitenteNfseFields,
   saveCertificateDocument,
@@ -181,7 +181,7 @@ export async function reconcileEmitenteMirrorFromEmpresaJson(userId, empresaJson
   if (!partial) return;
 
   const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
-  const cnpj = normalizeDoc(
+  const cnpj = normalizeDocDigits(
     empresa?.cpfCnpj ?? empresa?.cpf_cnpj ?? empresa?.cnpj ?? '',
   );
 
