@@ -16,11 +16,10 @@ import {
   type BpoPendingTxn
 } from '../../utils/bpoMatrix';
 
-const DEFAULT_COLUMNS: BpoColumnKey[] = ['orcado', 'previsto', 'realizado', 'variacao'];
+const DEFAULT_COLUMNS: BpoColumnKey[] = ['orcado', 'realizado', 'variacao'];
 
 const COLUMN_LABELS: Record<BpoColumnKey, string> = {
   orcado: 'Orçado',
-  previsto: 'Previsto',
   realizado: 'Realizado',
   variacao: 'Variação'
 };

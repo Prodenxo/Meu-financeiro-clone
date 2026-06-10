@@ -7,7 +7,7 @@ import {
   isSaidaTipo
 } from './dreMatrix';
 
-export type BpoColumnKey = 'orcado' | 'previsto' | 'realizado' | 'variacao';
+export type BpoColumnKey = 'orcado' | 'realizado' | 'variacao';
 
 export interface BpoPendingTxn {
   classificacao: string;
@@ -123,7 +123,7 @@ function buildPrevistoMap(
 
 function isRowEligible(metrics: BpoMonthMetrics[]): boolean {
   return metrics.some(
-    (m) => m.realizado !== 0 || m.previsto > 0 || (m.orcado !== null && m.orcado > 0)
+    (m) => m.realizado !== 0 || (m.orcado !== null && m.orcado > 0)
   );
 }
 
@@ -249,9 +249,6 @@ export function formatBpoMetricValue(
   if (column === 'orcado') {
     return metrics.orcado === null ? '—' : formatDreCurrency(metrics.orcado);
   }
-  if (column === 'previsto') {
-    return metrics.previsto === 0 ? formatDreCurrency(0) : formatDreCurrency(metrics.previsto);
-  }
   if (column === 'realizado') {
     return formatDreCurrency(metrics.realizado);
   }
@@ -266,7 +263,6 @@ export function bpoMonthHeaderLabel(monthIndex: number, year: number): string {
 
 const COLUMN_LABELS: Record<BpoColumnKey, string> = {
   orcado: 'Orçado',
-  previsto: 'Previsto',
   realizado: 'Realizado',
   variacao: 'Variação'
 };
@@ -276,7 +272,7 @@ export function exportBpoMatrixCsv(
   year: number,
   visibleColumns: BpoColumnKey[]
 ): string {
-  const cols = visibleColumns.length > 0 ? visibleColumns : (['orcado', 'previsto', 'realizado', 'variacao'] as BpoColumnKey[]);
+  const cols = visibleColumns.length > 0 ? visibleColumns : (['orcado', 'realizado', 'variacao'] as BpoColumnKey[]);
   const header = ['Grupo', 'Categoria'];
   for (let m = 0; m < 12; m += 1) {
     for (const col of cols) {
