@@ -1,4 +1,5 @@
 import { createSupabaseClient } from '../config/supabase.js';
+// [auto-restart trigger]
 import { badRequest, forbidden, unauthorized } from '../utils/errors.js';
 import {
   assertStrongPassword,
@@ -352,34 +353,9 @@ export const reconcileMeiModuleConsistency = async (
       }
     }
 
-    if (stripeSlots <= 0 && dbMax > 0) {
-      const { count, error: countError } = await adminClient
-        .from('role_x_user_x_empresa')
-        .select('id', { count: 'exact', head: true })
-        .eq('empresas_id', empresaId)
-        .eq('status', true)
-        .eq('mei', true);
-
-      if (countError) throw badRequest(countError.message);
-
-      if ((count || 0) === 0) {
-        resetEmpresas += 1;
-        details.push({
-          empresaId,
-          action: 'reset_max_mei',
-          from: dbMax,
-          to: 0,
-          dryRun
-        });
-        if (!dryRun) {
-          const { error: resetError } = await adminClient
-            .from('empresas')
-            .update({ max_mei: 0 })
-            .eq('id', empresaId);
-          if (resetError) throw badRequest(resetError.message);
-        }
-      }
-    }
+    // NOTE: Removed auto-reset of max_mei→0 when no active MEI users exist.
+    // The admin must be able to pre-configure MEI slots before linking users.
+    // max_mei is only set to 0 explicitly via the EmpresaModal toggle.
   }
 
   return { clearedLinks, resetEmpresas, details };

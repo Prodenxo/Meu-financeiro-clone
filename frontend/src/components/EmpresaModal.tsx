@@ -67,16 +67,37 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
-  const meiSlots =
-    form.max_mei === null || form.max_mei === undefined
-      ? 0
-      : Math.max(0, Math.trunc(form.max_mei));
-  const meiModuleOn = meiSlots > 0;
+  /** Estado separado para a chave MEI — não depende do valor numérico do input. */
+  const [meiEnabled, setMeiEnabled] = useState(false);
+  const [meiSlotsText, setMeiSlotsText] = useState('1');
+
+  // Sincroniza meiEnabled/meiSlotsText quando o modal abre com dados iniciais
+  useEffect(() => {
+    if (open) {
+      const v = initial?.max_mei ?? 0;
+      const isOn = v > 0;
+      setMeiEnabled(isOn);
+      setMeiSlotsText(isOn ? String(Math.trunc(v)) : '1');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initial]);
+
+  const meiSlots = (() => {
+    if (!meiEnabled) return 0;
+    const n = parseInt(meiSlotsText, 10);
+    return Number.isFinite(n) && n >= 1 ? n : 1;
+  })();
+
   const toggleMeiModule = () => {
-    if (meiModuleOn) {
+    if (meiEnabled) {
+      setMeiEnabled(false);
       setNum('max_mei', 0);
     } else {
-      setNum('max_mei', 1);
+      setMeiEnabled(true);
+      const current = parseInt(meiSlotsText, 10);
+      const val = Number.isFinite(current) && current >= 1 ? current : 1;
+      setMeiSlotsText(String(val));
+      setNum('max_mei', val);
     }
   };
 
@@ -425,7 +446,7 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Módulo MEI</h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    {meiModuleOn
+                    {meiEnabled
                       ? 'Defina quantas vagas MEI (CNPJ) esta empresa pode ter.'
                       : 'Desativado — esta empresa não pode ter clientes MEI.'}
                   </p>
@@ -434,19 +455,19 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
                   type="button"
                   onClick={toggleMeiModule}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                    meiModuleOn ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                    meiEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
                   }`}
-                  aria-pressed={meiModuleOn}
-                  aria-label={meiModuleOn ? 'Desativar módulo MEI' : 'Ativar módulo MEI'}
+                  aria-pressed={meiEnabled}
+                  aria-label={meiEnabled ? 'Desativar módulo MEI' : 'Ativar módulo MEI'}
                 >
                   <span
                     className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      meiModuleOn ? 'translate-x-6' : 'translate-x-1'
+                      meiEnabled ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
                 </button>
               </div>
-              {meiModuleOn ? (
+              {meiEnabled ? (
                 <div>
                   <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
                     Quantidade de vagas MEI
@@ -454,11 +475,19 @@ export default function EmpresaModal({ open, initial, onClose, onSuccess }: Empr
                   <input
                     type="number"
                     min={1}
-                    value={meiSlots}
+                    value={meiSlotsText}
                     onChange={(e) => {
                       const raw = e.target.value;
-                      const n = raw === '' ? 0 : Math.min(9999, Math.max(0, Number(raw) || 0));
+                      const digits = raw.replace(/\D/g, '');
+                      setMeiSlotsText(digits);
+                      const n = digits === '' ? 1 : Math.min(9999, Math.max(1, Number(digits) || 1));
                       setNum('max_mei', n);
+                    }}
+                    onBlur={() => {
+                      if (meiSlotsText === '' || parseInt(meiSlotsText, 10) < 1) {
+                        setMeiSlotsText('1');
+                        setNum('max_mei', 1);
+                      }
                     }}
                     className="planner-input-compact w-full"
                     placeholder="Ex.: 1, 3, 10"
