@@ -6,7 +6,15 @@ import {
   type MeiNfeLikeItemFormState
 } from '../../utils/meiNfeLikeFormState';
 import { mapCatalogProdutoToNfeItemRow } from '../../utils/mapCatalogProdutoToNfeItem';
+import { parseMeiDecimalInput } from '../../utils/meiNfeLikePayloadBuilder';
 import { MeiNfeLikeCatalogProdutoPickerModal } from './MeiNfeLikeCatalogProdutoPickerModal';
+
+function formatItemLineTotalBrl(quantidade: string, valorUnitario: string): string | null {
+  const q = parseMeiDecimalInput(quantidade);
+  const vu = parseMeiDecimalInput(valorUnitario);
+  if (q === null || vu === null || q <= 0 || vu <= 0) return null;
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(q * vu);
+}
 
 function NfeLikeCollapsible(props: {
   section: string;
@@ -463,6 +471,15 @@ export function MeiNfeLikeEmitForm({
                         {err(`mei-nfe-item-${index}-vu`)}
                       </p>
                     ) : null}
+                    <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                      <span className="font-semibold text-slate-700 dark:text-slate-200">
+                        Valor total do item:{' '}
+                        {formatItemLineTotalBrl(item.quantidade, item.valorUnitario) ?? '—'}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-500">
+                        Calculado automaticamente (quantidade × unitário).
+                      </span>
+                    </p>
                   </div>
                   <div className="md:col-span-2 rounded-md border border-slate-200/60 p-2 dark:border-slate-700/60">
                     <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">Tributos do item</p>
