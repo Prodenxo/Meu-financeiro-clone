@@ -2,6 +2,7 @@ import { env } from '../../config/env.js';
 import { HttpError, badRequest } from '../../utils/errors.js';
 import { resolvePlugnotasRequestJsonError } from './plugnotas-emit-400-log.js';
 import { getPlugnotasRootUrl } from './root-url.js';
+import { normalizePlugnotasNfePayload } from './plugnotas-nfe-payload.js';
 
 const ensureConfigured = () => {
   if (!env.PLUGNOTAS_API_BASE_URL) {
@@ -156,7 +157,7 @@ const resolveCancelPath = (id) => {
 };
 
 export const emitirNfe = async (payload) => {
-  return await requestJson('POST', '/nfe', [payload]);
+  return await requestJson('POST', '/nfe', [normalizePlugnotasNfePayload(payload)]);
 };
 
 export const consultarNfe = async (idOrChaveOrProtocol) => {

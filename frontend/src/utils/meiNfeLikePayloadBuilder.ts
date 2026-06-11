@@ -1,55 +1,67 @@
 import type { NfeLikePayloadInput } from '../services/meiNotasService';
 import type { MeiNfeLikeFormState } from './meiNfeLikeFormState';
+import {
+  buildDestinatarioIePayload,
+  normalizeDestinatarioIndIeDest,
+} from './meiNfeDestinatarioIe';
+import { mapDestinatarioEnderecoToPayload } from './meiNfeDestinatarioEndereco';
+import {
+  mapIcmsForPlugnotas,
+  mapNfeItemForPlugnotas,
+  parseDecimalInput,
+  resolveNfeConsumidorFinal,
+} from './plugnotasNfeItem';
 
 const normalizeDoc = (value: string) => String(value || '').replace(/\D/g, '');
 
-export function parseMeiDecimalInput(raw: string): number | null {
-  const t = String(raw ?? '')
-    .trim()
-    .replace(/\s/g, '')
-    .replace(',', '.');
-  if (!t) return null;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : null;
+export { parseDecimalInput };
+
+function computeItemsTotal(state: MeiNfeLikeFormState): number {
+  return state.itens.reduce((acc, item) => {
+    const q = parseDecimalInput(item.quantidade);
+    const vu = parseDecimalInput(item.valorUnitario);
+    if (q === null || vu === null || q <= 0 || vu <= 0) return acc;
+    return acc + q * vu;
+  }, 0);
 }
 
 /** Monta o payload enviado a `emitirNfe` / `emitirNfce` (servidor define `modelo` 55/65). */
-export function buildNfeLikePayloadFromMeiForm(state: MeiNfeLikeFormState): NfeLikePayloadInput {
+export function buildNfeLikePayloadFromMeiForm(
+  state: MeiNfeLikeFormState,
+  documentType: 'NFE' | 'NFCE' = 'NFE',
+): NfeLikePayloadInput {
   const emitDigits = normalizeDoc(state.emitenteCnpj);
   const destDigits = normalizeDoc(state.destinatarioDoc);
+  const indIEDest = normalizeDestinatarioIndIeDest(state.destinatarioIndIEDest);
+  const ieFields = buildDestinatarioIePayload(indIEDest, state.destinatarioInscricaoEstadual);
+  const enderecoPayload =
+    documentType === 'NFE' ? mapDestinatarioEnderecoToPayload(state.destinatarioEndereco) : undefined;
+  const itens = state.itens.map((item) =>
+    mapNfeItemForPlugnotas(item, {
+      icms: mapIcmsForPlugnotas({ csosn: item.icmsCsosn, cst: item.icmsCst }),
+      pis: { cst: item.pisCst.trim() },
+      cofins: { cst: item.cofinsCst.trim() },
+    }),
+  );
+  const total = computeItemsTotal(state);
+
   return {
     emitente: {
       cpfCnpj: emitDigits,
-      ...(state.emitenteRazao.trim() ? { razaoSocial: state.emitenteRazao.trim() } : {})
+      ...(state.emitenteRazao.trim() ? { razaoSocial: state.emitenteRazao.trim() } : {}),
     },
     destinatario: {
       cpfCnpj: destDigits,
       razaoSocial: state.destinatarioRazao.trim(),
-      ...(state.destinatarioEmail.trim() ? { email: state.destinatarioEmail.trim() } : {})
+      ...(state.destinatarioEmail.trim() ? { email: state.destinatarioEmail.trim() } : {}),
+      ...ieFields,
+      ...(enderecoPayload ? { endereco: enderecoPayload } : {}),
     },
-    itens: state.itens.map((item) => {
-      const q = parseMeiDecimalInput(item.quantidade);
-      const vu = parseMeiDecimalInput(item.valorUnitario);
-      return {
-        codigo: item.codigo.trim(),
-        descricao: item.descricao.trim(),
-        ncm: normalizeDoc(item.ncm),
-        cfop: normalizeDoc(item.cfop),
-        unidade: item.unidade.trim(),
-        quantidade: q ?? 0,
-        valorUnitario: vu ?? 0,
-        tributos: {
-          icms: {
-            ...(item.icmsCst.trim() ? { cst: item.icmsCst.trim() } : {}),
-            ...(item.icmsCsosn.trim() ? { csosn: item.icmsCsosn.trim() } : {})
-          },
-          pis: { cst: item.pisCst.trim() },
-          cofins: { cst: item.cofinsCst.trim() }
-        }
-      };
-    }),
+    ...(documentType === 'NFE' ? { consumidorFinal: resolveNfeConsumidorFinal(destDigits) } : {}),
+    itens,
+    ...(total > 0 ? { pagamentos: [{ meio: '99', valor: total }] } : {}),
     ...(state.informacoesComplementares.trim()
       ? { informacoesComplementares: state.informacoesComplementares.trim() }
-      : {})
+      : {}),
   };
 }

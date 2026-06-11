@@ -12,6 +12,11 @@ import {
   emitirNfse
 } from './plugnotas/nfse.service.js';
 import {
+  extractNfeItemQuantidade,
+  extractNfeItemValorUnitario,
+  normalizePlugnotasNfePayload,
+} from './plugnotas/plugnotas-nfe-payload.js';
+import {
   cancelarNfe,
   consultarNfe,
   consultarNfePorIdOuProtocolo,
@@ -121,6 +126,12 @@ const isValidCpfOrCnpj = (value) => {
 
 const toNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const nested = value.comercial ?? value.tributavel ?? value.valor;
+    if (nested !== undefined && nested !== null && nested !== '') {
+      return toNumber(nested);
+    }
+  }
   const parsed = Number(String(value).replace(',', '.'));
   return Number.isNaN(parsed) ? null : parsed;
 };
@@ -461,7 +472,11 @@ const buildNfeLikePayloadFromInput = (input, userId, { defaultModel = '55' } = {
       ...(input?.destinatario || {}),
       cpfCnpj: destinatarioDoc || input?.destinatario?.cpfCnpj || null,
       razaoSocial: input?.destinatario?.razaoSocial || input?.destinatarioRazaoSocial || null,
-      email: input?.destinatario?.email || input?.destinatarioEmail || null
+      email: input?.destinatario?.email || input?.destinatarioEmail || null,
+      indIEDest: input?.destinatario?.indIEDest || input?.destinatarioIndIEDest || null,
+      inscricaoEstadual:
+        input?.destinatario?.inscricaoEstadual || input?.destinatarioInscricaoEstadual || null,
+      endereco: prune(input?.destinatario?.endereco || input?.destinatarioEndereco || null)
     }),
     itens: itensInput,
     ...(input?.config && typeof input.config === 'object'
@@ -560,6 +575,34 @@ const validateNfeLikePayload = (payload, { label = 'NF-e' } = {}) => {
     throw badRequest(`Razão social do destinatário da ${label} é obrigatória`);
   }
 
+  if (label === 'NF-e') {
+    const endereco = payload?.destinatario?.endereco;
+    const cep = normalizeDoc(endereco?.cep || '');
+    if (cep.length !== 8) {
+      throw badRequest('CEP do destinatário da NF-e deve ter 8 dígitos');
+    }
+    if (!String(endereco?.logradouro || '').trim()) {
+      throw badRequest('Logradouro do destinatário da NF-e é obrigatório');
+    }
+    if (!String(endereco?.numero || '').trim()) {
+      throw badRequest('Número do endereço do destinatário da NF-e é obrigatório');
+    }
+    if (!String(endereco?.bairro || '').trim()) {
+      throw badRequest('Bairro do destinatário da NF-e é obrigatório');
+    }
+    const codigoCidade = normalizeDoc(endereco?.codigoCidade || '');
+    if (codigoCidade.length !== 7) {
+      throw badRequest('Código IBGE da cidade do destinatário da NF-e deve ter 7 dígitos');
+    }
+    if (!String(endereco?.descricaoCidade || '').trim()) {
+      throw badRequest('Cidade do destinatário da NF-e é obrigatória');
+    }
+    const uf = String(endereco?.estado || '').trim().toUpperCase();
+    if (uf.length !== 2) {
+      throw badRequest('UF do destinatário da NF-e deve ter 2 letras');
+    }
+  }
+
   const itens = Array.isArray(payload?.itens) ? payload.itens : [];
   if (!itens.length) {
     throw badRequest(`Itens da ${label} são obrigatórios`);
@@ -592,12 +635,12 @@ const validateNfeLikePayload = (payload, { label = 'NF-e' } = {}) => {
       throw badRequest(`Item ${itemPos} da ${label}: unidade é obrigatória`);
     }
 
-    const quantidade = toNumber(item?.quantidade ?? item?.quantidadeComercial);
+    const quantidade = extractNfeItemQuantidade(item);
     if (quantidade === null || quantidade <= 0) {
       throw badRequest(`Item ${itemPos} da ${label}: quantidade deve ser maior que zero`);
     }
 
-    const valorUnitario = toNumber(item?.valorUnitario ?? item?.valor ?? item?.valorUnitarioComercial);
+    const valorUnitario = extractNfeItemValorUnitario(item);
     if (valorUnitario === null || valorUnitario <= 0) {
       throw badRequest(`Item ${itemPos} da ${label}: valor unitário deve ser maior que zero`);
     }
@@ -811,6 +854,24 @@ const buildClienteCatalogEntry = (payload, { documentType = DOCUMENT_TYPE_NFSE }
   };
 };
 
+const buildClienteCatalogMetadataFromPayload = (payload, documentType) => {
+  const normalizedType = normalizeDocumentType(documentType);
+  if (normalizedType !== DOCUMENT_TYPE_NFE && normalizedType !== DOCUMENT_TYPE_NFCE) {
+    return null;
+  }
+  const dest = toObject(payload?.destinatario);
+  const endereco = prune(toObject(dest.endereco));
+  const indIEDest = String(dest.indIEDest || '').trim();
+  const meta = {};
+  if (indIEDest === '1' || indIEDest === '2' || indIEDest === '9') {
+    meta.indIEDest = indIEDest;
+  }
+  if (endereco && Object.keys(endereco).length) {
+    meta.endereco = endereco;
+  }
+  return Object.keys(meta).length ? meta : null;
+};
+
 const buildProdutoCatalogEntries = (payload, { documentType = DOCUMENT_TYPE_NFSE } = {}) => {
   const normalizedType = normalizeDocumentType(documentType);
   if (normalizedType !== DOCUMENT_TYPE_NFSE) {
@@ -939,17 +1000,23 @@ const upsertClienteCatalogo = async (userId, payload, { documentType = DOCUMENT_
   const entry = buildClienteCatalogEntry(payload, { documentType: normalizedType });
   if (!entry) return null;
 
+  const fiscalMeta = buildClienteCatalogMetadataFromPayload(payload, normalizedType);
+
   const now = new Date().toISOString();
   const dbClient = getDb();
+  const upsertRow = {
+    ...entry,
+    user_id: userId,
+    document_type: normalizedType,
+    last_used_at: now,
+    updated_at: now
+  };
+  if (fiscalMeta) {
+    upsertRow.metadata_json = fiscalMeta;
+  }
   const { error } = await dbClient
     .from(CLIENTS_TABLE)
-    .upsert({
-      ...entry,
-      user_id: userId,
-      document_type: normalizedType,
-      last_used_at: now,
-      updated_at: now
-    }, { onConflict: 'user_id,document_type,dedupe_key' });
+    .upsert(upsertRow, { onConflict: 'user_id,document_type,dedupe_key' });
   if (error) throw badRequest(error.message);
   return entry;
 };
@@ -1207,8 +1274,13 @@ export const emitirNota = async (userId, input) => {
     phase = 'validate';
     validatePayloadByDocumentType(payload, documentType);
 
+    let emitPayload = payload;
+    if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
+      emitPayload = normalizePlugnotasNfePayload(payload);
+    }
+
     phase = 'plugnotas_emit';
-    const response = await adapter.emitir(payload);
+    const response = await adapter.emitir(emitPayload);
     const plugnotasId = extractPlugNotasId(response);
     const idIntegracao = extractIntegracaoId(response) || payload.idIntegracao;
     const status = extractPlugNotasStatus(response);
@@ -1238,14 +1310,14 @@ export const emitirNota = async (userId, input) => {
         || normalizeDoc(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || ''),
       cnpj_tomador: tomadorDoc
         || normalizeDoc(payload?.tomador?.cpfCnpj || payload?.destinatario?.cpfCnpj || ''),
-      payload_json: payload,
+      payload_json: emitPayload,
       response_json: response,
       metadata_json: Object.keys(metadata).length ? metadata : null
     });
 
     try {
-      await upsertClienteCatalogo(userId, payload, { documentType });
-      await touchProdutosCatalogoOnEmit(userId, payload, { documentType });
+      await upsertClienteCatalogo(userId, emitPayload, { documentType });
+      await touchProdutosCatalogoOnEmit(userId, emitPayload, { documentType });
     } catch (error) {
       console.warn(
         `[mei-notas] Falha ao atualizar catalogo ${documentType}`,
