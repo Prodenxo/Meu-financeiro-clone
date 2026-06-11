@@ -25,6 +25,11 @@ export interface MeiPeriod {
   errorMessage?: string | null;
 }
 
+/** Competências indisponíveis (antes da abertura MEI, futuro, etc.) não entram na lista da UI. */
+export function filterMeiPeriodsForDisplay(periods: MeiPeriod[]): MeiPeriod[] {
+  return periods.filter((period) => period.status !== 'indisponivel');
+}
+
 /** Dados mínimos NFS-e persistidos em `user_mei_certificates` (espelho do formulário + documento opcional). */
 export type NfseEmitenteSnapshot = Pick<
   NfEmissionCompanyForm,
@@ -80,6 +85,23 @@ export interface ParcelamentoItem {
   situacao?: string;
   dataSituacao?: string;
   modalidade?: string;
+}
+
+export type ParcelamentoParcelaSituacao = 'pago' | 'a_pagar' | 'liberada' | 'indisponivel';
+
+export interface ParcelamentoParcelaOption {
+  periodoApuracao: string;
+  label: string;
+  pago?: boolean;
+  emAberto?: boolean;
+  liberadaParaImpressao?: boolean;
+  situacaoParcela?: ParcelamentoParcelaSituacao;
+  valor?: number;
+  dataArrecadacao?: string;
+}
+
+export interface ParcelamentoParcelasResponse {
+  parcelas: ParcelamentoParcelaOption[];
 }
 
 export interface ParcelamentosResponse {
@@ -217,15 +239,36 @@ export async function validateMeiGuide(
   });
 }
 
-export async function downloadParcelamentoPdf(
+export async function fetchParcelamentoParcelas(
   numero: string,
   cnpj?: string,
   modalidade?: string,
   contribuinte?: { numero: string; tipo: number }
+): Promise<ParcelamentoParcelasResponse> {
+  const params: Record<string, string> = {};
+  if (cnpj) params.cnpj = cnpj;
+  if (modalidade) params.modalidade = modalidade;
+  if (contribuinte) {
+    params.contribuinteNumero = contribuinte.numero;
+    params.contribuinteTipo = String(contribuinte.tipo);
+  }
+  const query = new URLSearchParams(params);
+  return apiClient.get<ParcelamentoParcelasResponse>(
+    `/mei-guide/parcelamentos/${encodeURIComponent(numero)}/parcelas?${query.toString()}`
+  );
+}
+
+export async function downloadParcelamentoPdf(
+  numero: string,
+  cnpj?: string,
+  modalidade?: string,
+  contribuinte?: { numero: string; tipo: number },
+  parcela?: string
 ): Promise<{ blob: Blob; filename: string | null }> {
   const params: Record<string, string> = {};
   if (cnpj) params.cnpj = cnpj;
   if (modalidade) params.modalidade = modalidade;
+  if (parcela) params.parcela = parcela;
   if (contribuinte) {
     params.contribuinteNumero = contribuinte.numero;
     params.contribuinteTipo = String(contribuinte.tipo);

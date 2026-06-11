@@ -141,16 +141,73 @@
   }
 
   .planner-tab-active {
-    @apply bg-blue-600 text-white shadow-soft dark:text-white;
+    @apply bg-blue-600 text-white dark:text-white;
   }
 
-  /* Mei Infinito — Fluxo do MEI: foco teclado + reforço do tab ativo em modo escuro (FR-UX-MEI-05) */
+  /* Mei — abas do fluxo: borda só, sem sombra/anel duplicado */
   .mei-fluxo-tab {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-blue-400 dark:focus-visible:ring-offset-slate-900;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70 focus-visible:ring-offset-2 dark:focus-visible:ring-blue-400 dark:focus-visible:ring-offset-slate-900;
   }
 
   .mei-fluxo-tab-active {
-    @apply ring-2 ring-blue-500/90 ring-offset-2 ring-offset-white dark:ring-blue-400 dark:ring-offset-slate-900;
+    @apply border border-blue-500/40 dark:border-blue-400/50;
+  }
+
+  .mei-fluxo-tab-row {
+    @apply flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scroll-smooth;
+    scrollbar-width: none;
+  }
+
+  .mei-fluxo-tab-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mei-fluxo-pill {
+    @apply inline-flex shrink-0 items-center gap-2 rounded-full border border-slate-200/80 bg-slate-50/90 px-4 py-2 text-sm font-semibold text-slate-600 transition dark:border-slate-700/80 dark:bg-slate-900/50 dark:text-slate-300;
+  }
+
+  .mei-fluxo-pill-active {
+    @apply border-blue-500/50 bg-blue-600 text-white dark:border-blue-400/60 dark:bg-blue-600 dark:text-white;
+  }
+
+  .mei-period-nav {
+    @apply flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-3 dark:border-slate-700/80 dark:bg-slate-900/50;
+  }
+
+  .mei-period-nav-btn {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200/90 bg-white text-xl font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700;
+  }
+
+  .mei-period-nav-label {
+    @apply min-w-0 flex-1 text-center text-base font-bold text-slate-800 dark:text-slate-100;
+  }
+
+  .mei-simple-card {
+    @apply space-y-4 rounded-xl border border-slate-200/80 bg-slate-50/90 p-4 dark:border-slate-700/80 dark:bg-slate-900/50;
+  }
+
+  .mei-das-panel {
+    @apply mx-auto w-full max-w-lg gap-6;
+  }
+
+  .mei-das-alert {
+    @apply mx-auto mb-4 flex w-full max-w-lg gap-3 rounded-xl border border-amber-200/80 bg-amber-50/90 p-4 dark:border-amber-900/40 dark:bg-amber-950/30;
+  }
+
+  .mei-das-alert-success {
+    @apply border-emerald-200/80 bg-emerald-50/90 dark:border-emerald-900/40 dark:bg-emerald-950/30;
+  }
+
+  .mei-das-step {
+    @apply flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-100;
+  }
+
+  .mei-das-step-badge {
+    @apply flex h-7 w-7 items-center justify-center rounded-full border border-cyan-500/30 bg-cyan-500/10 text-sm font-extrabold text-cyan-700 dark:text-cyan-300;
+  }
+
+  .mei-parc-mobile-card {
+    @apply rounded-xl border border-slate-200/80 bg-white/90 p-4 dark:border-slate-700/80 dark:bg-slate-900/40;
   }
 
   .admin-page-shell {
@@ -187,6 +244,79 @@
 
   .admin-section-card {
     @apply planner-card p-4 md:p-6 space-y-3 md:space-y-4 bg-gradient-to-br from-white/90 to-slate-50/70 dark:from-slate-900/75 dark:to-slate-950/50;
+  }
+
+  /** Configurações — tom calmo: superfícies leves, tipografia média, ações discretas */
+  .settings-shell {
+    @apply space-y-6;
+  }
+
+  .settings-heading {
+    @apply text-2xl font-medium tracking-tight text-slate-800 dark:text-slate-100;
+  }
+
+  .settings-lead {
+    @apply mt-1 text-sm text-slate-500 dark:text-slate-400;
+  }
+
+  .settings-grid {
+    @apply grid gap-5 xl:grid-cols-2;
+  }
+
+  .settings-panel {
+    @apply rounded-2xl border border-slate-200/35 bg-white/35 p-5 shadow-none backdrop-blur-sm dark:border-slate-700/30 dark:bg-slate-900/15;
+  }
+
+  .settings-panel-title {
+    @apply text-base font-medium text-slate-800 dark:text-slate-100;
+  }
+
+  .settings-panel-desc {
+    @apply mt-1 mb-4 text-sm leading-relaxed text-slate-500 dark:text-slate-400;
+  }
+
+  .settings-field {
+    @apply border-b border-slate-200/30 py-4 dark:border-slate-700/25;
+  }
+
+  .settings-field-label {
+    @apply mb-2 block text-sm font-normal text-slate-600 dark:text-slate-400;
+  }
+
+  .settings-field-row {
+    @apply flex flex-col gap-2.5 sm:flex-row sm:items-center;
+  }
+
+  .settings-field-input {
+    @apply min-w-0 flex-1 [&_.form-control]:!border-slate-200/60 [&_.form-control]:!bg-white/50 [&_.form-control]:!shadow-none dark:[&_.form-control]:!border-slate-600/40 dark:[&_.form-control]:!bg-slate-950/20;
+  }
+
+  .settings-save-btn {
+    @apply inline-flex shrink-0 items-center justify-center rounded-full border border-slate-200/60 bg-white/40 px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-white/70 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600/40 dark:bg-slate-900/25 dark:text-slate-300 dark:hover:bg-slate-800/40;
+  }
+
+  .settings-hint {
+    @apply mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400;
+  }
+
+  .settings-link-row {
+    @apply -mx-1 flex w-[calc(100%+0.5rem)] items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-slate-100/50 dark:hover:bg-slate-800/25;
+  }
+
+  .settings-muted-row {
+    @apply flex items-center justify-between gap-4 py-1;
+  }
+
+  .settings-text-action {
+    @apply text-sm font-medium text-blue-600/85 transition hover:text-blue-700 disabled:opacity-45 dark:text-blue-400/85 dark:hover:text-blue-300;
+  }
+
+  .settings-text-danger {
+    @apply text-sm font-medium text-rose-600/80 transition hover:text-rose-700 dark:text-rose-400/80 dark:hover:text-rose-300;
+  }
+
+  .settings-status-ok {
+    @apply flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-400;
   }
 
   .admin-section-header {

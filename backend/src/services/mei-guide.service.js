@@ -2205,7 +2205,7 @@ const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
     }
   }
 
-  return items;
+  return items.filter((item) => item.status !== 'indisponivel');
 };
 
 export const __buildPeriodsFromPdfForTests = async (userId, options = {}, dependencies = {}) => {

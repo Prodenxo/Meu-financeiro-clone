@@ -180,11 +180,28 @@ export interface CnpjLookupResult {
   opcaoSimples?: boolean | null;
 }
 
-/** Consulta dados cadastrais (PlugNotas com fallback BrasilAPI) via backend. */
+const shouldFallbackCnpjLookup = (error: unknown) => {
+  if (!(error instanceof Error)) return true;
+  const msg = error.message.toLowerCase();
+  if (msg.includes('not authenticated') || msg.includes('não autenticado')) return false;
+  if (msg.includes('inválido') || msg.includes('14 dígitos')) return false;
+  if (msg.includes('não encontrado')) return false;
+  return true;
+};
+
+/** Consulta dados cadastrais (PlugNotas + BrasilAPI no backend; fallback direto BrasilAPI no browser). */
 export async function lookupEmpresaCnpj(cnpj: string): Promise<CnpjLookupResult> {
   const digits = cnpj.replace(/\D/g, '');
   if (digits.length !== 14) throw new Error('CNPJ deve ter 14 dígitos.');
-  return apiClient.get<CnpjLookupResult>(`/users/empresas/cnpj-lookup/${digits}`);
+
+  try {
+    return await apiClient.get<CnpjLookupResult>(`/users/empresas/cnpj-lookup/${digits}`);
+  } catch (backendError) {
+    if (!shouldFallbackCnpjLookup(backendError)) throw backendError;
+    const { fetchBrasilApiCnpj, mapBrasilApiToCnpjLookupResult } = await import('../utils/brasilApi');
+    const raw = await fetchBrasilApiCnpj(digits);
+    return mapBrasilApiToCnpjLookupResult(raw, digits);
+  }
 }
 
 export async function createUser(input: {

@@ -1,4 +1,4 @@
-import {
+﻿import {
   useCallback,
   useEffect,
   useId,
@@ -5374,7 +5374,7 @@ export default function GuidesMei() {
             </div>
           ) : (
             <>
-              <div className="space-y-3 lg:hidden">
+              <div className="space-y-3">
                 {filteredNfseList.map((item) => {
                   const statusKey = getNfseStatusKey(item.status);
                   const rowBusy = isNfseRowBusy(item.id);
@@ -5426,84 +5426,6 @@ export default function GuidesMei() {
                     </div>
                   );
                 })}
-              </div>
-              <div className="hidden lg:block" aria-label="Lista de notas em tabela">
-                <div className="admin-table-shell">
-                  <div className="admin-table-wrap">
-                    <table className="admin-table w-full">
-                      <thead className="admin-table-head">
-                        <tr>
-                          <th className="admin-table-cell text-left">ID / Integração</th>
-                          <th className="admin-table-cell text-left">Data</th>
-                          <th className="admin-table-cell text-left">Tipo</th>
-                          <th className="admin-table-cell text-left">Status</th>
-                          <th className="admin-table-cell text-right">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredNfseList.map((item) => {
-                          const statusKey = getNfseStatusKey(item.status);
-                          const rowBusy = isNfseRowBusy(item.id);
-                          const metadata = toNfseMetadata(item.metadata_json);
-                          const reviewRequested = Boolean(metadata.reviewRequested);
-                          const isArchived = Boolean(item.archived_at);
-                          return (
-                            <tr key={item.id} className="admin-table-row" aria-busy={rowBusy || undefined}>
-                              <td className="admin-table-cell align-top">
-                                <div className="font-semibold text-slate-700 dark:text-gray-200">
-                                  {item.id_integracao || item.plugnotas_id || item.id}
-                                </div>
-                                {item.protocol ? (
-                                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                                    Protocolo {item.protocol}
-                                  </div>
-                                ) : null}
-                              </td>
-                              <td className="admin-table-cell align-top text-xs text-slate-600 dark:text-slate-300">
-                                {formatDateTime(item.created_at)}
-                              </td>
-                              <td className="admin-table-cell align-top">
-                                <span className={meiFiscalDocumentTypeBadgeClass(item.document_type)}>
-                                  {meiFiscalDocumentTypeShortLabel(item.document_type)}
-                                </span>
-                              </td>
-                              <td className="admin-table-cell align-top">
-                                <div className="flex flex-wrap gap-1">
-                                  <span className={getNfseStatusBadgeClass(item.status)}>
-                                    {formatNfseStatus(item.status)}
-                                  </span>
-                                  {isArchived && <span className="admin-badge-neutral">Arquivada</span>}
-                                  {reviewRequested && <span className="admin-badge-warning">Revisão</span>}
-                                </div>
-                              </td>
-                              <td className="admin-table-cell align-top">
-                                <MeiNfseListRowActions
-                                  item={item}
-                                  statusKey={statusKey}
-                                  rowBusy={rowBusy}
-                                  reviewRequested={reviewRequested}
-                                  isArchived={isArchived}
-                                  moreMenuOpenId={nfseMoreMenuOpenId}
-                                  setMoreMenuOpenId={setNfseMoreMenuOpenId}
-                                  isNfseActionLoading={isNfseActionLoading}
-                                  onSync={() => void handleSyncNfse(item.id)}
-                                  onDownloadPdf={() => void handleDownloadNfsePdf(item)}
-                                  onDownloadXml={() => void handleDownloadNfseXml(item)}
-                                  onToggleReview={() => void handleToggleReviewNfse(item)}
-                                  onCancel={() => void handleCancelNfse(item)}
-                                  onArchive={() => void handleArchiveNfse(item)}
-                                  onMenuKeyDown={handleNfseMoreMenuKeyDown}
-                                  menuFirstItemRef={nfseMoreMenuFirstItemRef}
-                                  layout="table"
-                                />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
               </div>
             </>
           )}

@@ -37,6 +37,7 @@ vi.mock('../store/authStore', () => ({
 }));
 
 vi.mock('../services/guidesMeiService', () => ({
+  filterMeiPeriodsForDisplay: (periods: unknown[]) => periods,
   downloadMeiGuide: vi.fn(async () => ({ blob: new Blob(), filename: 'guia-mei.pdf' })),
   downloadParcelamentoPdf: vi.fn(async () => ({ blob: new Blob(), filename: 'p.pdf' })),
   fetchMeiCertificateStatus: vi.fn(async () => ({
@@ -129,24 +130,16 @@ describe('GuidesMei limite MEI (FR-LIM-08)', () => {
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain('Mais ações');
+      expect(container.textContent).toContain('Cancelar nota');
     });
 
-    const moreBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Mais ações'
+    const cancelBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Cancelar nota')
     );
-    expect(moreBtn).toBeTruthy();
-    await act(async () => {
-      moreBtn!.click();
-    });
-
-    const cancelItem = Array.from(container.querySelectorAll('[role="menuitem"]')).find(
-      (el) => el.textContent?.includes('Cancelar nota')
-    );
-    expect(cancelItem).toBeTruthy();
+    expect(cancelBtn).toBeTruthy();
 
     await act(async () => {
-      cancelItem!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      cancelBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await act(async () => {
       await Promise.resolve();

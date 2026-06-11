@@ -1,4 +1,5 @@
 import { badRequest } from '../utils/errors.js';
+import { isValidCnpj } from '../utils/cpf-cnpj.js';
 import { env } from '../config/env.js';
 import { getPlugnotasRootUrl } from './plugnotas/root-url.js';
 
@@ -6,6 +7,21 @@ const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
 /** Endpoint público da BrasilAPI para consulta de CNPJ (v1). */
 const BRASILAPI_URL = 'https://brasilapi.com.br/api/cnpj/v1';
+
+const BRASILAPI_HEADERS = {
+  Accept: 'application/json',
+  'User-Agent': 'MeuFinanceiro/1.0 (+cnpj-lookup)'
+};
+
+const brasilApiStatusMessage = (status) => {
+  if (status === 403) {
+    return 'Consulta de CNPJ indisponível no servidor (bloqueio temporário). Tente novamente em instantes.';
+  }
+  if (status === 429) {
+    return 'Muitas consultas de CNPJ. Aguarde alguns segundos e tente novamente.';
+  }
+  return `BrasilAPI retornou status ${status}.`;
+};
 
 const padZeros = (value, length) => {
   const str = String(value || '').replace(/\D/g, '');
@@ -24,13 +40,16 @@ export const lookupCnpjBrasilApi = async (cnpjInput) => {
   if (cnpj.length !== 14) {
     throw badRequest('CNPJ inválido. Informe 14 dígitos.');
   }
+  if (!isValidCnpj(cnpj)) {
+    throw badRequest('CNPJ inválido. Verifique os dígitos informados.');
+  }
 
   const url = `${BRASILAPI_URL}/${cnpj}`;
   let response;
   try {
     response = await fetch(url, {
       method: 'GET',
-      headers: { Accept: 'application/json' }
+      headers: BRASILAPI_HEADERS
     });
   } catch (err) {
     throw badRequest('Falha ao consultar BrasilAPI. Verifique sua conexão.');
@@ -40,7 +59,7 @@ export const lookupCnpjBrasilApi = async (cnpjInput) => {
     throw badRequest('CNPJ não encontrado na base da Receita Federal.');
   }
   if (!response.ok) {
-    throw badRequest(`BrasilAPI retornou status ${response.status}.`);
+    throw badRequest(brasilApiStatusMessage(response.status));
   }
 
   const raw = await response.json();
@@ -90,6 +109,9 @@ export const lookupCnpjPlugnotas = async (cnpjInput) => {
   const cnpj = normalizeDoc(cnpjInput);
   if (cnpj.length !== 14) {
     throw badRequest('CNPJ inválido. Informe 14 dígitos.');
+  }
+  if (!isValidCnpj(cnpj)) {
+    throw badRequest('CNPJ inválido. Verifique os dígitos informados.');
   }
   if (!env.PLUGNOTAS_API_KEY) {
     throw badRequest('PlugNotas não configurado.');

@@ -117,7 +117,7 @@ test('mei-guide marca indisponível quando SERPRO indica não optante', async ()
   });
 
   assert.equal(persistedPaid, 0);
-  assert.ok(items.some((item) => item.status === 'indisponivel'));
+  assert.equal(items.filter((item) => item.status === 'indisponivel').length, 0);
   assert.equal(items.filter((item) => item.status === 'pago').length, 0);
 });
 

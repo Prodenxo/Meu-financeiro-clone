@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchBrasilApiCnpj } from './brasilApi';
+import { fetchBrasilApiCnpj, mapBrasilApiToCnpjLookupResult } from './brasilApi';
 
 const VALID_CNPJ = '11222333000181';
 const MOCK_RESPONSE = {
@@ -69,6 +69,26 @@ describe('fetchBrasilApiCnpj', () => {
     await expect(fetchBrasilApiCnpj(VALID_CNPJ)).rejects.toThrow('não encontrado');
   });
 
+  it('lança erro legível quando CNPJ inválido (400)', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ message: 'CNPJ 22.873.938/0001-95 inválido.' }),
+    } as Response);
+
+    await expect(fetchBrasilApiCnpj(VALID_CNPJ)).rejects.toThrow('CNPJ inválido');
+  });
+
+  it('lança erro legível quando bloqueio temporário (403)', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: async () => ({}),
+    } as Response);
+
+    await expect(fetchBrasilApiCnpj(VALID_CNPJ)).rejects.toThrow('temporariamente indisponível');
+  });
+
   it('lança erro legível quando rate limit (429)', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
@@ -84,5 +104,13 @@ describe('fetchBrasilApiCnpj', () => {
     vi.mocked(fetch).mockRejectedValueOnce(abortError);
 
     await expect(fetchBrasilApiCnpj(VALID_CNPJ)).rejects.toThrow('tempo limite');
+  });
+});
+
+describe('mapBrasilApiToCnpjLookupResult', () => {
+  it('prefere codigo_municipio_ibge para codigoCidade', () => {
+    const mapped = mapBrasilApiToCnpjLookupResult(MOCK_RESPONSE, VALID_CNPJ);
+    expect(mapped.endereco.codigoCidade).toBe('3550308');
+    expect(mapped.razaoSocial).toBe('EMPRESA TESTE LTDA');
   });
 });

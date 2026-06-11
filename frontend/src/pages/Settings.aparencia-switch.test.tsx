@@ -74,7 +74,7 @@ describe('Settings — Aparência (STORY-VIS-THEME-05)', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
-  it('trilho: estado off — borda token + bg-slate-300; estado on — bg-blue-600 (FR-VIS-THEME-08)', () => {
+  it('trilho: estado off — slate suave; estado on — azul suave (FR-VIS-THEME-08)', () => {
     render(
       <MemoryRouter>
         <Settings />
@@ -85,11 +85,11 @@ describe('Settings — Aparência (STORY-VIS-THEME-05)', () => {
     const track = sw.querySelector('[aria-hidden="true"]');
     expect(track).toBeTruthy();
     const cn = track!.className;
-    expect(cn).toMatch(/bg-slate-300/);
-    expect(cn).toMatch(/color-surface-border/);
+    expect(cn).toMatch(/bg-slate-200\/80/);
+    expect(cn).toMatch(/border-slate-200\/80/);
 
     fireEvent.click(sw);
-    expect(track!.className).toMatch(/bg-blue-600/);
+    expect(track!.className).toMatch(/bg-blue-500\/90|bg-blue-600\/80/);
   });
 
   it('foco: switch é focável (tabIndex nativo do botão); anel focus-visible vem de index.css', () => {

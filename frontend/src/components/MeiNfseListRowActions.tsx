@@ -4,7 +4,14 @@ import type {
   RefObject,
   SetStateAction
 } from 'react';
-import { RefreshCw } from 'lucide-react';
+import {
+  Archive,
+  Download,
+  FileCode2,
+  Pencil,
+  RefreshCw,
+  XCircle,
+} from 'lucide-react';
 import { notaFiscalPodeSincronizarEstadoEmissor, type NfseRecord } from '../services/meiNotasService';
 
 export type MeiNfseListRowActionsProps = {
@@ -24,12 +31,23 @@ export type MeiNfseListRowActionsProps = {
   onArchive: () => void;
   onMenuKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
   menuFirstItemRef: RefObject<HTMLButtonElement | null>;
-  /** `table`: layout compacto para célula de tabela desktop. */
   layout?: 'card' | 'table';
 };
 
+type ActionBtn = {
+  key: string;
+  label: string;
+  loadingLabel: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  disabled: boolean;
+  loading: boolean;
+  destructive?: boolean;
+  title?: string;
+};
+
 /**
- * Ações da linha na lista de notas (NFSE / NFE / NFCE): paridade cartão e tabela — mesmos handlers.
+ * Ações da linha na lista de notas — sempre com rótulo visível (sem ícone solto).
  */
 export function MeiNfseListRowActions({
   item,
@@ -37,7 +55,6 @@ export function MeiNfseListRowActions({
   rowBusy,
   reviewRequested,
   isArchived,
-  moreMenuOpenId,
   setMoreMenuOpenId,
   isNfseActionLoading,
   onSync,
@@ -46,150 +63,124 @@ export function MeiNfseListRowActions({
   onToggleReview,
   onCancel,
   onArchive,
-  onMenuKeyDown,
-  menuFirstItemRef,
   layout = 'card'
 }: MeiNfseListRowActionsProps) {
-  /** Chave única por vista — cartão e tabela coexistem no DOM (responsive). */
-  const menuKey = `${layout}:${item.id}`;
-  const menuDomId = `nfse-more-actions-${layout}-${item.id}`;
-  const isOpen = moreMenuOpenId === menuKey;
-  const wrap =
-    layout === 'table'
-      ? 'flex flex-wrap items-center justify-end gap-1'
-      : 'flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start';
-  const btn =
-    layout === 'table'
-      ? 'planner-button-secondary-compact whitespace-nowrap px-2 py-1 text-xs'
-      : 'planner-button-secondary-compact w-full sm:w-auto';
-
   const podeSyncEmissor = notaFiscalPodeSincronizarEstadoEmissor(item);
   const syncLoading = isNfseActionLoading(`${item.id}:sync`);
-  const syncDisabled = rowBusy || !podeSyncEmissor;
-  const syncLabel = 'Actualizar estado';
-  const syncAriaLabel = `${syncLabel} da nota fiscal (${item.document_type || 'NFSE'})`;
+  const processando = statusKey === 'processando';
+
+  const actions: ActionBtn[] = [
+    {
+      key: 'sync',
+      label: 'Atualizar status',
+      loadingLabel: 'Atualizando…',
+      icon: <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${syncLoading ? 'animate-spin' : ''}`} aria-hidden />,
+      onClick: () => {
+        setMoreMenuOpenId(null);
+        onSync();
+      },
+      disabled: rowBusy || !podeSyncEmissor,
+      loading: syncLoading,
+      title: !podeSyncEmissor
+        ? 'Não dá para atualizar: falta identificador no emissor'
+        : 'Consultar situação da nota na Receita / emissor',
+    },
+    {
+      key: 'pdf',
+      label: 'Baixar PDF',
+      loadingLabel: 'Baixando PDF…',
+      icon: <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />,
+      onClick: () => {
+        setMoreMenuOpenId(null);
+        onDownloadPdf();
+      },
+      disabled: rowBusy || processando,
+      loading: isNfseActionLoading(`${item.id}:pdf`),
+    },
+    {
+      key: 'xml',
+      label: 'Baixar XML',
+      loadingLabel: 'Baixando XML…',
+      icon: <FileCode2 className="h-3.5 w-3.5 shrink-0" aria-hidden />,
+      onClick: () => {
+        setMoreMenuOpenId(null);
+        onDownloadXml();
+      },
+      disabled: rowBusy || processando,
+      loading: isNfseActionLoading(`${item.id}:xml`),
+    },
+    {
+      key: 'review',
+      label: reviewRequested ? 'Remover revisão' : 'Marcar revisão',
+      loadingLabel: 'Salvando…',
+      icon: <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden />,
+      onClick: () => {
+        setMoreMenuOpenId(null);
+        onToggleReview();
+      },
+      disabled: rowBusy || isArchived,
+      loading: isNfseActionLoading(`${item.id}:update`),
+    },
+    {
+      key: 'cancel',
+      label: statusKey === 'cancelamento_pendente' ? 'Reenviar cancelamento' : 'Cancelar nota',
+      loadingLabel: 'Cancelando…',
+      icon: <XCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />,
+      onClick: () => {
+        setMoreMenuOpenId(null);
+        onCancel();
+      },
+      disabled: rowBusy || statusKey === 'cancelado',
+      loading: isNfseActionLoading(`${item.id}:cancel`),
+      destructive: true,
+    },
+    {
+      key: 'archive',
+      label: isArchived ? 'Desarquivar' : 'Arquivar',
+      loadingLabel: 'Salvando…',
+      icon: <Archive className="h-3.5 w-3.5 shrink-0" aria-hidden />,
+      onClick: () => {
+        setMoreMenuOpenId(null);
+        onArchive();
+      },
+      disabled: rowBusy,
+      loading: isNfseActionLoading(`${item.id}:archive`),
+    },
+  ];
+
+  const wrapClass =
+    layout === 'table'
+      ? 'flex flex-wrap items-center justify-end gap-1.5'
+      : 'flex flex-wrap gap-2';
 
   return (
-    <div className={wrap}>
-      <button
-        type="button"
-        className={`${btn} inline-flex items-center justify-center gap-1.5`}
-        onClick={() => {
-          setMoreMenuOpenId(null);
-          onSync();
-        }}
-        disabled={syncDisabled}
-        aria-busy={syncLoading || undefined}
-        aria-label={syncAriaLabel}
-        title={
-          !podeSyncEmissor
-            ? 'Não é possível actualizar: falta identificador no emissor (ID, protocolo ou integração com CNPJ do prestador).'
-            : undefined
-        }
-      >
-        <RefreshCw
-          className={`h-3.5 w-3.5 shrink-0 ${syncLoading ? 'animate-spin' : ''}`}
-          aria-hidden
-        />
-        <span>{syncLoading ? 'A actualizar estado…' : syncLabel}</span>
-      </button>
-      <button
-        type="button"
-        className={btn}
-        onClick={() => {
-          setMoreMenuOpenId(null);
-          onDownloadPdf();
-        }}
-        disabled={rowBusy || statusKey === 'processando'}
-        aria-disabled={rowBusy || statusKey === 'processando'}
-      >
-        {isNfseActionLoading(`${item.id}:pdf`) ? 'Baixando PDF...' : 'Baixar PDF'}
-      </button>
-      <div
-        className={layout === 'table' ? 'relative inline-block' : 'relative w-full sm:w-auto'}
-        data-nfse-more-menu-root={menuKey}
-      >
+    <div className={layout === 'card' ? 'mt-3 border-t border-slate-200/70 pt-3 dark:border-slate-700/60' : undefined}>
+      {layout === 'card' ? (
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          O que fazer com esta nota
+        </p>
+      ) : null}
+      <div className={wrapClass}>
+      {actions.map((action) => (
         <button
+          key={action.key}
           type="button"
-          className={btn}
-          aria-haspopup="menu"
-          aria-expanded={isOpen}
-          aria-controls={menuDomId}
-          onClick={() => setMoreMenuOpenId((open) => (open === menuKey ? null : menuKey))}
+          className={[
+            'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition',
+            action.destructive
+              ? 'border-red-200/80 bg-red-50/80 text-red-700 hover:bg-red-100/80 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300'
+              : 'border-slate-200/90 bg-white/80 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-200 dark:hover:bg-slate-800',
+            action.disabled ? 'cursor-not-allowed opacity-45' : '',
+          ].join(' ')}
+          onClick={action.onClick}
+          disabled={action.disabled || action.loading}
+          aria-busy={action.loading || undefined}
+          title={action.title}
         >
-          Mais ações
+          {action.icon}
+          <span>{action.loading ? action.loadingLabel : action.label}</span>
         </button>
-        {isOpen ? (
-          <div
-            id={menuDomId}
-            role="menu"
-            aria-label={`Mais ações para a nota ${item.id_integracao || item.plugnotas_id || item.id}`}
-            className="absolute right-0 top-full z-20 mt-1 flex min-w-[220px] flex-col gap-0.5 rounded-lg border border-slate-200/90 bg-white p-1 shadow-lg dark:border-slate-600 dark:bg-slate-900"
-            onKeyDown={onMenuKeyDown}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className="rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
-              ref={isOpen ? (el) => { menuFirstItemRef.current = el; } : undefined}
-              disabled={rowBusy || statusKey === 'processando'}
-              aria-disabled={rowBusy || statusKey === 'processando'}
-              onClick={() => {
-                setMoreMenuOpenId(null);
-                onDownloadXml();
-              }}
-            >
-              {isNfseActionLoading(`${item.id}:xml`) ? 'Baixando XML...' : 'Baixar XML'}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
-              disabled={rowBusy || isArchived}
-              aria-disabled={rowBusy || isArchived}
-              onClick={() => {
-                setMoreMenuOpenId(null);
-                onToggleReview();
-              }}
-            >
-              {isNfseActionLoading(`${item.id}:update`)
-                ? 'Salvando...'
-                : reviewRequested
-                  ? 'Remover revisão'
-                  : 'Marcar revisão'}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
-              disabled={rowBusy || statusKey === 'cancelado' || statusKey === 'cancelamento_pendente'}
-              aria-disabled={rowBusy || statusKey === 'cancelado' || statusKey === 'cancelamento_pendente'}
-              onClick={() => {
-                setMoreMenuOpenId(null);
-                onCancel();
-              }}
-            >
-              {isNfseActionLoading(`${item.id}:cancel`) ? 'Cancelando...' : 'Cancelar nota'}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
-              disabled={rowBusy}
-              aria-disabled={rowBusy}
-              onClick={() => {
-                setMoreMenuOpenId(null);
-                onArchive();
-              }}
-            >
-              {isNfseActionLoading(`${item.id}:archive`)
-                ? 'Salvando...'
-                : isArchived
-                  ? 'Desarquivar'
-                  : 'Arquivar'}
-            </button>
-          </div>
-        ) : null}
+      ))}
       </div>
     </div>
   );

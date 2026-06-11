@@ -42,25 +42,23 @@ describe('MeiNfseListRowActions — FR-GUIA-FISC-15 refresh', () => {
     cleanup();
   });
 
-  it('expõe botão Actualizar estado com aria-label multitipo', () => {
+  it('expõe botão Atualizar status com rótulo visível', () => {
     renderRow();
-    const btn = screen.getByRole('button', { name: /Actualizar estado da nota fiscal \(NFE\)/i });
+    const btn = screen.getByRole('button', { name: /Atualizar status/i });
     expect(btn).toBeTruthy();
   });
 
-  it('desactiva Actualizar estado quando não há identificadores no emissor', () => {
+  it('desactiva Atualizar status quando não há identificadores no emissor', () => {
     renderRow({
       item: { id: 'n1', user_id: 'u1', document_type: 'NFCE' } as NfseRecord
     });
-    const btn = screen.getByRole('button', { name: /Actualizar estado da nota fiscal \(NFCE\)/i });
+    const btn = screen.getByRole('button', { name: /Atualizar status/i });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('invoca onSync ao clicar quando há plugnotas_id', () => {
     const { onSync } = renderRow();
-    fireEvent.click(
-      screen.getByRole('button', { name: /Actualizar estado da nota fiscal \(NFE\)/i })
-    );
+    fireEvent.click(screen.getByRole('button', { name: /Atualizar status/i }));
     expect(onSync).toHaveBeenCalledTimes(1);
   });
 });

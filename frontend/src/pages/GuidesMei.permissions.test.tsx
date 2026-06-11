@@ -43,6 +43,7 @@ vi.mock('../store/authStore', () => ({
 }));
 
 vi.mock('../services/guidesMeiService', () => ({
+  filterMeiPeriodsForDisplay: (periods: unknown[]) => periods,
   downloadMeiGuide: vi.fn(async () => ({ blob: new Blob(), filename: 'guia-mei.pdf' })),
   fetchMeiCertificateStatus: vi.fn(async () => ({
     hasUserCertificate: false,
@@ -674,7 +675,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
   });
 
-  it('workspace NFS-e (FR-NFSE-UX-P1): filtros com htmlFor e menu Mais ações na linha', async () => {
+  it('workspace NFS-e (FR-NFSE-UX-P1): filtros com htmlFor e ações nomeadas na linha', async () => {
     listarNfseMock.mockResolvedValueOnce([
       {
         id: 'nfse-row-1',
@@ -710,22 +711,11 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain('Mais ações');
+      expect(container.textContent).toContain('O que fazer com esta nota');
+      expect(container.textContent).toContain('Baixar PDF');
+      expect(container.textContent).toContain('Baixar XML');
+      expect(container.textContent).toContain('Cancelar nota');
     });
-
-    const moreBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Mais ações'
-    );
-    expect(moreBtn).toBeTruthy();
-    expect(moreBtn!.getAttribute('aria-haspopup')).toBe('menu');
-    expect(moreBtn!.getAttribute('aria-expanded')).toBe('false');
-
-    await act(async () => {
-      moreBtn!.click();
-    });
-
-    expect(moreBtn!.getAttribute('aria-expanded')).toBe('true');
-    expect(container.textContent).toContain('Baixar XML');
 
     await act(async () => {
       root.unmount();
@@ -817,12 +807,13 @@ describe('GuidesMei permissões NFSe', () => {
     });
   });
 
-  it('workspace NFS-e (FR-NFSE-UX-P1 / QA): setas no menu Mais ações movem foco entre itens', async () => {
+  it('workspace NFS-e (FR-NFSE-UX-P1 / QA): ações da nota aparecem com rótulo visível', async () => {
     listarNfseMock.mockResolvedValueOnce([
       {
         id: 'nfse-row-1',
         user_id: 'user-1',
         status: 'concluido',
+        plugnotas_id: 'plug-1',
         created_at: '2026-01-15T12:00:00.000Z'
       }
     ]);
@@ -846,55 +837,11 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain('Mais ações');
+      expect(container.textContent).toContain('O que fazer com esta nota');
+      expect(container.textContent).toContain('Atualizar status');
+      expect(container.textContent).toContain('Baixar PDF');
+      expect(container.textContent).toContain('Cancelar nota');
     });
-
-    const moreBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Mais ações'
-    );
-    await act(async () => {
-      moreBtn!.click();
-    });
-
-    const menu = await waitFor(() =>
-      container.querySelector('#nfse-more-actions-card-nfse-row-1')
-    );
-    expect(menu).toBeTruthy();
-
-    const items = menu!.querySelectorAll('button[role="menuitem"]');
-    expect(items.length).toBeGreaterThanOrEqual(2);
-
-    // Evitar corrida com o rAF do componente que foca o 1.º menuitem ao abrir.
-    await act(async () => {
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      });
-    });
-    await waitFor(() => expect(document.activeElement).toBe(items[0]));
-
-    await act(async () => {
-      menu!.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
-      );
-    });
-    await waitFor(() => expect(document.activeElement).toBe(items[1]));
-
-    await act(async () => {
-      menu!.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })
-      );
-    });
-    await waitFor(() => expect(document.activeElement).toBe(items[0]));
-
-    await act(async () => {
-      menu!.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
-    });
-    await waitFor(() => expect(document.activeElement).toBe(items[items.length - 1]));
-
-    await act(async () => {
-      menu!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
-    });
-    await waitFor(() => expect(document.activeElement).toBe(items[0]));
 
     await act(async () => {
       root.unmount();
@@ -902,7 +849,7 @@ describe('GuidesMei permissões NFSe', () => {
     document.body.removeChild(container);
   });
 
-  it('workspace NFS-e (FR-NFSE-UX-P1 / QA): nota em processamento desativa PDF e XML no menu', async () => {
+  it('workspace NFS-e (FR-NFSE-UX-P1 / QA): nota em processamento desativa PDF e XML', async () => {
     listarNfseMock.mockResolvedValueOnce([
       {
         id: 'nfse-proc',
@@ -939,27 +886,18 @@ describe('GuidesMei permissões NFSe', () => {
     expect(pdfBtn).toBeTruthy();
     expect((pdfBtn as HTMLButtonElement).disabled).toBe(true);
 
-    const moreBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Mais ações'
+    const xmlBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Baixar XML')
     );
-    await act(async () => {
-      moreBtn!.click();
-    });
-
-    await waitFor(() => {
-      const xmlBtn = container.querySelector(
-        '#nfse-more-actions-card-nfse-proc button[role="menuitem"]'
-      );
-      expect(xmlBtn).toBeTruthy();
-      expect((xmlBtn as HTMLButtonElement).disabled).toBe(true);
-    });
+    expect(xmlBtn).toBeTruthy();
+    expect((xmlBtn as HTMLButtonElement).disabled).toBe(true);
 
     await act(async () => {
       root.unmount();
     });
   });
 
-  it('workspace NFS-e (FR-NFSE-UX-P1 / QA): nota arquivada desativa revisão no menu', async () => {
+  it('workspace NFS-e (FR-NFSE-UX-P1 / QA): nota arquivada desativa revisão', async () => {
     listarNfseMock.mockResolvedValueOnce([
       {
         id: 'nfse-arch',
@@ -988,22 +926,7 @@ describe('GuidesMei permissões NFSe', () => {
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain('Mais ações');
-    });
-
-    const moreBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Mais ações'
-    );
-    await act(async () => {
-      moreBtn!.click();
-    });
-
-    await waitFor(() => {
-      const menuItems = container.querySelectorAll(
-        '#nfse-more-actions-card-nfse-arch button[role="menuitem"]'
-      );
-      expect(menuItems.length).toBeGreaterThanOrEqual(2);
-      const reviewBtn = Array.from(menuItems).find((b) =>
+      const reviewBtn = Array.from(container.querySelectorAll('button')).find((b) =>
         /Marcar revisão|Remover revisão/.test(b.textContent || '')
       );
       expect(reviewBtn).toBeTruthy();
