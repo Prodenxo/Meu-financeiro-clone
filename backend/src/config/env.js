@@ -51,6 +51,9 @@ export const env = {
   CORS_ORIGIN: mergedCorsOrigin,
   SUPABASE_URL: required('SUPABASE_URL'),
   SUPABASE_ANON_KEY: required('SUPABASE_ANON_KEY'),
+  /** JWT Secret do projeto Supabase (Settings → API). Evita round-trip Auth em cada request. */
+  SUPABASE_JWT_SECRET:
+    normalizeEnvSecret(process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET || ''),
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   SUPABASE_DB_URL: process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || '',
   DB_BOOTSTRAP_AUTO_SCHEMA: process.env.DB_BOOTSTRAP_AUTO_SCHEMA || '',

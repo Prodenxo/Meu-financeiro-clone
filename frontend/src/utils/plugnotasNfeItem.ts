@@ -63,9 +63,18 @@ export function mapNfeItemForPlugnotas(
     ncm: normalizeDoc(item.ncm),
     cfop: normalizeDoc(item.cfop),
     unidadeComercial: unidade,
-    quantidade,
-    valorUnitario: valorUnitarioNum,
+    quantidade: { comercial: quantidade, tributavel: quantidade },
+    valorUnitario: { comercial: valorUnitarioNum, tributavel: valorUnitarioNum },
     valor: valorTotal,
     tributos,
   };
+}
+
+/** tPag 99 exige `descricaoMeio` na Plugnotas. */
+export function buildDefaultNfePagamentos(valor: number) {
+  return [{
+    meio: '99',
+    valor,
+    descricaoMeio: 'Outros',
+  }];
 }

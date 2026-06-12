@@ -4,6 +4,7 @@ import {
   isLikelyLocalOnlyGuiaMeiEmpresaCertError,
   shouldOfferNfceCadastroDocHint
 } from '../utils/nfceEmpresaCadastroErrorHints';
+import { isPlugnotasRpsSerieNotRegisteredMessage } from '../utils/nfEmissionCompany';
 import {
   getNfseNacionalOperacaoHelpHref,
   getPlugnotasEmpresaCadastroErrorUxVariant,
@@ -182,6 +183,8 @@ type EmissaoFiscalErrorAlertProps = {
   plugnotasRequest?: PlugnotasRequestMeta | null;
   /** FR-GUIA-FISC-13: novo POST (novo `idIntegracao` no servidor) — só para erros classificados como transitórios. */
   onRetry?: () => void;
+  /** Rola até o painel de numeração RPS na aba NFS-e. */
+  onConfigureRps?: () => void;
 };
 
 type NfseNacionalDocHintLinkTone = Extract<LongFiscalErrorTone, 'danger' | 'rose'>;
@@ -274,7 +277,8 @@ export function EmissaoFiscalErrorAlert({
   plugnotasCode = null,
   httpStatus = null,
   plugnotasRequest = null,
-  onRetry
+  onRetry,
+  onConfigureRps
 }: EmissaoFiscalErrorAlertProps) {
   const copy = mapMeiFiscalErrorToCopy({ rawMessage: message, plugnotasCode, httpStatus, plugnotasRequest });
   const facing = meiFiscalUserCopyToUserFacing(copy, {
@@ -283,6 +287,7 @@ export function EmissaoFiscalErrorAlert({
     plugnotasCode
   });
   const showNacionalHint = shouldOfferNfseNacionalOperacaoDocHint(message);
+  const showRpsSerieHint = isPlugnotasRpsSerieNotRegisteredMessage(message);
   return (
     <div className="space-y-2">
       <p className="text-xs font-semibold uppercase tracking-wide text-rose-900 dark:text-rose-100">
@@ -291,6 +296,25 @@ export function EmissaoFiscalErrorAlert({
       </p>
       <UserFacingErrorBlock {...facing} />
       <PlugnotasIbgeCidadeOperacaoHint message={message} />
+      {showRpsSerieHint && onConfigureRps ? (
+        <div
+          className="rounded-lg border border-violet-200/90 bg-violet-50/90 px-3 py-2 text-xs text-violet-950 dark:border-violet-900/60 dark:bg-violet-950/40 dark:text-violet-100"
+          role="region"
+          aria-label="Configurar numeração RPS"
+        >
+          <p className="font-semibold">Série RPS não cadastrada no emissor</p>
+          <p className="mt-1 leading-relaxed opacity-95">
+            Informe lote, número e série na seção «Antes de emitir» e salve no emissor antes de tentar de novo.
+          </p>
+          <button
+            type="button"
+            className="mt-2 text-xs font-medium text-violet-900 underline hover:no-underline dark:text-violet-200"
+            onClick={onConfigureRps}
+          >
+            Configurar numeração RPS
+          </button>
+        </div>
+      ) : null}
       {showNacionalHint ? <NfseNacionalOperacaoDocHint message={message} /> : null}
       {onRetry ? (
         <button type="button" className="planner-button-secondary-compact mt-1" onClick={onRetry}>

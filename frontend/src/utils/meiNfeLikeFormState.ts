@@ -5,6 +5,10 @@
 
 import type { EmitirNfseInput } from '../services/meiNotasService';
 import { formatCpfCnpjPtBr, onlyDigits } from '../lib/formatCpfCnpjPtBr';
+import { DEFAULT_DESTINATARIO_IND_IE_DEST } from './meiNfeDestinatarioIe';
+import { getDefaultNfeDestinatarioEndereco } from './meiNfeDestinatarioEndereco';
+import type { NfeDestinatarioEnderecoForm } from './meiNfeDestinatarioEndereco';
+import type { DestinatarioIndIeDest } from './meiNfeDestinatarioIe';
 
 export type MeiNfeLikeItemFormState = {
   codigo: string;
@@ -26,6 +30,9 @@ export type MeiNfeLikeFormState = {
   destinatarioDoc: string;
   destinatarioRazao: string;
   destinatarioEmail: string;
+  destinatarioIndIEDest: DestinatarioIndIeDest;
+  destinatarioInscricaoEstadual: string;
+  destinatarioEndereco: NfeDestinatarioEnderecoForm;
   informacoesComplementares: string;
   itens: MeiNfeLikeItemFormState[];
 };
@@ -40,9 +47,9 @@ export function createEmptyMeiNfeLikeItem(): MeiNfeLikeItemFormState {
     quantidade: '1',
     valorUnitario: '',
     icmsCst: '',
-    icmsCsosn: '102',
-    pisCst: '49',
-    cofinsCst: '49'
+    icmsCsosn: '',
+    pisCst: '',
+    cofinsCst: ''
   };
 }
 
@@ -53,6 +60,9 @@ export function createEmptyMeiNfeLikeFormState(): MeiNfeLikeFormState {
     destinatarioDoc: '',
     destinatarioRazao: '',
     destinatarioEmail: '',
+    destinatarioIndIEDest: DEFAULT_DESTINATARIO_IND_IE_DEST,
+    destinatarioInscricaoEstadual: '',
+    destinatarioEndereco: getDefaultNfeDestinatarioEndereco(),
     informacoesComplementares: '',
     itens: []
   };

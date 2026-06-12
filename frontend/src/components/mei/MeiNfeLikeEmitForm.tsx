@@ -244,6 +244,202 @@ export function MeiNfeLikeEmitForm({
               placeholder="email@exemplo.com"
             />
           </div>
+          <div className="md:col-span-2">
+            <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+              Situação de IE do destinatário
+              <span className="admin-required-mark">*</span>
+            </p>
+            <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+              Não confundir com CSOSN do item. Condomínio e consumidor = não contribuinte.
+            </p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Situação de IE do destinatário">
+              {(
+                [
+                  ['9', 'Não contribuinte'],
+                  ['2', 'Isento de IE'],
+                  ['1', 'Contribuinte ICMS'],
+                ] as const
+              ).map(([code, label]) => {
+                const selected = value.destinatarioIndIEDest === code;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    className={
+                      selected
+                        ? 'planner-button-primary-compact'
+                        : 'planner-button-secondary-compact'
+                    }
+                    disabled={fieldsDisabled}
+                    aria-pressed={selected}
+                    onClick={() =>
+                      patch({
+                        destinatarioIndIEDest: code,
+                        ...(code !== '1' ? { destinatarioInscricaoEstadual: '' } : {}),
+                      })
+                    }
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {value.destinatarioIndIEDest === '1' ? (
+            <div className="md:col-span-2">
+              <label
+                className="mb-1 block text-xs text-slate-500 dark:text-slate-400"
+                htmlFor="mei-nfe-dest-ie"
+              >
+                Inscrição Estadual do destinatário
+                <span className="admin-required-mark">*</span>
+              </label>
+              <input
+                id="mei-nfe-dest-ie"
+                className="planner-input-compact w-full"
+                type="text"
+                inputMode="numeric"
+                value={value.destinatarioInscricaoEstadual}
+                onChange={(e) =>
+                  patch({ destinatarioInscricaoEstadual: e.target.value.replace(/\D/g, '') })
+                }
+                placeholder="Somente números"
+              />
+            </div>
+          ) : null}
+          {documentLabel === 'NF-e' ? (
+            <div className="md:col-span-2 space-y-3 rounded-md border border-slate-200/80 p-3 dark:border-slate-600/80">
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                Endereço do destinatário
+                <span className="admin-required-mark">*</span>
+              </p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500" htmlFor="mei-nfe-dest-cep">
+                    CEP
+                  </label>
+                  <input
+                    id="mei-nfe-dest-cep"
+                    className="planner-input-compact w-full"
+                    inputMode="numeric"
+                    value={value.destinatarioEndereco.cep}
+                    onChange={(e) =>
+                      patch({
+                        destinatarioEndereco: {
+                          ...value.destinatarioEndereco,
+                          cep: e.target.value.replace(/\D/g, '').slice(0, 8),
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500" htmlFor="mei-nfe-dest-log">
+                    Logradouro
+                  </label>
+                  <input
+                    id="mei-nfe-dest-log"
+                    className="planner-input-compact w-full"
+                    value={value.destinatarioEndereco.logradouro}
+                    onChange={(e) =>
+                      patch({
+                        destinatarioEndereco: { ...value.destinatarioEndereco, logradouro: e.target.value },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500" htmlFor="mei-nfe-dest-num">
+                    Número
+                  </label>
+                  <input
+                    id="mei-nfe-dest-num"
+                    className="planner-input-compact w-full"
+                    value={value.destinatarioEndereco.numero}
+                    onChange={(e) =>
+                      patch({
+                        destinatarioEndereco: { ...value.destinatarioEndereco, numero: e.target.value },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500" htmlFor="mei-nfe-dest-bairro">
+                    Bairro
+                  </label>
+                  <input
+                    id="mei-nfe-dest-bairro"
+                    className="planner-input-compact w-full"
+                    value={value.destinatarioEndereco.bairro}
+                    onChange={(e) =>
+                      patch({
+                        destinatarioEndereco: { ...value.destinatarioEndereco, bairro: e.target.value },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500" htmlFor="mei-nfe-dest-ibge">
+                    Código IBGE (7 dígitos)
+                  </label>
+                  <input
+                    id="mei-nfe-dest-ibge"
+                    className="planner-input-compact w-full"
+                    inputMode="numeric"
+                    value={value.destinatarioEndereco.codigoCidade}
+                    onChange={(e) =>
+                      patch({
+                        destinatarioEndereco: {
+                          ...value.destinatarioEndereco,
+                          codigoCidade: e.target.value.replace(/\D/g, '').slice(0, 7),
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500" htmlFor="mei-nfe-dest-cidade">
+                    Cidade
+                  </label>
+                  <input
+                    id="mei-nfe-dest-cidade"
+                    className="planner-input-compact w-full"
+                    value={value.destinatarioEndereco.descricaoCidade}
+                    onChange={(e) =>
+                      patch({
+                        destinatarioEndereco: {
+                          ...value.destinatarioEndereco,
+                          descricaoCidade: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500" htmlFor="mei-nfe-dest-uf">
+                    UF
+                  </label>
+                  <input
+                    id="mei-nfe-dest-uf"
+                    className="planner-input-compact w-full"
+                    maxLength={2}
+                    value={value.destinatarioEndereco.estado}
+                    onChange={(e) =>
+                      patch({
+                        destinatarioEndereco: {
+                          ...value.destinatarioEndereco,
+                          estado: e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 2),
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              {err('mei-nfe-dest-endereco') ? (
+                <p className="text-xs text-amber-700 dark:text-amber-300">{err('mei-nfe-dest-endereco')}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </NfeLikeCollapsible>
 

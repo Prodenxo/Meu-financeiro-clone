@@ -28,6 +28,51 @@ const padZeros = (value, length) => {
   return str.padStart(length, '0').slice(-length);
 };
 
+const hasText = (value) => String(value || '').trim().length > 0;
+
+const lookupCepBrasilApi = async (cepInput) => {
+  const cep = normalizeDoc(cepInput).slice(0, 8);
+  if (cep.length !== 8) return null;
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, {
+      method: 'GET',
+      headers: BRASILAPI_HEADERS,
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+};
+
+/** Preenche logradouro/cidade/UF faltantes via CEP quando a Receita retorna só bairro+CEP. */
+const enrichEnderecoFromCep = async (data) => {
+  const endereco = data?.endereco || {};
+  const cep = normalizeDoc(endereco.cep || '').slice(0, 8);
+  const needsLogradouro = !hasText(endereco.logradouro);
+  const needsBairro = !hasText(endereco.bairro);
+  const needsCidade = !hasText(endereco.descricaoCidade);
+  const needsUf = !hasText(endereco.estado);
+  if (cep.length !== 8 || (!needsLogradouro && !needsBairro && !needsCidade && !needsUf)) {
+    return data;
+  }
+
+  const cepRaw = await lookupCepBrasilApi(cep);
+  if (!cepRaw) return data;
+
+  return {
+    ...data,
+    endereco: {
+      ...endereco,
+      logradouro: hasText(endereco.logradouro) ? endereco.logradouro : (cepRaw.street || null),
+      bairro: hasText(endereco.bairro) ? endereco.bairro : (cepRaw.neighborhood || null),
+      descricaoCidade: hasText(endereco.descricaoCidade) ? endereco.descricaoCidade : (cepRaw.city || null),
+      estado: hasText(endereco.estado) ? endereco.estado : (cepRaw.state || null),
+      cep,
+    },
+  };
+};
+
 /**
  * Consulta dados cadastrais de um CNPJ via BrasilAPI (público, gratuito).
  * Retorna payload normalizado pronto para preencher formulário de empresa fiscal.
@@ -198,13 +243,17 @@ export const lookupCnpjPlugnotas = async (cnpjInput) => {
  * @param {string} cnpjInput
  */
 export const lookupCnpjCascade = async (cnpjInput) => {
+  let data;
   if (env.PLUGNOTAS_API_KEY) {
     try {
-      return await lookupCnpjPlugnotas(cnpjInput);
+      data = await lookupCnpjPlugnotas(cnpjInput);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn('[cnpj-lookup] PlugNotas falhou, caindo para BrasilAPI:', err?.message);
+      data = await lookupCnpjBrasilApi(cnpjInput);
     }
+  } else {
+    data = await lookupCnpjBrasilApi(cnpjInput);
   }
-  return lookupCnpjBrasilApi(cnpjInput);
+  return enrichEnderecoFromCep(data);
 };

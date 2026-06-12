@@ -46,7 +46,7 @@ router.post(
 router.post('/setup/plugnotas/empresa', requireAuth, requireMeiEnabled, controller.cadastrarPlugNotasEmpresa);
 router.get('/setup/plugnotas/empresa', requireAuth, requireMeiEnabled, controller.consultarPlugNotasEmpresa);
 router.patch('/setup/plugnotas/empresa', requireAuth, requireMeiEnabled, controller.atualizarPlugNotasEmpresa);
-router.get('/cnpj-lookup/:cnpj', requireAuth, requireMeiEnabled, controller.lookupCnpj);
+router.get('/cnpj-lookup/:cnpj', requireAuth, controller.lookupCnpj);
 router.get('/', requireAuth, requireMeiEnabled, controller.listar);
 router.get('/limite-faturamento', requireAuth, requireMeiEnabled, controller.limiteFaturamento);
 router.get('/relatorio/nfe', requireAuth, requireMeiEnabled, controller.relatorioNfe);

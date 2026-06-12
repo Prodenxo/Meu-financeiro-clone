@@ -39,6 +39,16 @@ describe('validateMeiNfeLikeForm', () => {
       emitenteCnpj: '11.222.333/0001-81',
       destinatarioDoc: '529.982.247-25',
       destinatarioRazao: 'Cliente Teste',
+      destinatarioEndereco: {
+        cep: '01310100',
+        logradouro: 'Av Paulista',
+        numero: '100',
+        complemento: '',
+        bairro: 'Bela Vista',
+        codigoCidade: '3550308',
+        descricaoCidade: 'São Paulo',
+        estado: 'SP',
+      },
       itens: [
         {
           ...createEmptyMeiNfeLikeItem(),

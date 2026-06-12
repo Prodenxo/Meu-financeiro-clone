@@ -293,6 +293,41 @@ export const emitenteRowToApiShape = (row) => {
 /**
  * Atualiza apenas dados fiscais/endereço NFS-e (sem exigir novo .pfx).
  */
+/** Zera espelho NFS-e (titular/endereço) — usado ao trocar certificado digital. */
+export const clearEmitenteNfseMirrorFields = async (userId) => {
+  if (!userId) return;
+  const supabase = getSupabase();
+  const { data: existing } = await supabase
+    .from(TABLE)
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!existing?.id) return;
+  const { error } = await supabase
+    .from(TABLE)
+    .update({
+      razao_social: null,
+      nome_fantasia: null,
+      fiscal_email: null,
+      inscricao_municipal: null,
+      regime_tributario: null,
+      cep: null,
+      tipo_logradouro: null,
+      logradouro: null,
+      numero: null,
+      complemento: null,
+      bairro: null,
+      ibge_municipio: null,
+      cidade: null,
+      uf: null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('user_id', userId);
+  if (error) {
+    throw badRequest(error.message || 'Falha ao limpar dados fiscais do emitente');
+  }
+};
+
 export const patchEmitenteNfseFields = async (userId, partial) => {
   if (!userId) throw badRequest('Usuário não identificado');
   const fragment = normalizeEmitenteRowFragment(partial, { omitEmpty: true });

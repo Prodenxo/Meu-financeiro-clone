@@ -1,6 +1,7 @@
 import { createSupabaseClient } from '../config/supabase.js';
 // [auto-restart trigger]
-import { badRequest, forbidden, unauthorized } from '../utils/errors.js';
+import { badRequest, forbidden, serviceUnavailable, unauthorized } from '../utils/errors.js';
+import { isSupabaseAuthNetworkError as isSupabaseNetworkError } from '../utils/verifySupabaseAccessToken.js';
 import {
   assertStrongPassword,
   generateStrongRandomPassword
@@ -481,12 +482,44 @@ export const assertUserEligibleForEmpresaInvite = async (adminClient, userId) =>
   }
 };
 
-export const getRequesterContext = async (accessToken) => {
-  if (!accessToken) throw unauthorized();
+const matchesUserSearch = (user, { empresaName, roleLabel }, searchTerm) => {
+  if (!searchTerm) return true;
+  const lower = searchTerm.toLowerCase();
+  const digits = searchTerm.replace(/\D/g, '');
+  const textFields = [
+    user?.email,
+    user?.displayName,
+    user?.phone,
+    empresaName,
+    roleLabel,
+    user?.id,
+  ];
 
-  const userClient = createSupabaseClient({ accessToken });
-  const { data: { user } = {}, error: userError } = await userClient.auth.getUser();
-  if (userError || !user) throw unauthorized();
+  if (textFields.some((field) => String(field || '').toLowerCase().includes(lower))) {
+    return true;
+  }
+
+  if (digits.length >= 2) {
+    const phoneDigits = String(user?.phone || '').replace(/\D/g, '');
+    if (phoneDigits.includes(digits)) return true;
+    return textFields.some((field) =>
+      String(field || '').replace(/\D/g, '').includes(digits),
+    );
+  }
+
+  return false;
+};
+
+export const getRequesterContext = async (accessToken, preverifiedUser = null) => {
+  if (!accessToken && !preverifiedUser?.id) throw unauthorized();
+
+  let user = preverifiedUser?.id ? preverifiedUser : null;
+  if (!user?.id) {
+    const userClient = createSupabaseClient({ accessToken });
+    const { data: { user: fetched } = {}, error: userError } = await userClient.auth.getUser();
+    if (userError || !fetched) throw unauthorized();
+    user = fetched;
+  }
 
   const linkClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await linkClient
@@ -499,6 +532,12 @@ export const getRequesterContext = async (accessToken) => {
 
   if (linkError) {
     console.warn('[Users] role_x_user_x_empresa lookup error:', linkError.message);
+    if (isSupabaseNetworkError(linkError)) {
+      throw serviceUnavailable(
+        'Não foi possível verificar suas permissões. Verifique a conexão com o Supabase e tente novamente.',
+        { code: 'supabase_upstream_timeout' },
+      );
+    }
   }
 
   if (linkData?.roles_id) {
@@ -547,11 +586,21 @@ export const getRequesterContext = async (accessToken) => {
     }
   }
 
-  const { data: profile } = await userClient
+  const { data: profile, error: profileError } = await linkClient
     .from('profiles')
     .select('role')
     .eq('id', user.id)
     .maybeSingle();
+
+  if (profileError) {
+    console.warn('[Users] profiles lookup error:', profileError.message);
+    if (isSupabaseNetworkError(profileError)) {
+      throw serviceUnavailable(
+        'Não foi possível verificar suas permissões. Verifique a conexão com o Supabase e tente novamente.',
+        { code: 'supabase_upstream_timeout' },
+      );
+    }
+  }
 
   return {
     userId: user.id,
@@ -581,9 +630,17 @@ export const listUsers = async (accessToken, queryParams = {}) => {
     if (error || !users || users.length === 0) break;
 
     if (searchTerm) {
-      const matches = users.filter(u =>
-        u.email?.toLowerCase().includes(searchTerm) ||
-        u.user_metadata?.display_name?.toLowerCase().includes(searchTerm)
+      const matches = users.filter((u) =>
+        matchesUserSearch(
+          {
+            id: u.id,
+            email: u.email,
+            displayName: u.user_metadata?.display_name || null,
+            phone: u.user_metadata?.phone || null,
+          },
+          { empresaName: null, roleLabel: null },
+          searchTerm,
+        ),
       );
       allAuthUsers = allAuthUsers.concat(matches);
       // Se for busca, paramos se já tivermos um número razoável para não demorar demais
@@ -687,15 +744,22 @@ export const listUsers = async (accessToken, queryParams = {}) => {
     .map((link) => {
       const user = userMap.get(link.user_id);
       if (!user) return null;
-      
-      // Se estamos buscando e o usuário não bate com o termo (e não veio do allAuthUsers), removemos
-      if (searchTerm && !allAuthUsers.some(au => au.id === user.id)) return null;
+
+      const roleLabel = normalizeRoleValue(roleMap.get(link.roles_id) || (link.isOrphan ? 'N/A' : 'usuario'));
+      const empresaName = (() => {
+        const e = empresaMap.get(link.empresas_id);
+        return e ? (e.nome_fantasia || e.empresa) : (link.isOrphan ? 'SEM VÍNCULO' : null);
+      })();
+
+      if (searchTerm && !matchesUserSearch(user, { empresaName, roleLabel }, searchTerm)) {
+        return null;
+      }
 
       return {
         ...user,
-        role: normalizeRoleValue(roleMap.get(link.roles_id) || (link.isOrphan ? 'N/A' : 'usuario')),
+        role: roleLabel,
         empresaId: link.empresas_id || null,
-        empresaName: (() => { const e = empresaMap.get(link.empresas_id); return e ? (e.nome_fantasia || e.empresa) : (link.isOrphan ? 'SEM VÍNCULO' : null); })(),
+        empresaName,
         status: link.status ?? true,
         mei: typeof link.mei === 'boolean' ? link.mei : null,
         expiresAt: link.expires_at ? new Date(link.expires_at).toISOString() : null

@@ -3,6 +3,7 @@ import {
   buildNfEmissionEmpresaPayload,
   getDefaultNfEmissionCompanyForm,
   getNfEmissionCompanyValidationMessage,
+  isPlugnotasRpsSerieNotRegisteredMessage,
   PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
   PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
   PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY,
@@ -18,7 +19,8 @@ const fullValidForm = () => ({
   bairro: 'Bela Vista',
   codigoCidade: '3550308',
   descricaoCidade: 'São Paulo',
-  estado: 'SP'
+  estado: 'SP',
+  email: 'contato@empresa.com.br',
 });
 
 describe('nfEmissionCompany', () => {
@@ -66,6 +68,12 @@ describe('nfEmissionCompany', () => {
     expect(config[PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
     expect(config[PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]).toBe(PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON);
     expect('nacional' in nfse).toBe(false);
+  });
+
+  it('isPlugnotasRpsSerieNotRegisteredMessage detecta ausência de série RPS no emissor', () => {
+    expect(isPlugnotasRpsSerieNotRegisteredMessage('Nenhuma série cadastrada')).toBe(true);
+    expect(isPlugnotasRpsSerieNotRegisteredMessage('Nenhuma serie cadastrada para nfse')).toBe(true);
+    expect(isPlugnotasRpsSerieNotRegisteredMessage('Erro genérico de validação')).toBe(false);
   });
 
   it('buildNfEmissionEmpresaPayload inclui rps personalizado quando o formulário define lote/número/série', () => {

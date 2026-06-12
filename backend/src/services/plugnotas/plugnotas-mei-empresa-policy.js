@@ -1,3 +1,5 @@
+import { applyEmpresaPlugnotasNfseConfigRps } from './plugnotas-empresa-rps-inicial.js';
+
 /**
  * Política MEI / Guia MEI — cadastro empresa Plugnotas (apenas NFS-e).
  * @see docs/adr/ADR-plugnotas-empresa-payload-apenas-nfse.md
@@ -66,7 +68,35 @@ export const applyNfseNationalContractPolicy = (payload) => {
 
   next.config = configWithDefaults;
   payload.nfse = next;
+  applyEmpresaPlugnotasNfseConfigRps(payload);
   return contractInput;
+};
+
+/** Código Plugnotas para regime tributário especial MEI (cadastro empresa). */
+export const PLUGNOTAS_REGIME_ESPECIAL_MEI = 5;
+
+/**
+ * Garante payload MEI na Plugnotas: regimeTributario 1 + regimeTributarioEspecial 5.
+ * @param {Record<string, unknown>} payload
+ */
+export const normalizeMeiEmpresaPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const regime = Number(payload.regimeTributario);
+  const simples = payload.simplesNacional !== false;
+  const especial = Number(payload.regimeTributarioEspecial);
+
+  if (regime === 4) {
+    payload.regimeTributario = 1;
+    payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
+    payload.simplesNacional = true;
+    return payload;
+  }
+
+  if (simples && regime === 1 && (Number.isNaN(especial) || especial === 0)) {
+    payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
+  }
+
+  return payload;
 };
 
 /**
@@ -100,5 +130,6 @@ export const applyNfseMunicipalContractPolicy = (payload) => {
     [PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]: false
   };
   payload.nfse = next;
+  applyEmpresaPlugnotasNfseConfigRps(payload);
   return contractInput;
 };

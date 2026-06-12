@@ -4,8 +4,7 @@ import {
   formatValorUnitarioFromCatalogValorSugerido,
   mapCatalogProdutoToNfeItemRow
 } from './mapCatalogProdutoToNfeItem';
-import { validateMeiNfeLikeForm } from './meiNfeLikeClientValidation';
-import { createEmptyMeiNfeLikeFormState } from './meiNfeLikeFormState';
+import { createEmptyMeiNfeLikeItem } from './meiNfeLikeFormState';
 
 describe('formatValorUnitarioFromCatalogValorSugerido', () => {
   it('formata número positivo em pt-BR', () => {
@@ -35,14 +34,14 @@ describe('mapCatalogProdutoToNfeItemRow', () => {
       cfop: '5102',
       unidade: 'CX',
       quantidade: '1',
-      icmsCsosn: '102',
-      pisCst: '49',
-      cofinsCst: '49'
+      icmsCsosn: '',
+      pisCst: '',
+      cofinsCst: ''
     });
     expect(row.valorUnitario).toMatch(/99/);
   });
 
-  it('sem metadados: defaults numéricos passam validação cliente com cabeçalho mínimo', () => {
+  it('sem metadados: tributos vazios (usuário preenche na emissão)', () => {
     const produto: NfseCatalogProduto = {
       id: 'b2',
       codigo: '',
@@ -50,14 +49,9 @@ describe('mapCatalogProdutoToNfeItemRow', () => {
       valor_sugerido: 1
     };
     const row = mapCatalogProdutoToNfeItemRow(produto);
-    const state = {
-      ...createEmptyMeiNfeLikeFormState(),
-      emitenteCnpj: '11.222.333/0001-81',
-      destinatarioDoc: '529.982.247-25',
-      destinatarioRazao: 'Cliente',
-      itens: [row]
-    };
-    const v = validateMeiNfeLikeForm(state, 'NF-e');
-    expect(v.ok).toBe(true);
+    const defaults = createEmptyMeiNfeLikeItem();
+    expect(row.icmsCsosn).toBe(defaults.icmsCsosn);
+    expect(row.pisCst).toBe(defaults.pisCst);
+    expect(row.cofinsCst).toBe(defaults.cofinsCst);
   });
 });

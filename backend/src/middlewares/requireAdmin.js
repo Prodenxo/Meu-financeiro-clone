@@ -3,7 +3,7 @@ import { getRequesterContext } from '../services/users.service.js';
 
 export const requireAdmin = async (req, _res, next) => {
   try {
-    const context = await getRequesterContext(req.accessToken);
+    const context = await getRequesterContext(req.accessToken, req.user);
     if (!context?.role || (context.role !== 'admin' && context.role !== 'superadmin')) {
       return next(forbidden());
     }

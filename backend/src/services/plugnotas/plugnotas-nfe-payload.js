@@ -109,5 +109,19 @@ export const normalizePlugnotasNfePayload = (payload) => {
   const itens = Array.isArray(payload.itens)
     ? payload.itens.map(normalizeNfeItemForPlugnotasEmit)
     : payload.itens;
-  return { ...payload, itens };
+  const pagamentos = normalizeNfePagamentosForPlugnotas(payload.pagamentos);
+  return { ...payload, itens, pagamentos };
+};
+
+const normalizeNfePagamentosForPlugnotas = (pagamentos) => {
+  if (!Array.isArray(pagamentos)) return pagamentos;
+  return pagamentos.map((entry) => {
+    if (!entry || typeof entry !== 'object') return entry;
+    const meio = String(entry.meio ?? '').trim();
+    const descricaoMeio = String(entry.descricaoMeio ?? '').trim();
+    if (meio === '99' && !descricaoMeio) {
+      return { ...entry, descricaoMeio: 'Outros' };
+    }
+    return entry;
+  });
 };

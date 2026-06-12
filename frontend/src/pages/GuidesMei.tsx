@@ -181,6 +181,7 @@ import { MeiFiscalModalidadesActivationWizard } from '../components/mei/MeiFisca
 import { MeiCadastroNfeNfceInfoBanner } from '../components/mei/MeiCadastroNfeNfceInfoBanner';
 import { MeiCadastroRequisitosNfeNfcePlaceholder } from '../components/mei/MeiCadastroRequisitosNfeNfcePlaceholder';
 import { MeiNfeLikeEmitForm } from '../components/mei/MeiNfeLikeEmitForm';
+import { MeiRpsNumeracaoPanel } from '../components/mei/MeiRpsNumeracaoPanel';
 import { isMeiFiscalD2ModalidadesEnabled, isMeiNfeNfceEmitEnabled } from '../config/meiFiscalFeatureFlags';
 import { useMeiPlugnotasFiscalCapability } from '../hooks/useMeiPlugnotasFiscalCapability';
 import { isNfeLikeEmissionBlockedByCapabilities } from '../utils/plugnotasEmpresaCapabilities';
@@ -327,9 +328,7 @@ const clampRpsIntForm = (value: unknown, fallback: number): number => {
 
 const emitenteSnapshotToForm = (snap: NfseEmitenteSnapshot): NfEmissionCompanyForm => {
   const { certDocument: _omitCert, ...companyFields } = snap;
-  const r = companyFields.regimeTributario;
-  const regime: NfEmissionRegimeTributario =
-    r === '1' || r === '2' || r === '3' ? r : '1';
+  const regime: NfEmissionRegimeTributario = '1';
   const def = getDefaultNfEmissionCompanyForm();
   return {
     ...def,
@@ -1638,6 +1637,15 @@ export default function GuidesMei() {
     }));
   };
 
+  const openRpsConfig = useCallback(() => {
+    setActiveWorkspace('nfse');
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        document.getElementById('mei-rps-config')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    });
+  }, []);
+
   const handleDocumentosAtivosChange = (key: keyof DocumentosAtivosState, checked: boolean) => {
     if (key === 'nfse' && !checked && documentosAtivos.nfse) {
       setNfseDesativarDialogOpen(true);
@@ -1795,7 +1803,15 @@ export default function GuidesMei() {
         if (nfsePrestadorUserEditedRef.current) return;
         if (nfsePrestadorPrefillAppliedRef.current) return;
         nfsePrestadorPrefillAppliedRef.current = true;
-        setNfseForm((f) => mergeNfsePrestadorPrefillIntoForm(f, prefill, { onlyFillEmpty: true }));
+        const certDigits = normalizeDoc(contribuinteDoc || '');
+        const prefillDigits = normalizeDoc(prefill.prestadorCpfCnpj || '');
+        const localStale =
+          certDigits.length === 14
+          && prefillDigits.length === 14
+          && certDigits !== prefillDigits;
+        setNfseForm((f) => mergeNfsePrestadorPrefillIntoForm(f, prefill, {
+          onlyFillEmpty: !localStale,
+        }));
         if (isNfsePrestadorPrefillEffectivelyEmpty(prefill)) {
           nfsePrestadorPrefillBannerOutcomeRef.current = 'empty';
           setNfsePrestadorPrefillBanner(NFSE_PRESTADOR_PREFILL_MSG_EMPTY);
@@ -1814,7 +1830,7 @@ export default function GuidesMei() {
         setNfsePrestadorPrefillLoading(false);
       }
     })();
-  }, [canViewNfse, activeWorkspace]);
+  }, [canViewNfse, activeWorkspace, contribuinteDoc]);
 
   useEffect(() => {
     if (!normalizedContribuinte) return;
@@ -1941,7 +1957,18 @@ export default function GuidesMei() {
         setNfEmissionCompanyForm(emitenteSnapshotToForm(snap));
         nfseEmitenteHydratedRef.current = true;
         setNfseForm((current) => mergeEmitenteSnapshotIntoNfseForm(current, snap));
+        const emitDigits = normalizeDoc(snap.certDocument || status.documento || '');
+        const emitRazao = String(snap.razaoSocial || '').trim();
+        if (emitDigits.length === 14 || emitRazao) {
+          setNfeLikeForm((current) => ({
+            ...current,
+            emitenteCnpj: emitDigits.length === 14 ? formatDocument(emitDigits) : current.emitenteCnpj,
+            emitenteRazao: emitRazao || current.emitenteRazao
+          }));
+        }
       }
+      nfsePrestadorPrefillAppliedRef.current = false;
+      nfsePrestadorUserEditedRef.current = false;
 
       if (!canViewNfse) {
         setCertificateFile(null);
@@ -2339,9 +2366,12 @@ export default function GuidesMei() {
         ...current,
         prestadorRazaoSocial: '',
         prestadorEmail: '',
+        prestadorInscricaoMunicipal: '',
         prestadorEndereco: emptyNfsePrestadorEndereco(),
         prestadorCpfCnpj: ''
       }));
+      nfsePrestadorPrefillAppliedRef.current = false;
+      nfsePrestadorUserEditedRef.current = false;
       await loadCertificateStatus();
     } catch (error) {
       if (isFetchConnectivityFailure(error)) {
@@ -2680,7 +2710,7 @@ export default function GuidesMei() {
     meiEmitInFlightRef.current = true;
     setNfeLikeSubmitting(true);
     try {
-      const payload = buildNfeLikePayloadFromMeiForm(nfeLikeForm);
+      const payload = buildNfeLikePayloadFromMeiForm(nfeLikeForm, emissionDocumentType);
       const created =
         emissionDocumentType === 'NFE' ? await emitirNfe(payload) : await emitirNfce(payload);
       setNfseSuccess(
@@ -3534,13 +3564,22 @@ export default function GuidesMei() {
                       <span className="admin-badge-neutral">Integração fiscal</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="planner-button-secondary w-full self-stretch sm:w-auto sm:self-start"
-                    onClick={() => setActiveWorkspace('nfse')}
-                  >
-                    Abrir NFS-e
-                  </button>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <button
+                      type="button"
+                      className="planner-button-secondary w-full self-stretch sm:w-auto sm:self-start"
+                      onClick={() => setActiveWorkspace('nfse')}
+                    >
+                      Abrir NFS-e
+                    </button>
+                    <button
+                      type="button"
+                      className="planner-button w-full self-stretch sm:w-auto sm:self-start"
+                      onClick={openRpsConfig}
+                    >
+                      Configurar série RPS
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
@@ -4026,6 +4065,29 @@ export default function GuidesMei() {
                   <p className="admin-field-hint mb-2">
                     {dadosMinimosEmitenteHint}
                   </p>
+                  <MeiRpsNumeracaoPanel
+                    id="mei-rps-config-emitente"
+                    variant="nfse-workspace"
+                    rpsLote={nfEmissionCompanyForm.rpsLote}
+                    rpsNumero={nfEmissionCompanyForm.rpsNumero}
+                    rpsSerie={nfEmissionCompanyForm.rpsSerie}
+                    onChange={updateNfEmissionCompanyForm}
+                    showSaveAction
+                    onSave={handleSalvarDadosEmitente}
+                    saveLoading={nfEmissionCompanySyncLoading === 'patch'}
+                    saveLabel="Salvar série RPS no emissor"
+                  />
+                  <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+                    Também disponível no topo da aba{' '}
+                    <button
+                      type="button"
+                      className="font-medium text-violet-700 underline decoration-violet-700/70 underline-offset-2 hover:text-violet-900 dark:text-violet-300 dark:decoration-violet-300/70"
+                      onClick={openRpsConfig}
+                    >
+                      Emissão fiscal
+                    </button>
+                    .
+                  </p>
                   {!showPrefeituraPortalCredentialsBlock ? (
                     <div
                       role="note"
@@ -4127,19 +4189,14 @@ export default function GuidesMei() {
                       type="email"
                       value={nfEmissionCompanyForm.email}
                       onChange={(event) => updateNfEmissionCompanyForm({ email: event.target.value })}
-                      placeholder="Email fiscal (opcional)"
+                      placeholder="E-mail fiscal *"
                     />
-                    <select
-                      className="planner-input-compact"
-                      value={nfEmissionCompanyForm.regimeTributario}
-                      onChange={(event) => updateNfEmissionCompanyForm({
-                        regimeTributario: event.target.value as NfEmissionRegimeTributario
-                      })}
+                    <div
+                      className="planner-input-compact flex items-center bg-slate-100/80 text-slate-700 dark:bg-slate-800/60 dark:text-slate-200"
+                      aria-label="Regime tributário MEI"
                     >
-                      <option value="1">Regime tributário: Simples Nacional (1)</option>
-                      <option value="2">Regime tributário: Simples excesso sublimite (2)</option>
-                      <option value="3">Regime tributário: Regime normal (3)</option>
-                    </select>
+                      Simples Nacional + MEI
+                    </div>
                     <input
                       id="mei-emitente-inscricao-municipal"
                       className="planner-input-compact md:col-span-2"
@@ -4238,76 +4295,6 @@ export default function GuidesMei() {
                       />
                       Empresa optante pelo Simples Nacional
                     </label>
-                  </div>
-                  <div
-                    className="mt-3 rounded-lg border ui-border-section bg-slate-50/80 p-3 dark:bg-slate-900/40"
-                    role="group"
-                    aria-labelledby="mei-rps-config-title"
-                  >
-                    <p
-                      id="mei-rps-config-title"
-                      className="text-sm font-semibold text-slate-900 dark:text-slate-100"
-                    >
-                      Numeração RPS (emissor)
-                    </p>
-                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                      Lote, número e série iniciais enviados ao emissor no cadastro ou atualização. Ajuste só se o seu
-                      contador ou o município indicar valores diferentes dos padrão (1 / 1 / &quot;1&quot;).
-                    </p>
-                    <div className="mt-3 grid gap-2 md:grid-cols-3">
-                      <div>
-                        <label htmlFor="mei-rps-lote" className="mb-1 block text-xs text-slate-600 dark:text-slate-400">
-                          Lote inicial
-                        </label>
-                        <input
-                          id="mei-rps-lote"
-                          className="planner-input-compact w-full"
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={nfEmissionCompanyForm.rpsLote}
-                          onChange={(event) => {
-                            const v = Number.parseInt(event.target.value, 10);
-                            updateNfEmissionCompanyForm({
-                              rpsLote: Number.isFinite(v) && v >= 1 ? v : 1
-                            });
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="mei-rps-numero" className="mb-1 block text-xs text-slate-600 dark:text-slate-400">
-                          Número inicial RPS
-                        </label>
-                        <input
-                          id="mei-rps-numero"
-                          className="planner-input-compact w-full"
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={nfEmissionCompanyForm.rpsNumero}
-                          onChange={(event) => {
-                            const v = Number.parseInt(event.target.value, 10);
-                            updateNfEmissionCompanyForm({
-                              rpsNumero: Number.isFinite(v) && v >= 1 ? v : 1
-                            });
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="mei-rps-serie" className="mb-1 block text-xs text-slate-600 dark:text-slate-400">
-                          Série
-                        </label>
-                        <input
-                          id="mei-rps-serie"
-                          className="planner-input-compact w-full"
-                          type="text"
-                          inputMode="text"
-                          value={nfEmissionCompanyForm.rpsSerie}
-                          onChange={(event) => updateNfEmissionCompanyForm({ rpsSerie: event.target.value })}
-                          placeholder="ex.: 1"
-                        />
-                      </div>
-                    </div>
                   </div>
                   <div className="mt-3 flex flex-col gap-2 border-t ui-border-section pt-3">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -4556,6 +4543,49 @@ export default function GuidesMei() {
             </div>
 
             <section
+              id="mei-rps-config-section"
+              className="admin-section-card scroll-mt-4"
+              aria-labelledby="mei-rps-config-section-heading"
+            >
+              <div className="admin-section-header">
+                <div>
+                  <h2 id="mei-rps-config-section-heading" className="admin-section-title">
+                    Série RPS (NFS-e)
+                  </h2>
+                  <p className="admin-section-subtitle">
+                    Cadastre lote, número e série no emissor fiscal antes de emitir. Sem isso, a NFS-e pode retornar
+                    «Nenhuma série cadastrada».
+                  </p>
+                </div>
+              </div>
+              <MeiRpsNumeracaoPanel
+                id="mei-rps-config"
+                variant="nfse-workspace"
+                rpsLote={nfEmissionCompanyForm.rpsLote}
+                rpsNumero={nfEmissionCompanyForm.rpsNumero}
+                rpsSerie={nfEmissionCompanyForm.rpsSerie}
+                onChange={updateNfEmissionCompanyForm}
+                showSaveAction
+                onSave={handleSalvarDadosEmitente}
+                saveLoading={nfEmissionCompanySyncLoading === 'patch'}
+              />
+              {nfEmissionCompanySyncSuccess ? (
+                <div className="admin-alert-success mt-3 text-xs">{nfEmissionCompanySyncSuccess}</div>
+              ) : null}
+              {nfEmissionCompanySyncError ? (
+                <div className="mt-3">
+                  <GuiaMeiEmpresaCadastroErrorPanel
+                    message={nfEmissionCompanySyncError.message}
+                    fiscalApiErrorCode={nfEmissionCompanySyncError.apiErrorCode}
+                    fiscalErrorCode={nfEmissionCompanySyncError.plugnotasCode}
+                    fiscalHttpStatus={nfEmissionCompanySyncError.httpStatus}
+                    plugnotasRequest={nfEmissionCompanySyncError.plugnotasRequest}
+                  />
+                </div>
+              ) : null}
+            </section>
+
+            <section
               id="mei-nfse-pre"
               className="admin-section-card"
               aria-labelledby="mei-nfse-pre-heading"
@@ -4596,6 +4626,18 @@ export default function GuidesMei() {
           {nfEmissionCompanySyncSuccess && (
             <div className="admin-alert-success text-xs">{nfEmissionCompanySyncSuccess}</div>
           )}
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Série RPS? Use a seção{' '}
+            <button
+              type="button"
+              className="font-medium text-violet-700 underline decoration-violet-700/70 underline-offset-2 hover:text-violet-900 dark:text-violet-300"
+              onClick={openRpsConfig}
+            >
+              Série RPS (NFS-e)
+            </button>{' '}
+            no topo desta aba.
+          </p>
 
           <div className="admin-toolbar space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
@@ -5193,6 +5235,7 @@ export default function GuidesMei() {
                   plugnotasCode={nfseError.plugnotasCode}
                   httpStatus={nfseError.httpStatus}
                   plugnotasRequest={nfseError.plugnotasRequest}
+                  onConfigureRps={emissionDocumentType === 'NFSE' ? openRpsConfig : undefined}
                   onRetry={
                     nfseError.emissionRetryable
                       ? () => {

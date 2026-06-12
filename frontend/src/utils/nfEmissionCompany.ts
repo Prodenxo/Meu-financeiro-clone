@@ -5,6 +5,8 @@ import {
 import { normalizeIbgeMunicipioCodigo } from './ibgeMunicipioCodigo';
 
 const normalizeDoc = (value: string) => value.replace(/\D/g, '');
+const hasRequiredText = (value: unknown) => String(value || '').trim().length > 0;
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
 /**
  * Valor enviado ao Plugnotas quando a IE não é preenchida no formulário.
@@ -23,7 +25,11 @@ export const PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY = 'consultaNfseNacional
 export const PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON = true;
 
 const PLUGNOTAS_EMPRESA_DOC_INATIVO = Object.freeze({ ativo: false, tipoContrato: 0 });
-const PLUGNOTAS_NFE_ATIVO_CONFIG_MIN = Object.freeze({ producao: true });
+const PLUGNOTAS_NFE_ATIVO_CONFIG_MIN = Object.freeze({
+  producao: true,
+  serie: 1,
+  numero: 1
+});
 const PLUGNOTAS_NFCE_ATIVO_CONFIG_MIN = Object.freeze({
   producao: true,
   serie: 1,
@@ -31,10 +37,10 @@ const PLUGNOTAS_NFCE_ATIVO_CONFIG_MIN = Object.freeze({
   versaoQrCode: 2
 });
 
-const hasRequiredText = (value: unknown) => String(value || '').trim().length > 0;
-
 /** Abreviações de tipo de via sem nome — Plugnotas rejeita no POST /empresa. */
 const LOGRADOURO_SO_TIPO_ABREVIADO = /^(av|tv|pc|lt|rod|est|rua|al|v|p|l|st|qd|cj|cs)\.?$/i;
+
+export const PLUGNOTAS_REGIME_ESPECIAL_MEI = 5;
 
 export type NfEmissionRegimeTributario = '1' | '2' | '3';
 
@@ -68,6 +74,23 @@ const clampRpsInt = (value: unknown, fallback: number): number => {
   if (Number.isFinite(n) && n >= 1) return n;
   return fallback;
 };
+
+function normalizeRpsErrorText(s: string): string {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/** Detecta rejeição do emissor por ausência de série RPS no cadastro da empresa. */
+export function isPlugnotasRpsSerieNotRegisteredMessage(message: string): boolean {
+  const m = normalizeRpsErrorText(message);
+  if (!m.trim()) return false;
+  if (m.includes('nenhuma serie cadastrada')) return true;
+  if (m.includes('serie') && m.includes('cadastrad') && (m.includes('rps') || m.includes('nfse'))) return true;
+  if (m.includes('series') && m.includes('nao') && m.includes('cadastrad')) return true;
+  return false;
+}
 
 export const buildRpsPayloadFromForm = (form: NfEmissionCompanyForm) => ({
   lote: clampRpsInt(form.rpsLote, 1),
@@ -113,6 +136,12 @@ export const getNfEmissionCompanyValidationMessage = (form: NfEmissionCompanyFor
   if (!hasRequiredText(form.codigoCidade)) return 'Informe o código IBGE da cidade.';
   if (!hasRequiredText(form.descricaoCidade)) return 'Informe a cidade da empresa.';
   if (String(form.estado ?? '').trim().length !== 2) return 'Informe a UF com 2 letras (ex.: PR).';
+  if (!hasRequiredText(form.email)) {
+    return 'Informe o e-mail da empresa (obrigatório no cadastro fiscal).';
+  }
+  if (!isValidEmail(form.email)) {
+    return 'Informe um e-mail válido (ex.: contato@empresa.com.br).';
+  }
   if (!Number.isFinite(form.rpsLote) || form.rpsLote < 1) {
     return 'Lote RPS deve ser um número inteiro maior ou igual a 1.';
   }
@@ -136,7 +165,16 @@ const resolveDocumentosAtivosSelection = (documentosAtivos?: DocumentosAtivosSta
   };
 };
 
-const buildNfseBlockFromSelection = (selection: DocumentosAtivosState): Record<string, unknown> => {
+const buildNfseConfigRpsFromForm = (form: NfEmissionCompanyForm) => ({
+  serie: String(form.rpsSerie ?? '1').trim() || '1',
+  numero: clampRpsInt(form.rpsNumero, 1),
+  lote: clampRpsInt(form.rpsLote, 1)
+});
+
+const buildNfseBlockFromSelection = (
+  selection: DocumentosAtivosState,
+  form?: NfEmissionCompanyForm
+): Record<string, unknown> => {
   if (!selection.nfse) {
     return { ...PLUGNOTAS_EMPRESA_DOC_INATIVO };
   }
@@ -146,7 +184,8 @@ const buildNfseBlockFromSelection = (selection: DocumentosAtivosState): Record<s
     config: {
       producao: true,
       [PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
-      [PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON
+      [PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
+      rps: form ? buildNfseConfigRpsFromForm(form) : { serie: '1', numero: 1, lote: 1 }
     }
   };
 };
@@ -209,10 +248,13 @@ export const buildNfEmissionEmpresaPayload = ({
     nomeFantasia: form.nomeFantasia.trim() || form.razaoSocial.trim(),
     regimeTributario: Number(form.regimeTributario || '1'),
     simplesNacional: Boolean(form.simplesNacional),
+    ...(form.regimeTributario === '1' && form.simplesNacional
+      ? { regimeTributarioEspecial: PLUGNOTAS_REGIME_ESPECIAL_MEI }
+      : {}),
     endereco,
     /** Sem input na UI (US-MEI-NFS-02); política alinhada ao backend US-MEI-NFS-01. */
     inscricaoEstadual: PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
-    nfse: buildNfseBlockFromSelection(documentosSelection),
+    nfse: buildNfseBlockFromSelection(documentosSelection, form),
     nfe: buildNfeBlockFromSelection(documentosSelection),
     nfce: buildNfceBlockFromSelection(documentosSelection)
   };

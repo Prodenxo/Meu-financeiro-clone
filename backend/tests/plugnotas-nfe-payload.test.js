@@ -44,6 +44,13 @@ test('normalizePlugnotasNfePayload converte item flat para formato Plugnotas', (
   assert.equal(item.tributos.icms.csosn, undefined);
 });
 
+test('normalizePlugnotasNfePayload preenche descricaoMeio quando meio é 99', () => {
+  const out = normalizePlugnotasNfePayload({
+    pagamentos: [{ meio: '99', valor: 504 }],
+  });
+  assert.deepEqual(out.pagamentos, [{ meio: '99', valor: 504, descricaoMeio: 'Outros' }]);
+});
+
 test('extractNfeItemQuantidade aceita número simples e objeto', () => {
   assert.equal(extractNfeItemQuantidade({ quantidade: 42 }), 42);
   assert.equal(

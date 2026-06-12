@@ -9,7 +9,19 @@ export interface NfeEmitenteDestinatarioInput {
   cpfCnpj: string;
   razaoSocial?: string;
   email?: string;
+  /** SEFAZ indIEDest: 1 contribuinte, 2 isento, 9 não contribuinte */
+  indIEDest?: '1' | '2' | '9' | string;
   inscricaoEstadual?: string;
+  endereco?: {
+    cep: string;
+    logradouro: string;
+    numero: string;
+    bairro: string;
+    codigoCidade: string;
+    descricaoCidade: string;
+    estado: string;
+    complemento?: string;
+  };
 }
 
 export interface NfeIcmsInput {
@@ -56,9 +68,11 @@ export interface NfeItemInput {
   descricao: string;
   ncm: string;
   cfop: string;
-  unidade: string;
-  quantidade: string | number;
-  valorUnitario: string | number;
+  unidade?: string;
+  unidadeComercial?: string;
+  quantidade?: string | number | { comercial: number; tributavel?: number };
+  quantidadeComercial?: string | number;
+  valorUnitario?: string | number | { comercial: number; tributavel?: number };
   valor?: string | number;
   desconto?: string | number;
   cest?: string;
@@ -70,9 +84,11 @@ export interface NfeLikePayloadInput {
   idIntegracao?: string;
   modelo?: '55' | '65' | string;
   natureza?: string;
+  consumidorFinal?: boolean;
   emitente: NfeEmitenteDestinatarioInput;
   destinatario?: NfeEmitenteDestinatarioInput;
   itens: NfeItemInput[];
+  pagamentos?: Array<{ meio: string; valor: number; descricaoMeio?: string }>;
   informacoesComplementares?: string;
   config?: Record<string, unknown>;
 }

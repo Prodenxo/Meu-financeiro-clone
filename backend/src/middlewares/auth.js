@@ -1,6 +1,12 @@
 import { createSupabaseClient } from '../config/supabase.js';
-import { normalizeEnvSecret } from '../config/env.js';
-import { unauthorized, badRequest } from '../utils/errors.js';
+import { normalizeEnvSecret, env } from '../config/env.js';
+import { unauthorized, badRequest, serviceUnavailable } from '../utils/errors.js';
+import {
+  decodeJwtHeader,
+  isSupabaseAuthNetworkError,
+  verifySupabaseAccessToken,
+} from '../utils/verifySupabaseAccessToken.js';
+import { verifySupabaseAccessTokenWithJwks } from '../utils/verifySupabaseAccessTokenJwks.js';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -105,7 +111,40 @@ export const requireAuth = async (req, _res, next) => {
       return next();
     }
 
-    // 🔐 3. JWT do Supabase (utilizador real)
+    // 🔐 3. JWT do Supabase (utilizador real) — validação local (sem round-trip Auth)
+    const jwtHeader = decodeJwtHeader(token);
+    const jwtSecret = env.SUPABASE_JWT_SECRET;
+
+    if (!jwtHeader?.alg || jwtHeader.alg === 'HS256') {
+      const localUser = verifySupabaseAccessToken(token, jwtSecret);
+      if (localUser) {
+        req.user = localUser;
+        req.accessToken = token;
+        req.authType = 'user';
+        return next();
+      }
+    }
+
+    if (jwtHeader?.alg && ['RS256', 'ES256'].includes(jwtHeader.alg)) {
+      const jwksUser = await verifySupabaseAccessTokenWithJwks(token, env.SUPABASE_URL);
+      if (jwksUser) {
+        req.user = jwksUser;
+        req.accessToken = token;
+        req.authType = 'user';
+        return next();
+      }
+    }
+
+    if (jwtSecret || jwtHeader?.alg) {
+      return next(
+        unauthorized(
+          jwtHeader?.alg && jwtHeader.alg !== 'HS256'
+            ? 'Sessão inválida ou expirada. Saia e entre novamente. Se persistir, verifique conexão com o Supabase.'
+            : 'Sessão inválida. Em Supabase → Settings → JWT Keys → aba Legacy JWT Secret, copie o secret completo para SUPABASE_JWT_SECRET no .env e reinicie o backend.',
+        ),
+      );
+    }
+
     const supabase = createSupabaseClient({ accessToken: token });
     const { data, error } = await supabase.auth.getUser();
 
@@ -114,6 +153,15 @@ export const requireAuth = async (req, _res, next) => {
       req.accessToken = token;
       req.authType = 'user';
       return next();
+    }
+
+    if (error && isSupabaseAuthNetworkError(error)) {
+      return next(
+        serviceUnavailable(
+          'Serviço de autenticação temporariamente indisponível. Adicione SUPABASE_JWT_SECRET no .env do backend (Supabase → Settings → API) e reinicie.',
+          { code: 'auth_upstream_timeout' },
+        ),
+      );
     }
 
     // ❌ 4. Se não passou em nenhum

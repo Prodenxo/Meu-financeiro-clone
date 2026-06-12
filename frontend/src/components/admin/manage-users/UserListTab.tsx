@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import Fuse from 'fuse.js';
 import { type ManagedUser, type EmpresaOption } from '../../../services/usersService';
+import { matchManagedUserSearch } from '../../../utils/matchManagedUserSearch';
 import { getMeiUserStatusShort, isMeiSlotUser } from '../../../lib/meiUserSlot';
 import { formatIsoDateUtcCalendarPtBr } from '../../../utils/formatIsoDateUtcCalendarPtBr';
 import LoadingOverlay from '../../LoadingOverlay';
@@ -70,22 +70,12 @@ export function UserListTab({
     [baseUsers]
   );
 
-  const fuseInstance = useMemo(
-    () =>
-      new Fuse(sortedUsers, {
-        keys: ['displayName', 'email', 'empresaName', 'phone'],
-        threshold: 0.3,
-        ignoreLocation: true,
-      }),
-    [sortedUsers]
-  );
-
   const filteredUsers = useMemo(
     () =>
       inputValue.trim()
-        ? fuseInstance.search(inputValue.trim()).map((result) => result.item)
+        ? sortedUsers.filter((user) => matchManagedUserSearch(user, inputValue))
         : sortedUsers,
-    [inputValue, fuseInstance, sortedUsers]
+    [inputValue, sortedUsers]
   );
 
   const handleSearchChange = (value: string) => {
@@ -158,7 +148,7 @@ export function UserListTab({
                   value={inputValue}
                   onChange={(event) => handleSearchChange(event.target.value)}
                   className="planner-input-compact w-full pl-10"
-                  placeholder="Pesquisar por nome, email ou empresa..."
+                  placeholder="Nome, email, telefone, empresa ou perfil..."
                 />
                 <svg
                   className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"

@@ -4,6 +4,7 @@ import { ChevronDown, Users } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { hasRole } from '../lib/roles';
 import { listUsers, type ManagedUser } from '../services/usersService';
+import { matchManagedUserSearch } from '../utils/matchManagedUserSearch';
 import {
   downloadAdminMeiGuide,
   downloadAdminUserParcelamentoPdf,
@@ -383,18 +384,8 @@ export default function AdminUserData() {
   }, [users]);
 
   const filteredUsers = useMemo(() => {
-    const normalizedQuery = userQuery.trim().toLowerCase();
-    if (!normalizedQuery) return sortedUsers;
-    return sortedUsers.filter((user) => {
-      const name = (user.displayName || '').toLowerCase();
-      const email = (user.email || '').toLowerCase();
-      const empresa = (user.empresaName || '').toLowerCase();
-      return (
-        name.includes(normalizedQuery) ||
-        email.includes(normalizedQuery) ||
-        empresa.includes(normalizedQuery)
-      );
-    });
+    if (!userQuery.trim()) return sortedUsers;
+    return sortedUsers.filter((user) => matchManagedUserSearch(user, userQuery));
   }, [sortedUsers, userQuery]);
 
   useEffect(() => {
@@ -1050,7 +1041,7 @@ export default function AdminUserData() {
                 }
               }}
               className="planner-input-compact"
-              placeholder={loadingUsers ? 'Carregando usuários...' : 'Digite para filtrar'}
+              placeholder={loadingUsers ? 'Carregando usuários...' : 'Nome, email, telefone ou empresa...'}
               disabled={loadingUsers}
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -1905,7 +1896,10 @@ export default function AdminUserData() {
 
                         setEmitirNotaSubmitting(true);
                         try {
-                          const payload = buildNfeLikePayloadFromMeiForm(adminNfeLikeForm);
+                          const payload = buildNfeLikePayloadFromMeiForm(
+                            adminNfeLikeForm,
+                            adminEmitDocumentType === 'NFE' ? 'NFE' : 'NFCE',
+                          );
                           await emitirNotaAsAdmin(selectedUserId, {
                             documentType: adminEmitDocumentType,
                             payload

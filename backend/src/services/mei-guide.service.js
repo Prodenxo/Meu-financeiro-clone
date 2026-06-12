@@ -21,6 +21,7 @@ import {
   countOtherUsersWithPlugnotasCertId,
   getPlugNotasCertId
 } from './mei-certificate-store.js';
+import { syncEmitenteMirrorAfterCertificateUpload } from './mei-emitente-empresa-sync.js';
 import {
   cadastrarCertificadoPlugNotas,
   resolverCertificadoIdPorCnpj,
@@ -1405,6 +1406,15 @@ export const uploadCertificate = async (userId, payload) => {
 
   const certDocument = certInfo?.doc ? normalizeDoc(certInfo.doc) : null;
 
+  let previousCertDocument = null;
+  if (certDocument) {
+    try {
+      previousCertDocument = await getCertificateDocument(userId);
+    } catch {
+      previousCertDocument = null;
+    }
+  }
+
   if (env.MEI_CERT_ENCRYPTION_KEY) {
     try {
       const { passphraseEnc, passphraseIv } = encryptPassphrase(password);
@@ -1419,6 +1429,22 @@ export const uploadCertificate = async (userId, payload) => {
       });
     } catch (err) {
       throw badRequest(err?.message || 'Falha ao salvar certificado');
+    }
+  }
+
+  if (certDocument) {
+    try {
+      await syncEmitenteMirrorAfterCertificateUpload(userId, {
+        certDocument,
+        certInfo,
+        previousDoc: previousCertDocument,
+        payloadEmitente: emitente
+      });
+    } catch (syncErr) {
+      console.warn('[mei-guide.uploadCertificate] sync emitente pós-certificado (não-fatal)', {
+        userId,
+        error: syncErr instanceof Error ? syncErr.message : String(syncErr)
+      });
     }
   }
 

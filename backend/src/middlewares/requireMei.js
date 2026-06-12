@@ -9,7 +9,7 @@ export const __setGetRequesterContextForTests = (resolver) => {
 
 export const requireMeiEnabled = async (req, _res, next) => {
   try {
-    const context = await getRequesterContextRef(req.accessToken);
+    const context = await getRequesterContextRef(req.accessToken, req.user);
     const isSuperadmin = context?.role === 'superadmin';
     if (!isSuperadmin && context?.mei !== true) {
       return next(forbidden('Acesso MEI desabilitado'));

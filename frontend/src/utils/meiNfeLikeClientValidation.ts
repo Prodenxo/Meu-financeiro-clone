@@ -1,5 +1,7 @@
 import type { MeiNfeLikeFormState, MeiNfeLikeItemFormState } from './meiNfeLikeFormState';
 import { parseMeiDecimalInput } from './meiNfeLikePayloadBuilder';
+import { getDestinatarioIeValidationMessage, normalizeDestinatarioIndIeDest } from './meiNfeDestinatarioIe';
+import { getDestinatarioEnderecoValidationMessage } from './meiNfeDestinatarioEndereco';
 import { isValidCpfOrCnpjDigits as isValidCpfOrCnpjChecksum } from './validateCpfCnpjBr';
 
 const normalizeDoc = (value: string) => String(value || '').replace(/\D/g, '');
@@ -45,6 +47,22 @@ export function validateMeiNfeLikeForm(
 
   if (!state.destinatarioRazao.trim()) {
     set('mei-nfe-dest-razao', `Razão social do destinatário da ${label} é obrigatória`, 'destinatario');
+  }
+
+  const ieMsg = getDestinatarioIeValidationMessage(
+    normalizeDestinatarioIndIeDest(state.destinatarioIndIEDest),
+    state.destinatarioInscricaoEstadual,
+    label,
+  );
+  if (ieMsg) {
+    set('mei-nfe-dest-ie', ieMsg, 'destinatario');
+  }
+
+  if (label === 'NF-e') {
+    const enderecoMsg = getDestinatarioEnderecoValidationMessage(state.destinatarioEndereco, label);
+    if (enderecoMsg) {
+      set('mei-nfe-dest-endereco', enderecoMsg, 'destinatario');
+    }
   }
 
   if (!state.itens.length) {

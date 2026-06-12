@@ -23,6 +23,7 @@ import {
   inspectNfseContractInput,
   PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
 } from './plugnotas-mei-empresa-policy.js';
+import { normalizeMeiEmpresaPayload } from './plugnotas-mei-empresa-policy.js';
 import { consultarCidadePlugNotas } from './plugnotas-cidades.service.js';
 import {
   applyEmpresaPlugnotasDocumentSelectionForPatch,
@@ -34,7 +35,11 @@ import {
 import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.js';
 import { isPlugnotasIbgeTableRejectMessage } from '../../utils/plugnotasIbgeTableRejectMessage.js';
 import {
+  applyEmpresaPlugnotasNfseConfigRps,
   applyEmpresaPlugnotasRpsInicialForPost,
+  cloneEmpresaPlugnotasRpsInicialPost,
+  hasClientRpsShape,
+  hasNfseConfigRpsShape,
   sanitizeEmpresaPlugnotasRpsPayload,
   stripRpsFromEmpresaPayload
 } from './plugnotas-empresa-rps-inicial.js';
@@ -846,8 +851,22 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
 
+  normalizeMeiEmpresaPayload(payload);
+
+  const nfseBlock = payload.nfse;
+  const nfseAtivo = nfseBlock && typeof nfseBlock === 'object' && !Array.isArray(nfseBlock)
+    && nfseBlock.ativo !== false;
+
+  if (!hasClientRpsShape(payload.rps) && nfseAtivo) {
+    payload.rps = cloneEmpresaPlugnotasRpsInicialPost();
+  }
+
   if (Object.prototype.hasOwnProperty.call(payload, 'rps')) {
     sanitizeEmpresaPlugnotasRpsPayload(payload);
+  }
+
+  if (nfseAtivo && !hasNfseConfigRpsShape({ nfse: payload.nfse })) {
+    applyEmpresaPlugnotasNfseConfigRps(payload);
   }
 
   const credState = extractPrefeituraPortalCredentialState(payload);
@@ -964,6 +983,8 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
 
   payload.cpfCnpj = cnpj;
   delete payload.cnpj;
+
+  normalizeMeiEmpresaPayload(payload);
 
   const credState = extractPrefeituraPortalCredentialState(payload);
   const attemptNfseMode = resolveAttemptNfseModeFromPayload(payload);

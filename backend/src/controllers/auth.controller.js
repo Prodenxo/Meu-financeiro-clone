@@ -167,7 +167,7 @@ export const getPermissions = async (req, res, next) => {
       return sendSuccess(res, data, 'Permissões do cargo');
     }
 
-    const requester = await getRequesterContext(req.accessToken);
+    const requester = await getRequesterContext(req.accessToken, req.user);
     const actorContext = await resolveActorMembershipsForUser(requester.userId);
     const effective = rbacCatalogService.resolveEffectivePermissionsForActor({
       ...actorContext,
@@ -193,7 +193,7 @@ export const checkPermission = async (req, res, next) => {
   try {
     const permission = req.query?.permission;
     if (!permission) throw badRequest('Query permission é obrigatória');
-    const requester = await getRequesterContext(req.accessToken);
+    const requester = await getRequesterContext(req.accessToken, req.user);
     const actorContext = await resolveActorMembershipsForUser(requester.userId);
     const result = rbacCatalogService.checkActorPermission(
       {

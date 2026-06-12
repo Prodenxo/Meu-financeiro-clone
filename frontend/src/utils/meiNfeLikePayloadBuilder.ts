@@ -10,6 +10,7 @@ import {
   mapNfeItemForPlugnotas,
   parseDecimalInput,
   resolveNfeConsumidorFinal,
+  buildDefaultNfePagamentos,
 } from './plugnotasNfeItem';
 
 const normalizeDoc = (value: string) => String(value || '').replace(/\D/g, '');
@@ -59,7 +60,7 @@ export function buildNfeLikePayloadFromMeiForm(
     },
     ...(documentType === 'NFE' ? { consumidorFinal: resolveNfeConsumidorFinal(destDigits) } : {}),
     itens,
-    ...(total > 0 ? { pagamentos: [{ meio: '99', valor: total }] } : {}),
+    ...(total > 0 ? { pagamentos: buildDefaultNfePagamentos(total) } : {}),
     ...(state.informacoesComplementares.trim()
       ? { informacoesComplementares: state.informacoesComplementares.trim() }
       : {}),

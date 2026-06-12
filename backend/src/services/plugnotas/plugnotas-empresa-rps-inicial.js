@@ -9,6 +9,13 @@ export const EMPRESA_PLUGNOTAS_RPS_INICIAL_POST = Object.freeze({
   numeracao: Object.freeze([Object.freeze({ numero: 1, serie: '1' })])
 });
 
+/** Contrato PlugNotas em `nfse.config.rps` (série, número, lote). */
+export const EMPRESA_PLUGNOTAS_NFSE_CONFIG_RPS_CANONICAL = Object.freeze({
+  serie: '1',
+  numero: 1,
+  lote: 1
+});
+
 const parsePositiveInt = (value, fallback) => {
   const n = Number.parseInt(String(value ?? ''), 10);
   if (Number.isFinite(n) && n >= 1) return n;
@@ -19,7 +26,7 @@ const parsePositiveInt = (value, fallback) => {
  * @param {unknown} rps
  * @returns {boolean}
  */
-const hasClientRpsShape = (rps) => {
+export const hasClientRpsShape = (rps) => {
   if (!rps || typeof rps !== 'object' || Array.isArray(rps)) return false;
   const numeracao = rps.numeracao;
   if (!Array.isArray(numeracao) || numeracao.length < 1) return false;
@@ -55,16 +62,57 @@ export const sanitizeEmpresaPlugnotasRpsPayload = (payload) => {
  * POST /empresa: aplica `rps` canónico só se o cliente não enviou bloco utilizável; caso contrário sanitiza o enviado.
  * @param {Record<string, unknown>|null|undefined} payload
  */
+export const normalizeNfseConfigRps = (raw) => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ...EMPRESA_PLUGNOTAS_NFSE_CONFIG_RPS_CANONICAL };
+  }
+  const serie = String(raw.serie ?? '').trim() || '1';
+  const numero = parsePositiveInt(raw.numero, 1);
+  const lote = parsePositiveInt(raw.lote, 1);
+  return { serie, numero, lote };
+};
+
+/**
+ * @param {unknown} empresa
+ * @returns {boolean}
+ */
+export const hasNfseConfigRpsShape = (empresa) => {
+  if (!empresa || typeof empresa !== 'object' || Array.isArray(empresa)) return false;
+  const nfse = empresa.nfse;
+  if (!nfse || typeof nfse !== 'object' || Array.isArray(nfse) || nfse.ativo === false) return false;
+  const rps = nfse.config?.rps;
+  if (!rps || typeof rps !== 'object' || Array.isArray(rps)) return false;
+  const serie = String(rps.serie ?? '').trim();
+  const numero = parsePositiveInt(rps.numero, NaN);
+  return Boolean(serie) && Number.isFinite(numero) && numero >= 1;
+};
+
+/**
+ * Garante `nfse.config.rps` quando NFS-e está activa no payload empresa.
+ * @param {Record<string, unknown>|null|undefined} payload
+ */
+export const applyEmpresaPlugnotasNfseConfigRps = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+  const nfse = payload.nfse;
+  if (!nfse || typeof nfse !== 'object' || Array.isArray(nfse) || nfse.ativo === false) return;
+  const config = nfse.config && typeof nfse.config === 'object' && !Array.isArray(nfse.config)
+    ? { ...nfse.config }
+    : { producao: true };
+  config.rps = normalizeNfseConfigRps(config.rps);
+  payload.nfse = { ...nfse, config };
+};
+
 export const applyEmpresaPlugnotasRpsInicialForPost = (payload) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
   if (hasClientRpsShape(payload.rps)) {
     sanitizeEmpresaPlugnotasRpsPayload(payload);
-    return;
+  } else {
+    payload.rps = {
+      lote: 1,
+      numeracao: [{ numero: 1, serie: '1' }]
+    };
   }
-  payload.rps = {
-    lote: 1,
-    numeracao: [{ numero: 1, serie: '1' }]
-  };
+  applyEmpresaPlugnotasNfseConfigRps(payload);
 };
 
 /**
@@ -79,3 +127,12 @@ export const stripRpsFromEmpresaPayload = (payload) => {
   }
   return payload;
 };
+
+/**
+ * Clona o bloco canónico para PATCH de reparo (empresas criadas via POST→PATCH sem `rps`).
+ * @returns {{ lote: number, numeracao: Array<{ numero: number, serie: string }> }}
+ */
+export const cloneEmpresaPlugnotasRpsInicialPost = () => ({
+  lote: EMPRESA_PLUGNOTAS_RPS_INICIAL_POST.lote,
+  numeracao: [{ numero: 1, serie: '1' }]
+});

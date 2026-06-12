@@ -11,6 +11,7 @@ import {
   downloadNfseXmlPorIntegracao,
   emitirNfse
 } from './plugnotas/nfse.service.js';
+import { ensureEmpresaPlugnotasRpsForNfseEmit } from './plugnotas/plugnotas-empresa-rps-heal.js';
 import {
   extractNfeItemQuantidade,
   extractNfeItemValorUnitario,
@@ -1280,6 +1281,13 @@ export const emitirNota = async (userId, input) => {
     }
 
     phase = 'plugnotas_emit';
+    if (documentType === DOCUMENT_TYPE_NFSE) {
+      const cnpjPrestador = prestadorDoc
+        || String(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || '').replace(/\D/g, '');
+      if (cnpjPrestador.length === 14) {
+        await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestador);
+      }
+    }
     const response = await adapter.emitir(emitPayload);
     const plugnotasId = extractPlugNotasId(response);
     const idIntegracao = extractIntegracaoId(response) || payload.idIntegracao;
