@@ -25,6 +25,11 @@ import {
   normalizePlugnotasNfePayload,
 } from './plugnotas/plugnotas-nfe-payload.js';
 import {
+  applyMeiNfeEmitForcePolicy,
+  ensureMeiNfePlugnotasCadastroBeforeEmit,
+  hydrateMeiNfeEmitenteIeFromEmpresa,
+} from './plugnotas/plugnotas-mei-nfe-emit-force.js';
+import {
   cancelarNfe,
   consultarNfe,
   consultarNfePorIdOuProtocolo,
@@ -1290,6 +1295,13 @@ export const emitirNota = async (userId, input) => {
     let emitPayload = payload;
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
       emitPayload = normalizePlugnotasNfePayload(payload);
+      const cnpjEmitente = prestadorDoc
+        || String(payload?.emitente?.cpfCnpj || payload?.prestador?.cpfCnpj || '').replace(/\D/g, '');
+      if (cnpjEmitente.length === 14) {
+        const empresaPlugnotas = await ensureMeiNfePlugnotasCadastroBeforeEmit(cnpjEmitente);
+        emitPayload = hydrateMeiNfeEmitenteIeFromEmpresa(emitPayload, empresaPlugnotas);
+      }
+      emitPayload = applyMeiNfeEmitForcePolicy(emitPayload);
     }
 
     phase = 'plugnotas_emit';

@@ -72,6 +72,39 @@ const normalizeNfeIcmsForPlugnotas = (icms) => {
   return prune({ ...block, origem });
 };
 
+/** CST PIS/COFINS usados por MEI/Simples sem incidência (NT 2009/004). */
+const SIMPLES_PIS_COFINS_CSTS = new Set(['49', '99', '07', '08']);
+
+/**
+ * Plugnotas gera PISOutr incompleto (só vBC) se mandar só `cst: 49`.
+ * Para Simples/MEI, exige baseCalculo { valor }, aliquota e valor zerados.
+ */
+export const normalizeNfePisCofinsForPlugnotasSn = (block) => {
+  const raw = toObject(block);
+  const cst = String(raw.cst || '').trim();
+  if (!cst) return prune(raw);
+
+  const normalizedCst = cst.padStart(2, '0').slice(0, 2);
+  if (!SIMPLES_PIS_COFINS_CSTS.has(normalizedCst)) {
+    return prune({ ...raw, cst: normalizedCst });
+  }
+
+  const baseCalculo = raw.baseCalculo;
+  const baseValor = (
+    baseCalculo && typeof baseCalculo === 'object' && !Array.isArray(baseCalculo)
+      ? toPlugnotasNumber(baseCalculo.valor ?? baseCalculo.vBC)
+      : toPlugnotasNumber(baseCalculo)
+  ) ?? 0;
+
+  return prune({
+    ...raw,
+    cst: normalizedCst,
+    baseCalculo: { valor: baseValor },
+    aliquota: toPlugnotasNumber(raw.aliquota) ?? 0,
+    valor: toPlugnotasNumber(raw.valor) ?? 0,
+  });
+};
+
 export const normalizeNfeItemForPlugnotasEmit = (item) => {
   if (!item || typeof item !== 'object') return item;
 
@@ -97,11 +130,62 @@ export const normalizeNfeItemForPlugnotasEmit = (item) => {
     tributos: prune({
       ...tributos,
       icms: normalizeNfeIcmsForPlugnotas(tributos.icms),
+      pis: normalizeNfePisCofinsForPlugnotasSn(tributos.pis),
+      cofins: normalizeNfePisCofinsForPlugnotasSn(tributos.cofins),
     }),
     unidade: undefined,
     quantidadeComercial: undefined,
     valorUnitarioComercial: undefined,
   }) || item;
+};
+
+const PRESENCIAL_REQUIRES_INTERMEDIADOR = new Set([2, 3, 4, 9]);
+
+const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
+
+/**
+ * Plugnotas costuma gerar indIEDest=9 para CNPJ sem IE, mesmo com indIEDest=2 no JSON.
+ */
+export const destinatarioMapsToNaoContribuinteOnPlugnotas = (destinatario) => {
+  const dest = toObject(destinatario);
+  const indIEDest = String(dest.indIEDest ?? dest.indicadorInscricaoEstadual ?? '').trim();
+  const ie = normalizeDoc(dest.inscricaoEstadual || '');
+  const doc = normalizeDoc(dest.cpfCnpj || '');
+
+  if (indIEDest === '9') return true;
+  if (indIEDest === '1' && ie) return false;
+  if (doc.length === 14 && !ie) return true;
+  if (doc.length === 11) return true;
+  return false;
+};
+
+/**
+ * NT 2020.006: indPres 2/3/4/9 exige intermediador (0=sem, 1=com marketplace).
+ * Plugnotas assume indPres=9 quando presencial não é enviado.
+ * SEFAZ: indIEDest=9 exige indFinal=1 (consumidorFinal).
+ */
+export const normalizePlugnotasNfeIdeForEmit = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const next = { ...payload };
+  const presencialRaw = next.presencial;
+  const presencial = presencialRaw === undefined || presencialRaw === null || presencialRaw === ''
+    ? null
+    : Number(presencialRaw);
+
+  const needsIntermediador = presencial === null
+    || Number.isNaN(presencial)
+    || PRESENCIAL_REQUIRES_INTERMEDIADOR.has(presencial);
+
+  if (needsIntermediador && next.intermediador == null) {
+    next.intermediador = 0;
+  }
+
+  if (destinatarioMapsToNaoContribuinteOnPlugnotas(next.destinatario)) {
+    next.consumidorFinal = true;
+  }
+
+  return next;
 };
 
 export const normalizePlugnotasNfePayload = (payload) => {
@@ -110,7 +194,7 @@ export const normalizePlugnotasNfePayload = (payload) => {
     ? payload.itens.map(normalizeNfeItemForPlugnotasEmit)
     : payload.itens;
   const pagamentos = normalizeNfePagamentosForPlugnotas(payload.pagamentos);
-  return { ...payload, itens, pagamentos };
+  return normalizePlugnotasNfeIdeForEmit({ ...payload, itens, pagamentos });
 };
 
 const normalizeNfePagamentosForPlugnotas = (pagamentos) => {

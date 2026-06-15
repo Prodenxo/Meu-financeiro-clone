@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import {
   extractNfeItemQuantidade,
   extractNfeItemValorUnitario,
+  normalizeNfePisCofinsForPlugnotasSn,
+  normalizePlugnotasNfeIdeForEmit,
+  destinatarioMapsToNaoContribuinteOnPlugnotas,
   normalizePlugnotasNfePayload,
 } from '../src/services/plugnotas/plugnotas-nfe-payload.js';
 
@@ -15,6 +18,42 @@ test('extractNfeItemValorUnitario aceita objeto Plugnotas', () => {
   assert.equal(
     extractNfeItemValorUnitario({ valorUnitario: { comercial: 12, tributavel: 12 } }),
     12,
+  );
+});
+
+test('normalizeNfePisCofinsForPlugnotasSn completa CST 49 com zeros', () => {
+  assert.deepEqual(normalizeNfePisCofinsForPlugnotasSn({ cst: '49' }), {
+    cst: '49',
+    baseCalculo: { valor: 0 },
+    aliquota: 0,
+    valor: 0,
+  });
+});
+
+test('normalizePlugnotasNfeIdeForEmit preenche intermediador e consumidorFinal', () => {
+  const out = normalizePlugnotasNfeIdeForEmit({
+    destinatario: {
+      cpfCnpj: '01858368000158',
+      indIEDest: '2',
+    },
+    consumidorFinal: false,
+  });
+  assert.equal(out.intermediador, 0);
+  assert.equal(out.consumidorFinal, true);
+});
+
+test('destinatarioMapsToNaoContribuinteOnPlugnotas detecta CNPJ sem IE', () => {
+  assert.equal(
+    destinatarioMapsToNaoContribuinteOnPlugnotas({ cpfCnpj: '01858368000158', indIEDest: '2' }),
+    true,
+  );
+  assert.equal(
+    destinatarioMapsToNaoContribuinteOnPlugnotas({
+      cpfCnpj: '01858368000158',
+      indIEDest: '1',
+      inscricaoEstadual: '12345678',
+    }),
+    false,
   );
 });
 
@@ -42,6 +81,18 @@ test('normalizePlugnotasNfePayload converte item flat para formato Plugnotas', (
   assert.equal(item.valor, 504);
   assert.equal(item.tributos.icms.cst, '102');
   assert.equal(item.tributos.icms.csosn, undefined);
+  assert.deepEqual(item.tributos.pis, {
+    cst: '49',
+    baseCalculo: { valor: 0 },
+    aliquota: 0,
+    valor: 0,
+  });
+  assert.deepEqual(item.tributos.cofins, {
+    cst: '49',
+    baseCalculo: { valor: 0 },
+    aliquota: 0,
+    valor: 0,
+  });
 });
 
 test('normalizePlugnotasNfePayload preenche descricaoMeio quando meio é 99', () => {

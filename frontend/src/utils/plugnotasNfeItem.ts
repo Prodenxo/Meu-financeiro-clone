@@ -30,9 +30,19 @@ export function parseDecimalInput(raw: string): number | null {
 
 const normalizeDoc = (value: string) => String(value || '').replace(/\D/g, '');
 
-/** CPF → consumidor final; CNPJ (condomínio/empresa) → operação B2B. */
-export function resolveNfeConsumidorFinal(destDoc: string): boolean {
-  return normalizeDoc(destDoc).length === 11;
+/** CPF ou destinatário não contribuinte → consumidor final (exigência SEFAZ com indIEDest=9). */
+export function resolveNfeConsumidorFinal(
+  destDoc: string,
+  indIEDest?: string,
+  inscricaoEstadual?: string,
+): boolean {
+  const doc = normalizeDoc(destDoc);
+  const ie = normalizeDoc(inscricaoEstadual || '');
+  const ind = String(indIEDest ?? '').trim();
+  if (ind === '9') return true;
+  if (doc.length === 14 && ind !== '1' && !ie) return true;
+  if (doc.length === 11) return true;
+  return false;
 }
 
 /** Plugnotas: CSOSN MEI (102) vai em `tributos.icms.cst`. */

@@ -58,7 +58,15 @@ export function buildNfeLikePayloadFromMeiForm(
       ...ieFields,
       ...(enderecoPayload ? { endereco: enderecoPayload } : {}),
     },
-    ...(documentType === 'NFE' ? { consumidorFinal: resolveNfeConsumidorFinal(destDigits) } : {}),
+    ...(documentType === 'NFE'
+      ? {
+          consumidorFinal: resolveNfeConsumidorFinal(
+            destDigits,
+            indIEDest,
+            state.destinatarioInscricaoEstadual,
+          ),
+        }
+      : {}),
     itens,
     ...(total > 0 ? { pagamentos: buildDefaultNfePagamentos(total) } : {}),
     ...(state.informacoesComplementares.trim()
