@@ -87,6 +87,12 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 | `consult_nfse` | Sim | Status de uma nota (`payload.id`); `payload.sync: false` para não consultar Plugnotas. |
 | `get_nfse_pdf` | Sim | PDF em base64 (`includeBase64: true`) ou só metadados + `execCommand`. |
 | `send_nfse_whatsapp` | Sim | Envia PDF via Z-API/n8n se configurado; senão use `mf-nfse-send.sh`. |
+| `list_catalog_servicos` | Sim | Lista só **serviços NFS-e** (alias de `list_nfse_produtos` com tipo serviço). |
+| `list_nfe_produtos` | Sim | Lista só **produtos NF-e** (mercadorias com NCM/CFOP). |
+| `register_nfe_cliente` | Sim | Cadastra cliente para NF-e **com endereço** (CEP, logradouro, etc.). CNPJ pode preencher via BrasilAPI. |
+| `register_nfe_produto` | Sim | Cadastra produto: `discriminacao`, `codigo`, `ncm` (8 dígitos), opcional `valor`, `cfop`. |
+| `preview_nfe` | Sim | Pré-visualização NF-e de produto sem emitir. |
+| `emit_nfe` | Sim | Emite NF-e; exige `payload.confirm: true` e NF-e liberada pelo admin. |
 
 ---
 
@@ -141,6 +147,36 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 **Erros comuns:** `NFSE_EMITENTE_MISSING`, `NFSE_CODIGO_SERVICO_MISSING`, `NFSE_TOMADOR_NOME_MISSING` — seguir `botHint` na resposta; orientar app MEI → Notas.
 
 Implementação: `openclaw-nfse.service.js` + `mei-notas.service.js` (`emitirNota`).
+
+---
+
+## NF-e de produto pelo WhatsApp (`emit_nfe`)
+
+**Pré-requisitos:** NF-e liberada pelo admin, certificado A1, empresa com NF-e ativa no Plugnotas, produtos no catálogo (NCM + CFOP + tributos).
+
+**Fluxo recomendado**
+
+1. **Antes de emitir**, listar o catálogo certo:
+   - Serviço (NFS-e) → `list_catalog_servicos` ou `list_nfse_produtos` com `payload.tipo: "servico"`
+   - Produto (NF-e) → `list_nfe_produtos` ou `list_nfse_produtos` com `payload.tipo: "produto"`
+2. Cliente: `list_nfse_clientes` ou `register_nfe_cliente` (endereço obrigatório para NF-e)
+3. Produto: `register_nfe_produto` se não existir (NCM 8 dígitos, SKU, descrição, valor)
+4. `preview_nfe` com `destinatarioNome`, `produtoNome`, `valor`
+5. Utilizador confirma → `emit_nfe` com `"confirm": true`
+
+**Payload `emit_nfe` / `preview_nfe`**
+
+| Campo | Obrigatório | Notas |
+|-------|-------------|--------|
+| `destinatarioNome` / `tomadorNome` | Condicional | Nome no catálogo |
+| `destinatarioCpfCnpj` / `tomadorCpfCnpj` | Condicional | Se não usar nome |
+| `produtoNome` / `descricao` | Sim* | Nome do produto no catálogo NF-e |
+| `produtoId` | Alternativa | UUID do item em `list_nfe_produtos` |
+| `valor` | Sim | Valor unitário ou total (qtd padrão 1) |
+| `quantidade` | Opcional | Padrão `1` |
+| `confirm` | Só em `emit_nfe` | `true` para emitir |
+
+Implementação: `openclaw-nfe.service.js`.
 
 ---
 

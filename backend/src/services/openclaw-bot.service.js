@@ -47,6 +47,16 @@ import {
   registerOpenclawNfseProduto,
   rethrowNfseErrorForBot,
 } from './openclaw-nfse.service.js';
+import {
+  emitOpenclawNfe,
+  formatOpenclawCatalogServicosMessage,
+  formatOpenclawNfeProdutosMessage,
+  listOpenclawNfeProdutos,
+  previewOpenclawNfeEmit,
+  registerOpenclawNfeCliente,
+  registerOpenclawNfeProduto,
+  rethrowNfeErrorForBot,
+} from './openclaw-nfe.service.js';
 import { formatCnpjDisplay } from '../utils/cpf-cnpj.js';
 import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
 import {
@@ -574,6 +584,13 @@ export const resolveActorMembershipsForUser = async (userId) => {
   return { memberships, hasActiveMembership: true, profileRole, hasSuperadminCapability };
 };
 
+const resolveCatalogDocumentType = (payload = {}) => {
+  const raw = String(payload?.documentType || payload?.tipo || payload?.type || '').trim().toUpperCase();
+  if (['NFE', 'NF-E', 'PRODUTO', 'PRODUTOS', 'PRODUCT', 'PRODUCTS'].includes(raw)) return 'NFE';
+  if (['NFSE', 'NFS-E', 'SERVICO', 'SERVICOS', 'SERVICE', 'SERVICES'].includes(raw)) return 'NFSE';
+  return undefined;
+};
+
 /**
  * @param {{ phone?: string, senderPhone?: string, action: string, payload?: object }} input
  */
@@ -610,6 +627,19 @@ export const runOpenclawAction = async (input) => {
     register_nfse_produto: 'register_nfse_produto',
     cadastrar_produto_nfse: 'register_nfse_produto',
     cadastrar_servico_nfse: 'register_nfse_produto',
+    list_nfe_produtos: 'list_nfe_produtos',
+    list_catalog_produtos: 'list_nfe_produtos',
+    list_catalog_servicos: 'list_catalog_servicos',
+    listar_produtos_nfe: 'list_nfe_produtos',
+    listar_servicos_nfse: 'list_catalog_servicos',
+    register_nfe_cliente: 'register_nfe_cliente',
+    cadastrar_cliente_nfe: 'register_nfe_cliente',
+    register_nfe_produto: 'register_nfe_produto',
+    cadastrar_produto_nfe: 'register_nfe_produto',
+    preview_nfe: 'preview_nfe',
+    emit_nfe: 'emit_nfe',
+    emitir_nfe: 'emit_nfe',
+    nota_produto: 'emit_nfe',
     minha_agenda: 'list_calendar_events',
     compromissos_agenda: 'list_calendar_events',
     agenda_compromissos: 'list_calendar_events',
@@ -1653,12 +1683,136 @@ export const runOpenclawAction = async (input) => {
       payload?.q ?? payload?.nome ?? payload?.busca ?? payload?.produto ?? payload?.servico ?? '',
     ).trim();
     const limit = payload?.limit;
-    const produtos = await listOpenclawNfseProdutos(userId, { q, limit });
+    const documentType = resolveCatalogDocumentType(payload) || 'NFSE';
+    if (documentType === 'NFE') {
+      const produtos = await listOpenclawNfeProdutos(userId, { q, limit });
+      return {
+        ok: true,
+        message: formatOpenclawNfeProdutosMessage(produtos),
+        data: { produtos, documentType: 'NFE', userId, actorContext, ...linkDebug },
+      };
+    }
+    const produtos = await listOpenclawNfseProdutos(userId, { q, limit, documentType: 'NFSE' });
     return {
       ok: true,
-      message: formatOpenclawNfseProdutosMessage(produtos),
-      data: { produtos, userId, actorContext, ...linkDebug },
+      message: formatOpenclawCatalogServicosMessage(produtos),
+      data: { produtos, documentType: 'NFSE', userId, actorContext, ...linkDebug },
     };
+  }
+
+  if (action === 'list_catalog_servicos') {
+    const q = String(
+      payload?.q ?? payload?.nome ?? payload?.busca ?? payload?.servico ?? '',
+    ).trim();
+    const limit = payload?.limit;
+    const produtos = await listOpenclawNfseProdutos(userId, { q, limit, documentType: 'NFSE' });
+    return {
+      ok: true,
+      message: formatOpenclawCatalogServicosMessage(produtos),
+      data: { produtos, documentType: 'NFSE', userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'list_nfe_produtos') {
+    const q = String(
+      payload?.q ?? payload?.nome ?? payload?.busca ?? payload?.produto ?? '',
+    ).trim();
+    const limit = payload?.limit;
+    const produtos = await listOpenclawNfeProdutos(userId, { q, limit });
+    return {
+      ok: true,
+      message: formatOpenclawNfeProdutosMessage(produtos),
+      data: { produtos, documentType: 'NFE', userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'register_nfe_cliente') {
+    try {
+      const result = await registerOpenclawNfeCliente(userId, payload);
+      const nome = result.cliente?.nome || 'Cliente';
+      const doc = result.cliente?.documento || '';
+      return {
+        ok: true,
+        message: `Cliente NF-e cadastrado: ${nome} (${doc}). Use list_nfe_produtos e preview_nfe antes de emit_nfe.`,
+        data: { ...result, userId, actorContext, ...linkDebug },
+      };
+    } catch (err) {
+      rethrowNfeErrorForBot(err);
+    }
+  }
+
+  if (action === 'register_nfe_produto') {
+    try {
+      const result = await registerOpenclawNfeProduto(userId, payload);
+      const nome = result.produto?.discriminacao || 'Produto';
+      const codigo = result.produto?.codigo || '';
+      return {
+        ok: true,
+        message: `Produto NF-e cadastrado: ${nome} (SKU ${codigo}). Use list_nfe_produtos e emit_nfe com confirm:true.`,
+        data: { ...result, userId, actorContext, ...linkDebug },
+      };
+    } catch (err) {
+      rethrowNfeErrorForBot(err);
+    }
+  }
+
+  if (action === 'preview_nfe') {
+    try {
+      const preview = await previewOpenclawNfeEmit(userId, payload);
+      return {
+        ok: true,
+        message:
+          `Pré-visualização NF-e: ${preview.produtoDescricao} — R$ ${preview.valorTotal} `
+          + `para ${preview.destinatarioRazaoSocial} (${preview.destinatarioCpfCnpj}). `
+          + 'Confirme com emit_nfe e confirm:true.',
+        data: { preview, requiresConfirm: true, userId, actorContext, ...linkDebug },
+      };
+    } catch (err) {
+      rethrowNfeErrorForBot(err);
+    }
+  }
+
+  if (action === 'emit_nfe') {
+    try {
+      const result = await emitOpenclawNfe(userId, payload);
+      if (result.requiresConfirm) {
+        const p = result.preview;
+        return {
+          ok: true,
+          message:
+            `Confirme a NF-e: ${p?.produtoDescricao} — R$ ${p?.valorTotal} `
+            + `para ${p?.destinatarioRazaoSocial}. Repita com "confirm":true no payload.`,
+          data: {
+            preview: result.preview,
+            requiresConfirm: true,
+            notEmitted: true,
+            userId,
+            actorContext,
+            ...linkDebug,
+          },
+        };
+      }
+      const nota = result.nota;
+      const status = nota?.status || 'processando';
+      const dest = nota?.cnpj_tomador || result.preview?.destinatarioCpfCnpj;
+      return {
+        ok: true,
+        message: `NF-e enviada para emissão (status: ${status}). Destinatário: ${dest || '—'}.`,
+        data: {
+          nota: {
+            id: nota?.id,
+            status: nota?.status,
+            plugnotas_id: nota?.plugnotas_id,
+            document_type: nota?.document_type || 'NFE',
+          },
+          userId,
+          actorContext,
+          ...linkDebug,
+        },
+      };
+    } catch (err) {
+      rethrowNfeErrorForBot(err);
+    }
   }
 
   if (action === 'register_nfse_produto') {
@@ -2018,6 +2172,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, register_nfse_produto, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, list_catalog_servicos, list_nfe_produtos, register_nfse_produto, register_nfe_cliente, register_nfe_produto, preview_nfse, emit_nfse, preview_nfe, emit_nfe, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

@@ -1038,8 +1038,8 @@ export const fetchOpenclawNfsePdfBase64 = async (userId, { id, sync = true } = {
 export const listOpenclawNfseClientes = async (userId, { q = '', limit = 20 } = {}) =>
   listarCatalogoClientes(userId, { q, limit });
 
-export const listOpenclawNfseProdutos = async (userId, { q = '', limit = 20 } = {}) =>
-  listarCatalogoProdutos(userId, { q, limit });
+export const listOpenclawNfseProdutos = async (userId, { q = '', limit = 20, documentType } = {}) =>
+  listarCatalogoProdutos(userId, { q, limit, ...(documentType ? { documentType } : {}) });
 
 export const formatOpenclawNfseProdutosMessage = (produtos) => {
   const list = Array.isArray(produtos) ? produtos : [];
@@ -1070,4 +1070,12 @@ export const rethrowNfseErrorForBot = (err) => {
     });
   }
   throw err;
+};
+
+/** Reutilizado por NF-e (OpenClaw). */
+export const resolveOpenclawTomador = resolveTomador;
+export {
+  resolveEmitenteForNfseSetup,
+  emitenteMissingAddressFields,
+  emitenteToPrestadorInput,
 };
