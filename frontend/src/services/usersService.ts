@@ -106,6 +106,22 @@ export async function deleteUser(userId: string) {
   return apiClient.delete<{ userId: string }>(`/users/${userId}`);
 }
 
+export type AdminMeiDocumentosAtivosInput = {
+  nfse: boolean;
+  nfe: boolean;
+  nfce: boolean;
+};
+
+export async function patchAdminMeiDocumentosAtivos(
+  userId: string,
+  documentosAtivos: AdminMeiDocumentosAtivosInput
+): Promise<{ documentosAtivos: AdminMeiDocumentosAtivosInput }> {
+  return apiClient.patch<{ documentosAtivos: AdminMeiDocumentosAtivosInput }>(
+    `/admin/users/${encodeURIComponent(userId)}/mei-documentos-ativos`,
+    { documentosAtivos }
+  );
+}
+
 export async function resetUserPassword(userId: string, password?: string) {
   return apiClient.post<{ userId: string; password: string }>(`/users/${userId}/reset-password`, {
     password

@@ -51,6 +51,11 @@ export interface AdminMeiCertificateStatus {
   documento?: string | null;
   certValidFrom?: string | null;
   certValidTo?: string | null;
+  documentosAtivos?: {
+    nfse: boolean;
+    nfe: boolean;
+    nfce: boolean;
+  } | null;
 }
 
 export interface AdminMeiPeriod {

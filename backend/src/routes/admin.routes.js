@@ -48,6 +48,12 @@ router.get('/das/status', requireAuth, requireAdmin, controller.listDasStatus);
 router.get('/das/pending', requireAuth, requireAdmin, controller.listPendingDas);
 router.post('/das/reprocess', requireAuth, requireAdmin, controller.reprocessDas);
 router.get('/mei-guide/:userId/certificate/status', requireAuth, requireAdmin, controller.getAdminMeiCertificateStatus);
+router.patch(
+  '/users/:userId/mei-documentos-ativos',
+  requireAuth,
+  requireAdmin,
+  controller.patchAdminMeiDocumentosAtivos,
+);
 router.get('/mei-guide/:userId/parcelamentos', requireAuth, requireAdmin, controller.listAdminUserParcelamentos);
 router.get('/mei-guide/:userId/parcelamentos/:numero/pdf', requireAuth, requireAdmin, controller.downloadAdminUserParcelamentoPdf);
 router.get('/mei-guide/:userId/periods', requireAuth, requireAdmin, controller.listAdminMeiPeriods);

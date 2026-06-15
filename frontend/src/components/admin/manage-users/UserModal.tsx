@@ -11,9 +11,11 @@ import {
   sendUserPasswordResetEmail,
   unbanUser,
   updateUser,
+  patchAdminMeiDocumentosAtivos,
   type EmpresaOption,
   type ManagedUser
 } from '../../../services/usersService';
+import { fetchAdminMeiCertificateStatus } from '../../../services/adminUserDataService';
 import LoadingOverlay from '../../LoadingOverlay';
 import { UserBlockConfirmDialog, type UserBlockConfirmIntent } from './UserBlockConfirmDialog';
 import {
@@ -54,6 +56,10 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
   const [phone, setPhone] = useState('');
   const [selectedRole, setSelectedRole] = useState<'admin' | 'usuario' | 'outsider'>('usuario');
   const [mei, setMei] = useState(false);
+  const [docNfse, setDocNfse] = useState(true);
+  const [docNfe, setDocNfe] = useState(false);
+  const [docNfce, setDocNfce] = useState(false);
+  const [docsLoading, setDocsLoading] = useState(false);
   const [expiresAt, setExpiresAt] = useState('');
 
   // Empresa selection
@@ -90,6 +96,28 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
         const matchedEmpresa = empresas.find(e => e.id === user.empresaId);
         setEmpresaQuery(matchedEmpresa?.empresa || user.empresaName || '');
         setLinkBlocked(user.status === false);
+        void (async () => {
+          setDocsLoading(true);
+          try {
+            const status = await fetchAdminMeiCertificateStatus(user.id);
+            const docs = status.documentosAtivos;
+            if (docs) {
+              setDocNfse(Boolean(docs.nfse));
+              setDocNfe(Boolean(docs.nfe));
+              setDocNfce(Boolean(docs.nfce));
+            } else {
+              setDocNfse(true);
+              setDocNfe(false);
+              setDocNfce(false);
+            }
+          } catch {
+            setDocNfse(true);
+            setDocNfe(false);
+            setDocNfce(false);
+          } finally {
+            setDocsLoading(false);
+          }
+        })();
       } else {
         setEmail('');
         setPassword('');
@@ -99,6 +127,9 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
         setPhone('');
         setSelectedRole('usuario');
         setMei(false);
+        setDocNfse(true);
+        setDocNfe(false);
+        setDocNfce(false);
         setExpiresAt('');
         setTargetEmpresaId('');
         setEmpresaQuery('');
@@ -248,6 +279,11 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
       return;
     }
 
+    if (mei && !docNfse && !docNfe && !docNfce) {
+      toast.error('Com MEI ativo, libere ao menos um tipo de nota (NFS-e, NF-e ou NFC-e).');
+      return;
+    }
+
     if (mode === 'create') {
       const pwdCheck = validateStrongPassword(password);
       if (!pwdCheck.ok) {
@@ -292,7 +328,14 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
           mei,
           expiresAt: expiresAt || null
         };
-        await createUser(payload);
+        const created = await createUser(payload);
+        if (mei && created?.userId) {
+          await patchAdminMeiDocumentosAtivos(created.userId, {
+            nfse: docNfse,
+            nfe: docNfe,
+            nfce: docNfce,
+          });
+        }
         toast.success('Usuário criado com sucesso');
       } else if (user) {
         const trimmedEditEmail = editEmail.trim().toLowerCase();
@@ -312,6 +355,13 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
           expiresAt: expiresAt || null
         };
         await updateUser(user.id, payload);
+        if (mei) {
+          await patchAdminMeiDocumentosAtivos(user.id, {
+            nfse: docNfse,
+            nfe: docNfe,
+            nfce: docNfce,
+          });
+        }
         if (emailChanged) {
           toast.success(`Usuário atualizado. Link de confirmação enviado para ${trimmedEditEmail}.`);
         } else {
@@ -750,6 +800,35 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                 </div>
               )}
             </div>
+
+            {mei ? (
+              <div className="rounded-2xl border border-slate-100 dark:border-slate-800/50 bg-slate-50/40 dark:bg-slate-900/40 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">Tipos de nota liberados</h4>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                    O usuário só vê e cadastra o que estiver ativo aqui (NFS-e, NF-e, NFC-e).
+                  </p>
+                </div>
+                {docsLoading ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Carregando permissões…</p>
+                ) : (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <input type="checkbox" checked={docNfse} onChange={(e) => setDocNfse(e.target.checked)} />
+                      NFS-e (serviços)
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <input type="checkbox" checked={docNfe} onChange={(e) => setDocNfe(e.target.checked)} />
+                      NF-e (produtos)
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <input type="checkbox" checked={docNfce} onChange={(e) => setDocNfce(e.target.checked)} />
+                      NFC-e (varejo)
+                    </label>
+                  </div>
+                )}
+              </div>
+            ) : null}
 
             {role === 'superadmin' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">

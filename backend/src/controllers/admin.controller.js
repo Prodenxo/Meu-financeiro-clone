@@ -10,6 +10,11 @@ import { badRequest, forbidden } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
 import { buildAccessRequestReport } from '../services/access-request-report.service.js';
+import { upsertDocumentosAtivosMirrorForAdmin } from '../services/mei-certificate-store.js';
+import {
+  assertAtLeastOneDocumentoAtivo,
+  normalizeDocumentosAtivosShape,
+} from '../services/plugnotas/plugnotas-empresa-documentos-ativos.js';
 
 let meiDasServiceRef = meiDasService;
 let meiGuideServiceRef = meiGuideService;
@@ -189,6 +194,26 @@ export const getAdminMeiCertificateStatus = async (req, res, next) => {
     await ensureMeiEnabledForUser(req.accessToken, userId);
     const data = await meiGuideServiceRef.getCertificateStatus(userId);
     return sendSuccess(res, data, 'Status do certificado obtido');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+/** Admin define quais tipos de nota o utilizador pode emitir (espelho local). */
+export const patchAdminMeiDocumentosAtivos = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
+
+    const selection = normalizeDocumentosAtivosShape(req.body?.documentosAtivos ?? req.body);
+    assertAtLeastOneDocumentoAtivo(selection);
+
+    const saved = await upsertDocumentosAtivosMirrorForAdmin(userId, selection);
+    if (!saved) {
+      throw badRequest('Não foi possível gravar as permissões de emissão para este utilizador.');
+    }
+    return sendSuccess(res, { documentosAtivos: saved }, 'Permissões de emissão atualizadas');
   } catch (error) {
     return next(error);
   }

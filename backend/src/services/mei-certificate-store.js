@@ -645,6 +645,86 @@ export const saveDocumentosAtivosMirror = async (userId, selection, deps = {}) =
  * @param {string} userId
  * @returns {Promise<{ nfse: boolean, nfe: boolean, nfce: boolean } | null>}
  */
+/**
+ * Admin: grava permissões de emissão (NFS-e / NF-e / NFC-e) mesmo sem certificado A1.
+ * Faz upsert mínimo em `user_mei_certificates` só com `documentos_ativos`.
+ *
+ * @param {string} userId
+ * @param {{ nfse: boolean, nfe: boolean, nfce: boolean }} selection
+ * @param {object} [deps]
+ * @returns {Promise<{ nfse: boolean, nfe: boolean, nfce: boolean } | null>}
+ */
+export const upsertDocumentosAtivosMirrorForAdmin = async (userId, selection, deps = {}) => {
+  const logWarn = deps.logWarn ?? logDocumentosAtivosMirrorPersistWarn;
+  const resolveSupabase = deps.getSupabase ?? getSupabase;
+
+  if (!userId || !selection || typeof selection !== 'object') return null;
+  const json = {
+    nfse: Boolean(selection.nfse),
+    nfe: Boolean(selection.nfe),
+    nfce: Boolean(selection.nfce),
+  };
+  if (!json.nfse && !json.nfe && !json.nfce) return null;
+
+  try {
+    const supabase = resolveSupabase();
+    const { data: existing, error: selErr } = await supabase
+      .from(TABLE)
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (selErr) {
+      logWarn({
+        userId,
+        reason: 'admin_mirror_select_failed',
+        detail: selErr.message || String(selErr.code || 'unknown'),
+      });
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    if (existing?.id) {
+      const { error } = await supabase
+        .from(TABLE)
+        .update({ documentos_ativos: json, updated_at: now })
+        .eq('user_id', userId);
+      if (error) {
+        logWarn({
+          userId,
+          reason: 'admin_mirror_update_failed',
+          detail: error.message || String(error.code || 'unknown'),
+        });
+        return null;
+      }
+      return json;
+    }
+
+    const { error: insErr } = await supabase.from(TABLE).insert({
+      user_id: userId,
+      documentos_ativos: json,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    });
+    if (insErr) {
+      logWarn({
+        userId,
+        reason: 'admin_mirror_insert_failed',
+        detail: insErr.message || String(insErr.code || 'unknown'),
+      });
+      return null;
+    }
+    return json;
+  } catch (err) {
+    logWarn({
+      userId,
+      reason: 'admin_mirror_unexpected_error',
+      detail: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+};
+
 export const getDocumentosAtivosMirror = async (userId) => {
   if (!userId) return null;
   try {

@@ -49,3 +49,18 @@ export function meiFiscalListFilterEmptyMessage(filter: MeiFiscalListDocumentFil
   }
   return 'Nenhuma nota corresponde aos filtros atuais.';
 }
+
+export const MEI_CATALOG_DOC_FILTER_OPTIONS: { value: MeiFiscalListDocumentFilter; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'NFSE', label: 'NFS-e' },
+  { value: 'NFE', label: 'NF-e' },
+  { value: 'NFCE', label: 'NFC-e' }
+];
+
+/** Mensagem de lista vazia no catálogo de serviços/produtos. */
+export function meiCatalogListFilterEmptyMessage(filter: MeiFiscalListDocumentFilter): string {
+  if (filter === 'NFSE' || filter === 'NFE' || filter === 'NFCE') {
+    return `Não há itens de ${meiFiscalDocumentTypeShortLabel(filter)} no catálogo.`;
+  }
+  return 'Nenhum item no catálogo.';
+}

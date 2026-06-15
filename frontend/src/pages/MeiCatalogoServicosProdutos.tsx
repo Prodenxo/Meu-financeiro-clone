@@ -15,6 +15,12 @@ import {
 import { formatBrlDisplay } from '../lib/formatMoneyPtBr';
 import { toast } from '../lib/toast';
 import { userFacingToastSummary } from '../lib/mapUnknownErrorToUserFacing';
+import {
+  MEI_CATALOG_DOC_FILTER_OPTIONS,
+  meiCatalogListFilterEmptyMessage,
+  meiFiscalDocumentTypeShortLabel,
+  type MeiFiscalListDocumentFilter
+} from '../utils/meiFiscalDocumentTypeUi';
 
 const SEARCH_DEBOUNCE_MS = 300;
 const LIST_LIMIT = 50;
@@ -40,6 +46,7 @@ function ariaLabelExcluirItem(row: NfseCatalogProduto): string {
 export default function MeiCatalogoServicosProdutos() {
   const [searchInput, setSearchInput] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
+  const [docFilter, setDocFilter] = useState<MeiFiscalListDocumentFilter>('all');
   const [rows, setRows] = useState<NfseCatalogProduto[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<unknown | null>(null);
@@ -65,7 +72,7 @@ export default function MeiCatalogoServicosProdutos() {
       const data = await listarCatalogoNfseProdutos({
         ...(debouncedQ ? { q: debouncedQ } : {}),
         limit: LIST_LIMIT,
-        documentType: 'NFSE'
+        ...(docFilter !== 'all' ? { documentType: docFilter } : {})
       });
       setRows(data);
     } catch (err) {
@@ -73,7 +80,7 @@ export default function MeiCatalogoServicosProdutos() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedQ]);
+  }, [debouncedQ, docFilter]);
 
   useEffect(() => {
     void loadProdutos();
@@ -125,6 +132,7 @@ export default function MeiCatalogoServicosProdutos() {
 
   const emptyWithQuery = Boolean(debouncedQ) && !loading && rows.length === 0;
   const emptyNoQuery = !debouncedQ && !loading && rows.length === 0;
+  const emptyCatalogMessage = meiCatalogListFilterEmptyMessage(docFilter);
 
   return (
     <PageShell>
@@ -138,7 +146,7 @@ export default function MeiCatalogoServicosProdutos() {
         </Link>
       </div>
 
-      <PageTitle subtitle="Serviços e produtos usados na emissão de NFS-e">
+      <PageTitle subtitle="Serviços e produtos usados na emissão de NFS-e, NF-e e NFC-e">
         Catálogo — serviços e produtos
       </PageTitle>
 
@@ -175,6 +183,32 @@ export default function MeiCatalogoServicosProdutos() {
         </button>
       </div>
 
+      <div
+        className="mb-4 flex flex-wrap gap-2"
+        role="radiogroup"
+        aria-label="Filtrar por tipo de documento"
+      >
+        {MEI_CATALOG_DOC_FILTER_OPTIONS.map((opt) => {
+          const active = docFilter === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              className={
+                active
+                  ? 'rounded-lg border border-blue-500/60 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 dark:border-blue-400/50 dark:bg-blue-950/40 dark:text-blue-300'
+                  : 'rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300'
+              }
+              onClick={() => setDocFilter(opt.value)}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+
       {loading ? (
         <div className="py-8 text-center text-slate-500 dark:text-slate-400">Carregando…</div>
       ) : emptyWithQuery ? (
@@ -192,7 +226,7 @@ export default function MeiCatalogoServicosProdutos() {
         <EmptyState
           icon={Package}
           title="Nenhum item no catálogo"
-          description="Adicione serviços ou produtos para reutilizar discriminação, CNAE e valores ao emitir NFS-e."
+          description={emptyCatalogMessage}
           action={
             <button type="button" className="planner-button" onClick={openCreate}>
               Novo item
@@ -209,6 +243,9 @@ export default function MeiCatalogoServicosProdutos() {
                 className="planner-card-muted p-4 shadow-sm"
               >
                 <p className="font-medium text-slate-900 dark:text-white">{summarizeDiscriminacao(row.discriminacao)}</p>
+                <p className="mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                  {meiFiscalDocumentTypeShortLabel(row.document_type)}
+                </p>
                 <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
                   <dt className="text-slate-500 dark:text-slate-400">CNAE</dt>
                   <dd className="tabular-nums">{row.cnae?.trim() ? row.cnae : '—'}</dd>
@@ -254,6 +291,9 @@ export default function MeiCatalogoServicosProdutos() {
                     Discriminação
                   </th>
                   <th scope="col" className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">
+                    Tipo
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">
                     CNAE
                   </th>
                   <th scope="col" className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">
@@ -278,6 +318,9 @@ export default function MeiCatalogoServicosProdutos() {
                   >
                     <td className="max-w-[220px] px-4 py-3 font-medium text-slate-900 dark:text-white">
                       <span title={row.discriminacao || undefined}>{summarizeDiscriminacao(row.discriminacao)}</span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                      {meiFiscalDocumentTypeShortLabel(row.document_type)}
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300 tabular-nums">
                       {row.cnae?.trim() ? row.cnae : '—'}

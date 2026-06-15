@@ -67,7 +67,25 @@ describe('MeiCatalogoServicosProdutos', () => {
 
     expect((await screen.findAllByText(/Consultoria técnica/i)).length).toBeGreaterThan(0);
     expect(listarMock).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 50, documentType: 'NFSE' })
+      expect.objectContaining({ limit: 50 })
+    );
+    expect((listarMock.mock.calls[0][0] as { documentType?: string }).documentType).toBeUndefined();
+  });
+
+  it('filtro NF-e envia documentType na listagem', async () => {
+    render(
+      <MemoryRouter>
+        <MeiCatalogoServicosProdutos />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(listarMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('radio', { name: 'NF-e' }));
+
+    await waitFor(() =>
+      expect(listarMock).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 50, documentType: 'NFE' })
+      )
     );
   });
 
