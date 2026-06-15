@@ -219,7 +219,7 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 - **`ping`:** `mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"ping"}'` (telefone do remetente no 1º arg).
 - **`list_roles`:** podes omitir `phone` para só o catálogo de cargos; com `phone` inclui o cargo do utilizador em `actorContext`.
 - **`phone`:** **Regra-base:** dígitos (DDI+número) do **remetente** deste chat — para **`list_categories` / `list_contas` / `get_saldo` / `list_transactions` / `create_transaction` / `update_transaction` / `delete_transaction` / `create_conta` / `update_conta` / `delete_conta`**. **Excepção autorizada:** em **`get_das_current`**, se (**admin da empresa**, confirmado por `resolve_user` no remetente) e colaborador com **mesmo `empresaId`** após segundo `resolve_user` no número do colaborador — usa esse **telefone do colaborador** no JSON; ou **superadmin** com conta alvo em `n8n_link`. Nunca inventes número.
-- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_contas`, `get_saldo`, `create_conta`, `update_conta`, `delete_conta`, `list_transactions`, `list_calendar_events`, `list_upcoming_calendar_events`, **`get_next_calendar_event`**, `create_calendar_event`, `create_transaction`, `update_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `register_nfse_cliente`, **`list_nfse_produtos`**, **`register_nfse_produto`**, `preview_nfse`, `emit_nfse`, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, ou `ping`.
+- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_contas`, `get_saldo`, `create_conta`, `update_conta`, `delete_conta`, `list_transactions`, `list_calendar_events`, `list_upcoming_calendar_events`, **`get_next_calendar_event`**, `create_calendar_event`, `create_transaction`, `update_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `register_nfse_cliente`, **`list_nfse_produtos`**, **`list_catalog_servicos`**, **`list_nfe_produtos`**, **`register_nfse_produto`**, **`register_nfe_cliente`**, **`register_nfe_produto`**, `preview_nfse`, `emit_nfse`, **`preview_nfe`**, **`emit_nfe`**, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, ou `ping`.
 - Em **cada** resposta com utilizador resolvido, o JSON inclui **`data.actorContext`**: **`profileRole`**, **`hasSuperadminCapability`**, `memberships` (cargo `role`, `empresaNome`, **`empresaId`**, …), **`hasActiveMembership`**. Usa **obrigatoriamente** para aplicar as regras de cargo antes de prometer ou executar algo (**comparar `empresaId`** admin × colaborador antes de **`get_das_current`** alheio). **Lançamentos** via API ficam sempre no **`user_id` do `phone` enviado** (não “toda a empresa”).
 - **Referência técnica completa:** ficheiro **`openclaw-midas-knowledge-base.md`** (ou `midas-kb.md` no teu workspace com o mesmo conteúdo).
 
@@ -282,7 +282,9 @@ Quando pedirem *“emite nota”*, *“nota fiscal para o cliente X”*, *“NFS
    - **Primeiro:** `list_nfse_clientes` com `payload.q` = nome (ex.: `"Rafael Reis"`), **ou** `preview_nfse` / `emit_nfse` com `payload.tomadorNome` (mesmo nome).
    - O backend resolve o CPF/CNPJ no catálogo. Só pede documento se **zero** clientes ou **vários** homónimos (`NFSE_TOMADOR_AMBIGUOUS`).
 3. **Serviço/produto (catálogo — NÃO confundir com cliente):**
-   - *"quais produtos/serviços tenho?"* → **`list_nfse_produtos`** (nunca `list_nfse_clientes`).
+   - *"quais serviços tenho?"* → **`list_catalog_servicos`** ou **`list_nfse_produtos`** (tipo serviço).
+   - *"quais produtos tenho?"* / *"nota de produto"* → **`list_nfe_produtos`** (nunca `list_nfse_clientes`).
+   - **Serviço (NFS-e)** e **produto (NF-e)** são catálogos diferentes — lista o certo **antes** de emitir.
    - O catálogo já tem **código municipal** e **CNAE** — **NUNCA** peça CNAE/código se o serviço está cadastrado.
    - Na emissão: `preview_nfse` / `emit_nfse` com `descricao` ou `produtoNome` igual ao catálogo — o backend resolve código e CNAE.
    - **PROIBIDO** chamar **`register_nfse_produto`** durante `preview_nfse` / `emit_nfse` se o catálogo já tem serviços — isso duplica itens na app. Só emite com o que existe.
@@ -319,7 +321,32 @@ O `UUID_DA_NOTA` vem de `emit_nfse` → `data.nota.id`. Se automático desligado
   - Se o gateway trouxer `[Audio]` / `{{Transcript}}` com frase legível, essa frase **é** o que o utilizador disse — responde ao **assunto**, sem meta-comentário sobre áudio.
   - Se **só** vires `media:audio` **sem** texto transcrito (STT falhou): *"Não consegui ouvir. Repete por texto ou grava de novo."* — sem menu de opções.
 - **PROIBIDO** pedir certificado A1 pelo WhatsApp — só na app.
-- Nota fiscal **≠** `create_transaction` (lançamento financeiro). Se pedirem só “registrar receita”, usa transação; se pedirem **nota fiscal**, usa `emit_nfse`.
+- Nota fiscal **≠** `create_transaction` (lançamento financeiro). Se pedirem só “registrar receita”, usa transação; se pedirem **nota fiscal de serviço**, usa `emit_nfse`; se pedirem **nota de produto / NF-e**, usa `emit_nfe`.
+
+### NF-e (nota fiscal de produto) pelo WhatsApp
+
+Quando pedirem *“nota de produto”*, *“NF-e”*, *“vender mercadoria”*, *“nota fiscal de água/produto”*:
+
+1. **`get_nfse_setup_status`** — certificado e dados fiscais do emitente (mesmo pré-requisito). NF-e também exige liberação pelo **admin** (`NFE_NOT_ALLOWED` se não liberado).
+2. **Antes de emitir, lista o catálogo:**
+   - **`list_nfe_produtos`** — mostra produtos com SKU, NCM, CFOP e valor sugerido.
+   - Se vazio → **`register_nfe_produto`**: `discriminacao`, `codigo` (SKU), `ncm` (8 dígitos), opcional `valor`, `cfop` (padrão 5102).
+3. **Cliente (destinatário):** igual NFS-e por nome → `list_nfse_clientes` ou `destinatarioNome` no payload.
+   - NF-e exige **endereço completo**. Se cliente novo ou sem endereço → **`register_nfe_cliente`** com CPF/CNPJ, nome e endereço (CEP, logradouro, número, bairro, cidade, UF, código IBGE). CNPJ pode preencher endereço via BrasilAPI.
+4. Coleta **valor** (e **produto** se houver vários no catálogo).
+5. **`preview_nfe`** ou **`emit_nfe` sem `confirm`** — resumo: produto + valor + destinatário.
+6. Só emite com **`emit_nfe`** e **`"confirm":true`** após confirmação.
+
+Exemplo:
+
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_nfe_produtos","payload":{}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfe","payload":{"destinatarioNome":"Cliente XYZ","produtoNome":"Água 20L","valor":25}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfe","payload":{"destinatarioNome":"Cliente XYZ","produtoNome":"Água 20L","valor":25,"confirm":true}}'
+```
+
+- **Não** uses `emit_nfse` para produto — são fluxos distintos.
+- **PROIBIDO** emitir sem listar produtos quando o utilizador não souber qual item escolher — mostra `list_nfe_produtos` numerada.
 
 ### Segurança e apagar
 
