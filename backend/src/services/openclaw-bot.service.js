@@ -1714,7 +1714,16 @@ export const runOpenclawAction = async (input) => {
     return {
       ok: true,
       message: formatOpenclawCatalogServicosMessage(produtos),
-      data: { produtos, documentType: 'NFSE', userId, actorContext, ...linkDebug },
+      data: {
+        produtos,
+        documentType: 'NFSE',
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Mostre APENAS message (lista numerada). Espere o utilizador escolher serviço antes de preview_nfse. '
+          + 'PROIBIDO inventar descricao genérica.',
+      },
     };
   }
 
@@ -1727,7 +1736,15 @@ export const runOpenclawAction = async (input) => {
     return {
       ok: true,
       message: formatOpenclawNfeProdutosMessage(produtos),
-      data: { produtos, documentType: 'NFE', userId, actorContext, ...linkDebug },
+      data: {
+        produtos,
+        documentType: 'NFE',
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Mostre APENAS message (lista numerada). Espere escolha do produto antes de preview_nfe.',
+      },
     };
   }
 

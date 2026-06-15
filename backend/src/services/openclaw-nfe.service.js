@@ -17,7 +17,7 @@ import {
   emitenteMissingAddressFields,
   emitenteToPrestadorInput,
 } from './openclaw-nfse.service.js';
-import { isNfEmitConfirmed } from './openclaw-nf-user-messages.js';
+import { isNfEmitConfirmed, isVagueNfItemLabel, formatNfeCatalogChoiceMessage, formatNfCatalogAmbiguousMessage, formatNfCatalogNotFoundMessage } from './openclaw-nf-user-messages.js';
 
 const normalizeDoc = (value) => normalizeDocDigits(value);
 
@@ -371,31 +371,53 @@ const resolveProdutoNfe = async (userId, payload) => {
     return found;
   }
 
-  const nome = pickProdutoNomeFromPayload(payload);
+  const nomeRaw = pickProdutoNomeFromPayload(payload);
+  const nome = isVagueNfItemLabel(nomeRaw) ? '' : nomeRaw;
+
   if (!nome) {
-    throw badRequest('Informe o produto (nome ou SKU).', {
-      code: 'NFE_PRODUTO_MISSING',
-      botHint: 'Use list_nfe_produtos para listar e depois produtoNome no payload.',
+    const catalogNfe = await listOpenclawNfeProdutos(userId, { limit: 20 });
+    if (!catalogNfe.length) {
+      throw badRequest(
+        'Nenhum produto cadastrado para NF-e. Cadastre na app (MEI → Notas) ou use register_nfe_produto.',
+        {
+          code: 'NFE_PRODUTO_CATALOG_EMPTY',
+          botHint: 'Use list_nfe_produtos. Não chame preview_nfe sem produto no catálogo.',
+        },
+      );
+    }
+    if (catalogNfe.length === 1) return catalogNfe[0];
+    throw badRequest(formatNfeCatalogChoiceMessage(catalogNfe), {
+      code: 'NFE_PRODUTO_CHOICE_REQUIRED',
+      produtos: catalogNfe.map((p) => ({
+        id: p.id,
+        discriminacao: p.discriminacao,
+        codigo: p.codigo,
+      })),
+      botHint:
+        'O utilizador não disse qual produto. Liste com list_nfe_produtos e só depois preview_nfe '
+        + 'com produtoNome exato.',
     });
   }
 
   const rows = await listOpenclawNfeProdutos(userId, { q: nome, limit: 20 });
   const lookup = pickProdutoCatalogoByNomeResult(rows, nome);
   if (lookup.kind === 'not_found') {
-    throw badRequest(`Produto "${nome}" não encontrado no catálogo NF-e.`, {
+    const catalogNfe = await listOpenclawNfeProdutos(userId, { limit: 20 });
+    throw badRequest(formatNfCatalogNotFoundMessage(nome, catalogNfe, 'NFE'), {
       code: 'NFE_PRODUTO_NOT_IN_CATALOG',
-      botHint: 'Use list_nfe_produtos ou register_nfe_produto para cadastrar.',
+      produtoNome: nome,
+      botHint: 'Liste o catálogo e espere escolha antes de preview_nfe.',
     });
   }
   if (lookup.kind === 'ambiguous') {
-    throw badRequest(`Vários produtos encontrados para "${nome}".`, {
+    throw badRequest(formatNfCatalogAmbiguousMessage(nome, lookup.matches, 'NFE'), {
       code: 'NFE_PRODUTO_AMBIGUOUS',
       matches: (lookup.matches || []).map((p) => ({
         id: p.id,
         discriminacao: p.discriminacao,
         codigo: p.codigo,
       })),
-      botHint: 'Liste as opções e peça ao utilizador para escolher produtoId ou nome exato.',
+      botHint: 'Mostre a lista numerada e peça produtoNome ou número.',
     });
   }
   return lookup.produto;

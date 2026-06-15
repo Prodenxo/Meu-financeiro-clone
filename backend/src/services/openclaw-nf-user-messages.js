@@ -97,3 +97,82 @@ export const isNfEmitConfirmed = (payload = {}) => {
   if (raw === 'true') return true;
   return CONFIRM_WORDS.has(raw);
 };
+
+const VAGUE_NF_ITEM_REGEX = [
+  /^notas?(\s+fiscal(is)?)?(\s+de)?(\s+servicos?)?$/i,
+  /^prestacao\s+de\s+servicos?$/i,
+  /^servicos?$/i,
+  /^emissao\s+de\s+nota/i,
+  /^emitir\s+nota/i,
+  /^fazer\s+nota/i,
+  /^tirar\s+nota/i,
+  /^nota\s+para\b/i,
+  /^cobranca$/i,
+];
+
+const normalizeNfItemLabel = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+
+const VAGUE_NF_ITEM_EXACT = new Set([
+  'nota',
+  'notas',
+  'nota fiscal',
+  'nota fiscal de servico',
+  'nota fiscal de servicos',
+  'prestacao de servicos',
+  'servico',
+  'servicos',
+  'emissao de nota',
+  'emitir nota',
+  'fazer nota',
+  'tirar nota',
+  'cobranca',
+]);
+
+/** Nome genérico vindo do áudio/LLM — não é item do catálogo. */
+export const isVagueNfItemLabel = (value) => {
+  const s = normalizeNfItemLabel(value);
+  if (!s) return true;
+  if (s.length <= 3) return true;
+  if (VAGUE_NF_ITEM_EXACT.has(s)) return true;
+  return VAGUE_NF_ITEM_REGEX.some((re) => re.test(s));
+};
+
+export const formatNfseCatalogChoiceMessage = (produtos = []) => {
+  const list = Array.isArray(produtos) ? produtos : [];
+  if (!list.length) {
+    return 'Você ainda não tem serviços cadastrados. Cadastre na app (MEI → Notas) e peça a nota de novo.';
+  }
+  const lines = list.map((p, i) => `${i + 1}. ${String(p.discriminacao || '—').trim()}`);
+  return `Qual serviço você quer na nota? Responda com o número ou o nome exato:\n${lines.join('\n')}`;
+};
+
+export const formatNfeCatalogChoiceMessage = (produtos = []) => {
+  const list = Array.isArray(produtos) ? produtos : [];
+  if (!list.length) {
+    return 'Você ainda não tem produtos cadastrados. Cadastre na app (MEI → Notas) e peça a nota de novo.';
+  }
+  const lines = list.map((p, i) => `${i + 1}. ${String(p.discriminacao || '—').trim()}`);
+  return `Qual produto você quer na nota? Responda com o número ou o nome exato:\n${lines.join('\n')}`;
+};
+
+export const formatNfCatalogAmbiguousMessage = (label, matches = [], documentType = 'NFSE') => {
+  const tipo = documentType === 'NFE' ? 'produto' : 'serviço';
+  const list = Array.isArray(matches) ? matches : [];
+  const lines = list.map((p, i) => `${i + 1}. ${String(p.discriminacao || '—').trim()}`);
+  return `Encontrei vários ${tipo}s parecidos com "${label}". Qual é?\n${lines.join('\n')}`;
+};
+
+export const formatNfCatalogNotFoundMessage = (label, catalog = [], documentType = 'NFSE') => {
+  const tipo = documentType === 'NFE' ? 'produto' : 'serviço';
+  const list = Array.isArray(catalog) ? catalog : [];
+  if (!list.length) {
+    return `Não encontrei o ${tipo} "${label}" e seu catálogo está vazio. Cadastre na app (MEI → Notas).`;
+  }
+  const lines = list.map((p, i) => `${i + 1}. ${String(p.discriminacao || '—').trim()}`);
+  return `Não encontrei o ${tipo} "${label}". Escolha um do seu catálogo:\n${lines.join('\n')}`;
+};

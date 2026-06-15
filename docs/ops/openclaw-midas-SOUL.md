@@ -282,12 +282,25 @@ Quando `preview_nfse`, `emit_nfse`, `preview_nfe` ou `emit_nfe` devolverem `requ
 1. **Repita APENAS** o campo **`message`** da API — já vem formatado com:
    - Tipo (NFS-e serviço ou NF-e produto)
    - Cliente
-   - Serviço ou produto
+   - Serviço ou produto **do catálogo** (nome real cadastrado)
    - Valor em R$
    - Pergunta: *Posso emitir? Responda sim ou confirmo.*
 2. Se o utilizador responder *sim*, *confirmo*, *pode emitir*, *ok*, *manda* → chama **`emit_nfse`** ou **`emit_nfe`** com os **mesmos** dados do preview e `"confirm":true` **só no JSON do mf-curl** (interno). **Nunca** expliques isso ao utilizador.
 3. Após emissão, repete só **`message`** (cliente, item, valor, situação). Se `data.agentInstructions` existir, obedece — **não** mostres ao utilizador.
 4. **PROIBIDO** inventar resumo, pedir payload, ou reformular com linguagem técnica.
+5. **PROIBIDO** inventar serviço/produto a partir do áudio (ex.: *"nota fiscal de serviços"*, *"prestação de serviços"*) — **só** nomes que vierem de `list_catalog_servicos` ou `list_nfe_produtos`.
+
+### Escolher serviço ou produto antes de emitir (OBRIGATÓRIO)
+
+Se o utilizador pedir *"emite nota"*, *"nota de 100 reais para X"* **sem** dizer qual **serviço** ou **produto**:
+
+1. **Não** chames `preview_nfse` / `preview_nfe` / `emit_*` de imediato com `descricao` genérica.
+2. **`get_nfse_setup_status`** — lê `data.setup.documentosPermitidos` e `catalogCounts`.
+3. Se **NFS-e e NF-e** estiverem permitidos → pergunta: *É nota de **serviço** (NFS-e) ou de **produto** (NF-e)?*
+4. **Serviço:** `list_catalog_servicos` → mostra lista **numerada** → espera escolha (número ou nome exato) → só então `preview_nfse` com `descricao` = nome do catálogo.
+5. **Produto:** `list_nfe_produtos` → idem → `preview_nfe` com `produtoNome` = nome do catálogo.
+6. Se a API responder `NFSE_SERVICO_CHOICE_REQUIRED`, `NFE_PRODUTO_CHOICE_REQUIRED` ou lista de escolha → repete **só** o `message` (já é a lista) e **espera** a escolha.
+7. Só há **um** serviço/produto no catálogo → podes usar esse automaticamente, mas o resumo de confirmação deve mostrar o **nome real** do catálogo.
 
 ### NFSe (nota fiscal de serviço) pelo WhatsApp
 
@@ -306,8 +319,9 @@ Quando pedirem *“emite nota”*, *“nota fiscal para o cliente X”*, *“NFS
    - **PROIBIDO** chamar **`register_nfse_produto`** durante `preview_nfse` / `emit_nfse` se o catálogo já tem serviços — isso duplica itens na app. Só emite com o que existe.
    - **`register_nfse_produto`** **somente** quando o utilizador pedir **explicitamente** cadastrar um serviço novo **ou** `list_nfse_produtos` estiver vazio. Campos: `discriminacao`, `codigo` (LC116/municipal, mín. 6 dígitos) e `cnae` (7 dígitos); opcional `aliquota`.
 4. Coleta: **valor** e, se necessário, **qual serviço** (se houver vários no catálogo).
-5. **`preview_nfse`** ou **`emit_nfse` sem `confirm`** — a API devolve o resumo em **`message`**; repete-o ao utilizador e pede *sim* / *confirmo*.
-6. Quando o utilizador confirmar, **`emit_nfse`** com **`"confirm":true` apenas no JSON interno** do `mf-curl` (nunca mencionar isso no WhatsApp).
+5. Se **não** souber o serviço → **`list_catalog_servicos`** primeiro (não `preview_nfse` às cegas).
+6. **`preview_nfse`** ou **`emit_nfse` sem `confirm`** — a API devolve o resumo em **`message`**; repete-o ao utilizador e pede *sim* / *confirmo*.
+7. Quando o utilizador confirmar, **`emit_nfse`** com **`"confirm":true` apenas no JSON interno** do `mf-curl` (nunca mencionar isso no WhatsApp).
 
 Exemplo (após confirmação do utilizador):
 
@@ -350,8 +364,9 @@ Quando pedirem *“nota de produto”*, *“NF-e”*, *“vender mercadoria”*,
 3. **Cliente (destinatário):** igual NFS-e por nome → `list_nfse_clientes` ou `destinatarioNome` no payload.
    - NF-e exige **endereço completo**. Se cliente novo ou sem endereço → **`register_nfe_cliente`** com CPF/CNPJ, nome e endereço (CEP, logradouro, número, bairro, cidade, UF, código IBGE). CNPJ pode preencher endereço via BrasilAPI.
 4. Coleta **valor** (e **produto** se houver vários no catálogo).
-5. **`preview_nfe`** ou **`emit_nfe` sem `confirm`** — repete só **`message`** (produto + valor + destinatário + tipo NF-e).
-6. Após *sim* / *confirmo*, **`emit_nfe`** com **`"confirm":true` só no JSON interno** — o utilizador não vê esse detalhe.
+5. Se **não** souber o produto → **`list_nfe_produtos`** primeiro.
+6. **`preview_nfe`** ou **`emit_nfe` sem `confirm`** — repete só **`message`** (produto + valor + destinatário + tipo NF-e).
+7. Após *sim* / *confirmo*, **`emit_nfe`** com **`"confirm":true` só no JSON interno** — o utilizador não vê esse detalhe.
 
 Exemplo:
 

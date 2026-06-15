@@ -3,8 +3,10 @@ import test from 'node:test';
 import {
   buildNfConfirmRequestUserMessage,
   buildNfEmittedUserMessage,
+  formatNfseCatalogChoiceMessage,
   formatValorBr,
   isNfEmitConfirmed,
+  isVagueNfItemLabel,
 } from '../src/services/openclaw-nf-user-messages.js';
 
 test('formatValorBr formata moeda pt-BR', () => {
@@ -60,4 +62,22 @@ test('isNfEmitConfirmed aceita linguagem natural', () => {
   assert.equal(isNfEmitConfirmed({ confirmar: 'sim' }), true);
   assert.equal(isNfEmitConfirmed({}), false);
   assert.equal(isNfEmitConfirmed({ confirm: 'talvez' }), false);
+});
+
+test('isVagueNfItemLabel rejeita nomes genéricos do áudio', () => {
+  assert.equal(isVagueNfItemLabel(''), true);
+  assert.equal(isVagueNfItemLabel('nota fiscal de serviços'), true);
+  assert.equal(isVagueNfItemLabel('Prestação de serviços'), true);
+  assert.equal(isVagueNfItemLabel('nota'), true);
+  assert.equal(isVagueNfItemLabel('Consultoria contábil'), false);
+});
+
+test('formatNfseCatalogChoiceMessage lista catálogo numerado', () => {
+  const msg = formatNfseCatalogChoiceMessage([
+    { discriminacao: 'Consultoria' },
+    { discriminacao: 'Manutenção' },
+  ]);
+  assert.match(msg, /1\. Consultoria/);
+  assert.match(msg, /2\. Manutenção/);
+  assert.match(msg, /número ou o nome exato/i);
 });

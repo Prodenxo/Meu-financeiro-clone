@@ -2,6 +2,7 @@ import { BACKEND_BUILD_ID } from '../build-id.js';
 import { badRequest } from '../utils/errors.js';
 import {
   getCertificateDocument,
+  getDocumentosAtivosMirror,
   getEmitenteNfseSnapshot,
   getPlugNotasCertId,
   hasCertificate,
@@ -24,6 +25,7 @@ import {
   obterNota,
   NFSE_SERVICO_CODIGO_MIN_LENGTH,
 } from './mei-notas.service.js';
+import { isVagueNfItemLabel, formatNfseCatalogChoiceMessage, formatNfCatalogAmbiguousMessage, formatNfCatalogNotFoundMessage } from './openclaw-nf-user-messages.js';
 import { isNfEmitConfirmed } from './openclaw-nf-user-messages.js';
 import { lookupCnpjBrasilApi } from './cnpj-lookup.service.js';
 import { isValidCpfOrCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
@@ -242,15 +244,20 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
     payload?.descricao,
     payload?.servico,
   );
+  if (isVagueNfItemLabel(discriminacao)) discriminacao = '';
 
   let codigo = firstNonEmpty(payload?.codigoServico, payload?.codigo);
   let cnae = firstNonEmpty(payload?.cnae);
   let codigoNbs = firstNonEmpty(payload?.codigoNbs, payload?.codigo_nbs);
   let aliquotaRaw = payload?.aliquota ?? payload?.aliquotaIss;
 
-  const servicoNome = pickServicoNomeFromPayload(payload);
+  const servicoNomeRaw = pickServicoNomeFromPayload(payload);
+  const servicoNome = isVagueNfItemLabel(servicoNomeRaw) ? '' : servicoNomeRaw;
+  let servicoLookupKind = servicoNome ? 'pending' : 'missing';
+
   if (servicoNome && (!codigo || !cnae || !discriminacao)) {
     const lookup = await findProdutoCatalogoByNome(userId, servicoNome);
+    servicoLookupKind = lookup.kind;
     if (lookup.kind === 'ok') {
       ({ codigo, cnae, codigoNbs, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(lookup.produto, {
         codigo,
@@ -260,7 +267,7 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
         discriminacao,
       }));
     } else if (lookup.kind === 'ambiguous') {
-      throw badRequest(`Vários serviços encontrados para "${servicoNome}".`, {
+      throw badRequest(formatNfCatalogAmbiguousMessage(servicoNome, lookup.matches, 'NFSE'), {
         code: 'NFSE_SERVICO_AMBIGUOUS',
         servicoNome,
         matches: (lookup.matches || []).map((p) => ({
@@ -269,34 +276,69 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
           codigo: p.codigo,
           cnae: p.cnae,
         })),
-        botHint: 'Use list_nfse_produtos e peça ao utilizador para escolher um serviço.',
+        botHint: 'Mostre a lista numerada e só depois chame preview_nfse com descricao igual ao catálogo.',
       });
     }
   }
 
-  if (!codigo || !cnae) {
-    const todos = await listarCatalogoProdutos(userId, { limit: 20 });
-    if (todos.length === 1) {
-      ({ codigo, cnae, codigoNbs, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(todos[0], {
+  const catalogNfse = await listarCatalogoProdutos(userId, { limit: 20, documentType: 'NFSE' });
+
+  if (!codigo || !cnae || !discriminacao) {
+    if (!catalogNfse.length) {
+      throw badRequest(
+        'Nenhum serviço cadastrado para NFS-e. Cadastre na app (MEI → Notas) ou use register_nfse_produto.',
+        {
+          code: 'NFSE_SERVICO_CATALOG_EMPTY',
+          botHint: 'Não chame preview_nfse sem serviço no catálogo. Oriente cadastro na app.',
+        },
+      );
+    }
+
+    if (catalogNfse.length === 1 && !servicoNome) {
+      ({ codigo, cnae, codigoNbs, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(catalogNfse[0], {
         codigo,
         cnae,
         codigoNbs,
         aliquotaRaw,
         discriminacao,
       }));
-    } else if (!codigo || !cnae) {
-      const ultimo = todos?.[0];
-      ({ codigo, cnae, codigoNbs, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(ultimo, {
-        codigo,
-        cnae,
-        codigoNbs,
-        aliquotaRaw,
-        discriminacao,
-      }));
+    } else if (servicoNome && servicoLookupKind === 'not_found') {
+      throw badRequest(
+        formatNfCatalogNotFoundMessage(servicoNome, catalogNfse, 'NFSE'),
+        {
+          code: 'NFSE_SERVICO_NOT_FOUND',
+          servicoNome,
+          servicos: catalogNfse.map((p) => ({
+            id: p.id,
+            discriminacao: p.discriminacao,
+            codigo: p.codigo,
+            cnae: p.cnae,
+          })),
+          botHint: 'Liste o catálogo e espere o utilizador escolher antes de preview_nfse.',
+        },
+      );
+    } else {
+      throw badRequest(formatNfseCatalogChoiceMessage(catalogNfse), {
+        code: 'NFSE_SERVICO_CHOICE_REQUIRED',
+        servicos: catalogNfse.map((p) => ({
+          id: p.id,
+          discriminacao: p.discriminacao,
+          codigo: p.codigo,
+          cnae: p.cnae,
+        })),
+        botHint:
+          'O utilizador não disse qual serviço. Use list_catalog_servicos, mostre a lista e só depois preview_nfse '
+          + 'com descricao do item escolhido. PROIBIDO inventar "nota fiscal de serviços".',
+      });
     }
   }
 
-  if (!discriminacao) discriminacao = 'Prestação de serviços';
+  if (!discriminacao || isVagueNfItemLabel(discriminacao)) {
+    throw badRequest(formatNfseCatalogChoiceMessage(catalogNfse), {
+      code: 'NFSE_SERVICO_CHOICE_REQUIRED',
+      botHint: 'Informe descricao/servicoNome com nome exato do catálogo.',
+    });
+  }
 
   if (!codigo) {
     throw badRequest(
@@ -843,14 +885,22 @@ export const getOpenclawNfseSetupStatus = async (userId) => {
   }
 
   let defaultServico = null;
+  let catalogCounts = { nfse: 0, nfe: 0 };
+  let documentosPermitidos = { nfse: true, nfe: false, nfce: false };
   try {
-    const produtos = await listarCatalogoProdutos(userId, { limit: 1 });
-    if (produtos?.[0]) {
+    const [produtosNfse, produtosNfe, docs] = await Promise.all([
+      listarCatalogoProdutos(userId, { limit: 30, documentType: 'NFSE' }),
+      listarCatalogoProdutos(userId, { limit: 30, documentType: 'NFE' }),
+      getDocumentosAtivosMirror(userId),
+    ]);
+    catalogCounts = { nfse: produtosNfse.length, nfe: produtosNfe.length };
+    documentosPermitidos = docs;
+    if (produtosNfse?.[0]) {
       defaultServico = {
-        codigo: produtos[0].codigo,
-        cnae: produtos[0].cnae,
-        discriminacao: produtos[0].discriminacao,
-        aliquota: produtos[0].aliquota,
+        codigo: produtosNfse[0].codigo,
+        cnae: produtosNfse[0].cnae,
+        discriminacao: produtosNfse[0].discriminacao,
+        aliquota: produtosNfse[0].aliquota,
       };
     }
   } catch {
@@ -866,6 +916,8 @@ export const getOpenclawNfseSetupStatus = async (userId) => {
     prestadorCnpj: emitente?.certDocument ? normalizeDoc(emitente.certDocument) : null,
     prestadorRazaoSocial: emitente?.razaoSocial || null,
     defaultServico,
+    catalogCounts,
+    documentosPermitidos,
     heal: heal || null,
   };
 };
