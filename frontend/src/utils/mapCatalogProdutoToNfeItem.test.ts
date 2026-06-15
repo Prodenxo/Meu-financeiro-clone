@@ -24,7 +24,15 @@ describe('mapCatalogProdutoToNfeItemRow', () => {
       codigo: 'SKU-X',
       discriminacao: 'Widget fiscal',
       valor_sugerido: 99.99,
-      metadata_json: { ncm: '12345678', cfop: '5102', unidade: 'CX' }
+      document_type: 'NFE',
+      metadata_json: {
+        ncm: '12345678',
+        cfop: '5102',
+        unidade: 'CX',
+        icmsCsosn: '102',
+        pisCst: '49',
+        cofinsCst: '49',
+      },
     };
     const row = mapCatalogProdutoToNfeItemRow(produto);
     expect(row).toMatchObject({
@@ -34,24 +42,24 @@ describe('mapCatalogProdutoToNfeItemRow', () => {
       cfop: '5102',
       unidade: 'CX',
       quantidade: '1',
-      icmsCsosn: '',
-      pisCst: '',
-      cofinsCst: ''
+      icmsCsosn: '102',
+      pisCst: '49',
+      cofinsCst: '49'
     });
     expect(row.valorUnitario).toMatch(/99/);
   });
 
-  it('sem metadados: tributos vazios (usuário preenche na emissão)', () => {
+  it('sem metadados NF-e: usa defaults do formulário vazio', () => {
     const produto: NfseCatalogProduto = {
       id: 'b2',
       codigo: '',
       discriminacao: 'Só descrição',
-      valor_sugerido: 1
+      valor_sugerido: 1,
+      document_type: 'NFE',
     };
     const row = mapCatalogProdutoToNfeItemRow(produto);
     const defaults = createEmptyMeiNfeLikeItem();
     expect(row.icmsCsosn).toBe(defaults.icmsCsosn);
-    expect(row.pisCst).toBe(defaults.pisCst);
-    expect(row.cofinsCst).toBe(defaults.cofinsCst);
+    expect(row.ncm).toBe('');
   });
 });

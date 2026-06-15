@@ -1,13 +1,16 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Meu Financeiro</title>
-    <meta name="description" content="Controle financeiro inteligente na palma da mão" />
+    <meta
+      name="description"
+      content="Controle financeiro inteligente na palma da mão"
+    />
     <meta name="theme-color" content="#2563EB" />
 
-    <!-- Favicons -->
+    <!--  Favicons -->
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -25,21 +28,27 @@
   <body>
     <div id="root"></div>
     <script>
-      // Camada 1: Detecção de tokens de recuperação ANTES do React carregar
-      (function() {
+      // Camada 1:  Detecção de tokens de recuperação ANTES do React carregar
+      (function () {
         const hash = window.location.hash;
         const searchParams = new URLSearchParams(window.location.search);
-        
-        const hasRecoveryToken = 
-          hash.includes('type=recovery') || 
-          hash.includes('access_token') ||
-          searchParams.get('type') === 'recovery' ||
-          searchParams.get('token');
-        
+
+        const hasRecoveryToken =
+          hash.includes("type=recovery") ||
+          hash.includes("access_token") ||
+          searchParams.get("type") === "recovery" ||
+          searchParams.get("token");
+
         // Se houver tokens de recuperação e não estiver em /reset-password, redirecionar
-        if (hasRecoveryToken && window.location.pathname !== '/reset-password') {
-          console.log('[Fallback] Tokens de recuperação detectados, redirecionando para /reset-password');
-          const redirectPath = '/reset-password' + hash + (window.location.search || '');
+        if (
+          hasRecoveryToken &&
+          window.location.pathname !== "/reset-password"
+        ) {
+          console.log(
+            "[Fallback] Tokens de recuperação detectados, redirecionando para /reset-password",
+          );
+          const redirectPath =
+            "/reset-password" + hash + (window.location.search || "");
           window.location.replace(redirectPath);
         }
       })();

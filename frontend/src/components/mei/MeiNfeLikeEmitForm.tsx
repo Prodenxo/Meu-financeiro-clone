@@ -8,6 +8,10 @@ import {
 import { mapCatalogProdutoToNfeItemRow } from '../../utils/mapCatalogProdutoToNfeItem';
 import { parseMeiDecimalInput } from '../../utils/meiNfeLikePayloadBuilder';
 import { MeiNfeLikeCatalogProdutoPickerModal } from './MeiNfeLikeCatalogProdutoPickerModal';
+import {
+  DESTINATARIO_IE_OPTIONS,
+  DESTINATARIO_IE_SECTION_HINT,
+} from '../../utils/meiNfeDestinatarioIe';
 
 function formatItemLineTotalBrl(quantidade: string, valorUnitario: string): string | null {
   const q = parseMeiDecimalInput(quantidade);
@@ -68,6 +72,8 @@ export type MeiNfeLikeEmitFormProps = {
   fieldsDisabled?: boolean;
   /** FR-GUIA-FISC-12: catálogo → linha (só NF-e / NFC-e). */
   nfLikeCatalogDocumentType?: 'NFE' | 'NFCE';
+  /** Abre cadastro do emitente (ex.: secção empresa na guia MEI). */
+  onEditEmitenteCadastro?: () => void;
 };
 
 export function MeiNfeLikeEmitForm({
@@ -78,7 +84,8 @@ export function MeiNfeLikeEmitForm({
   flashOpenSection,
   onFlashOpenConsumed,
   fieldsDisabled = false,
-  nfLikeCatalogDocumentType
+  nfLikeCatalogDocumentType,
+  onEditEmitenteCadastro
 }: MeiNfeLikeEmitFormProps) {
   const catalogAddBtnRef = useRef<HTMLButtonElement>(null);
   const [catalogPickerOpen, setCatalogPickerOpen] = useState(false);
@@ -177,6 +184,34 @@ export function MeiNfeLikeEmitForm({
               placeholder="Razão social"
             />
           </div>
+          <div className="md:col-span-2">
+            <label
+              className="mb-1 block text-xs text-slate-500 dark:text-slate-400"
+              htmlFor="mei-nfe-emitente-ie"
+            >
+              Inscrição Estadual do emitente (opcional)
+            </label>
+            <input
+              id="mei-nfe-emitente-ie"
+              className="planner-input-compact w-full"
+              type="text"
+              value={value.emitenteInscricaoEstadual}
+              onChange={(e) => patch({ emitenteInscricaoEstadual: e.target.value })}
+              placeholder="Somente números ou ISENTO"
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              IE da sua empresa MEI no XML do emitente. Não confunda com a IE do cliente (destinatário).
+            </p>
+            {onEditEmitenteCadastro ? (
+              <button
+                type="button"
+                className="mt-2 text-xs font-medium text-violet-700 underline decoration-violet-700/70 underline-offset-2 hover:text-violet-900 dark:text-violet-300"
+                onClick={onEditEmitenteCadastro}
+              >
+                Alterar no cadastro da empresa
+              </button>
+            ) : null}
+          </div>
         </div>
       </NfeLikeCollapsible>
 
@@ -250,20 +285,14 @@ export function MeiNfeLikeEmitForm({
               <span className="admin-required-mark">*</span>
             </p>
             <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-              Não confundir com CSOSN do item. Condomínio e consumidor = não contribuinte.
+              {DESTINATARIO_IE_SECTION_HINT}
             </p>
             <div className="flex flex-wrap gap-2" role="group" aria-label="Situação de IE do destinatário">
-              {(
-                [
-                  ['9', 'Não contribuinte'],
-                  ['2', 'Isento de IE'],
-                  ['1', 'Contribuinte ICMS'],
-                ] as const
-              ).map(([code, label]) => {
-                const selected = value.destinatarioIndIEDest === code;
+              {DESTINATARIO_IE_OPTIONS.map((opt) => {
+                const selected = value.destinatarioIndIEDest === opt.value;
                 return (
                   <button
-                    key={code}
+                    key={opt.value}
                     type="button"
                     className={
                       selected
@@ -272,14 +301,15 @@ export function MeiNfeLikeEmitForm({
                     }
                     disabled={fieldsDisabled}
                     aria-pressed={selected}
+                    title={opt.hint}
                     onClick={() =>
                       patch({
-                        destinatarioIndIEDest: code,
-                        ...(code !== '1' ? { destinatarioInscricaoEstadual: '' } : {}),
+                        destinatarioIndIEDest: opt.value,
+                        ...(opt.value !== '1' ? { destinatarioInscricaoEstadual: '' } : {}),
                       })
                     }
                   >
-                    {label}
+                    {opt.label}
                   </button>
                 );
               })}
@@ -291,7 +321,7 @@ export function MeiNfeLikeEmitForm({
                 className="mb-1 block text-xs text-slate-500 dark:text-slate-400"
                 htmlFor="mei-nfe-dest-ie"
               >
-                Inscrição Estadual do destinatário
+                Inscrição Estadual do destinatário (cliente)
                 <span className="admin-required-mark">*</span>
               </label>
               <input
@@ -303,7 +333,7 @@ export function MeiNfeLikeEmitForm({
                 onChange={(e) =>
                   patch({ destinatarioInscricaoEstadual: e.target.value.replace(/\D/g, '') })
                 }
-                placeholder="Somente números"
+                placeholder="Somente números — não use a IE do seu MEI"
               />
             </div>
           ) : null}
@@ -678,7 +708,9 @@ export function MeiNfeLikeEmitForm({
                     </p>
                   </div>
                   <div className="md:col-span-2 rounded-md border border-slate-200/60 p-2 dark:border-slate-700/60">
-                    <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">Tributos do item</p>
+                    <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+                      Tributos do item (vêm do cadastro do produto; editáveis aqui)
+                    </p>
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                       <div>
                         <label className="mb-1 block text-[11px] text-slate-500" htmlFor={`mei-nfe-item-${index}-icms-cst`}>
@@ -722,6 +754,7 @@ export function MeiNfeLikeEmitForm({
                           aria-invalid={Boolean(err(`mei-nfe-item-${index}-pis`))}
                           aria-describedby={err(`mei-nfe-item-${index}-pis`) ? `mei-nfe-item-${index}-pis-err` : undefined}
                           onChange={(e) => patchItem(index, { pisCst: e.target.value })}
+                          placeholder="49"
                         />
                         {err(`mei-nfe-item-${index}-pis`) ? (
                           <p id={`mei-nfe-item-${index}-pis-err`} className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
@@ -745,6 +778,7 @@ export function MeiNfeLikeEmitForm({
                             err(`mei-nfe-item-${index}-cofins`) ? `mei-nfe-item-${index}-cofins-err` : undefined
                           }
                           onChange={(e) => patchItem(index, { cofinsCst: e.target.value })}
+                          placeholder="49"
                         />
                         {err(`mei-nfe-item-${index}-cofins`) ? (
                           <p

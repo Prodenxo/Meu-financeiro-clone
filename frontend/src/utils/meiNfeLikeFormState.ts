@@ -24,9 +24,17 @@ export type MeiNfeLikeItemFormState = {
   cofinsCst: string;
 };
 
+/** CSOSN típico para venda de mercadoria MEI no Simples Nacional (editável por item). */
+export const MEI_DEFAULT_NFE_CSOSN = '102';
+
+/** CST PIS/COFINS comum para MEI sem destaque (editável por item). */
+export const MEI_DEFAULT_NFE_PIS_COFINS_CST = '49';
+
 export type MeiNfeLikeFormState = {
   emitenteCnpj: string;
   emitenteRazao: string;
+  /** IE do emitente (MEI) — opcional; distinta da IE do destinatário. */
+  emitenteInscricaoEstadual: string;
   destinatarioDoc: string;
   destinatarioRazao: string;
   destinatarioEmail: string;
@@ -42,14 +50,14 @@ export function createEmptyMeiNfeLikeItem(): MeiNfeLikeItemFormState {
     codigo: '',
     descricao: '',
     ncm: '',
-    cfop: '',
+    cfop: '5102',
     unidade: 'UN',
     quantidade: '1',
     valorUnitario: '',
     icmsCst: '',
-    icmsCsosn: '',
-    pisCst: '',
-    cofinsCst: ''
+    icmsCsosn: MEI_DEFAULT_NFE_CSOSN,
+    pisCst: MEI_DEFAULT_NFE_PIS_COFINS_CST,
+    cofinsCst: MEI_DEFAULT_NFE_PIS_COFINS_CST
   };
 }
 
@@ -57,6 +65,7 @@ export function createEmptyMeiNfeLikeFormState(): MeiNfeLikeFormState {
   return {
     emitenteCnpj: '',
     emitenteRazao: '',
+    emitenteInscricaoEstadual: '',
     destinatarioDoc: '',
     destinatarioRazao: '',
     destinatarioEmail: '',
@@ -75,18 +84,23 @@ export function serializeMeiNfeLikeFormForDirty(state: MeiNfeLikeFormState): str
 export function prefilledMeiNfeLikeFormState(partial: {
   emitenteCnpj: string;
   emitenteRazao: string;
+  emitenteInscricaoEstadual?: string;
 }): MeiNfeLikeFormState {
   return {
     ...createEmptyMeiNfeLikeFormState(),
     emitenteCnpj: partial.emitenteCnpj,
-    emitenteRazao: partial.emitenteRazao
+    emitenteRazao: partial.emitenteRazao,
+    ...(partial.emitenteInscricaoEstadual?.trim()
+      ? { emitenteInscricaoEstadual: partial.emitenteInscricaoEstadual.trim() }
+      : {})
   };
 }
 
 /** CNPJ / razão a partir do fluxo NFS-e + cadastro emitente (sem catálogo NFE — story futura). */
 export function buildPrefilledNfeLikeFormSnapshot(
   nfseForm: EmitirNfseInput,
-  companyRazaoSocial: string
+  companyRazaoSocial: string,
+  emitenteInscricaoEstadual = ''
 ): MeiNfeLikeFormState {
   const digits = onlyDigits(nfseForm.prestadorCpfCnpj || '').slice(0, 14);
   const cnpjUi = digits.length === 14 ? formatCpfCnpjPtBr(digits) : '';
@@ -94,6 +108,7 @@ export function buildPrefilledNfeLikeFormSnapshot(
     String(nfseForm.prestadorRazaoSocial || '').trim() || String(companyRazaoSocial || '').trim();
   return prefilledMeiNfeLikeFormState({
     emitenteCnpj: cnpjUi,
-    emitenteRazao: razao
+    emitenteRazao: razao,
+    emitenteInscricaoEstadual
   });
 }

@@ -21,6 +21,15 @@ import {
   pickCodigoNbsFromCatalogMetadata
 } from '../lib/nfseCodigoNbs';
 import type { CodigoServicoReferencia } from '../services/meiNotasService';
+import type { DocumentType } from '../services/meiNotasService';
+import {
+  buildNfeCatalogProdutoMetadata,
+  emptyNfeCatalogProdutoFormFields,
+  isNfeLikeCatalogDocumentType,
+  nfeCatalogProdutoFormFieldsFromMetadata,
+  validateNfeCatalogProdutoFormFields,
+  type NfeCatalogProdutoFormFields,
+} from '../utils/nfeCatalogProdutoMetadata';
 
 export interface MeiCatalogoProdutoModalProps {
   open: boolean;
@@ -31,7 +40,19 @@ export interface MeiCatalogoProdutoModalProps {
   onRequestDelete?: () => void;
 }
 
-type FieldKey = 'discriminacao' | 'codigo' | 'cnae' | 'codigoNbs' | 'aliquota' | 'valor_sugerido';
+type FieldKey =
+  | 'discriminacao'
+  | 'codigo'
+  | 'cnae'
+  | 'codigoNbs'
+  | 'aliquota'
+  | 'valor_sugerido'
+  | 'ncm'
+  | 'cfop'
+  | 'unidade'
+  | 'icmsCsosn'
+  | 'pisCst'
+  | 'cofinsCst';
 
 function parseAliquotaInput(raw: string): number | null {
   const t = raw.trim().replace(',', '.');
@@ -59,6 +80,10 @@ export default function MeiCatalogoProdutoModal({
   const [codigoNbs, setCodigoNbs] = useState('');
   const [aliquotaStr, setAliquotaStr] = useState('');
   const [valorCentDigits, setValorCentDigits] = useState('');
+  const [documentType, setDocumentType] = useState<DocumentType>('NFSE');
+  const [nfeFields, setNfeFields] = useState<NfeCatalogProdutoFormFields>(() =>
+    emptyNfeCatalogProdutoFormFields()
+  );
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [apiError, setApiError] = useState<unknown | null>(null);
   const [saving, setSaving] = useState(false);
@@ -83,6 +108,8 @@ export default function MeiCatalogoProdutoModal({
       setCodigoNbs(pickCodigoNbsFromCatalogMetadata(editing.metadata_json));
       setAliquotaStr(formatAliquotaForInput(editing.aliquota ?? null));
       setValorCentDigits(moneyDigitsFromNumber(editing.valor_sugerido ?? null));
+      setDocumentType((editing.document_type as DocumentType) || 'NFSE');
+      setNfeFields(nfeCatalogProdutoFormFieldsFromMetadata(editing.metadata_json));
     } else {
       setDiscriminacao('');
       setCodigo('');
@@ -90,6 +117,8 @@ export default function MeiCatalogoProdutoModal({
       setCodigoNbs('');
       setAliquotaStr('');
       setValorCentDigits('');
+      setDocumentType('NFSE');
+      setNfeFields(emptyNfeCatalogProdutoFormFields());
     }
   }, [open, editing]);
 
@@ -107,14 +136,29 @@ export default function MeiCatalogoProdutoModal({
   const validate = (): boolean => {
     const next: Partial<Record<FieldKey, string>> = {};
     if (!discriminacao.trim()) {
-      next.discriminacao = 'Informe a discriminação do serviço ou produto.';
+      next.discriminacao = isNfeLikeCatalogDocumentType(documentType)
+        ? 'Informe a descrição do produto.'
+        : 'Informe a discriminação do serviço ou produto.';
     }
-    if (codigoNbs.trim() && !isValidCodigoNbs(codigoNbs)) {
-      next.codigoNbs = 'NBS inválido — use 9 dígitos (ex.: 114061100).';
-    }
-    const alParsed = parseAliquotaInput(aliquotaStr);
-    if (aliquotaStr.trim() && Number.isNaN(alParsed as number)) {
-      next.aliquota = 'Alíquota inválida (use número, ex.: 5 ou 5,5).';
+    if (isNfeLikeCatalogDocumentType(documentType)) {
+      if (!codigo.trim()) next.codigo = 'Informe o código/SKU do produto.';
+      const nfeErr = validateNfeCatalogProdutoFormFields(nfeFields);
+      if (nfeErr) {
+        if (nfeErr.includes('NCM')) next.ncm = nfeErr;
+        else if (nfeErr.includes('CFOP')) next.cfop = nfeErr;
+        else if (nfeErr.includes('unidade')) next.unidade = nfeErr;
+        else if (nfeErr.includes('CSOSN')) next.icmsCsosn = nfeErr;
+        else if (nfeErr.includes('PIS')) next.pisCst = nfeErr;
+        else if (nfeErr.includes('COFINS')) next.cofinsCst = nfeErr;
+      }
+    } else {
+      if (codigoNbs.trim() && !isValidCodigoNbs(codigoNbs)) {
+        next.codigoNbs = 'NBS inválido — use 9 dígitos (ex.: 114061100).';
+      }
+      const alParsed = parseAliquotaInput(aliquotaStr);
+      if (aliquotaStr.trim() && Number.isNaN(alParsed as number)) {
+        next.aliquota = 'Alíquota inválida (use número, ex.: 5 ou 5,5).';
+      }
     }
     const valorNum = parseMoneyInputToNumber(formatMoneyDigitsPtBr(valorCentDigits));
     if (valorCentDigits && valorNum === null) {
@@ -141,18 +185,17 @@ export default function MeiCatalogoProdutoModal({
     const aliquotaVal = aliquotaStr.trim() && !Number.isNaN(alParsed as number) ? alParsed : null;
     const valorNum = parseMoneyInputToNumber(formatMoneyDigitsPtBr(valorCentDigits));
 
-    const metadataJson = buildCatalogMetadataWithCodigoNbs(
-      editing?.metadata_json,
-      codigoNbs
-    );
+    const metadataJson = isNfeLikeCatalogDocumentType(documentType)
+      ? buildNfeCatalogProdutoMetadata(editing?.metadata_json, nfeFields)
+      : buildCatalogMetadataWithCodigoNbs(editing?.metadata_json, codigoNbs);
 
     try {
       if (isEdit && editing) {
         await atualizarCatalogoNfseProduto(editing.id, {
           discriminacao: discriminacao.trim(),
           codigo: codigo.trim(),
-          cnae: cnae.trim(),
-          aliquota: aliquotaVal,
+          cnae: isNfeLikeCatalogDocumentType(documentType) ? '' : cnae.trim(),
+          aliquota: isNfeLikeCatalogDocumentType(documentType) ? null : aliquotaVal,
           valor_sugerido: valorNum,
           metadata_json: metadataJson
         });
@@ -160,11 +203,13 @@ export default function MeiCatalogoProdutoModal({
         await criarCatalogoNfseProduto({
           discriminacao: discriminacao.trim(),
           codigo: codigo.trim() || undefined,
-          cnae: cnae.trim() || undefined,
-          ...(aliquotaVal !== null ? { aliquota: aliquotaVal } : {}),
+          cnae: isNfeLikeCatalogDocumentType(documentType) ? undefined : cnae.trim() || undefined,
+          ...(aliquotaVal !== null && !isNfeLikeCatalogDocumentType(documentType)
+            ? { aliquota: aliquotaVal }
+            : {}),
           ...(valorNum !== null ? { valor_sugerido: valorNum } : {}),
           ...(metadataJson ? { metadata_json: metadataJson } : {}),
-          documentType: 'NFSE'
+          documentType
         });
       }
       onSaved(isEdit ? 'edit' : 'create');
@@ -206,9 +251,48 @@ export default function MeiCatalogoProdutoModal({
           {isEdit ? 'Editar serviço ou produto' : 'Novo serviço ou produto'}
         </h2>
         <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-          Itens reutilizáveis na emissão de NFS-e (discriminação, CNAE, valores sugeridos).
+          Itens reutilizáveis na emissão de NFS-e ou NF-e (cadastre tributos do produto uma vez).
         </p>
 
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Tipo de documento</p>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Tipo de documento fiscal">
+            {(['NFSE', 'NFE', 'NFCE'] as DocumentType[]).map((dt) => {
+              const selected = documentType === dt;
+              return (
+                <button
+                  key={dt}
+                  type="button"
+                  className={selected ? 'planner-button-primary-compact' : 'planner-button-secondary-compact'}
+                  aria-pressed={selected}
+                  disabled={isEdit}
+                  onClick={() => {
+                    if (isEdit) return;
+                    setDocumentType(dt);
+                    if (isNfeLikeCatalogDocumentType(dt)) {
+                      setNfeFields(emptyNfeCatalogProdutoFormFields());
+                    }
+                  }}
+                >
+                  {dt}
+                </button>
+              );
+            })}
+          </div>
+          {isEdit ? (
+            <p className="mt-1 text-xs text-slate-500">O tipo não pode ser alterado após criar o item.</p>
+          ) : null}
+        </div>
+
+        {isNfeLikeCatalogDocumentType(documentType) ? (
+          <div
+            className="mb-4 rounded-lg border border-violet-200/80 bg-violet-50/80 p-3 text-sm text-slate-700 dark:border-violet-900/50 dark:bg-violet-950/30 dark:text-slate-200"
+            role="note"
+          >
+            Cadastre NCM, CFOP e tributos aqui. Na emissão de {documentType === 'NFE' ? 'NF-e' : 'NFC-e'}, escolha este
+            produto no catálogo — os campos fiscais vêm preenchidos.
+          </div>
+        ) : (
         <div
           className="mb-4 rounded-lg border border-amber-200/80 bg-amber-50/90 p-3 text-sm text-slate-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-slate-200"
           role="note"
@@ -225,6 +309,7 @@ export default function MeiCatalogoProdutoModal({
             </li>
           </ul>
         </div>
+        )}
 
         {apiError != null ? (
           <div id={errId} className="mb-4" role="alert">
@@ -242,7 +327,8 @@ export default function MeiCatalogoProdutoModal({
         >
           <div>
             <label htmlFor="mei-cat-prod-disc" className="mb-2 block font-medium dark:text-gray-200">
-              Discriminação <span className="text-red-600">*</span>
+              {isNfeLikeCatalogDocumentType(documentType) ? 'Descrição do produto' : 'Discriminação'}{' '}
+              <span className="text-red-600">*</span>
             </label>
             <textarea
               ref={discRef}
@@ -261,6 +347,126 @@ export default function MeiCatalogoProdutoModal({
             ) : null}
           </div>
 
+          {isNfeLikeCatalogDocumentType(documentType) ? (
+            <>
+              <div>
+                <label htmlFor="mei-cat-prod-cod" className="mb-1 block font-medium dark:text-gray-200">
+                  Código / SKU <span className="text-red-600">*</span>
+                </label>
+                <input
+                  ref={codigoRef}
+                  id="mei-cat-prod-cod"
+                  className="planner-input-compact w-full"
+                  value={codigo}
+                  onChange={(ev) => setCodigo(ev.target.value)}
+                  aria-invalid={Boolean(fieldErrors.codigo)}
+                />
+                {fieldErrors.codigo ? (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
+                    {fieldErrors.codigo}
+                  </p>
+                ) : null}
+              </div>
+              <div>
+                <label htmlFor="mei-cat-prod-ncm" className="mb-1 block font-medium dark:text-gray-200">
+                  NCM (8 dígitos) <span className="text-red-600">*</span>
+                </label>
+                <input
+                  id="mei-cat-prod-ncm"
+                  className="planner-input-compact w-full tabular-nums"
+                  value={nfeFields.ncm}
+                  onChange={(ev) =>
+                    setNfeFields((f) => ({ ...f, ncm: ev.target.value.replace(/\D/g, '').slice(0, 8) }))
+                  }
+                  inputMode="numeric"
+                  aria-invalid={Boolean(fieldErrors.ncm)}
+                />
+                {fieldErrors.ncm ? (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
+                    {fieldErrors.ncm}
+                  </p>
+                ) : null}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="mei-cat-prod-cfop" className="mb-1 block font-medium dark:text-gray-200">
+                    CFOP <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="mei-cat-prod-cfop"
+                    className="planner-input-compact w-full tabular-nums"
+                    value={nfeFields.cfop}
+                    onChange={(ev) =>
+                      setNfeFields((f) => ({ ...f, cfop: ev.target.value.replace(/\D/g, '').slice(0, 4) }))
+                    }
+                    inputMode="numeric"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="mei-cat-prod-un" className="mb-1 block font-medium dark:text-gray-200">
+                    Unidade <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="mei-cat-prod-un"
+                    className="planner-input-compact w-full"
+                    value={nfeFields.unidade}
+                    onChange={(ev) => setNfeFields((f) => ({ ...f, unidade: ev.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="mei-cat-prod-csosn" className="mb-1 block text-sm font-medium dark:text-gray-200">
+                    CSOSN <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="mei-cat-prod-csosn"
+                    className="planner-input-compact w-full tabular-nums"
+                    value={nfeFields.icmsCsosn}
+                    onChange={(ev) =>
+                      setNfeFields((f) => ({
+                        ...f,
+                        icmsCsosn: ev.target.value.replace(/\D/g, '').slice(0, 3),
+                      }))
+                    }
+                    placeholder="102"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="mei-cat-prod-pis" className="mb-1 block text-sm font-medium dark:text-gray-200">
+                    CST PIS <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="mei-cat-prod-pis"
+                    className="planner-input-compact w-full tabular-nums"
+                    value={nfeFields.pisCst}
+                    onChange={(ev) =>
+                      setNfeFields((f) => ({ ...f, pisCst: ev.target.value.replace(/\D/g, '').slice(0, 2) }))
+                    }
+                    placeholder="49"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="mei-cat-prod-cofins" className="mb-1 block text-sm font-medium dark:text-gray-200">
+                    CST COFINS <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="mei-cat-prod-cofins"
+                    className="planner-input-compact w-full tabular-nums"
+                    value={nfeFields.cofinsCst}
+                    onChange={(ev) =>
+                      setNfeFields((f) => ({
+                        ...f,
+                        cofinsCst: ev.target.value.replace(/\D/g, '').slice(0, 2),
+                      }))
+                    }
+                    placeholder="49"
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+          <>
           <div>
             <label htmlFor="mei-cat-prod-cod" className="mb-1 block font-medium dark:text-gray-200">
               Código do serviço — LC 116 / prefeitura
@@ -371,6 +577,8 @@ export default function MeiCatalogoProdutoModal({
               </p>
             ) : null}
           </div>
+          </>
+          )}
 
           <div>
             <label htmlFor="mei-cat-prod-valor" className="mb-2 block font-medium dark:text-gray-200">

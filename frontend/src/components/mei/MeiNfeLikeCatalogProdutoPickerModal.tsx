@@ -6,6 +6,7 @@ import {
   listarCatalogoNfseProdutos,
   type NfseCatalogProduto
 } from '../../services/meiNotasService';
+import { isCatalogProdutoUsableForNfeLike } from '../../utils/nfeCatalogProdutoMetadata';
 
 export type MeiNfeLikeCatalogProdutoPickerModalProps = {
   open: boolean;
@@ -40,7 +41,7 @@ export function MeiNfeLikeCatalogProdutoPickerModal({
         documentType,
         limit: 50
       });
-      setRows(Array.isArray(data) ? data : []);
+      setRows(Array.isArray(data) ? data.filter(isCatalogProdutoUsableForNfeLike) : []);
     } catch (e) {
       setLoadError(e);
       setRows([]);
@@ -139,8 +140,8 @@ export function MeiNfeLikeCatalogProdutoPickerModal({
           Adicionar do catálogo — {documentLabel}
         </h2>
         <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-          Só aparecem produtos guardados no catálogo com tipo <strong>{documentType}</strong>. Produtos só NFS-e não
-          são listados aqui.
+          Só produtos cadastrados com tipo <strong>{documentType}</strong> e dados NF-e completos (NCM, CFOP,
+          tributos). Cadastre ou edite no catálogo de produtos.
         </p>
 
         {loadError != null ? (

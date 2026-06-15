@@ -50,6 +50,9 @@ export function buildNfeLikePayloadFromMeiForm(
     emitente: {
       cpfCnpj: emitDigits,
       ...(state.emitenteRazao.trim() ? { razaoSocial: state.emitenteRazao.trim() } : {}),
+      ...(state.emitenteInscricaoEstadual.trim()
+        ? { inscricaoEstadual: state.emitenteInscricaoEstadual.trim() }
+        : {}),
     },
     destinatario: {
       cpfCnpj: destDigits,

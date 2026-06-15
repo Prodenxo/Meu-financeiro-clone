@@ -2646,7 +2646,8 @@ export default function GuidesMei() {
         const prefill: MeiNfeLikeFormState = {
           ...createEmptyMeiNfeLikeFormState(),
           emitenteCnpj: nfeLikeForm.emitenteCnpj,
-          emitenteRazao: nfeLikeForm.emitenteRazao
+          emitenteRazao: nfeLikeForm.emitenteRazao,
+          emitenteInscricaoEstadual: nfeLikeForm.emitenteInscricaoEstadual,
         };
         setNfeLikeForm(prefill);
         nfeLikeBaselineRef.current = serializeMeiNfeLikeFormForDirty(prefill);
@@ -5191,6 +5192,12 @@ export default function GuidesMei() {
                   ? emissionDocumentType
                   : undefined
               }
+              onEditEmitenteCadastro={() => {
+                document.getElementById('mei-emitente-dados-minimos')?.scrollIntoView?.({
+                  behavior: 'smooth',
+                  block: 'start',
+                });
+              }}
             />
           )}
 
