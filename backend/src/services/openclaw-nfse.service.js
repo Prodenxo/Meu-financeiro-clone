@@ -12,6 +12,7 @@ import {
   reconcileEmitenteMirrorFromEmpresaJson,
 } from './mei-emitente-empresa-sync.js';
 import { consultarEmpresaAndReconcileMirror } from './mei-notas-documentos-mirror.js';
+import { resolveCodigoNbsForServico } from './nfse-codigo-nbs.js';
 import {
   baixarPdf,
   criarCatalogoCliente,
@@ -203,6 +204,15 @@ const findProdutoCatalogoByNome = async (userId, nome) => {
   return pickProdutoCatalogoByNomeResult(rows, q);
 };
 
+const pickCodigoNbsFromCatalogMetadata = (metadataJson) => {
+  if (!metadataJson || typeof metadataJson !== 'object' || Array.isArray(metadataJson)) {
+    return null;
+  }
+  const raw = metadataJson.codigoNbs ?? metadataJson.codigo_nbs;
+  if (raw === undefined || raw === null || raw === '') return null;
+  return String(raw).trim();
+};
+
 const applyProdutoCatalogoToServico = (produto, refs) => {
   if (!produto) return refs;
   const next = { ...refs };
@@ -217,6 +227,10 @@ const applyProdutoCatalogoToServico = (produto, refs) => {
   if (!next.discriminacao && produto.discriminacao) {
     next.discriminacao = String(produto.discriminacao).trim();
   }
+  if (!next.codigoNbs) {
+    const fromMeta = pickCodigoNbsFromCatalogMetadata(produto.metadata_json);
+    if (fromMeta) next.codigoNbs = fromMeta;
+  }
   return next;
 };
 
@@ -230,15 +244,17 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
 
   let codigo = firstNonEmpty(payload?.codigoServico, payload?.codigo);
   let cnae = firstNonEmpty(payload?.cnae);
+  let codigoNbs = firstNonEmpty(payload?.codigoNbs, payload?.codigo_nbs);
   let aliquotaRaw = payload?.aliquota ?? payload?.aliquotaIss;
 
   const servicoNome = pickServicoNomeFromPayload(payload);
   if (servicoNome && (!codigo || !cnae || !discriminacao)) {
     const lookup = await findProdutoCatalogoByNome(userId, servicoNome);
     if (lookup.kind === 'ok') {
-      ({ codigo, cnae, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(lookup.produto, {
+      ({ codigo, cnae, codigoNbs, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(lookup.produto, {
         codigo,
         cnae,
+        codigoNbs,
         aliquotaRaw,
         discriminacao,
       }));
@@ -260,17 +276,19 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
   if (!codigo || !cnae) {
     const todos = await listarCatalogoProdutos(userId, { limit: 20 });
     if (todos.length === 1) {
-      ({ codigo, cnae, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(todos[0], {
+      ({ codigo, cnae, codigoNbs, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(todos[0], {
         codigo,
         cnae,
+        codigoNbs,
         aliquotaRaw,
         discriminacao,
       }));
     } else if (!codigo || !cnae) {
       const ultimo = todos?.[0];
-      ({ codigo, cnae, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(ultimo, {
+      ({ codigo, cnae, codigoNbs, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(ultimo, {
         codigo,
         cnae,
+        codigoNbs,
         aliquotaRaw,
         discriminacao,
       }));
@@ -324,12 +342,25 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
     aliquota = 2;
   }
 
-  return {
-    codigo: codigoNorm.length >= NFSE_SERVICO_CODIGO_MIN_LENGTH ? codigoNorm : String(codigo).trim(),
+  const codigoFinal = codigoNorm.length >= NFSE_SERVICO_CODIGO_MIN_LENGTH ? codigoNorm : String(codigo).trim();
+  const codigoNbsResolved = resolveCodigoNbsForServico({
+    codigo: codigoFinal,
+    codigoNbs,
+  });
+
+  const servico = {
+    codigo: codigoFinal,
     discriminacao,
     cnae: cnaeNorm,
-    aliquota,
+    ...(codigoNbsResolved ? { codigoNbs: codigoNbsResolved } : {}),
   };
+
+  // MEI/Simples: não informar alíquota ISS (paridade com mei-notas.service buildServicoFromInput).
+  if (!emitente?.simplesNacional && aliquota > 0) {
+    servico.aliquota = aliquota;
+  }
+
+  return servico;
 };
 
 const pickTomadorNomeFromPayload = (payload) =>

@@ -83,6 +83,7 @@ export function createInitialEmitirNfseInput(): EmitirNfseInput {
       codigo: '',
       discriminacao: '',
       cnae: '',
+      codigoNbs: '',
       valorServico: ''
     },
     cidadePrestacao: {

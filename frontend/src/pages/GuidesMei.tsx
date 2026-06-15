@@ -145,6 +145,10 @@ import {
   replacePrestadorFromEmitenteSnapshot
 } from '../utils/nfseEmitenteHydration';
 import {
+  normalizeCodigoNbsInput,
+  pickCodigoNbsFromCatalogMetadata
+} from '../lib/nfseCodigoNbs';
+import {
   isNfsePrestadorPrefillEffectivelyEmpty,
   mergeNfsePrestadorPrefillIntoForm
 } from '../utils/nfsePrestadorPrefillMerge';
@@ -1692,6 +1696,7 @@ export default function GuidesMei() {
       codigo: selected.codigo || '',
       cnae: selected.cnae || '',
       discriminacao: selected.discriminacao || '',
+      codigoNbs: pickCodigoNbsFromCatalogMetadata(selected.metadata_json),
       valorServico: vs != null && vs !== '' ? String(vs) : ''
     });
   };
@@ -2542,6 +2547,9 @@ export default function GuidesMei() {
             codigo: servico.codigo.trim(),
             cnae: servico.cnae.trim(),
             discriminacao: servico.discriminacao.trim(),
+            ...(servico.codigoNbs?.trim()
+              ? { codigoNbs: normalizeCodigoNbsInput(servico.codigoNbs) }
+              : {}),
             valorServico: servico.valorServico
           },
           prestadorEndereco: {
@@ -5049,6 +5057,26 @@ export default function GuidesMei() {
                   onChange={(event) => updateNfseServico({ valorServico: event.target.value })}
                   placeholder="1500,00"
                 />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400" htmlFor="nfse-servico-nbs">
+                  Código NBS
+                </label>
+                <input
+                  id="nfse-servico-nbs"
+                  className="planner-input-compact w-full tabular-nums"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={9}
+                  value={nfseForm.servico.codigoNbs ?? ''}
+                  onChange={(event) => updateNfseServico({
+                    codigoNbs: normalizeCodigoNbsInput(event.target.value)
+                  })}
+                  placeholder="114061100 (sugerido no catálogo)"
+                />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  NFS-e Nacional — se vazio, o backend tenta sugerir pelo código LC 116.
+                </p>
               </div>
             </div>
             <div>

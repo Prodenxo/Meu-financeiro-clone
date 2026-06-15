@@ -11,7 +11,14 @@ import {
   downloadNfseXmlPorIntegracao,
   emitirNfse
 } from './plugnotas/nfse.service.js';
-import { ensureEmpresaPlugnotasRpsForNfseEmit } from './plugnotas/plugnotas-empresa-rps-heal.js';
+import {
+  applyPlugnotasNfseEmitRpsFromEmpresaConfig,
+  ensureEmpresaPlugnotasRpsForNfseEmit
+} from './plugnotas/plugnotas-empresa-rps-heal.js';
+import {
+  enrichCodigosServicosComNbs,
+  resolveCodigoNbsForServico,
+} from './nfse-codigo-nbs.js';
 import {
   extractNfeItemQuantidade,
   extractNfeItemValorUnitario,
@@ -330,6 +337,10 @@ const buildServicoFromInput = (input) => {
   const discriminacao = input.discriminacao || input.descricaoServico || null;
   const cnae = input.cnae || null;
   const valorServico = input.valorServico ?? valor.servico;
+  const codigoNbs = resolveCodigoNbsForServico({
+    codigo,
+    codigoNbs: input.codigoNbs ?? input.codigo_nbs,
+  });
 
   // MEI optante pelo Simples Nacional: não informar alíquota ISS no JSON (regra fiscal / prefeitura).
   return prune({
@@ -337,6 +348,7 @@ const buildServicoFromInput = (input) => {
     codigo,
     discriminacao,
     cnae,
+    codigoNbs,
     iss: prune(issSource),
     valor: prune({
       ...valor,
@@ -1286,6 +1298,7 @@ export const emitirNota = async (userId, input) => {
         || String(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || '').replace(/\D/g, '');
       if (cnpjPrestador.length === 14) {
         await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestador);
+        await applyPlugnotasNfseEmitRpsFromEmpresaConfig(emitPayload, cnpjPrestador);
       }
     }
     const response = await adapter.emitir(emitPayload);
@@ -1557,7 +1570,7 @@ export const listarCodigosServicosReferencia = async ({ q = '', limit = 20 } = {
 
   const { data, error } = await query;
   if (error) throw badRequest(error.message);
-  return data || [];
+  return enrichCodigosServicosComNbs(data || []);
 };
 
 const UUID_RE =

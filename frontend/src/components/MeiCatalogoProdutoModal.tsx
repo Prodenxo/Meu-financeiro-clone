@@ -14,6 +14,13 @@ import {
 import UserFacingErrorBlock from './UserFacingErrorBlock';
 import { mapMeiCatalogApiErrorToUserFacing } from '../lib/mapMeiCatalogApiErrorToUserFacing';
 import { MeiCodigoServicoCombobox } from './MeiCodigoServicoCombobox';
+import {
+  buildCatalogMetadataWithCodigoNbs,
+  isValidCodigoNbs,
+  normalizeCodigoNbsInput,
+  pickCodigoNbsFromCatalogMetadata
+} from '../lib/nfseCodigoNbs';
+import type { CodigoServicoReferencia } from '../services/meiNotasService';
 
 export interface MeiCatalogoProdutoModalProps {
   open: boolean;
@@ -24,7 +31,7 @@ export interface MeiCatalogoProdutoModalProps {
   onRequestDelete?: () => void;
 }
 
-type FieldKey = 'discriminacao' | 'codigo' | 'cnae' | 'aliquota' | 'valor_sugerido';
+type FieldKey = 'discriminacao' | 'codigo' | 'cnae' | 'codigoNbs' | 'aliquota' | 'valor_sugerido';
 
 function parseAliquotaInput(raw: string): number | null {
   const t = raw.trim().replace(',', '.');
@@ -49,6 +56,7 @@ export default function MeiCatalogoProdutoModal({
   const [discriminacao, setDiscriminacao] = useState('');
   const [codigo, setCodigo] = useState('');
   const [cnae, setCnae] = useState('');
+  const [codigoNbs, setCodigoNbs] = useState('');
   const [aliquotaStr, setAliquotaStr] = useState('');
   const [valorCentDigits, setValorCentDigits] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
@@ -58,6 +66,7 @@ export default function MeiCatalogoProdutoModal({
   const discRef = useRef<HTMLTextAreaElement>(null);
   const codigoRef = useRef<HTMLInputElement>(null);
   const cnaeRef = useRef<HTMLInputElement>(null);
+  const codigoNbsRef = useRef<HTMLInputElement>(null);
   const aliquotaRef = useRef<HTMLInputElement>(null);
   const valorRef = useRef<HTMLInputElement>(null);
 
@@ -71,23 +80,26 @@ export default function MeiCatalogoProdutoModal({
       setDiscriminacao(editing.discriminacao || '');
       setCodigo(editing.codigo || '');
       setCnae(editing.cnae || '');
+      setCodigoNbs(pickCodigoNbsFromCatalogMetadata(editing.metadata_json));
       setAliquotaStr(formatAliquotaForInput(editing.aliquota ?? null));
       setValorCentDigits(moneyDigitsFromNumber(editing.valor_sugerido ?? null));
     } else {
       setDiscriminacao('');
       setCodigo('');
       setCnae('');
+      setCodigoNbs('');
       setAliquotaStr('');
       setValorCentDigits('');
     }
   }, [open, editing]);
 
   const focusFirstError = (keys: FieldKey[]) => {
-    const order: FieldKey[] = ['discriminacao', 'codigo', 'cnae', 'aliquota', 'valor_sugerido'];
+    const order: FieldKey[] = ['discriminacao', 'codigo', 'cnae', 'codigoNbs', 'aliquota', 'valor_sugerido'];
     const first = order.find((k) => keys.includes(k));
     if (first === 'discriminacao') discRef.current?.focus();
     else if (first === 'codigo') codigoRef.current?.focus();
     else if (first === 'cnae') cnaeRef.current?.focus();
+    else if (first === 'codigoNbs') codigoNbsRef.current?.focus();
     else if (first === 'aliquota') aliquotaRef.current?.focus();
     else if (first === 'valor_sugerido') valorRef.current?.focus();
   };
@@ -96,6 +108,9 @@ export default function MeiCatalogoProdutoModal({
     const next: Partial<Record<FieldKey, string>> = {};
     if (!discriminacao.trim()) {
       next.discriminacao = 'Informe a discriminação do serviço ou produto.';
+    }
+    if (codigoNbs.trim() && !isValidCodigoNbs(codigoNbs)) {
+      next.codigoNbs = 'NBS inválido — use 9 dígitos (ex.: 114061100).';
     }
     const alParsed = parseAliquotaInput(aliquotaStr);
     if (aliquotaStr.trim() && Number.isNaN(alParsed as number)) {
@@ -126,6 +141,11 @@ export default function MeiCatalogoProdutoModal({
     const aliquotaVal = aliquotaStr.trim() && !Number.isNaN(alParsed as number) ? alParsed : null;
     const valorNum = parseMoneyInputToNumber(formatMoneyDigitsPtBr(valorCentDigits));
 
+    const metadataJson = buildCatalogMetadataWithCodigoNbs(
+      editing?.metadata_json,
+      codigoNbs
+    );
+
     try {
       if (isEdit && editing) {
         await atualizarCatalogoNfseProduto(editing.id, {
@@ -133,7 +153,8 @@ export default function MeiCatalogoProdutoModal({
           codigo: codigo.trim(),
           cnae: cnae.trim(),
           aliquota: aliquotaVal,
-          valor_sugerido: valorNum
+          valor_sugerido: valorNum,
+          metadata_json: metadataJson
         });
       } else {
         await criarCatalogoNfseProduto({
@@ -142,6 +163,7 @@ export default function MeiCatalogoProdutoModal({
           cnae: cnae.trim() || undefined,
           ...(aliquotaVal !== null ? { aliquota: aliquotaVal } : {}),
           ...(valorNum !== null ? { valor_sugerido: valorNum } : {}),
+          ...(metadataJson ? { metadata_json: metadataJson } : {}),
           documentType: 'NFSE'
         });
       }
@@ -252,6 +274,11 @@ export default function MeiCatalogoProdutoModal({
               id="mei-cat-prod-cod"
               value={codigo}
               onChange={setCodigo}
+              onSelectReferencia={(row: CodigoServicoReferencia) => {
+                if (row.codigo_nbs) {
+                  setCodigoNbs(normalizeCodigoNbsInput(row.codigo_nbs));
+                }
+              }}
               aria-invalid={Boolean(fieldErrors.codigo)}
               aria-describedby={
                 fieldErrors.codigo ? 'mei-cat-prod-cod-err mei-cat-prod-cod-help' : 'mei-cat-prod-cod-help'
@@ -294,8 +321,38 @@ export default function MeiCatalogoProdutoModal({
           </div>
 
           <div>
+            <label htmlFor="mei-cat-prod-nbs" className="mb-1 block font-medium dark:text-gray-200">
+              Código NBS
+              <span className="text-slate-400"> (recomendado — NFS-e Nacional)</span>
+            </label>
+            <p id="mei-cat-prod-nbs-help" className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+              9 dígitos exigidos pelo Emissor Nacional. Sugerido ao escolher o código LC 116; pode ajustar manualmente.
+            </p>
+            <input
+              ref={codigoNbsRef}
+              id="mei-cat-prod-nbs"
+              className="planner-input-compact w-full tabular-nums"
+              value={codigoNbs}
+              onChange={(ev) => setCodigoNbs(normalizeCodigoNbsInput(ev.target.value))}
+              placeholder="Ex.: 114061100"
+              inputMode="numeric"
+              maxLength={9}
+              aria-invalid={Boolean(fieldErrors.codigoNbs)}
+              aria-describedby={
+                fieldErrors.codigoNbs ? 'mei-cat-prod-nbs-err mei-cat-prod-nbs-help' : 'mei-cat-prod-nbs-help'
+              }
+              autoComplete="off"
+            />
+            {fieldErrors.codigoNbs ? (
+              <p id="mei-cat-prod-nbs-err" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
+                {fieldErrors.codigoNbs}
+              </p>
+            ) : null}
+          </div>
+
+          <div>
             <label htmlFor="mei-cat-prod-alq" className="mb-2 block font-medium dark:text-gray-200">
-              Alíquota (%) <span className="text-slate-400">(opcional)</span>
+              Alíquota (%) <span className="text-slate-400">(opcional — MEI/Simples não informa ISS)</span>
             </label>
             <input
               ref={aliquotaRef}

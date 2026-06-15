@@ -97,6 +97,8 @@ export interface NfseServicoInput {
   codigo: string;
   discriminacao: string;
   cnae: string;
+  /** Nomenclatura Brasileira de Serviços (9 dígitos) — NFS-e Nacional / PlugNotas `servico.codigoNbs`. */
+  codigoNbs?: string;
   /** Não usar para MEI no Simples Nacional — o backend não repassa alíquota ISS. */
   aliquota?: string | number;
   valorServico: string | number;
@@ -483,6 +485,8 @@ export async function listarCatalogoNfseProdutos(
 export interface CodigoServicoReferencia {
   codigo: string;
   descricao: string;
+  /** Sugestão NBS (Anexo VIII) quando disponível no backend. */
+  codigo_nbs?: string | null;
 }
 
 export interface ListarCodigosServicoReferenciaInput {

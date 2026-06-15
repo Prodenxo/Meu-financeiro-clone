@@ -33,6 +33,12 @@ test('hasNfseConfigRpsShape valida nfse.config.rps', () => {
     true
   );
   assert.equal(
+    hasNfseConfigRpsShape({
+      nfse: { ativo: true, config: { rps: { lote: 1, numeracao: [{ serie: '1', numero: 4 }] } } }
+    }),
+    true
+  );
+  assert.equal(
     hasNfseConfigRpsShape({ nfse: { ativo: true, config: { rps: { lote: 1 } } } }),
     false
   );

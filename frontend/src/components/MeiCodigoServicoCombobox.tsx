@@ -48,13 +48,15 @@ export interface MeiCodigoServicoComboboxProps {
   id: string;
   value: string;
   onChange: (nextCodigo: string) => void;
+  /** Disparado ao escolher uma linha da lista (inclui sugestão NBS, quando houver). */
+  onSelectReferencia?: (item: CodigoServicoReferencia) => void;
   'aria-invalid'?: boolean;
   'aria-describedby'?: string;
 }
 
 export const MeiCodigoServicoCombobox = forwardRef<HTMLInputElement, MeiCodigoServicoComboboxProps>(
   function MeiCodigoServicoCombobox(
-    { id, value, onChange, 'aria-invalid': ariaInvalid, 'aria-describedby': ariaDescribedBy },
+    { id, value, onChange, onSelectReferencia, 'aria-invalid': ariaInvalid, 'aria-describedby': ariaDescribedBy },
     ref
   ) {
     const listboxId = useId();
@@ -181,6 +183,7 @@ export const MeiCodigoServicoCombobox = forwardRef<HTMLInputElement, MeiCodigoSe
     const selectRow = useCallback(
       (row: CodigoServicoReferencia) => {
         onChange(String(row.codigo).trim());
+        onSelectReferencia?.(row);
         setResolvedDesc(String(row.descricao ?? ''));
         setLegacyMode(false);
         setResolveError(null);
@@ -188,7 +191,7 @@ export const MeiCodigoServicoCombobox = forwardRef<HTMLInputElement, MeiCodigoSe
         setFilterText('');
         setHighlightIndex(0);
       },
-      [onChange]
+      [onChange, onSelectReferencia]
     );
 
     const clearSelection = useCallback(() => {

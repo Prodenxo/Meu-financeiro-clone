@@ -82,6 +82,7 @@ export const hasNfseConfigRpsShape = (empresa) => {
   if (!nfse || typeof nfse !== 'object' || Array.isArray(nfse) || nfse.ativo === false) return false;
   const rps = nfse.config?.rps;
   if (!rps || typeof rps !== 'object' || Array.isArray(rps)) return false;
+  if (hasClientRpsShape(rps)) return true;
   const serie = String(rps.serie ?? '').trim();
   const numero = parsePositiveInt(rps.numero, NaN);
   return Boolean(serie) && Number.isFinite(numero) && numero >= 1;

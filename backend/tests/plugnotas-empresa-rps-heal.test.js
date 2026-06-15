@@ -2,9 +2,61 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  applyPlugnotasNfseEmitRpsFromEmpresaConfig,
   empresaPlugnotasTemRpsCadastrado,
-  ensureEmpresaPlugnotasRpsForNfseEmit
+  ensureEmpresaPlugnotasRpsForNfseEmit,
+  readPlugnotasNfseNextRpsFromEmpresa
 } from '../src/services/plugnotas/plugnotas-empresa-rps-heal.js';
+
+test('readPlugnotasNfseNextRpsFromEmpresa lê numeracao em nfse.config.rps', () => {
+  assert.deepEqual(
+    readPlugnotasNfseNextRpsFromEmpresa({
+      cpfCnpj: '12345678000199',
+      nfse: { config: { rps: { numeracao: [{ serie: '1', numero: 4 }], lote: 1 } } }
+    }),
+    { serie: '1', numero: 4, lote: 1 }
+  );
+});
+
+test('applyPlugnotasNfseEmitRpsFromEmpresaConfig injeta rps explícito quando ausente', async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/empresa/12345678000199') && options.method === 'GET') {
+      return new Response(JSON.stringify({
+        cpfCnpj: '12345678000199',
+        nfse: { config: { rps: { numeracao: [{ serie: '1', numero: 5 }], lote: 1 } } }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  try {
+    const payload = { idIntegracao: 'x' };
+    await applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, '12.345.678/0001-99');
+    assert.deepEqual(payload.rps, {
+      lote: 1,
+      numeracao: [{ serie: '1', numero: 5 }]
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('applyPlugnotasNfseEmitRpsFromEmpresaConfig não sobrescreve rps já informado', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    throw new Error('fetch não deve ser chamado');
+  };
+
+  try {
+    const payload = { rps: { serie: '1', numero: 9, lote: 1 } };
+    await applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, '12345678000199');
+    assert.deepEqual(payload.rps, { serie: '1', numero: 9, lote: 1 });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
 
 test('empresaPlugnotasTemRpsCadastrado reconhece rps válido no GET empresa', () => {
   assert.equal(
@@ -21,6 +73,32 @@ test('empresaPlugnotasTemRpsCadastrado reconhece rps válido no GET empresa', ()
     }),
     false
   );
+});
+
+test('ensureEmpresaPlugnotasRpsForNfseEmit não faz PATCH quando numeracao já existe em nfse.config.rps', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (String(url).includes('/empresa/12345678000199') && options.method === 'GET') {
+      return new Response(JSON.stringify({
+        cpfCnpj: '12345678000199',
+        nfse: {
+          ativo: true,
+          config: { rps: { lote: 1, numeracao: [{ serie: '1', numero: 4 }] } }
+        }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  try {
+    await ensureEmpresaPlugnotasRpsForNfseEmit('12.345.678/0001-99');
+    assert.equal(calls.filter((c) => c.options.method === 'PATCH').length, 0);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test('ensureEmpresaPlugnotasRpsForNfseEmit faz PATCH só quando rps ausente', async () => {
