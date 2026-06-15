@@ -133,6 +133,9 @@ export const lookupCnpjBrasilApi = async (cnpjInput) => {
     },
     situacaoCadastral: raw?.descricao_situacao_cadastral || null,
     porte: raw?.porte || null,
+    codigoNaturezaJuridica: raw?.codigo_natureza_juridica != null
+      ? Number(raw.codigo_natureza_juridica)
+      : null,
     capitalSocial: raw?.capital_social || null,
     opcaoSimples: raw?.opcao_pelo_simples || null,
     opcaoMei: raw?.opcao_pelo_mei || null,

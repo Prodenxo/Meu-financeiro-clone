@@ -81,8 +81,7 @@ export const PLUGNOTAS_REGIME_ESPECIAL_MEI = 5;
  */
 export const normalizeMeiEmpresaPayload = (payload) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
-  const regime = Number(payload.regimeTributario);
-  const simples = payload.simplesNacional !== false;
+  let regime = Number(payload.regimeTributario);
   const especial = Number(payload.regimeTributarioEspecial);
 
   if (regime === 4) {
@@ -92,10 +91,39 @@ export const normalizeMeiEmpresaPayload = (payload) => {
     return payload;
   }
 
-  if (simples && regime === 1 && (Number.isNaN(especial) || especial === 0)) {
+  // Mei Infinito: cadastro sem regime explícito assume Simples Nacional (1).
+  if (!Number.isFinite(regime) || regime <= 0) {
+    payload.regimeTributario = 1;
+    regime = 1;
+  }
+
+  if (payload.simplesNacional !== false) {
+    payload.simplesNacional = true;
+  }
+
+  if (regime === 1 && (Number.isNaN(especial) || especial === 0)) {
     payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
   }
 
+  return payload;
+};
+
+/**
+ * Payload mínimo para PATCH do regime MEI (1 + especial 5) na Plugnotas.
+ * @param {string} cnpj14
+ * @param {string} [certificadoId]
+ */
+export const buildMeiRegimePatchPayload = (cnpj14, certificadoId) => {
+  const payload = {
+    cpfCnpj: cnpj14,
+    regimeTributario: 1,
+    simplesNacional: true,
+    regimeTributarioEspecial: PLUGNOTAS_REGIME_ESPECIAL_MEI,
+    inscricaoEstadual: PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA
+  };
+  const cert = certificadoId != null ? String(certificadoId).trim() : '';
+  if (cert) payload.certificado = cert;
+  normalizeMeiEmpresaPayload(payload);
   return payload;
 };
 

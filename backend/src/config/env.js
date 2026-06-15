@@ -101,6 +101,8 @@ export const env = {
   MEI_API_PERIODS_PATH: process.env.MEI_API_PERIODS_PATH || '',
   MEI_API_TIMEOUT_MS: process.env.MEI_API_TIMEOUT_MS || '15000',
   MEI_CERT_ENCRYPTION_KEY: process.env.MEI_CERT_ENCRYPTION_KEY || '',
+  /** Quando true (padrão), bloqueia certificado cujo CNPJ não seja MEI na Receita. */
+  MEI_CERT_ENFORCE_MEI_CNPJ: process.env.MEI_CERT_ENFORCE_MEI_CNPJ || 'true',
   PLUGNOTAS_API_BASE_URL: process.env.PLUGNOTAS_API_BASE_URL || '',
   /** Prefixo opcional antes do path (ex.: `/api`). Ver docs Plugnotas e docs/operacao-mei-nfse.md. */
   PLUGNOTAS_API_PATH_PREFIX: process.env.PLUGNOTAS_API_PATH_PREFIX || '',

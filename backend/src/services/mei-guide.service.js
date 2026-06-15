@@ -27,6 +27,7 @@ import {
   resolverCertificadoIdPorCnpj,
   excluirCertificadoPlugNotas
 } from './plugnotas/empresa.service.js';
+import { assertMeiCertificateEligible } from './mei-certificate-eligibility.service.js';
 import {
   isCompetenciaPaid,
   listPaidCompetencias,
@@ -1405,6 +1406,8 @@ export const uploadCertificate = async (userId, payload) => {
   const emitente = parseEmitenteFromPayload(payload);
 
   const certDocument = certInfo?.doc ? normalizeDoc(certInfo.doc) : null;
+
+  await assertMeiCertificateEligible(certDocument);
 
   let previousCertDocument = null;
   if (certDocument) {

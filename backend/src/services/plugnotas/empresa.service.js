@@ -20,10 +20,14 @@ import {
 import { getPlugnotasRootUrl } from './root-url.js';
 import {
   applyNfseNationalContractPolicy,
+  buildMeiRegimePatchPayload,
   inspectNfseContractInput,
+  normalizeMeiEmpresaPayload,
   PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
+  PLUGNOTAS_REGIME_ESPECIAL_MEI,
 } from './plugnotas-mei-empresa-policy.js';
-import { normalizeMeiEmpresaPayload } from './plugnotas-mei-empresa-policy.js';
+import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
+import { assertMeiCertificateEligible } from '../mei-certificate-eligibility.service.js';
 import { consultarCidadePlugNotas } from './plugnotas-cidades.service.js';
 import {
   applyEmpresaPlugnotasDocumentSelectionForPatch,
@@ -738,6 +742,70 @@ export const excluirCertificadoPlugNotas = async (certId) => {
   return requestJson('DELETE', `/certificado/${encodeURIComponent(id)}`);
 };
 
+/**
+ * Após POST /certificado, a Plugnotas pode criar/vincular a empresa só com Simples Nacional,
+ * deixando `regimeTributarioEspecial` vazio. Garante MEI (especial 5) via PATCH best-effort.
+ * @param {string|undefined} cpfCnpjInput
+ * @param {string|null|undefined} certificadoId
+ */
+export const ensureMeiRegimeEspecialPlugnotasEmpresa = async (cpfCnpjInput, certificadoId) => {
+  const cnpj = normalizeDoc(cpfCnpjInput || '');
+  if (cnpj.length !== 14) {
+    return { ok: false, patched: false, reason: 'invalid_cnpj' };
+  }
+
+  let empresaRaw;
+  try {
+    empresaRaw = await requestJson('GET', `/empresa/${encodeURIComponent(cnpj)}`);
+  } catch (err) {
+    if (err?.status === 404) {
+      return { ok: false, patched: false, reason: 'empresa_not_found' };
+    }
+    throw err;
+  }
+
+  const empresa = unwrapPlugnotasEmpresaRecord(empresaRaw) || {};
+  const especial = Number(empresa.regimeTributarioEspecial);
+  if (especial === PLUGNOTAS_REGIME_ESPECIAL_MEI) {
+    return { ok: true, patched: false, reason: 'already_mei' };
+  }
+
+  const payload = buildMeiRegimePatchPayload(cnpj, certificadoId);
+  const updateResult = await tryUpdateEmpresa(cnpj, payload);
+  if (updateResult.response) {
+    return { ok: true, patched: true, reason: 'patched' };
+  }
+
+  const errorMessage = updateResult.lastError instanceof Error
+    ? updateResult.lastError.message
+    : String(updateResult.lastError || '');
+  return { ok: false, patched: false, reason: 'patch_failed', error: errorMessage };
+};
+
+const attachMeiRegimeAfterCertificado = async (result, cpfCnpj) => {
+  const cnpj = normalizeDoc(cpfCnpj || '');
+  const id = result?.id;
+  if (!id || cnpj.length !== 14) return result;
+
+  try {
+    const regimeResult = await ensureMeiRegimeEspecialPlugnotasEmpresa(cnpj, id);
+    if (!regimeResult.ok && regimeResult.reason !== 'empresa_not_found') {
+      console.warn('[plugnotas] regime MEI não aplicado após certificado', {
+        cnpj14: `${cnpj.slice(0, 4)}***${cnpj.slice(-2)}`,
+        reason: regimeResult.reason,
+        error: regimeResult.error
+      });
+    }
+  } catch (err) {
+    console.warn('[plugnotas] falha ao garantir regime MEI após certificado', {
+      cnpj14: `${cnpj.slice(0, 4)}***${cnpj.slice(-2)}`,
+      error: err instanceof Error ? err.message : String(err)
+    });
+  }
+
+  return result;
+};
+
 export const cadastrarCertificadoPlugNotas = async ({
   fileBuffer,
   fileName,
@@ -751,6 +819,10 @@ export const cadastrarCertificadoPlugNotas = async ({
   }
   if (!password) {
     throw badRequest('Senha do certificado é obrigatória');
+  }
+
+  if (cpfCnpj) {
+    await assertMeiCertificateEligible(normalizeDoc(cpfCnpj));
   }
 
   const formData = new FormData();
@@ -767,25 +839,25 @@ export const cadastrarCertificadoPlugNotas = async ({
     const response = await requestFormData('POST', '/certificado', formData);
     const data = toObject(response?.data);
 
-    return {
+    return attachMeiRegimeAfterCertificado({
       id: typeof data.id === 'string' ? data.id : null,
       message: typeof response?.message === 'string' ? response.message : null,
       raw: response
-    };
+    }, cpfCnpj);
   } catch (error) {
     if (!isCertificadoDuplicado409(error)) {
       throw error;
     }
     const resolved = await resolverCertificadoIdPorCnpj(cpfCnpj);
     if (resolved) {
-      return {
+      return attachMeiRegimeAfterCertificado({
         id: resolved,
         message: 'Certificado já existente no emissor fiscal; ID recuperado para continuar o cadastro da empresa.',
         raw: {
           recoveredFrom409: true,
           conflictMessage: error instanceof Error ? error.message : String(error)
         }
-      };
+      }, cpfCnpj);
     }
     throw badRequest(
       'O certificado já está cadastrado no emissor fiscal, mas não foi possível obter o ID automaticamente. '
