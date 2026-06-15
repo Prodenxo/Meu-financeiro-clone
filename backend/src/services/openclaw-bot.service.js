@@ -57,6 +57,11 @@ import {
   registerOpenclawNfeProduto,
   rethrowNfeErrorForBot,
 } from './openclaw-nfe.service.js';
+import {
+  BOT_NF_CONFIRM_INSTRUCTION,
+  buildNfConfirmRequestUserMessage,
+  buildNfEmittedUserMessage,
+} from './openclaw-nf-user-messages.js';
 import { formatCnpjDisplay } from '../utils/cpf-cnpj.js';
 import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
 import {
@@ -1664,8 +1669,8 @@ export const runOpenclawAction = async (input) => {
       return {
         ok: true,
         message: result.alreadyRegistered
-          ? `Cliente já cadastrado: ${nome} (${doc}). Pode usar preview_nfse e emit_nfse.`
-          : `Cliente cadastrado: ${nome} (${doc}). Agora use preview_nfse e emit_nfse com confirm:true.`,
+          ? `Cliente já cadastrado: ${nome} (${doc}). Pode emitir a nota quando quiser.`
+          : `Cliente cadastrado: ${nome} (${doc}). Já pode pedir a emissão da nota.`,
         data: {
           ...result,
           userId,
@@ -1748,7 +1753,7 @@ export const runOpenclawAction = async (input) => {
       const codigo = result.produto?.codigo || '';
       return {
         ok: true,
-        message: `Produto NF-e cadastrado: ${nome} (SKU ${codigo}). Use list_nfe_produtos e emit_nfe com confirm:true.`,
+        message: `Produto NF-e cadastrado: ${nome} (SKU ${codigo}). Já pode pedir a emissão da nota de produto.`,
         data: { ...result, userId, actorContext, ...linkDebug },
       };
     } catch (err) {
@@ -1761,11 +1766,16 @@ export const runOpenclawAction = async (input) => {
       const preview = await previewOpenclawNfeEmit(userId, payload);
       return {
         ok: true,
-        message:
-          `Pré-visualização NF-e: ${preview.produtoDescricao} — R$ ${preview.valorTotal} `
-          + `para ${preview.destinatarioRazaoSocial} (${preview.destinatarioCpfCnpj}). `
-          + 'Confirme com emit_nfe e confirm:true.',
-        data: { preview, requiresConfirm: true, userId, actorContext, ...linkDebug },
+        message: buildNfConfirmRequestUserMessage(preview),
+        data: {
+          preview,
+          requiresConfirm: true,
+          userId,
+          actorContext,
+          ...linkDebug,
+          agentInstructions:
+            `${BOT_NF_CONFIRM_INSTRUCTION} Repita APENAS o campo message ao utilizador.`,
+        },
       };
     } catch (err) {
       rethrowNfeErrorForBot(err);
@@ -1779,9 +1789,7 @@ export const runOpenclawAction = async (input) => {
         const p = result.preview;
         return {
           ok: true,
-          message:
-            `Confirme a NF-e: ${p?.produtoDescricao} — R$ ${p?.valorTotal} `
-            + `para ${p?.destinatarioRazaoSocial}. Repita com "confirm":true no payload.`,
+          message: buildNfConfirmRequestUserMessage(p),
           data: {
             preview: result.preview,
             requiresConfirm: true,
@@ -1789,15 +1797,19 @@ export const runOpenclawAction = async (input) => {
             userId,
             actorContext,
             ...linkDebug,
+            agentInstructions:
+              `${BOT_NF_CONFIRM_INSTRUCTION} Repita APENAS o campo message ao utilizador.`,
           },
         };
       }
       const nota = result.nota;
       const status = nota?.status || 'processando';
-      const dest = nota?.cnpj_tomador || result.preview?.destinatarioCpfCnpj;
       return {
         ok: true,
-        message: `NF-e enviada para emissão (status: ${status}). Destinatário: ${dest || '—'}.`,
+        message: buildNfEmittedUserMessage(result.preview, {
+          status,
+          pdfPending: true,
+        }),
         data: {
           nota: {
             id: nota?.id,
@@ -1808,6 +1820,8 @@ export const runOpenclawAction = async (input) => {
           userId,
           actorContext,
           ...linkDebug,
+          agentInstructions:
+            'Nota NF-e em processamento. Repita APENAS message — não mencione payload nem confirm:true.',
         },
       };
     } catch (err) {
@@ -1864,8 +1878,16 @@ export const runOpenclawAction = async (input) => {
       const preview = await previewOpenclawNfseEmit(userId, payload);
       return {
         ok: true,
-        message: `Pré-visualização: NFSe de R$ ${preview.valorServico} para ${preview.tomadorRazaoSocial} (${preview.tomadorCpfCnpj}). Confirme com emit_nfse e confirm:true.`,
-        data: { preview, requiresConfirm: true, userId, actorContext, ...linkDebug },
+        message: buildNfConfirmRequestUserMessage(preview),
+        data: {
+          preview,
+          requiresConfirm: true,
+          userId,
+          actorContext,
+          ...linkDebug,
+          agentInstructions:
+            `${BOT_NF_CONFIRM_INSTRUCTION} Repita APENAS o campo message ao utilizador.`,
+        },
       };
     } catch (err) {
       rethrowNfseErrorForBot(err);
@@ -1878,7 +1900,7 @@ export const runOpenclawAction = async (input) => {
       if (result.requiresConfirm) {
         return {
           ok: true,
-          message: `Confirme a emissão: R$ ${result.preview.valorServico} — ${result.preview.tomadorRazaoSocial}. Repita com "confirm":true no payload.`,
+          message: buildNfConfirmRequestUserMessage(result.preview),
           data: {
             preview: result.preview,
             requiresConfirm: true,
@@ -1886,12 +1908,13 @@ export const runOpenclawAction = async (input) => {
             userId,
             actorContext,
             ...linkDebug,
+            agentInstructions:
+              `${BOT_NF_CONFIRM_INSTRUCTION} Repita APENAS o campo message ao utilizador.`,
           },
         };
       }
       const nota = result.nota;
       const status = nota?.status || 'processando';
-      const tomador = nota?.cnpj_tomador || result.preview?.tomadorCpfCnpj;
       const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
       const pdfReady = isNfsePdfReadyStatus(status);
       const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
@@ -1921,22 +1944,25 @@ export const runOpenclawAction = async (input) => {
           ? buildNfseSendExecCommand(destinationPhone, nota.id)
           : null;
 
-      let statusHint = '';
+      const userMessage = buildNfEmittedUserMessage(result.preview, {
+        status,
+        pdfSent: autoSent,
+        pdfPending: autoEnabled && !pdfReady,
+      });
+
+      let agentInstructions =
+        'Repita APENAS o campo message ao utilizador. PROIBIDO mencionar payload, confirm:true ou ações técnicas.';
       if (autoSent) {
-        statusHint = ' PDF enviado automaticamente no WhatsApp.';
+        agentInstructions += ' PDF já enviado no WhatsApp — não peça confirmação nem script.';
       } else if (autoEnabled) {
-        statusHint = pdfReady
-          ? ' Envio automático do PDF falhou — use mf-nfse-send.sh se necessário.'
-          : ' O PDF será enviado automaticamente quando a nota concluir (não precisa pedir de novo).';
-      } else if (pdfReady) {
-        statusHint = ' PDF pronto — pode enviar com mf-nfse-send.sh.';
-      } else {
-        statusHint = ' Quando status for concluido, envie o PDF com mf-nfse-send.sh TELEFONE UUID.';
+        agentInstructions += ' O PDF será enviado automaticamente — não peça mf-nfse-send.sh ao utilizador.';
+      } else if (execCommand) {
+        agentInstructions += ' Envio manual pendente — usa execCommand internamente se necessário.';
       }
 
       return {
         ok: true,
-        message: `NFSe enviada para emissão (status: ${status}). Tomador: ${tomador || '—'}.${statusHint}`,
+        message: userMessage,
         data: {
           nota: {
             id: nota?.id,
@@ -1959,6 +1985,7 @@ export const runOpenclawAction = async (input) => {
           userId,
           actorContext,
           ...linkDebug,
+          agentInstructions,
         },
       };
     } catch (err) {

@@ -17,6 +17,7 @@ import {
   emitenteMissingAddressFields,
   emitenteToPrestadorInput,
 } from './openclaw-nfse.service.js';
+import { isNfEmitConfirmed } from './openclaw-nf-user-messages.js';
 
 const normalizeDoc = (value) => normalizeDocDigits(value);
 
@@ -524,11 +525,6 @@ export const buildOpenclawNfeEmitInput = async (userId, payload = {}) => {
   };
 };
 
-const isConfirmTrue = (payload) =>
-  payload?.confirm === true
-  || payload?.confirmar === true
-  || String(payload?.confirm || payload?.confirmar || '').toLowerCase() === 'true';
-
 export const previewOpenclawNfeEmit = async (userId, payload = {}) => {
   const input = await buildOpenclawNfeEmitInput(userId, payload);
   const item = input.itens[0];
@@ -549,7 +545,7 @@ export const previewOpenclawNfeEmit = async (userId, payload = {}) => {
 
 export const emitOpenclawNfe = async (userId, payload = {}) => {
   const input = await buildOpenclawNfeEmitInput(userId, payload);
-  if (!isConfirmTrue(payload)) {
+  if (!isNfEmitConfirmed(payload)) {
     const preview = await previewOpenclawNfeEmit(userId, payload);
     return {
       preview,
@@ -559,7 +555,16 @@ export const emitOpenclawNfe = async (userId, payload = {}) => {
   }
 
   const created = await emitirNota(userId, input);
-  return { nota: created, preview: null, requiresConfirm: false, notEmitted: false };
+  const item = input.itens[0];
+  const preview = {
+    documentType: 'NFE',
+    destinatarioCpfCnpj: input.destinatario.cpfCnpj,
+    destinatarioRazaoSocial: input.destinatario.razaoSocial,
+    produtoDescricao: item.descricao,
+    produtoCodigo: item.codigo,
+    valorTotal: item.valor,
+  };
+  return { nota: created, preview, requiresConfirm: false, notEmitted: false };
 };
 
 export const rethrowNfeErrorForBot = (err) => {

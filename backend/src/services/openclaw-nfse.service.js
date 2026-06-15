@@ -24,6 +24,7 @@ import {
   obterNota,
   NFSE_SERVICO_CODIGO_MIN_LENGTH,
 } from './mei-notas.service.js';
+import { isNfEmitConfirmed } from './openclaw-nf-user-messages.js';
 import { lookupCnpjBrasilApi } from './cnpj-lookup.service.js';
 import { isValidCpfOrCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
 
@@ -908,17 +909,12 @@ export const previewOpenclawNfseEmit = async (userId, payload = {}) => {
   };
 };
 
-const isConfirmTrue = (payload) =>
-  payload?.confirm === true
-  || payload?.confirmar === true
-  || String(payload?.confirm || payload?.confirmar || '').toLowerCase() === 'true';
-
 /**
  * Emite NFSe (Plugnotas) para utilizador identificado pelo telefone.
  */
 export const emitOpenclawNfse = async (userId, payload = {}) => {
   const input = await buildOpenclawNfseEmitInput(userId, payload);
-  if (!isConfirmTrue(payload)) {
+  if (!isNfEmitConfirmed(payload)) {
     const preview = {
       documentType: 'NFSE',
       tomadorCpfCnpj: input.tomadorCpfCnpj,
@@ -937,7 +933,15 @@ export const emitOpenclawNfse = async (userId, payload = {}) => {
   }
 
   const created = await emitirNota(userId, input);
-  return { nota: created, preview: null, requiresConfirm: false, notEmitted: false };
+  const preview = {
+    documentType: 'NFSE',
+    tomadorRazaoSocial: input.tomadorRazaoSocial,
+    tomadorCpfCnpj: input.tomadorCpfCnpj,
+    valorServico: input.servico.valorServico,
+    discriminacao: input.servico.discriminacao,
+    codigoServico: input.servico.codigo,
+  };
+  return { nota: created, preview, requiresConfirm: false, notEmitted: false };
 };
 
 export const listOpenclawNfseNotas = async (userId, { limit = 10 } = {}) => {
