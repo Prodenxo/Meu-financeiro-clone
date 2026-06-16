@@ -1361,7 +1361,9 @@ export const runOpenclawAction = async (input) => {
       if (!created.ok) {
         const hint = created.notLinked
           ? ' Peça para conectar o Google Calendar em Configurações na app.'
-          : '';
+          : created.refreshFailed
+            ? ' Se o utilizador acabou de conectar, peça para tentar de novo em 1 minuto antes de reconectar.'
+            : '';
         const message = `${created.message || 'Não foi possível criar o compromisso.'}${hint}`;
         return {
           ok: false,
@@ -1645,6 +1647,24 @@ export const runOpenclawAction = async (input) => {
           : 'OBRIGATÓRIO exec mf-das-send.sh com telefone do PAINEL. Não diga que enviou sem whatsappStatus=sent.',
         actorContext,
         ...(dasSubject?.dataLinkDebug ?? linkDebug),
+      },
+    };
+  }
+
+  if (action === 'get_google_calendar_status') {
+    const status = await calendarEventsService.getGoogleCalendarConnectionStatus(userId);
+    return {
+      ok: status.ready,
+      message: status.message,
+      data: {
+        status,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions: status.ready
+          ? 'Google Calendar OK — pode create_calendar_event.'
+          : 'Repita só message. Se notLinked, oriente Configurações → Google Calendar na app. '
+            + 'Se acabou de conectar, peça para tentar criar o compromisso de novo em 1 minuto.',
       },
     };
   }

@@ -1,8 +1,10 @@
-import { createSupabaseClient } from '../config/supabase.js';
-import { env } from '../config/env.js';
 import { badRequest } from '../utils/errors.js';
 import * as transactionsService from './transactions.service.js';
 import { getCertificateValidity } from './mei-certificate-store.js';
+import {
+  getGoogleCalendarAccessTokenForUser,
+  getGoogleCalendarConnectionStatus,
+} from './google-calendar-token.service.js';
 import {
   buildCalendarAskEndTimeMessage,
   buildCalendarAskStartEndTimeMessage,
@@ -207,69 +209,7 @@ export const googleEventOverlapsDate = (item, dateIso) => {
   return start < dayEndExclusive && end > dayStart;
 };
 
-/**
- * Obtém access token Google Calendar (com refresh se necessário).
- * @param {string} userId
- * @returns {Promise<{ accessToken: string } | { error: string, notLinked?: boolean }>}
- */
-export const getGoogleCalendarAccessTokenForUser = async (userId) => {
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-    return { error: 'Integração Google Calendar não configurada no servidor.' };
-  }
-
-  const admin = createSupabaseClient({ useServiceRole: true });
-  const { data: tokenData, error: tokenError } = await admin
-    .from('google_tokens_id')
-    .select('access_token, refresh_token, expires_at')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (tokenError) return { error: tokenError.message };
-  if (!tokenData?.access_token) {
-    return {
-      error: 'Google Calendar não conectado. Autorize em Configurações na app.',
-      notLinked: true,
-    };
-  }
-
-  let accessToken = tokenData.access_token;
-  const expired =
-    tokenData.expires_at && new Date(tokenData.expires_at) <= new Date();
-
-  if (!expired) return { accessToken };
-
-  if (!tokenData.refresh_token) {
-    return {
-      error: 'Token Google expirado. Reconecte o Google Calendar nas Configurações.',
-      notLinked: true,
-    };
-  }
-
-  const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
-      refresh_token: tokenData.refresh_token,
-      grant_type: 'refresh_token',
-    }),
-  });
-
-  if (!refreshResponse.ok) {
-    return { error: 'Não foi possível renovar o token do Google Calendar.' };
-  }
-
-  const refreshed = await refreshResponse.json();
-  accessToken = refreshed.access_token;
-  const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-  await admin
-    .from('google_tokens_id')
-    .update({ access_token: accessToken, expires_at: newExpiresAt })
-    .eq('user_id', userId);
-
-  return { accessToken };
-};
+export { getGoogleCalendarAccessTokenForUser, getGoogleCalendarConnectionStatus };
 
 /**
  * Lista eventos brutos do Google Calendar num intervalo.
@@ -1463,6 +1403,7 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     return {
       ok: false,
       notLinked: !!tokenResult.notLinked,
+      refreshFailed: !!tokenResult.refreshFailed,
       message: tokenResult.error,
       date: parsed.iso,
       dateDisplay: parsed.display,
