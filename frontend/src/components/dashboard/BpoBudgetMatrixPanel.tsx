@@ -30,6 +30,9 @@ export interface BpoBudgetMatrixPanelProps {
   transactions: BpoPendingTxn[];
 }
 
+const STICKY_CATEGORY_CLASS =
+  'sticky left-0 z-[3] min-w-[180px] border-r border-slate-200/80 dark:border-slate-700/60 shadow-[4px_0_8px_-4px_rgba(15,23,42,0.12)] dark:shadow-[4px_0_8px_-4px_rgba(0,0,0,0.45)]';
+
 function toggleColumn(columns: BpoColumnKey[], key: BpoColumnKey): BpoColumnKey[] {
   if (columns.includes(key)) {
     const next = columns.filter((c) => c !== key);
@@ -83,7 +86,7 @@ function CategoryRows({
         >
           <th
             scope="row"
-            className="py-2 px-3 text-left text-xs font-medium text-slate-700 dark:text-slate-200 sticky left-0 bg-white dark:bg-slate-950 z-[1] min-w-[180px]"
+            className={`py-2 px-3 text-left text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-950 ${STICKY_CATEGORY_CLASS}`}
           >
             {row.nome}
           </th>
@@ -308,7 +311,7 @@ export default function BpoBudgetMatrixPanel({
               <span className="text-sm text-slate-600 dark:text-slate-300">A atualizar…</span>
             </div>
           ) : null}
-          <table className="w-full text-sm border-collapse min-w-[960px]">
+          <table className="w-full text-sm border-separate border-spacing-0 min-w-[960px]">
             <caption className="sr-only">
               Matriz orçado, previsto, realizado e variação por categoria e mês em {year}
             </caption>
@@ -317,7 +320,7 @@ export default function BpoBudgetMatrixPanel({
                 <th
                   rowSpan={2}
                   scope="col"
-                  className="py-2 px-3 text-left text-xs font-semibold sticky left-0 bg-slate-50/95 dark:bg-slate-900/60 z-[2] min-w-[180px]"
+                  className={`py-2 px-3 text-left text-xs font-semibold bg-slate-50 dark:bg-slate-900 ${STICKY_CATEGORY_CLASS}`}
                 >
                   Grupo / Categoria
                 </th>
@@ -373,7 +376,7 @@ export default function BpoBudgetMatrixPanel({
                 <>
                   <CategoryRows rows={receitas} visibleColumns={visibleColumns} condensed={condensed} />
                   <tr className="font-semibold bg-emerald-50/40 dark:bg-emerald-950/10 border-t border-slate-200/60">
-                    <th scope="row" className="py-2 px-3 text-left text-xs sticky left-0 bg-emerald-50/90 dark:bg-emerald-950/30">
+                    <th scope="row" className={`py-2 px-3 text-left text-xs bg-emerald-50 dark:bg-emerald-950/30 ${STICKY_CATEGORY_CLASS}`}>
                       Subtotal receitas
                     </th>
                     {receitaSubtotal.map((m, mi) => (
@@ -405,7 +408,7 @@ export default function BpoBudgetMatrixPanel({
                 <>
                   <CategoryRows rows={despesas} visibleColumns={visibleColumns} condensed={condensed} />
                   <tr className="font-semibold bg-slate-100/50 dark:bg-slate-800/30 border-t border-slate-200/60">
-                    <th scope="row" className="py-2 px-3 text-left text-xs sticky left-0 bg-slate-100/90 dark:bg-slate-800/50">
+                    <th scope="row" className={`py-2 px-3 text-left text-xs bg-slate-100 dark:bg-slate-800/50 ${STICKY_CATEGORY_CLASS}`}>
                       Subtotal despesas
                     </th>
                     {despesaSubtotal.map((m, mi) => (
@@ -421,7 +424,7 @@ export default function BpoBudgetMatrixPanel({
               ) : null}
 
               <tr className="font-semibold bg-sky-50/80 dark:bg-sky-950/20 border-t-2 border-sky-200/80 dark:border-sky-800/50">
-                <th scope="row" className="py-3 px-3 text-left text-sm sticky left-0 bg-sky-50/95 dark:bg-sky-950/40 text-sky-900 dark:text-sky-100">
+                <th scope="row" className={`py-3 px-3 text-left text-sm text-sky-900 dark:text-sky-100 bg-sky-50 dark:bg-sky-950/40 ${STICKY_CATEGORY_CLASS}`}>
                   (=) Resultado
                 </th>
                 {resultadoFiltrado.map((m, mi) => (
