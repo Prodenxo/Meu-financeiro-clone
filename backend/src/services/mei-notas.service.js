@@ -1409,15 +1409,18 @@ export const emitirNota = async (userId, input) => {
       payload.idIntegracao = await resolveIdIntegracaoForEmit(userId, payload.idIntegracao);
     }
 
-    phase = 'validate';
-    validatePayloadByDocumentType(payload, documentType);
-
     let emitPayload = payload;
     if (documentType === DOCUMENT_TYPE_NFSE) {
       emitPayload = await enrichNfseEmitPayloadEmails(userId, emitPayload, {
         prestadorDoc,
         tomadorDoc,
       });
+    }
+
+    phase = 'validate';
+    validatePayloadByDocumentType(emitPayload, documentType);
+
+    if (documentType === DOCUMENT_TYPE_NFSE) {
       assertNfsePrestadorEmailOrThrow(emitPayload);
     }
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {

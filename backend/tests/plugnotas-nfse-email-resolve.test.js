@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   assertNfsePrestadorEmailOrThrow,
+  enderecoFromCnpjLookupNfse,
   enrichNfseEmitPayloadEmails,
   hasCompleteTomadorEndereco,
   isValidPlugnotasEmitEmail,
@@ -49,6 +50,21 @@ test('hasCompleteTomadorEndereco valida endereço mínimo', () => {
     }),
     true,
   );
+});
+
+test('enderecoFromCnpjLookupNfse usa S/N quando número ausente', () => {
+  const endereco = enderecoFromCnpjLookupNfse({
+    endereco: {
+      cep: '59082000',
+      logradouro: 'Rua Teste',
+      bairro: 'Centro',
+      codigoCidade: '2408102',
+      descricaoCidade: 'Natal',
+      estado: 'RN',
+    },
+  });
+  assert.equal(endereco?.numero, 'S/N');
+  assert.equal(hasCompleteTomadorEndereco(endereco), true);
 });
 
 test('assertNfsePrestadorEmailOrThrow exige e-mail do prestador', () => {

@@ -1,5 +1,6 @@
 import { createSupabaseClient } from '../../config/supabase.js';
 import { badRequest } from '../../utils/errors.js';
+import { lookupCnpjCascade } from '../cnpj-lookup.service.js';
 import { getEmitenteNfseSnapshot } from '../mei-certificate-store.js';
 import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
 import { consultarEmpresaPlugNotas } from './empresa.service.js';
@@ -128,6 +129,53 @@ export const resolveCatalogClienteEndereco = async (userId, documento, documentT
 };
 
 /**
+ * @param {Record<string, unknown>|null|undefined} lookup
+ * @returns {Record<string, string>|null}
+ */
+export const enderecoFromCnpjLookupNfse = (lookup) => {
+  const end = lookup?.endereco;
+  if (!isPlainObject(end)) return null;
+  const mapped = pruneEndereco({
+    cep: end.cep,
+    logradouro: end.logradouro,
+    numero: String(end.numero || '').trim() || 'S/N',
+    bairro: end.bairro,
+    codigoCidade: end.codigoCidade,
+    descricaoCidade: end.descricaoCidade || end.cidade,
+    estado: end.estado || end.uf,
+    complemento: end.complemento,
+  });
+  return hasCompleteTomadorEndereco(mapped) ? mapped : null;
+};
+
+/**
+ * Catálogo → consulta CNPJ (Receita/Plugnotas) antes da validação do payload.
+ * @param {string} userId
+ * @param {string} tomadorDoc
+ * @param {unknown} payloadEndereco
+ * @returns {Promise<Record<string, string>|null>}
+ */
+export const resolveTomadorEmitEndereco = async (userId, tomadorDoc, payloadEndereco) => {
+  const fromPayload = pruneEndereco(isPlainObject(payloadEndereco) ? payloadEndereco : null);
+  if (hasCompleteTomadorEndereco(fromPayload)) return fromPayload;
+
+  const catalogEndereco = await resolveCatalogClienteEndereco(userId, tomadorDoc);
+  if (hasCompleteTomadorEndereco(catalogEndereco)) return catalogEndereco;
+
+  if (tomadorDoc.length !== 14) return fromPayload;
+
+  try {
+    const lookup = await lookupCnpjCascade(tomadorDoc);
+    const fromLookup = enderecoFromCnpjLookupNfse(lookup);
+    if (fromLookup) return fromLookup;
+  } catch {
+    /* consulta opcional — validação final informa campos faltantes */
+  }
+
+  return fromPayload;
+};
+
+/**
  * E-mail do prestador: formulário → espelho local → Plugnotas → conta Auth.
  * @param {string} userId
  * @param {string} [cnpj14]
@@ -196,9 +244,9 @@ export const enrichNfseEmitPayloadEmails = async (userId, payload, options = {})
     if (tomadorEmail) tomador.email = tomadorEmail;
   }
 
-  if (tomadorDoc.length === 14 && !hasCompleteTomadorEndereco(tomador.endereco)) {
-    const catalogEndereco = await resolveCatalogClienteEndereco(userId, tomadorDoc);
-    if (catalogEndereco) tomador.endereco = catalogEndereco;
+  if (tomadorDoc.length === 14) {
+    const tomadorEndereco = await resolveTomadorEmitEndereco(userId, tomadorDoc, tomador.endereco);
+    if (tomadorEndereco) tomador.endereco = tomadorEndereco;
   }
 
   return {
