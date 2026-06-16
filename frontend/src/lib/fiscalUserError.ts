@@ -386,6 +386,34 @@ export function mapMeiFiscalErrorToCopy(input: {
   }
 
   if (
+    lower.includes('rps')
+    && (
+      lower.includes('duplic')
+      || lower.includes('já utiliz')
+      || lower.includes('ja utiliz')
+      || lower.includes('already')
+      || lower.includes('em uso')
+    )
+  ) {
+    return {
+      title: 'Numeração RPS em conflito',
+      description:
+        'O número de RPS desta nota já foi utilizado. Aguarde a autorização da nota anterior ou ajuste lote, série e número em Certificado → Empresa.',
+    };
+  }
+
+  if (
+    (lower.includes('id_integracao') || lower.includes('idintegracao') || lower.includes('id integração'))
+    && (lower.includes('duplic') || lower.includes('unique') || lower.includes('23505') || lower.includes('já foi registrad'))
+  ) {
+    return {
+      title: 'Emissão já enviada',
+      description:
+        'Este pedido de emissão já foi registrado. Confira a lista de notas ou aguarde alguns segundos e tente novamente.',
+    };
+  }
+
+  if (
     lower.includes('duplicate')
     || lower.includes('unique')
     || lower.includes('já existe')
@@ -397,7 +425,7 @@ export function mapMeiFiscalErrorToCopy(input: {
     return {
       title: 'Registo duplicado',
       description:
-        'Já existe um registo com estes dados (por exemplo, o mesmo CPF/CNPJ no catálogo). Altere o documento ou edite o registo existente.',
+        'Já existe um registo com estes dados (catálogo, código de serviço ou identificador de emissão). Altere os dados ou edite o registo existente.',
     };
   }
 

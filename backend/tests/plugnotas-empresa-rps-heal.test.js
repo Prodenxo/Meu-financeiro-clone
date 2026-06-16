@@ -2,11 +2,87 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  advancePlugnotasNfseRpsAfterEmit,
   applyPlugnotasNfseEmitRpsFromEmpresaConfig,
   empresaPlugnotasTemRpsCadastrado,
   ensureEmpresaPlugnotasRpsForNfseEmit,
-  readPlugnotasNfseNextRpsFromEmpresa
+  readPlugnotasNfseNextRpsFromEmpresa,
+  readRpsFromNfseEmitPayload,
+  resolveNextNfseRpsNumero
 } from '../src/services/plugnotas/plugnotas-empresa-rps-heal.js';
+
+test('resolveNextNfseRpsNumero usa o maior entre PlugNotas e histórico local', () => {
+  assert.equal(resolveNextNfseRpsNumero(5, 7), 8);
+  assert.equal(resolveNextNfseRpsNumero(10, 3), 10);
+  assert.equal(resolveNextNfseRpsNumero(1, null), 1);
+});
+
+test('readRpsFromNfseEmitPayload lê numeracao do payload de emissão', () => {
+  assert.deepEqual(
+    readRpsFromNfseEmitPayload({ rps: { lote: 1, numeracao: [{ serie: '1', numero: 12 }] } }),
+    { serie: '1', numero: 12, lote: 1 }
+  );
+});
+
+test('applyPlugnotasNfseEmitRpsFromEmpresaConfig avança número com localMaxRpsNumero', async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/empresa/12345678000199') && options.method === 'GET') {
+      return new Response(JSON.stringify({
+        cpfCnpj: '12345678000199',
+        nfse: { config: { rps: { numeracao: [{ serie: '1', numero: 5 }], lote: 1 } } }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  try {
+    const payload = { idIntegracao: 'x' };
+    await applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, '12.345.678/0001-99', {
+      localMaxRpsNumero: 7
+    });
+    assert.deepEqual(payload.rps, {
+      lote: 1,
+      numeracao: [{ serie: '1', numero: 8 }]
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('advancePlugnotasNfseRpsAfterEmit faz PATCH quando contador PlugNotas está atrás', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (String(url).includes('/empresa/12345678000199') && options.method === 'GET') {
+      return new Response(JSON.stringify({
+        cpfCnpj: '12345678000199',
+        nfse: { ativo: true, config: { rps: { numeracao: [{ serie: '1', numero: 5 }], lote: 1 } } }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (String(url).includes('/empresa/12345678000199') && options.method === 'PATCH') {
+      return new Response(JSON.stringify({ message: 'ok' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  try {
+    await advancePlugnotasNfseRpsAfterEmit('12.345.678/0001-99', { serie: '1', numero: 8, lote: 1 });
+    const patchCall = calls.find((c) => c.options.method === 'PATCH');
+    assert.ok(patchCall);
+    const body = JSON.parse(patchCall.options.body);
+    assert.equal(body.nfse.config.rps.numero, 9);
+    assert.equal(body.rps.numeracao[0].numero, 9);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
 
 test('readPlugnotasNfseNextRpsFromEmpresa lê numeracao em nfse.config.rps', () => {
   assert.deepEqual(

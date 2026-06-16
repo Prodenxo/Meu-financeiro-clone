@@ -12,8 +12,10 @@ import {
   emitirNfse
 } from './plugnotas/nfse.service.js';
 import {
+  advancePlugnotasNfseRpsAfterEmit,
   applyPlugnotasNfseEmitRpsFromEmpresaConfig,
-  ensureEmpresaPlugnotasRpsForNfseEmit
+  ensureEmpresaPlugnotasRpsForNfseEmit,
+  readRpsFromNfseEmitPayload
 } from './plugnotas/plugnotas-empresa-rps-heal.js';
 import {
   enrichCodigosServicosComNbs,
@@ -972,6 +974,65 @@ export const __resetGetDbForTests = () => {
 
 const getDb = () => (getDbOverride ? getDbOverride() : defaultGetDb());
 
+const buildMeiIdIntegracao = (userId) =>
+  `mei-${userId}-${Date.now()}-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
+
+const resolveIdIntegracaoForEmit = async (userId, proposed) => {
+  const trimmed = typeof proposed === 'string' ? proposed.trim() : '';
+  if (!trimmed) return buildMeiIdIntegracao(userId);
+
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(TABLE)
+    .select('id')
+    .eq('user_id', userId)
+    .eq('id_integracao', trimmed)
+    .maybeSingle();
+  if (error) throw badRequest(error.message);
+  if (data?.id) return buildMeiIdIntegracao(userId);
+  return trimmed;
+};
+
+const queryMaxRpsNumeroEmitted = async (userId, cnpjPrestador) => {
+  const cnpj = normalizeDoc(cnpjPrestador);
+  if (!userId || cnpj.length !== 14) return null;
+
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(TABLE)
+    .select('payload_json, document_type')
+    .eq('user_id', userId)
+    .eq('cnpj_prestador', cnpj)
+    .is('archived_at', null)
+    .order('created_at', { ascending: false })
+    .limit(250);
+  if (error) throw badRequest(error.message);
+
+  let max = 0;
+  for (const row of data || []) {
+    const docType = row.document_type;
+    if (docType && docType !== DOCUMENT_TYPE_NFSE) continue;
+    const rps = readRpsFromNfseEmitPayload(row.payload_json);
+    if (rps?.numero > max) max = rps.numero;
+  }
+  return max > 0 ? max : null;
+};
+
+const mapInsertRecordError = (error) => {
+  const message = String(error?.message || '');
+  const code = String(error?.code || '');
+  if (
+    code === '23505'
+    && (message.includes('id_integracao') || message.includes('mei_nfse_user_doc_type_id_integracao'))
+  ) {
+    throw badRequest(
+      'Esta emissão já foi registrada. Confira a lista de notas ou aguarde alguns segundos e tente novamente.',
+      { code: 'MEI_ID_INTEGRACAO_DUPLICATE' }
+    );
+  }
+  throw badRequest(message);
+};
+
 const insertRecord = async (userId, data) => {
   const dbClient = getDb();
   const { data: created, error } = await dbClient
@@ -983,7 +1044,7 @@ const insertRecord = async (userId, data) => {
     })
     .select()
     .single();
-  if (error) throw badRequest(error.message);
+  if (error) mapInsertRecordError(error);
   return created;
 };
 
@@ -1286,7 +1347,9 @@ export const emitirNota = async (userId, input) => {
     const metadata = sanitizeMetadata(input?.metadata);
 
     if (!payload?.idIntegracao) {
-      payload.idIntegracao = `mei-${userId}-${Date.now()}`;
+      payload.idIntegracao = buildMeiIdIntegracao(userId);
+    } else {
+      payload.idIntegracao = await resolveIdIntegracaoForEmit(userId, payload.idIntegracao);
     }
 
     phase = 'validate';
@@ -1305,12 +1368,16 @@ export const emitirNota = async (userId, input) => {
     }
 
     phase = 'plugnotas_emit';
+    let cnpjPrestadorNfse = '';
     if (documentType === DOCUMENT_TYPE_NFSE) {
-      const cnpjPrestador = prestadorDoc
+      cnpjPrestadorNfse = prestadorDoc
         || String(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || '').replace(/\D/g, '');
-      if (cnpjPrestador.length === 14) {
-        await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestador);
-        await applyPlugnotasNfseEmitRpsFromEmpresaConfig(emitPayload, cnpjPrestador);
+      if (cnpjPrestadorNfse.length === 14) {
+        await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestadorNfse);
+        const localMaxRpsNumero = await queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse);
+        await applyPlugnotasNfseEmitRpsFromEmpresaConfig(emitPayload, cnpjPrestadorNfse, {
+          localMaxRpsNumero
+        });
       }
     }
     const response = await adapter.emitir(emitPayload);
@@ -1356,6 +1423,13 @@ export const emitirNota = async (userId, input) => {
         `[mei-notas] Falha ao atualizar catalogo ${documentType}`,
         error instanceof Error ? error.message : error
       );
+    }
+
+    if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
+      const usedRps = readRpsFromNfseEmitPayload(emitPayload);
+      if (usedRps) {
+        advancePlugnotasNfseRpsAfterEmit(cnpjPrestadorNfse, usedRps).catch(() => {});
+      }
     }
 
     const duration_ms = Date.now() - startedAt;

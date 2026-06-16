@@ -133,6 +133,22 @@ describe('mapMeiFiscalErrorToCopy', () => {
     expect(copy.title).toBe('Registo duplicado');
   });
 
+  it('mapeia conflito de RPS antes do genérico de duplicado', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage: 'RPS duplicado já utilizado na prefeitura',
+      plugnotasCode: null,
+    });
+    expect(copy.title).toBe('Numeração RPS em conflito');
+  });
+
+  it('mapeia id_integracao duplicado como emissão já enviada', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage: 'duplicate key value violates unique constraint "mei_nfse_user_doc_type_id_integracao_uq"',
+      plugnotasCode: null,
+    });
+    expect(copy.title).toBe('Emissão já enviada');
+  });
+
   it('mensagem não mapeada usa fallback global (sem texto bruto da API)', () => {
     const copy = mapMeiFiscalErrorToCopy({
       rawMessage: 'ERR_PN_INTERNAL unexpected token in response',
