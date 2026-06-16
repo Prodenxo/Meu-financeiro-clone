@@ -26,6 +26,88 @@ const normalizeCategoryName = (value) => {
     .trim();
 };
 
+const categoryCopyKey = (nome, tipo) =>
+  `${normalizeCategoryName(nome)}:${normalizeTipo(tipo) || ''}`;
+
+/**
+ * Garante cópias das categorias globais (user_id IS NULL) para o utilizador.
+ * Idempotente — alinhado à migração copy_global_categories_to_users + RLS categorias_select_own.
+ */
+export const ensureGlobalCategoriesCopiedForUser = async (dbClient, userId) => {
+  if (!userId) return { inserted: 0, budgetRows: 0 };
+
+  const { data: globals, error: globalError } = await dbClient
+    .from('categorias_id')
+    .select('nome, tipo')
+    .is('user_id', null);
+
+  if (globalError) throw badRequest(globalError.message);
+  if (!globals?.length) return { inserted: 0, budgetRows: 0 };
+
+  const { data: existing, error: existingError } = await dbClient
+    .from('categorias_id')
+    .select('id, nome, tipo')
+    .eq('user_id', userId);
+
+  if (existingError) throw badRequest(existingError.message);
+
+  const existingKeys = new Set(
+    (existing || []).map((row) => categoryCopyKey(row.nome, row.tipo)),
+  );
+
+  const toInsert = (globals || [])
+    .filter((row) => !existingKeys.has(categoryCopyKey(row.nome, row.tipo)))
+    .map((row) => ({
+      user_id: userId,
+      nome: row.nome,
+      tipo: normalizeTipo(row.tipo),
+    }));
+
+  if (!toInsert.length) return { inserted: 0, budgetRows: 0 };
+
+  const { data: insertedRows, error: insertError } = await dbClient
+    .from('categorias_id')
+    .insert(toInsert)
+    .select('id');
+
+  if (insertError) throw badRequest(insertError.message);
+
+  const monthStart = getMonthStartDateString();
+  const newIds = (insertedRows || []).map((row) => row.id).filter(Boolean);
+  let budgetRows = 0;
+
+  if (newIds.length > 0) {
+    const { data: existingBudgets, error: budgetReadError } = await dbClient
+      .from('orçamentos')
+      .select('categorias_id')
+      .eq('user_id', userId)
+      .eq('date', monthStart)
+      .in('categorias_id', newIds);
+
+    if (budgetReadError) throw badRequest(budgetReadError.message);
+
+    const budgetedIds = new Set((existingBudgets || []).map((row) => row.categorias_id));
+    const budgetInserts = newIds
+      .filter((id) => !budgetedIds.has(id))
+      .map((categorias_id) => ({
+        user_id: userId,
+        categorias_id,
+        date: monthStart,
+        'valor_orçado': null,
+      }));
+
+    if (budgetInserts.length > 0) {
+      const { error: budgetInsertError } = await dbClient
+        .from('orçamentos')
+        .insert(budgetInserts);
+      if (budgetInsertError) throw badRequest(budgetInsertError.message);
+      budgetRows = budgetInserts.length;
+    }
+  }
+
+  return { inserted: toInsert.length, budgetRows };
+};
+
 const parseValorOrcado = (valorOrcado) => {
   if (valorOrcado === null || valorOrcado === undefined || valorOrcado === '') return null;
   const parsed = Number(String(valorOrcado).replace(',', '.'));
@@ -130,11 +212,12 @@ export const parseMonthFromBudgetDate = (dateValue) => {
 };
 
 const ensureUserCategory = async (dbClient, userId, categoriaId) => {
+  await ensureGlobalCategoriesCopiedForUser(dbClient, userId);
   const { data, error } = await dbClient
     .from('categorias_id')
     .select('id, user_id')
     .eq('id', categoriaId)
-    .or(`user_id.eq.${userId},user_id.is.null`)
+    .eq('user_id', userId)
     .maybeSingle();
 
   if (error) throw badRequest(error.message);
@@ -143,6 +226,7 @@ const ensureUserCategory = async (dbClient, userId, categoriaId) => {
 
 export const listCategories = async (userId, tipo) => {
   const dbClient = createSupabaseClient({ useServiceRole: true });
+  await ensureGlobalCategoriesCopiedForUser(dbClient, userId);
 
   const { data: categories, error } = await dbClient
     .from('categorias_id')
@@ -300,6 +384,7 @@ export const upsertCategoryBudget = async (userId, payload) => {
 
 export const listCategoryBudgetsSummary = async (userId, { year, month } = {}) => {
   const dbClient = getCategoriesBudgetReadClient();
+  await ensureGlobalCategoriesCopiedForUser(dbClient, userId);
 
   const { data: categories, error: catError } = await dbClient
     .from('categorias_id')
@@ -479,6 +564,7 @@ export const listCategoryBudgetsDreMatrix = async (userId, year) => {
 
   const dbClient = getCategoriesBudgetReadClient();
   const { startDate, endDate } = getYearMonthRange(y);
+  await ensureGlobalCategoriesCopiedForUser(dbClient, userId);
 
   const { data: userCategories, error: userError } = await dbClient
     .from('categorias_id')
@@ -487,17 +573,7 @@ export const listCategoryBudgetsDreMatrix = async (userId, year) => {
 
   if (userError) throw badRequest(userError.message);
 
-  const { data: globalCategories, error: globalError } = await dbClient
-    .from('categorias_id')
-    .select('id, nome, tipo, user_id')
-    .is('user_id', null);
-
-  if (globalError) throw badRequest(globalError.message);
-
-  const allCategories = [
-    ...(userCategories || []),
-    ...(globalCategories || [])
-  ];
+  const allCategories = userCategories || [];
 
   const { data: budgetRows, error: budgetsError } = await dbClient
     .from('orçamentos')

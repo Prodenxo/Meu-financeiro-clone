@@ -618,37 +618,45 @@ export const listUsers = async (accessToken, queryParams = {}) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const searchTerm = search?.toLowerCase().trim();
 
-  // 1. Obter todos os usuários do Auth que batem com a busca (ou todos se não houver busca)
-  // Como temos 700+, vamos carregar em lotes se houver busca, ou focar nos vínculos se não houver.
-  // 1. Obter usuários do Auth
+  // 1. Usuários do Auth que batem com a busca (órfãos só entram quando há search + superadmin).
   let allAuthUsers = [];
-  let page = 1;
-  const MAX_AUTH_PAGES = 30; // Suporta até 3000 usuários
-
-  while (page <= MAX_AUTH_PAGES) {
-    const { data: { users }, error } = await adminClient.auth.admin.listUsers({ page, perPage: 100 });
-    if (error || !users || users.length === 0) break;
-
-    if (searchTerm) {
-      const matches = users.filter((u) =>
-        matchesUserSearch(
-          {
-            id: u.id,
-            email: u.email,
-            displayName: u.user_metadata?.display_name || null,
-            phone: u.user_metadata?.phone || null,
-          },
-          { empresaName: null, roleLabel: null },
-          searchTerm,
-        ),
-      );
-      allAuthUsers = allAuthUsers.concat(matches);
-      // Se for busca, paramos se já tivermos um número razoável para não demorar demais
-      if (allAuthUsers.length > 200) break;
-    } else {
-      allAuthUsers = allAuthUsers.concat(users);
+  if (searchTerm) {
+    if (searchTerm.length >= 3) {
+      const { data: filteredData, error: filterError } = await adminClient.auth.admin.listUsers({
+        page: 1,
+        perPage: 100,
+        filter: searchTerm,
+      });
+      if (!filterError && filteredData?.users?.length) {
+        allAuthUsers = filteredData.users;
+      }
     }
-    page++;
+
+    if (allAuthUsers.length === 0) {
+      let page = 1;
+      const MAX_AUTH_PAGES = 30;
+
+      while (page <= MAX_AUTH_PAGES) {
+        const { data: { users }, error } = await adminClient.auth.admin.listUsers({ page, perPage: 100 });
+        if (error || !users || users.length === 0) break;
+
+        const matches = users.filter((u) =>
+          matchesUserSearch(
+            {
+              id: u.id,
+              email: u.email,
+              displayName: u.user_metadata?.display_name || null,
+              phone: u.user_metadata?.phone || null,
+            },
+            { empresaName: null, roleLabel: null },
+            searchTerm,
+          ),
+        );
+        allAuthUsers = allAuthUsers.concat(matches);
+        if (allAuthUsers.length > 200) break;
+        page++;
+      }
+    }
   }
 
   // 2. Obter links de empresas

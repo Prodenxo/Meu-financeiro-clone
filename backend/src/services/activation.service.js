@@ -1,6 +1,7 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { canonicalizeBrazilWhatsappPhone } from '../utils/whatsapp-phone.js';
 import { userHasMeiCertificate } from './mei-guide.service.js';
+import { ensureGlobalCategoriesCopiedForUser } from './categories.service.js';
 
 /** Cliente Supabase injetável em testes. */
 let getActivationDbClient = () => createSupabaseClient({ useServiceRole: true });
@@ -305,6 +306,11 @@ export const gatherActivationContext = async (userId) => {
 };
 
 export const getActivationProgress = async (userId) => {
+  const admin = getActivationDbClient();
+  await ensureGlobalCategoriesCopiedForUser(admin, userId).catch((err) => {
+    console.warn('[activation] ensureGlobalCategoriesCopiedForUser:', err?.message || err);
+  });
+
   const { showMei, ctx } = await gatherActivationContext(userId);
   const steps = buildActivationSteps(ctx, { showMei });
   const progress = computeProgressFromSteps(steps);
