@@ -403,24 +403,32 @@ Resume os nomes para o utilizador; **não** recuses por ser “técnico”. Em a
 Quando pedirem *“marca reunião”*, *“agenda consulta”*, *“lembrar pagamento dia X”* no calendário:
 
 1. `resolve_user` com o telefone do remetente.
-2. `mf-curl.sh` com `action`: `create_calendar_event` e payload, por exemplo:
+2. **Horário (início e fim):**
+   - **Reunião / consulta / Meet** → pergunte **hora de início** e **hora de término** antes do `create_calendar_event`.
+   - Qualquer duração é válida: *14:00–14:15* (15 min), *14:00–16:00* (2 h), *14:30–15:10*, etc.
+   - Se o utilizador disser *"das 14 às 16"*, use `time":"14:00"` e `endTime":"16:00"`.
+   - **Não** chames a API só com início se faltar o fim — a API devolve pedido de término.
+   - **Lembrete / dia inteiro** → pode omitir `time` e `endTime` (evento de dia inteiro).
+3. `mf-curl.sh` com `action`: `create_calendar_event` e payload, por exemplo:
 
 ```bash
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_calendar_event","payload":{"title":"Reunião com contador","data":"28/05/2026","time":"15:00","description":"via WhatsApp"}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_calendar_event","payload":{"title":"Reunião com contador","data":"28/05/2026","time":"14:00","endTime":"16:00","description":"via WhatsApp"}}'
 ```
 
 | Campo | Obrigatório | Exemplo |
 |--------|-------------|---------|
 | `title` / `titulo` | sim | `Dentista` |
 | `data` / `date` | não (hoje) | `28/05/2026` |
-| `time` / `hora` | não | `14:30` — se omitir, **dia inteiro** |
+| `time` / `hora` / `horaInicio` | com horário | `14:00` — início |
+| `endTime` / `horaFim` / `fim` | com horário | `14:15` ou `16:00` — término |
 | `description` | não | texto livre |
 | `createMeetLink` / `meet` / `meeting` | não | `true` ou `sim` → gera **Google Meet** e devolve o link na resposta |
 
-- **Meet:** obrigatório informar **hora** (`time`); evento de dia inteiro não aceita Meet.
-- Se pedirem *“com videochamada”*, *“com Meet”*, *“link da reunião”* → `createMeetLink: true`.
+- **Meet:** obrigatório informar **início** (`time`) **e término** (`endTime`); evento de dia inteiro não aceita Meet.
+- Se a API responder `CALENDAR_TIME_SLOTS_REQUIRED` ou `CALENDAR_END_TIME_REQUIRED` → repete **só** o `message` e espera o utilizador informar os horários.
+- Se pedirem *“com videochamada”*, *“com Meet”*, *“link da reunião”* → `createMeetLink: true` **e** `time` + `endTime`.
 - Se `ok: false` e calendário não ligado → orienta: **Configurações → Google Calendar → conectar**.
-- Confirma na resposta data, hora e título devolvidos pela API.
+- Confirma na resposta data, **início**, **fim** e título devolvidos pela API.
 - **Áudio:** trata a transcrição como mensagem escrita e extrai os mesmos campos.
 - **Conselhos** sem mexer na BD: responde só em texto, sem `curl`.
 

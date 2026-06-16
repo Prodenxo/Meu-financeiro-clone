@@ -1356,40 +1356,67 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'create_calendar_event') {
-    const created = await calendarEventsService.createCalendarEventForUser(userId, payload);
-    if (!created.ok) {
-      const hint = created.notLinked
-        ? ' Peça para conectar o Google Calendar em Configurações na app.'
-        : '';
-      const message = `${created.message || 'Não foi possível criar o compromisso.'}${hint}`;
+    try {
+      const created = await calendarEventsService.createCalendarEventForUser(userId, payload);
+      if (!created.ok) {
+        const hint = created.notLinked
+          ? ' Peça para conectar o Google Calendar em Configurações na app.'
+          : '';
+        const message = `${created.message || 'Não foi possível criar o compromisso.'}${hint}`;
+        return {
+          ok: false,
+          message,
+          data: {
+            ...created,
+            userId,
+            actorContext,
+            ...linkDebug,
+            agentInstructions:
+              'Repita só esta message ao utilizador. Não digas "dificuldades técnicas". '
+              + 'Se notLinked, explique conectar Google Calendar na app Meu Financeiro.',
+          },
+        };
+      }
       return {
-        ok: false,
-        message,
+        ok: true,
+        message: created.message,
         data: {
           ...created,
           userId,
           actorContext,
           ...linkDebug,
           agentInstructions:
-            'Repita só esta message ao utilizador. Não digas "dificuldades técnicas". '
-            + 'Se notLinked, explique conectar Google Calendar na app Meu Financeiro.',
+            'Repita APENAS a message (título, data, início e fim). NUNCA troque início por fim. '
+            + 'Se timeAdjustedToEvening, confirme o horário da tarde/noite indicado na message. '
+            + 'Se houver meetLink/hangoutLink, envie o link.',
         },
       };
+    } catch (err) {
+      const code = err?.errors?.code || err?.code;
+      const calendarAskCodes = new Set([
+        'CALENDAR_TIME_SLOTS_REQUIRED',
+        'CALENDAR_END_TIME_REQUIRED',
+        'CALENDAR_END_BEFORE_START',
+        'CALENDAR_TIME_INVALID',
+        'CALENDAR_END_TIME_INVALID',
+      ]);
+      if (calendarAskCodes.has(code)) {
+        return {
+          ok: false,
+          message: String(err?.message || 'Informe horário de início e término.'),
+          data: {
+            code,
+            userId,
+            actorContext,
+            ...linkDebug,
+            agentInstructions:
+              'Repita APENAS message ao utilizador e aguarde hora início + hora fim. '
+              + 'Não chame create_calendar_event de novo até ter time e endTime.',
+          },
+        };
+      }
+      throw err;
     }
-    return {
-      ok: true,
-      message: created.message,
-      data: {
-        ...created,
-        userId,
-        actorContext,
-        ...linkDebug,
-        agentInstructions:
-          'Repita APENAS a message (título, data, início e fim). NUNCA troque início por fim. '
-          + 'Se timeAdjustedToEvening, confirme o horário da tarde/noite indicado na message. '
-          + 'Se houver meetLink/hangoutLink, envie o link.',
-      },
-    };
   }
 
   const resolveDasCompetencia = () => resolveDasCompetenciaFromPayload(payload);

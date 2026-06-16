@@ -3,6 +3,13 @@ import { env } from '../config/env.js';
 import { badRequest } from '../utils/errors.js';
 import * as transactionsService from './transactions.service.js';
 import { getCertificateValidity } from './mei-certificate-store.js';
+import {
+  buildCalendarAskEndTimeMessage,
+  buildCalendarAskStartEndTimeMessage,
+  buildCalendarEndBeforeStartMessage,
+  buildCalendarTimeSlotInvalidMessage,
+  formatCalendarTimeLabel,
+} from './calendar-time-slots.js';
 
 const SAO_PAULO_TZ = 'America/Sao_Paulo';
 const CERT_EXPIRATION_TITLE = 'Vencimento do certificado digital';
@@ -1228,6 +1235,31 @@ export const resolveCreateCalendarTimesFromPayload = (payload = {}, context = {}
     'horaInicio',
   ].some((k) => payload[k] != null && String(payload[k]).trim() !== '');
 
+  const endFromPayload = payload.endTime
+    ?? payload.horaFim
+    ?? payload.fim
+    ?? payload.end
+    ?? null;
+
+  const hasExplicitEnd = (endFromPayload != null && String(endFromPayload).trim() !== '')
+    || payload.endHour != null
+    || payload.endMinute != null
+    || payload.durationMinutes != null
+    || payload.duracaoMinutos != null
+    || payload.duracao != null;
+
+  const explicitNotAllDay = payload.allDay === false || payload.diaInteiro === false;
+  const wantsTimedEvent = context.wantsMeet === true || explicitNotAllDay;
+
+  if (wantsTimedEvent && !hasExplicitTime) {
+    throw badRequest(buildCalendarAskStartEndTimeMessage(), {
+      code: 'CALENDAR_TIME_SLOTS_REQUIRED',
+      botHint:
+        'Pergunte hora de início e término antes de create_calendar_event. '
+        + 'Use payload.time e payload.endTime (qualquer duração, ex. 14:00–14:15 ou 14:00–16:00).',
+    });
+  }
+
   const allDay = payload.allDay === true
     || payload.diaInteiro === true
     || String(payload.allDay || payload.diaInteiro || '').toLowerCase() === 'true'
@@ -1249,7 +1281,11 @@ export const resolveCreateCalendarTimesFromPayload = (payload = {}, context = {}
 
   if (startRaw != null && String(startRaw).trim() !== '') {
     const tm = parseCalendarEventTimeHm(startRaw);
-    if (!tm) throw badRequest('hora inválida; use HH:MM (ex.: 14:30) em payload.time.');
+    if (!tm) {
+      throw badRequest(buildCalendarTimeSlotInvalidMessage(startRaw), {
+        code: 'CALENDAR_TIME_INVALID',
+      });
+    }
     startHour = tm.hour;
     startMinute = tm.minute;
   }
@@ -1271,16 +1307,17 @@ export const resolveCreateCalendarTimesFromPayload = (payload = {}, context = {}
     }
   }
 
-  const endFromPayload = payload.endTime
-    ?? payload.horaFim
-    ?? payload.fim
-    ?? payload.end
-    ?? null;
-
   if (!hasExplicitTime && endFromPayload != null && String(endFromPayload).trim() !== '') {
     throw badRequest(
       'payload.endTime/horaFim é hora de término, não de início. Informe payload.time (início), ex.: "18:30".',
     );
+  }
+
+  if (hasExplicitTime && !hasExplicitEnd && !allDay) {
+    throw badRequest(buildCalendarAskEndTimeMessage(startHour, startMinute), {
+      code: 'CALENDAR_END_TIME_REQUIRED',
+      botHint: 'Peça hora de término e chame create_calendar_event com endTime (ex. 14:15 ou 16:00).',
+    });
   }
 
   let endHour = Number(payload.endHour);
@@ -1288,7 +1325,11 @@ export const resolveCreateCalendarTimesFromPayload = (payload = {}, context = {}
 
   if (endFromPayload != null && String(endFromPayload).trim() !== '') {
     const endTm = parseCalendarEventTimeHm(endFromPayload);
-    if (!endTm) throw badRequest('hora de término inválida; use HH:MM em payload.endTime.');
+    if (!endTm) {
+      throw badRequest(buildCalendarTimeSlotInvalidMessage(endFromPayload), {
+        code: 'CALENDAR_END_TIME_INVALID',
+      });
+    }
     endHour = endTm.hour;
     endMinute = endTm.minute;
   } else {
@@ -1309,6 +1350,18 @@ export const resolveCreateCalendarTimesFromPayload = (payload = {}, context = {}
   }
 
   if (!Number.isFinite(endMinute)) endMinute = startMinute;
+
+  if (!allDay && (hasExplicitEnd || hasExplicitTime)) {
+    const startTotal = startHour * 60 + startMinute;
+    const endTotal = endHour * 60 + endMinute;
+    if (endTotal <= startTotal) {
+      throw badRequest(
+        buildCalendarEndBeforeStartMessage(startHour, startMinute, endHour, endMinute),
+        { code: 'CALENDAR_END_BEFORE_START' },
+      );
+    }
+  }
+
   if (endHour >= 24) {
     endHour = 23;
     endMinute = 59;
@@ -1376,6 +1429,8 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     );
   }
 
+  const wantsMeet = parseCreateMeetLinkFlag(payload);
+
   const {
     startHour,
     startMinute,
@@ -1383,7 +1438,10 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     endMinute,
     allDay,
     timeAdjustedToEvening,
-  } = resolveCreateCalendarTimesFromPayload(payload, { dateIso: parsed.iso });
+  } = resolveCreateCalendarTimesFromPayload(payload, {
+    dateIso: parsed.iso,
+    wantsMeet,
+  });
 
   const endDateParsed = payload.endDate ?? payload.dataFim
     ? parseCalendarQueryDate(String(payload.endDate ?? payload.dataFim))
@@ -1394,7 +1452,6 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     payload.description ?? payload.descricao ?? payload.obs ?? '',
   ).trim();
 
-  const wantsMeet = parseCreateMeetLinkFlag(payload);
   if (wantsMeet && allDay) {
     throw badRequest(
       'Google Meet exige horário definido. Informe payload.time (ex.: 15:00) ou allDay: false.',
@@ -1496,8 +1553,8 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
 
   const timeLabel = allDay
     ? 'dia inteiro'
-    : `${pad2(startHour)}:${pad2(startMinute)}`;
-  const endLabel = allDay ? null : `${pad2(endHour)}:${pad2(endMinute)}`;
+    : formatCalendarTimeLabel(startHour, startMinute);
+  const endLabel = allDay ? null : formatCalendarTimeLabel(endHour, endMinute);
 
   let message = allDay
     ? `Compromisso criado: "${title}" em ${parsed.display} (dia inteiro).`

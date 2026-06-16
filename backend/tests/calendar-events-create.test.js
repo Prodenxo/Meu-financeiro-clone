@@ -61,7 +61,7 @@ test('resolveCreateCalendarTimesFromPayload ajusta 8h passado no mesmo dia', () 
   const today = calendarDateTodayInSaoPaulo();
   const evening = new Date(`${today}T22:00:00-03:00`);
   const t = resolveCreateCalendarTimesFromPayload(
-    { time: '8h' },
+    { time: '8h', endTime: '21:00' },
     { dateIso: today, referenceNow: evening },
   );
   assert.equal(t.startHour, 20);
