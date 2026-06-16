@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   assertNfsePrestadorEmailOrThrow,
   enrichNfseEmitPayloadEmails,
+  hasCompleteTomadorEndereco,
   isValidPlugnotasEmitEmail,
   pickFirstValidEmitEmail,
 } from '../src/services/plugnotas/plugnotas-nfse-email-resolve.js';
@@ -32,6 +33,22 @@ test('enrichNfseEmitPayloadEmails preserva e-mail já informado no payload', asy
 
   assert.equal(payload.prestador.email, 'prestador@mei.com');
   assert.equal(payload.tomador.email, 'tomador@cliente.com');
+});
+
+test('hasCompleteTomadorEndereco valida endereço mínimo', () => {
+  assert.equal(hasCompleteTomadorEndereco(null), false);
+  assert.equal(
+    hasCompleteTomadorEndereco({
+      cep: '01310100',
+      logradouro: 'Av Paulista',
+      numero: '1000',
+      bairro: 'Bela Vista',
+      codigoCidade: '3550308',
+      descricaoCidade: 'São Paulo',
+      estado: 'SP',
+    }),
+    true,
+  );
 });
 
 test('assertNfsePrestadorEmailOrThrow exige e-mail do prestador', () => {

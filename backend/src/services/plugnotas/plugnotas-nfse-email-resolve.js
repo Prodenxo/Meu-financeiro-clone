@@ -9,6 +9,45 @@ const CLIENTS_TABLE = 'mei_nfse_clientes';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const pruneEndereco = (endereco) => {
+  if (!isPlainObject(endereco)) return null;
+  const cep = normalizeDoc(endereco.cep).slice(0, 8);
+  const codigoCidade = String(endereco.codigoCidade || '').trim();
+  const logradouro = String(endereco.logradouro || '').trim();
+  const numero = String(endereco.numero || '').trim();
+  const bairro = String(endereco.bairro || '').trim();
+  const descricaoCidade = String(endereco.descricaoCidade || '').trim();
+  const estado = String(endereco.estado || '').trim().toUpperCase().slice(0, 2);
+  const complemento = String(endereco.complemento || '').trim();
+  const next = {
+    ...(cep.length === 8 ? { cep } : {}),
+    ...(logradouro ? { logradouro } : {}),
+    ...(numero ? { numero } : {}),
+    ...(bairro ? { bairro } : {}),
+    ...(codigoCidade ? { codigoCidade } : {}),
+    ...(descricaoCidade ? { descricaoCidade } : {}),
+    ...(estado.length === 2 ? { estado, uf: estado } : {}),
+    ...(complemento ? { complemento } : {}),
+  };
+  return Object.keys(next).length ? next : null;
+};
+
+export const hasCompleteTomadorEndereco = (endereco) => {
+  const e = pruneEndereco(endereco);
+  if (!e) return false;
+  return (
+    normalizeDoc(e.cep).length === 8
+    && Boolean(String(e.logradouro || '').trim())
+    && Boolean(String(e.numero || '').trim())
+    && Boolean(String(e.bairro || '').trim())
+    && Boolean(String(e.codigoCidade || '').trim())
+    && Boolean(String(e.descricaoCidade || '').trim())
+    && String(e.estado || '').trim().length === 2
+  );
+};
+
 /**
  * @param {unknown} value
  * @returns {boolean}
@@ -52,22 +91,40 @@ export const resolveAuthUserEmail = async (userId) => {
  * @returns {Promise<string|null>}
  */
 export const resolveCatalogClienteEmail = async (userId, documento, documentType = 'NFSE') => {
+  const record = await resolveCatalogClienteRecord(userId, documento, documentType);
+  return pickFirstValidEmitEmail(record?.email);
+};
+
+/**
+ * @param {string} userId
+ * @param {string} documento
+ * @param {string} [documentType]
+ * @returns {Promise<{ email?: string|null, metadata_json?: Record<string, unknown>|null }|null>}
+ */
+export const resolveCatalogClienteRecord = async (userId, documento, documentType = 'NFSE') => {
   const doc = normalizeDoc(documento);
   if (!userId || !doc) return null;
   try {
     const db = createSupabaseClient();
     const { data, error } = await db
       .from(CLIENTS_TABLE)
-      .select('email')
+      .select('email, metadata_json')
       .eq('user_id', userId)
       .eq('document_type', documentType)
       .eq('documento', doc)
       .maybeSingle();
     if (error) return null;
-    return pickFirstValidEmitEmail(data?.email);
+    return data || null;
   } catch {
     return null;
   }
+};
+
+export const resolveCatalogClienteEndereco = async (userId, documento, documentType = 'NFSE') => {
+  const record = await resolveCatalogClienteRecord(userId, documento, documentType);
+  if (!record?.metadata_json || typeof record.metadata_json !== 'object') return null;
+  const rawEndereco = record.metadata_json.endereco;
+  return pruneEndereco(isPlainObject(rawEndereco) ? rawEndereco : null);
 };
 
 /**
@@ -137,6 +194,11 @@ export const enrichNfseEmitPayloadEmails = async (userId, payload, options = {})
   if (!isValidPlugnotasEmitEmail(tomador.email) && tomadorDoc) {
     const tomadorEmail = await resolveCatalogClienteEmail(userId, tomadorDoc);
     if (tomadorEmail) tomador.email = tomadorEmail;
+  }
+
+  if (tomadorDoc.length === 14 && !hasCompleteTomadorEndereco(tomador.endereco)) {
+    const catalogEndereco = await resolveCatalogClienteEndereco(userId, tomadorDoc);
+    if (catalogEndereco) tomador.endereco = catalogEndereco;
   }
 
   return {

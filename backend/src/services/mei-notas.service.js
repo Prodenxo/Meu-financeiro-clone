@@ -378,6 +378,30 @@ const estadoToUf = (estado) => {
   return s.length >= 2 ? s.slice(0, 2) : s || null;
 };
 
+const buildPartyEnderecoFromInput = (enderecoInput = {}) => {
+  const estadoNorm = enderecoInput?.estado ? String(enderecoInput.estado).trim().toUpperCase() : null;
+  const uf = estadoToUf(estadoNorm || enderecoInput?.uf);
+  const cepRaw = enderecoInput?.cep ? normalizeDoc(enderecoInput.cep).slice(0, 8) : null;
+  const codigoCidadeRaw = enderecoInput?.codigoCidade;
+  const codigoCidade =
+    codigoCidadeRaw !== undefined && codigoCidadeRaw !== null && codigoCidadeRaw !== ''
+      ? String(codigoCidadeRaw).trim()
+      : null;
+
+  return prune({
+    ...enderecoInput,
+    logradouro: enderecoInput?.logradouro || null,
+    numero: enderecoInput?.numero || null,
+    codigoCidade,
+    cep: cepRaw ? String(cepRaw) : null,
+    complemento: enderecoInput?.complemento || null,
+    bairro: enderecoInput?.bairro || null,
+    estado: estadoNorm,
+    uf,
+    descricaoCidade: enderecoInput?.descricaoCidade || null
+  });
+};
+
 const buildPrestadorEnderecoFromInput = (input) => {
   const enderecoInput = (
     input?.prestadorEndereco
@@ -392,28 +416,24 @@ const buildPrestadorEnderecoFromInput = (input) => {
             : {}
         )
   );
+  return buildPartyEnderecoFromInput(enderecoInput);
+};
 
-  const estadoNorm = enderecoInput?.estado ? String(enderecoInput.estado).trim().toUpperCase() : null;
-  const uf = estadoToUf(estadoNorm || enderecoInput?.uf);
-  const cepRaw = enderecoInput?.cep ? normalizeDoc(enderecoInput.cep).slice(0, 8) : null;
-  const codigoCidadeRaw = enderecoInput?.codigoCidade;
-  const codigoCidade =
-    codigoCidadeRaw !== undefined && codigoCidadeRaw !== null && codigoCidadeRaw !== ''
-      ? String(codigoCidadeRaw).trim()
-      : null;
-
-  return prune({
-    ...enderecoInput,
-    logradouro: enderecoInput?.logradouro || null,
-    numero: enderecoInput?.numero || null,
-    codigoCidade: codigoCidade,
-    cep: cepRaw ? String(cepRaw) : null,
-    complemento: enderecoInput?.complemento || null,
-    bairro: enderecoInput?.bairro || null,
-    estado: estadoNorm,
-    uf: uf,
-    descricaoCidade: enderecoInput?.descricaoCidade || null
-  });
+const buildTomadorEnderecoFromInput = (input) => {
+  const enderecoInput = (
+    input?.tomadorEndereco
+    && typeof input.tomadorEndereco === 'object'
+    && !Array.isArray(input.tomadorEndereco)
+      ? input.tomadorEndereco
+      : (
+          input?.tomador?.endereco
+          && typeof input.tomador.endereco === 'object'
+          && !Array.isArray(input.tomador.endereco)
+            ? input.tomador.endereco
+            : {}
+        )
+  );
+  return buildPartyEnderecoFromInput(enderecoInput);
 };
 
 const buildPayloadFromInput = (input, userId) => {
@@ -436,6 +456,7 @@ const buildPayloadFromInput = (input, userId) => {
     ? servicosInput.map(buildServicoFromInput).filter(Boolean)
     : [buildServicoFromInput(servicosInput)].filter(Boolean);
   const prestadorEndereco = buildPrestadorEnderecoFromInput(input);
+  const tomadorEndereco = buildTomadorEnderecoFromInput(input);
 
   const prestadorBase = { ...(input?.prestador || {}) };
   delete prestadorBase.inscricaoMunicipal;
@@ -457,7 +478,8 @@ const buildPayloadFromInput = (input, userId) => {
       ...(input?.tomador || {}),
       cpfCnpj: tomadorDoc || input?.tomador?.cpfCnpj || null,
       razaoSocial: input?.tomador?.razaoSocial || input?.tomadorRazaoSocial || null,
-      email: input?.tomador?.email || input?.tomadorEmail || null
+      email: input?.tomador?.email || input?.tomadorEmail || null,
+      endereco: tomadorEndereco
     }),
     rps: prune(input?.rps || null),
     cidadePrestacao: prune(input?.cidadePrestacao || null),
@@ -556,6 +578,33 @@ const validatePayload = (payload) => {
   const tomadorRazaoSocial = String(payload?.tomador?.razaoSocial || '').trim();
   if (!tomadorRazaoSocial) {
     throw badRequest('Razão social do tomador é obrigatória');
+  }
+
+  if (tomadorDoc.length === 14) {
+    const tomadorEndereco = payload?.tomador?.endereco;
+    const tomadorCep = normalizeDoc(tomadorEndereco?.cep || '');
+    if (tomadorCep.length !== 8) {
+      throw badRequest('CEP do tomador (CNPJ) é obrigatório com 8 dígitos');
+    }
+    if (!String(tomadorEndereco?.logradouro || '').trim()) {
+      throw badRequest('Logradouro do tomador (CNPJ) é obrigatório');
+    }
+    if (!String(tomadorEndereco?.numero || '').trim()) {
+      throw badRequest('Número do endereço do tomador (CNPJ) é obrigatório');
+    }
+    if (!String(tomadorEndereco?.bairro || '').trim()) {
+      throw badRequest('Bairro do tomador (CNPJ) é obrigatório');
+    }
+    if (!String(tomadorEndereco?.codigoCidade || '').trim()) {
+      throw badRequest('Código IBGE da cidade do tomador (CNPJ) é obrigatório');
+    }
+    if (!String(tomadorEndereco?.descricaoCidade || '').trim()) {
+      throw badRequest('Cidade do tomador (CNPJ) é obrigatória');
+    }
+    const tomadorUf = String(tomadorEndereco?.estado || '').trim().toUpperCase();
+    if (tomadorUf.length !== 2) {
+      throw badRequest('UF do tomador (CNPJ) é obrigatória');
+    }
   }
 
   const servicos = Array.isArray(payload?.servico) ? payload.servico : [];
@@ -885,10 +934,9 @@ const buildClienteCatalogEntry = (payload, { documentType = DOCUMENT_TYPE_NFSE }
 
 const buildClienteCatalogMetadataFromPayload = (payload, documentType) => {
   const normalizedType = normalizeDocumentType(documentType);
-  if (normalizedType !== DOCUMENT_TYPE_NFE && normalizedType !== DOCUMENT_TYPE_NFCE) {
-    return null;
-  }
-  const dest = toObject(payload?.destinatario);
+  const dest = normalizedType === DOCUMENT_TYPE_NFSE
+    ? toObject(payload?.tomador)
+    : toObject(payload?.destinatario);
   const endereco = prune(toObject(dest.endereco));
   const indIEDest = String(dest.indIEDest || '').trim();
   const meta = {};
