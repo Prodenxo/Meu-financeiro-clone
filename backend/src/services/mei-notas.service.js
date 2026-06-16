@@ -22,6 +22,11 @@ import {
   rethrowIfPlugnotasEmpresaNaoCadastrada,
 } from './plugnotas/plugnotas-mei-nfse-emit-prep.js';
 import {
+  assertNfsePrestadorEmailOrThrow,
+  enrichNfseEmitPayloadEmails,
+  resolvePrestadorEmitEmail,
+} from './plugnotas/plugnotas-nfse-email-resolve.js';
+import {
   enrichCodigosServicosComNbs,
   resolveCodigoNbsForServico,
 } from './nfse-codigo-nbs.js';
@@ -1360,6 +1365,13 @@ export const emitirNota = async (userId, input) => {
     validatePayloadByDocumentType(payload, documentType);
 
     let emitPayload = payload;
+    if (documentType === DOCUMENT_TYPE_NFSE) {
+      emitPayload = await enrichNfseEmitPayloadEmails(userId, emitPayload, {
+        prestadorDoc,
+        tomadorDoc,
+      });
+      assertNfsePrestadorEmailOrThrow(emitPayload);
+    }
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
       emitPayload = normalizePlugnotasNfePayload(payload);
       const cnpjEmitente = prestadorDoc

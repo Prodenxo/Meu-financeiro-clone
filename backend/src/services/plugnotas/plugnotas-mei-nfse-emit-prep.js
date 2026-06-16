@@ -17,6 +17,7 @@ import {
   consultarEmpresaPlugNotas,
   resolverCertificadoIdPorCnpj,
 } from './empresa.service.js';
+import { resolvePrestadorEmitEmail } from './plugnotas-nfse-email-resolve.js';
 import { PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE } from './empresa-cadastro-runtime-decision.js';
 import {
   PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
@@ -251,7 +252,15 @@ export const ensureMeiNfsePlugnotasCadastroBeforeEmit = async (userId, cnpjInput
   const mirror = await getDocumentosAtivosMirror(userId).catch(() => null);
   const documentosAtivos = resolveDocumentosAtivosSelection(mirror);
 
-  const payload = buildEmpresaPayloadFromEmitenteSnapshot(emitente, certId, documentosAtivos);
+  const resolvedEmail = await resolvePrestadorEmitEmail(userId, cnpj, emitente.email);
+  const emitenteForPayload = resolvedEmail && !String(emitente.email || '').trim()
+    ? { ...emitente, email: resolvedEmail }
+    : emitente;
+
+  const payload = buildEmpresaPayloadFromEmitenteSnapshot(emitenteForPayload, certId, documentosAtivos);
+  if (resolvedEmail && !payload.email) {
+    payload.email = resolvedEmail;
+  }
   await cadastrarEmpresaPlugNotas(payload);
   await persistDocumentosAtivosMirrorAfterEmpresa(userId, payload).catch(() => {});
 
