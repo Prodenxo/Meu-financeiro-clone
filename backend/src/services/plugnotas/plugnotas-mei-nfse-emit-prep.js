@@ -27,6 +27,23 @@ import {
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
+const DEFAULT_DOCUMENTOS_ATIVOS = Object.freeze({
+  nfse: true,
+  nfe: false,
+  nfce: false,
+});
+
+const resolveDocumentosAtivosSelection = (documentosAtivos) => {
+  if (!documentosAtivos || typeof documentosAtivos !== 'object') {
+    return { ...DEFAULT_DOCUMENTOS_ATIVOS };
+  }
+  return {
+    nfse: documentosAtivos.nfse !== false,
+    nfe: documentosAtivos.nfe === true,
+    nfce: documentosAtivos.nfce === true,
+  };
+};
+
 const isEmpresaNaoCadastradaError = (error) => {
   if (!(error instanceof HttpError)) return false;
   if (error.errors?.plugnotasCode === PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE) return true;
@@ -55,7 +72,7 @@ const emitenteHasMinimumAddress = (emitente) => {
 export const buildEmpresaPayloadFromEmitenteSnapshot = (
   emitente,
   certificadoId,
-  documentosAtivos = { nfse: true, nfe: false, nfce: false },
+  documentosAtivos = DEFAULT_DOCUMENTOS_ATIVOS,
 ) => {
   const cnpj = normalizeDoc(emitente.certDocument);
   const endereco = {
@@ -79,11 +96,7 @@ export const buildEmpresaPayloadFromEmitenteSnapshot = (
   const rpsNumero = Number.parseInt(String(emitente.rpsNumero ?? 1), 10) || 1;
   const rpsLote = Number.parseInt(String(emitente.rpsLote ?? 1), 10) || 1;
 
-  const selection = {
-    nfse: documentosAtivos.nfse !== false,
-    nfe: documentosAtivos.nfe === true,
-    nfce: documentosAtivos.nfce === true,
-  };
+  const selection = resolveDocumentosAtivosSelection(documentosAtivos);
 
   const payload = {
     cpfCnpj: cnpj,
@@ -235,11 +248,8 @@ export const ensureMeiNfsePlugnotasCadastroBeforeEmit = async (userId, cnpjInput
     );
   }
 
-  const documentosAtivos = await getDocumentosAtivosMirror(userId).catch(() => ({
-    nfse: true,
-    nfe: false,
-    nfce: false,
-  }));
+  const mirror = await getDocumentosAtivosMirror(userId).catch(() => null);
+  const documentosAtivos = resolveDocumentosAtivosSelection(mirror);
 
   const payload = buildEmpresaPayloadFromEmitenteSnapshot(emitente, certId, documentosAtivos);
   await cadastrarEmpresaPlugNotas(payload);
