@@ -386,6 +386,21 @@ export function mapMeiFiscalErrorToCopy(input: {
   }
 
   if (
+    lower.includes('e0014')
+    || lower.includes('dps já existe')
+    || lower.includes('dps ja existe')
+    || (lower.includes('conjunto de série') && lower.includes('já existe'))
+    || (lower.includes('conjunto de serie') && lower.includes('ja existe'))
+  ) {
+    return {
+      title: 'Numeração da nota já utilizada (E0014)',
+      description:
+        'A prefeitura recusou porque série + número desta nota já foram usados numa emissão anterior. '
+        + 'Não é bloqueio por cliente: emita uma nova nota para a mesma pessoa — o sistema usará o próximo número automaticamente.',
+    };
+  }
+
+  if (
     lower.includes('rps')
     && (
       lower.includes('duplic')

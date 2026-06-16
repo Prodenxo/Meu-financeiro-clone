@@ -133,6 +133,16 @@ describe('mapMeiFiscalErrorToCopy', () => {
     expect(copy.title).toBe('Registo duplicado');
   });
 
+  it('mapeia E0014 NFS-e Nacional como numeração repetida', () => {
+    const copy = mapMeiFiscalErrorToCopy({
+      rawMessage:
+        'E0014: Conjunto de Série, Número, Código do Município Emissor e CNPJ/CPF informado nesta DPS já existe',
+      plugnotasCode: null,
+    });
+    expect(copy.title).toMatch(/E0014/);
+    expect(copy.description).toMatch(/Não é bloqueio por cliente/i);
+  });
+
   it('mapeia conflito de RPS antes do genérico de duplicado', () => {
     const copy = mapMeiFiscalErrorToCopy({
       rawMessage: 'RPS duplicado já utilizado na prefeitura',
