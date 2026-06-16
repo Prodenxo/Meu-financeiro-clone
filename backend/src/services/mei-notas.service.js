@@ -18,6 +18,10 @@ import {
   readRpsFromNfseEmitPayload
 } from './plugnotas/plugnotas-empresa-rps-heal.js';
 import {
+  ensureMeiNfsePlugnotasCadastroBeforeEmit,
+  rethrowIfPlugnotasEmpresaNaoCadastrada,
+} from './plugnotas/plugnotas-mei-nfse-emit-prep.js';
+import {
   enrichCodigosServicosComNbs,
   resolveCodigoNbsForServico,
 } from './nfse-codigo-nbs.js';
@@ -1373,6 +1377,7 @@ export const emitirNota = async (userId, input) => {
       cnpjPrestadorNfse = prestadorDoc
         || String(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || '').replace(/\D/g, '');
       if (cnpjPrestadorNfse.length === 14) {
+        await ensureMeiNfsePlugnotasCadastroBeforeEmit(userId, cnpjPrestadorNfse);
         await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestadorNfse);
         const localMaxRpsNumero = await queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse);
         await applyPlugnotasNfseEmitRpsFromEmpresaConfig(emitPayload, cnpjPrestadorNfse, {
@@ -1380,7 +1385,15 @@ export const emitirNota = async (userId, input) => {
         });
       }
     }
-    const response = await adapter.emitir(emitPayload);
+    let response;
+    try {
+      response = await adapter.emitir(emitPayload);
+    } catch (emitError) {
+      if (documentType === DOCUMENT_TYPE_NFSE) {
+        rethrowIfPlugnotasEmpresaNaoCadastrada(emitError);
+      }
+      throw emitError;
+    }
     const plugnotasId = extractPlugNotasId(response);
     const idIntegracao = extractIntegracaoId(response) || payload.idIntegracao;
     const status = extractPlugNotasStatus(response);

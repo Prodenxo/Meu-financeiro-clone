@@ -626,6 +626,93 @@ export const getRequesterContext = async (accessToken, preverifiedUser = null) =
   };
 };
 
+const SUPABASE_ROWS_PAGE = 1000;
+const AUTH_LIST_USERS_PAGE = 1000;
+const AUTH_LIST_USERS_MAX_PAGES = 100;
+
+const toAuthUserSummary = (user) => ({
+  id: user.id,
+  email: user.email,
+  displayName: user.user_metadata?.display_name || null,
+  phone: user.user_metadata?.phone || null
+});
+
+const fetchAllEmpresaUserLinks = async (adminClient, { role, empresaId }) => {
+  const rows = [];
+  let from = 0;
+
+  while (true) {
+    let query = adminClient
+      .from('role_x_user_x_empresa')
+      .select('user_id, empresas_id, roles_id, status, mei, expires_at')
+      .range(from, from + SUPABASE_ROWS_PAGE - 1);
+
+    if (role === 'admin') {
+      if (!empresaId) throw forbidden();
+      query = query.eq('empresas_id', empresaId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw badRequest(error.message);
+    if (!data?.length) break;
+
+    rows.push(...data);
+    if (data.length < SUPABASE_ROWS_PAGE) break;
+    from += SUPABASE_ROWS_PAGE;
+  }
+
+  return rows;
+};
+
+/**
+ * Monta mapa id → dados do Auth para todos os IDs pedidos (sem teto artificial de 500).
+ * Varre listUsers paginado e só usa getUserById para faltantes raros.
+ */
+const buildAuthUserMapForIds = async (adminClient, userIds, seedUsers = []) => {
+  const userMap = new Map();
+
+  for (const user of seedUsers) {
+    userMap.set(user.id, toAuthUserSummary(user));
+  }
+
+  const needed = new Set(userIds.filter((id) => id && !userMap.has(id)));
+  if (needed.size === 0) return userMap;
+
+  let page = 1;
+  while (needed.size > 0 && page <= AUTH_LIST_USERS_MAX_PAGES) {
+    const { data: { users }, error } = await adminClient.auth.admin.listUsers({
+      page,
+      perPage: AUTH_LIST_USERS_PAGE
+    });
+    if (error || !users?.length) break;
+
+    for (const user of users) {
+      if (!needed.has(user.id)) continue;
+      userMap.set(user.id, toAuthUserSummary(user));
+      needed.delete(user.id);
+    }
+
+    if (users.length < AUTH_LIST_USERS_PAGE) break;
+    page += 1;
+  }
+
+  if (needed.size > 0) {
+    const leftover = [...needed];
+    const chunkSize = 25;
+    for (let offset = 0; offset < leftover.length; offset += chunkSize) {
+      const chunk = leftover.slice(offset, offset + chunkSize);
+      await Promise.all(chunk.map(async (id) => {
+        const { data } = await adminClient.auth.admin.getUserById(id);
+        if (data?.user) {
+          userMap.set(id, toAuthUserSummary(data.user));
+        }
+      }));
+    }
+  }
+
+  return userMap;
+};
+
 export const listUsers = async (accessToken, queryParams = {}) => {
   const { search } = queryParams;
   const { role, empresaId } = await getRequesterContext(accessToken);
@@ -675,18 +762,8 @@ export const listUsers = async (accessToken, queryParams = {}) => {
     }
   }
 
-  // 2. Obter links de empresas
-  let linksQuery = adminClient
-    .from('role_x_user_x_empresa')
-    .select('user_id, empresas_id, roles_id, status, mei, expires_at');
-
-  if (role === 'admin') {
-    if (!empresaId) throw forbidden();
-    linksQuery = linksQuery.eq('empresas_id', empresaId);
-  }
-
-  const { data: links, error: linksErr } = await linksQuery;
-  if (linksErr) throw badRequest(linksErr.message);
+  // 2. Obter links de empresas (paginado — PostgREST limita ~1000 linhas por request)
+  const links = await fetchAllEmpresaUserLinks(adminClient, { role, empresaId });
 
   const scopedEmpresaIds = Array.from(
     new Set((links || []).map((link) => link.empresas_id).filter(Boolean))
@@ -717,39 +794,11 @@ export const listUsers = async (accessToken, queryParams = {}) => {
 
   // 4. Filtrar links se houver busca (caso a busca não tenha vindo do Auth primeiro)
   // No caso de listagem normal (sem busca), precisamos carregar os dados do Auth para os links.
-  const userIdsToFetch = searchTerm 
-    ? allAuthUsers.map(u => u.id)
-    : (links || []).map(l => l.user_id).filter(Boolean);
+  const userIdsToFetch = searchTerm
+    ? allAuthUsers.map((u) => u.id)
+    : (links || []).map((l) => l.user_id).filter(Boolean);
 
-  // Otimização: carregar dados do Auth em lote para os usuários necessários
-  // (O listUsers do Supabase não permite filtrar por IDs, então usamos o cache de allAuthUsers ou buscamos)
-  const userMap = new Map();
-  
-  // Alimentar mapa com o que já temos da busca
-  allAuthUsers.forEach(u => userMap.set(u.id, {
-    id: u.id,
-    email: u.email,
-    displayName: u.user_metadata?.display_name || null,
-    phone: u.user_metadata?.phone || null
-  }));
-
-  // Buscar faltantes (apenas se não for uma busca global que já varreu o auth)
-  const missingIds = userIdsToFetch.filter(id => !userMap.has(id));
-  if (missingIds.length > 0) {
-    // Para não estourar limite, buscamos um por um apenas os necessários (limitado a 500 para segurança)
-    const limitedMissing = missingIds.slice(0, 500);
-    await Promise.all(limitedMissing.map(async (id) => {
-      const { data } = await adminClient.auth.admin.getUserById(id);
-      if (data?.user) {
-        userMap.set(id, {
-          id: data.user.id,
-          email: data.user.email,
-          displayName: data.user.user_metadata?.display_name || null,
-          phone: data.user.user_metadata?.phone || null
-        });
-      }
-    }));
-  }
+  const userMap = await buildAuthUserMapForIds(adminClient, userIdsToFetch, allAuthUsers);
 
   // 5. Carregar Roles e Empresas para o mapeamento final
   const roleIds = Array.from(new Set((links || []).map(l => l.roles_id).filter(Boolean)));
