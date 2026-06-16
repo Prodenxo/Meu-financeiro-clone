@@ -3,6 +3,8 @@ import { type ManagedUser, type EmpresaOption } from '../../../services/usersSer
 import { matchManagedUserSearch } from '../../../utils/matchManagedUserSearch';
 import { getMeiUserStatusShort, isMeiSlotUser } from '../../../lib/meiUserSlot';
 import { formatIsoDateUtcCalendarPtBr } from '../../../utils/formatIsoDateUtcCalendarPtBr';
+import { getManagedUserActions } from '../../../lib/managedUserActions';
+import { useAuthStore } from '../../../store/authStore';
 import LoadingOverlay from '../../LoadingOverlay';
 
 interface UserListTabProps {
@@ -38,6 +40,7 @@ export function UserListTab({
   searchTerm,
   onSearchChange,
 }: UserListTabProps) {
+  const currentUserId = useAuthStore((s) => s.userId);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [inputValue, setInputValue] = useState(searchTerm);
@@ -205,10 +208,7 @@ export function UserListTab({
                   </thead>
                   <tbody>
                     {pagedUsers.map((user) => {
-                      const canEdit =
-                        role === 'superadmin'
-                          ? user.role !== 'superadmin'
-                          : role === 'admin' && user.role === 'usuario';
+                      const actions = getManagedUserActions(role, user, currentUserId);
                       const isBlocked = user.status === false;
 
                       return (
@@ -266,33 +266,35 @@ export function UserListTab({
                           </td>
                            <td className="px-4 py-3 text-right">
                              <div className="flex items-center justify-end gap-2">
-                               {canEdit && (
-                                 <>
-                                   <button
-                                     onClick={() => onImpersonate(user)}
-                                     title="Acessar como este usuário"
-                                     className="planner-button-secondary-compact text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                                   >
-                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                                     </svg>
-                                   </button>
-                                   <button
-                                     onClick={() => onStartEdit(user)}
-                                     className="planner-button-secondary-compact text-blue-600 dark:text-blue-400"
-                                   >
-                                     Editar
-                                   </button>
-                                   <button
-                                     onClick={() => onDelete(user)}
-                                     title="Excluir usuário"
-                                     className="planner-button-secondary-compact text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20"
-                                   >
-                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                     </svg>
-                                   </button>
-                                 </>
+                               {actions.canImpersonate && (
+                                 <button
+                                   onClick={() => onImpersonate(user)}
+                                   title={user.id === currentUserId ? 'Acessar como você mesmo' : 'Acessar como este usuário'}
+                                   className="planner-button-secondary-compact text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                 >
+                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                                   </svg>
+                                 </button>
+                               )}
+                               {actions.canEdit && (
+                                 <button
+                                   onClick={() => onStartEdit(user)}
+                                   className="planner-button-secondary-compact text-blue-600 dark:text-blue-400"
+                                 >
+                                   Editar
+                                 </button>
+                               )}
+                               {actions.canDelete && (
+                                 <button
+                                   onClick={() => onDelete(user)}
+                                   title="Excluir usuário"
+                                   className="planner-button-secondary-compact text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                                 >
+                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                   </svg>
+                                 </button>
                                )}
                              </div>
                            </td>

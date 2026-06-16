@@ -232,6 +232,22 @@ const resolveMeiValue = (value, defaultValue = false) => (
 /** Vaga MEI ocupada só quando `role_x_user_x_empresa.mei === true`. */
 const isMeiSlotActive = (value) => value === true;
 
+/** Consulta direta ao vínculo ativo — evita carregar toda a lista de utilizadores no admin MEI. */
+export const isUserMeiSlotActive = async (userId) => {
+  if (!userId) return false;
+  const adminClient = createSupabaseClient({ useServiceRole: true });
+  const { data, error } = await adminClient
+    .from('role_x_user_x_empresa')
+    .select('mei')
+    .eq('user_id', userId)
+    .eq('status', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw badRequest(error.message);
+  return isMeiSlotActive(data?.mei);
+};
+
 const isUnlimitedLimit = (value) => value === null;
 
 const getEmpresaLimits = async (adminClient, empresaId) => {
@@ -1014,6 +1030,8 @@ export const updateUser = async (accessToken, userId, input) => {
   const requester = await getRequesterContext(accessToken);
   if (!ROLE_CREATE_ALLOWED.has(requester.role)) throw forbidden();
 
+  const isSelfUpdate = requester.userId === userId;
+
   const requestedRole = normalizeRoleValue(input?.role);
   const requestedEmpresaId = input?.empresaId || null;
   const requestedDisplayName = input?.displayName?.trim();
@@ -1135,6 +1153,17 @@ export const updateUser = async (accessToken, userId, input) => {
   if (roleError) throw badRequest(roleError.message);
   const targetRole = normalizeRoleValue(roleData?.roles) || 'usuario';
 
+  if (isSelfUpdate && requestedRole && requestedRole !== targetRole) {
+    throw badRequest('Não é possível alterar o seu próprio perfil de acesso.');
+  }
+  if (
+    isSelfUpdate
+    && requestedEmpresaId
+    && requestedEmpresaId !== linkRecord.empresas_id
+  ) {
+    throw badRequest('Não é possível alterar a sua própria empresa por aqui.');
+  }
+
   if (requester.role === 'admin') {
     if (!requester.empresaId || requester.empresaId !== linkRecord.empresas_id) throw forbidden();
     if (!ROLE_ADMIN_MANAGEABLE.has(targetRole)) throw forbidden();
@@ -1142,8 +1171,12 @@ export const updateUser = async (accessToken, userId, input) => {
   }
 
   if (requester.role === 'superadmin') {
-    if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
-    if (requestedRole && !ROLE_UPDATE_ALLOWED_SUPERADMIN.has(requestedRole)) {
+    if (!isSelfUpdate && !ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
+    if (
+      !isSelfUpdate
+      && requestedRole
+      && !ROLE_UPDATE_ALLOWED_SUPERADMIN.has(requestedRole)
+    ) {
       throw badRequest('Role inválida');
     }
   }
@@ -1152,15 +1185,19 @@ export const updateUser = async (accessToken, userId, input) => {
   let finalEmpresaId = linkRecord.empresas_id;
 
   if (requester.role === 'superadmin') {
-    if (!requestedEmpresaId) throw badRequest('Empresa é obrigatória');
-    finalEmpresaId = requestedEmpresaId;
+    if (!isSelfUpdate) {
+      if (!requestedEmpresaId) throw badRequest('Empresa é obrigatória');
+      finalEmpresaId = requestedEmpresaId;
+    }
   }
 
   targetEmpresaId = finalEmpresaId;
 
   if (!capacityChecked) {
+    const isSelfMeiRemoval = isSelfUpdate && requestedMei === false && currentMeiSlot;
     const shouldCheckCapacity =
-      targetEmpresaId !== currentEmpresaId || targetMeiSlot !== currentMeiSlot;
+      !isSelfMeiRemoval
+      && (targetEmpresaId !== currentEmpresaId || targetMeiSlot !== currentMeiSlot);
     if (shouldCheckCapacity) {
       await ensureEmpresaCapacity(adminClient, {
         empresaId: targetEmpresaId,
@@ -1271,6 +1308,9 @@ export const banUser = async (accessToken, userId, status = false) => {
 
   const requester = await getRequesterContext(accessToken);
   if (!ROLE_CREATE_ALLOWED.has(requester.role)) throw forbidden();
+  if (requester.userId === userId) {
+    throw badRequest('Não é possível bloquear a sua própria conta por aqui.');
+  }
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await adminClient
@@ -1316,6 +1356,9 @@ export const deleteUser = async (accessToken, userId) => {
 
   const requester = await getRequesterContext(accessToken);
   if (!ROLE_CREATE_ALLOWED.has(requester.role)) throw forbidden();
+  if (requester.userId === userId) {
+    throw badRequest('Não é possível excluir a sua própria conta por aqui.');
+  }
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await adminClient

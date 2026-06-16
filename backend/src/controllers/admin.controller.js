@@ -53,14 +53,21 @@ const ensureCanViewUser = async (accessToken, targetUserId) => {
 };
 
 const ensureMeiEnabledForUser = async (accessToken, targetUserId) => {
-  if (typeof usersServiceRef.listUsers !== 'function') {
-    return { mei: true };
+  if (typeof usersServiceRef.isUserMeiSlotActive !== 'function') {
+    if (typeof usersServiceRef.listUsers !== 'function') {
+      return { mei: true };
+    }
+    const user = await resolveAdminUserContext(accessToken, targetUserId);
+    if (user?.mei !== true) {
+      throw forbidden('Acesso MEI desabilitado para este usuário');
+    }
+    return user;
   }
-  const user = await resolveAdminUserContext(accessToken, targetUserId);
-  if (user?.mei !== true) {
+  const meiActive = await usersServiceRef.isUserMeiSlotActive(targetUserId);
+  if (!meiActive) {
     throw forbidden('Acesso MEI desabilitado para este usuário');
   }
-  return user;
+  return { id: targetUserId, mei: true };
 };
 
 const resolveAdminUserContext = async (accessToken, targetUserId) => {

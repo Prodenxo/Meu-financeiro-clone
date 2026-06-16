@@ -668,11 +668,12 @@ export const upsertDocumentosAtivosMirrorForAdmin = async (userId, selection, de
 
   try {
     const supabase = resolveSupabase();
-    const { data: existing, error: selErr } = await supabase
+    const { data: existingRows, error: selErr } = await supabase
       .from(TABLE)
       .select('id')
       .eq('user_id', userId)
-      .maybeSingle();
+      .order('updated_at', { ascending: false })
+      .limit(1);
     if (selErr) {
       logWarn({
         userId,
@@ -681,6 +682,7 @@ export const upsertDocumentosAtivosMirrorForAdmin = async (userId, selection, de
       });
       return null;
     }
+    const existing = existingRows?.[0] ?? null;
 
     const now = new Date().toISOString();
     if (existing?.id) {
@@ -702,8 +704,6 @@ export const upsertDocumentosAtivosMirrorForAdmin = async (userId, selection, de
     const { error: insErr } = await supabase.from(TABLE).insert({
       user_id: userId,
       documentos_ativos: json,
-      is_active: true,
-      created_at: now,
       updated_at: now,
     });
     if (insErr) {

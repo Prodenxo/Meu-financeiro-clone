@@ -23,6 +23,7 @@ import {
   strongPasswordRequirementsSummary,
   validateStrongPassword
 } from '../../../lib/passwordPolicy';
+import { shouldShowAdminMeiToggle } from '../../../lib/managedUserActions';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -150,6 +151,10 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
   }, [isOpen, mode, user, empresas]);
 
   const isEditingSelf = mode === 'edit' && !!user && user.id === currentSessionUserId;
+  const showAdminMeiToggle =
+    role === 'admin' &&
+    shouldShowAdminMeiToggle(empresas, { meiActive: mei, userHasMei: user?.mei });
+  const isSelfMeiRemoval = isEditingSelf && user?.mei === true && !mei;
 
   const openBlockConfirm = () => {
     if (!user || isEditingSelf || blockBusy) return;
@@ -305,7 +310,7 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
           toast.error(limit === 0 ? 'Módulo MEI está desativado para esta empresa' : `Limite de MEIs atingido (${limit})`);
           return;
         }
-      } else {
+      } else if (!isSelfMeiRemoval) {
         const currentRegular = users.filter(u => u.empresaId === validationEmpresa.id && !u.mei && u.id !== user?.id).length;
         const limit = validationEmpresa.max_usuarios_nao_mei;
         if (limit !== null && limit !== 0 && currentRegular >= limit) {
@@ -349,8 +354,14 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
           displayName: displayName || undefined,
           phone: phone || undefined,
           email: emailChanged ? trimmedEditEmail : undefined,
-          role: role === 'superadmin' || role === 'admin' ? selectedRole : undefined,
-          empresaId: role === 'superadmin' ? targetEmpresaId || undefined : undefined,
+          role:
+            isEditingSelf
+              ? undefined
+              : role === 'superadmin' || role === 'admin'
+                ? selectedRole
+                : undefined,
+          empresaId:
+            isEditingSelf ? undefined : role === 'superadmin' ? targetEmpresaId || undefined : undefined,
           mei,
           expiresAt: expiresAt || null
         };
@@ -755,14 +766,15 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setRoleOpen(!roleOpen)}
-                    className={`planner-input w-full text-left flex justify-between items-center pr-10 ${showErrors && !selectedRole ? 'border-rose-500 bg-rose-50/5' : ''}`}
+                    onClick={() => !isEditingSelf && setRoleOpen(!roleOpen)}
+                    disabled={isEditingSelf}
+                    className={`planner-input w-full text-left flex justify-between items-center pr-10 ${showErrors && !selectedRole ? 'border-rose-500 bg-rose-50/5' : ''} ${isEditingSelf ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
                     <span className="capitalize">{selectedRole === 'usuario' ? 'Usuário' : selectedRole}</span>
                     <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                   </button>
                   
-                  {roleOpen && (
+                  {roleOpen && !isEditingSelf && (
                     <div className="absolute top-full left-0 right-0 z-[120] mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
                       {(role === 'superadmin' ? ['usuario', 'admin', 'outsider'] : ['usuario', 'admin']).map(r => (
                         <button
@@ -781,12 +793,16 @@ export function UserModal({ isOpen, onClose, onSuccess, mode, user, empresas, us
                 </div>
               </div>
 
-              {/* Toggle MEI para Administradores se a empresa permitir */}
-              {role === 'admin' && empresas.some(e => e.max_mei && e.max_mei > 0) && (
+              {/* Toggle MEI: ativo na empresa ou na conta (permite desligar o próprio MEI) */}
+              {showAdminMeiToggle && (
                 <div className="bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/50 flex items-center justify-between">
                   <div className="max-w-[70%]">
                     <h4 className="text-sm font-bold text-slate-900 dark:text-white">Usuário MEI</h4>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">Habilita as funções específicas do módulo MEI.</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                      {isSelfMeiRemoval || (isEditingSelf && mei)
+                        ? 'Desligue para remover o módulo MEI da sua conta.'
+                        : 'Habilita as funções específicas do módulo MEI.'}
+                    </p>
                   </div>
                   <button
                     type="button"

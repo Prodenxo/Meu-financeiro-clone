@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   logDocumentosAtivosMirrorPersistWarn,
-  saveDocumentosAtivosMirror
+  saveDocumentosAtivosMirror,
+  upsertDocumentosAtivosMirrorForAdmin,
 } from '../src/services/mei-certificate-store.js';
 
 const selection = { nfse: true, nfe: false, nfce: false };
@@ -104,4 +105,45 @@ test('logDocumentosAtivosMirrorPersistWarn não inclui payload Plugnotas (smoke)
   assert.match(out, /"userId":"u1"/);
   assert.match(out, /mirror_update_documentos_ativos_failed/);
   assert.equal(out.includes('nfse'), false);
+});
+
+function mockSupabaseAdminUpsert({ selectRows, insertError, updateError }) {
+  return () => ({
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          order: () => ({
+            limit: async () => ({
+              data: selectRows ?? [],
+              error: null,
+            }),
+          }),
+        }),
+      }),
+      update: () => ({
+        eq: async () => ({ error: updateError ?? null }),
+      }),
+      insert: async (row) => {
+        assert.equal('is_active' in row, false, 'insert não deve incluir is_active');
+        return { error: insertError ?? null };
+      },
+    }),
+  });
+}
+
+test('upsertDocumentosAtivosMirrorForAdmin: insert mínimo sem is_active', async () => {
+  const warns = [];
+  const saved = await upsertDocumentosAtivosMirrorForAdmin('user-new', selection, {
+    getSupabase: mockSupabaseAdminUpsert({ selectRows: [] }),
+    logWarn: (ctx) => warns.push(ctx),
+  });
+  assert.deepEqual(saved, selection);
+  assert.equal(warns.length, 0);
+});
+
+test('upsertDocumentosAtivosMirrorForAdmin: update quando já existe linha', async () => {
+  const saved = await upsertDocumentosAtivosMirrorForAdmin('user-existing', selection, {
+    getSupabase: mockSupabaseAdminUpsert({ selectRows: [{ id: 'row-1' }] }),
+  });
+  assert.deepEqual(saved, selection);
 });
