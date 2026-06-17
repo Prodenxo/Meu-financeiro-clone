@@ -15,6 +15,7 @@ import {
   advancePlugnotasNfseRpsAfterEmit,
   applyPlugnotasNfseEmitRpsFromEmpresaConfig,
   ensureEmpresaPlugnotasRpsForNfseEmit,
+  readRpsNumeroFromNfseHistoryRow,
   readRpsFromNfseEmitPayload
 } from './plugnotas/plugnotas-empresa-rps-heal.js';
 import {
@@ -1056,20 +1057,23 @@ const queryMaxRpsNumeroEmitted = async (userId, cnpjPrestador) => {
   const dbClient = getDb();
   const { data, error } = await dbClient
     .from(TABLE)
-    .select('payload_json, document_type')
+    .select('payload_json, response_json, document_type, cnpj_prestador')
     .eq('user_id', userId)
-    .eq('cnpj_prestador', cnpj)
-    .is('archived_at', null)
     .order('created_at', { ascending: false })
-    .limit(250);
+    .limit(500);
   if (error) throw badRequest(error.message);
 
   let max = 0;
   for (const row of data || []) {
     const docType = row.document_type;
     if (docType && docType !== DOCUMENT_TYPE_NFSE) continue;
-    const rps = readRpsFromNfseEmitPayload(row.payload_json);
-    if (rps?.numero > max) max = rps.numero;
+
+    const rowCnpj = normalizeDoc(row.cnpj_prestador)
+      || normalizeDoc(row.payload_json?.prestador?.cpfCnpj);
+    if (rowCnpj && rowCnpj !== cnpj) continue;
+
+    const numero = readRpsNumeroFromNfseHistoryRow(row);
+    if (numero > max) max = numero;
   }
   return max > 0 ? max : null;
 };
@@ -2097,6 +2101,18 @@ export const obterNota = async (userId, id, { sync = false, skipWhatsappDelivery
     status,
     response_json: response
   });
+
+  if (
+    updated.document_type === DOCUMENT_TYPE_NFSE
+    && normalizeStatus(status) === 'rejeitado'
+  ) {
+    const cnpjPrestador = normalizeDoc(updated.cnpj_prestador)
+      || normalizeDoc(updated.payload_json?.prestador?.cpfCnpj);
+    const usedRps = readRpsFromNfseEmitPayload(updated.payload_json);
+    if (cnpjPrestador.length === 14 && usedRps) {
+      advancePlugnotasNfseRpsAfterEmit(cnpjPrestador, usedRps).catch(() => {});
+    }
+  }
 
   if (!skipWhatsappDelivery) {
     void import('./nfse-whatsapp-delivery.service.js')

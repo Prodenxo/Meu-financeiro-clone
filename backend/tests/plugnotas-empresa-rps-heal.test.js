@@ -8,6 +8,7 @@ import {
   ensureEmpresaPlugnotasRpsForNfseEmit,
   readPlugnotasNfseNextRpsFromEmpresa,
   readRpsFromNfseEmitPayload,
+  readRpsNumeroFromNfseHistoryRow,
   resolveNextNfseRpsNumero
 } from '../src/services/plugnotas/plugnotas-empresa-rps-heal.js';
 
@@ -22,6 +23,43 @@ test('readRpsFromNfseEmitPayload lê numeracao do payload de emissão', () => {
     readRpsFromNfseEmitPayload({ rps: { lote: 1, numeracao: [{ serie: '1', numero: 12 }] } }),
     { serie: '1', numero: 12, lote: 1 }
   );
+});
+
+test('readRpsNumeroFromNfseHistoryRow lê número do payload ou da resposta PlugNotas', () => {
+  assert.equal(
+    readRpsNumeroFromNfseHistoryRow({
+      payload_json: { rps: { lote: 1, numeracao: [{ serie: '1', numero: 9 }] } }
+    }),
+    9
+  );
+  assert.equal(
+    readRpsNumeroFromNfseHistoryRow({
+      payload_json: {},
+      response_json: { rps: { lote: 1, numeracao: [{ serie: '1', numero: 11 }] } }
+    }),
+    11
+  );
+  assert.equal(readRpsNumeroFromNfseHistoryRow({}), null);
+});
+
+test('applyPlugnotasNfseEmitRpsFromEmpresaConfig usa histórico local se GET empresa falhar', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    throw new Error('plugnotas indisponível');
+  };
+
+  try {
+    const payload = { idIntegracao: 'x' };
+    await applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, '12.345.678/0001-99', {
+      localMaxRpsNumero: 12
+    });
+    assert.deepEqual(payload.rps, {
+      lote: 1,
+      numeracao: [{ serie: '1', numero: 13 }]
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test('applyPlugnotasNfseEmitRpsFromEmpresaConfig avança número com localMaxRpsNumero', async () => {

@@ -34,6 +34,20 @@ export function readRpsFromNfseEmitPayload(payload) {
 }
 
 /**
+ * Maior número RPS já usado numa linha do histórico (payload de emissão ou resposta PlugNotas).
+ * @param {{ payload_json?: unknown, response_json?: unknown }|null|undefined} row
+ * @returns {number|null}
+ */
+export function readRpsNumeroFromNfseHistoryRow(row) {
+  if (!row || typeof row !== 'object') return null;
+  const fromPayload = readRpsFromNfseEmitPayload(row.payload_json)?.numero;
+  if (Number.isFinite(fromPayload) && fromPayload >= 1) return fromPayload;
+  const fromResponse = readRpsFromNfseEmitPayload(row.response_json)?.numero;
+  if (Number.isFinite(fromResponse) && fromResponse >= 1) return fromResponse;
+  return null;
+}
+
+/**
  * Próximo número RPS seguro para emissões consecutivas (PlugNotas pode atrasar o contador).
  * @param {number} plugnotasNumero
  * @param {number|null|undefined} localMaxNumero
@@ -81,17 +95,21 @@ export async function applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, cnpjIn
   try {
     empresaJson = await consultarEmpresaPlugNotas(cnpj);
   } catch {
-    return;
+    empresaJson = null;
   }
 
-  const next = readPlugnotasNfseNextRpsFromEmpresa(empresaJson);
-  if (!next) return;
+  const next = empresaJson ? readPlugnotasNfseNextRpsFromEmpresa(empresaJson) : null;
+  const localMax = parsePositiveInt(opts.localMaxRpsNumero, 0);
+  if (!next && localMax < 1) return;
 
-  const numero = resolveNextNfseRpsNumero(next.numero, opts.localMaxRpsNumero);
+  const serie = next?.serie ?? '1';
+  const lote = next?.lote ?? 1;
+  const plugNumero = next?.numero ?? 1;
+  const numero = resolveNextNfseRpsNumero(plugNumero, opts.localMaxRpsNumero);
 
   payload.rps = {
-    lote: next.lote,
-    numeracao: [{ serie: next.serie, numero }]
+    lote,
+    numeracao: [{ serie, numero }]
   };
 }
 
