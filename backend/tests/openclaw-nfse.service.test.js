@@ -76,6 +76,15 @@ test('pickClienteCatalogoByNomeResult — único resultado da busca', () => {
   assert.equal(r.cliente.id, '1');
 });
 
+test('pickClienteCatalogoByNomeResult — catálogo NFSe filtrado ignora duplicata NF-e', () => {
+  const rowsNfseOnly = [
+    { id: 'nfse-1', nome: 'Leonardo de Lima', documento: '11953257704', document_type: 'NFSE' },
+  ];
+  const r = pickClienteCatalogoByNomeResult(rowsNfseOnly, 'Leonardo de Lima');
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.cliente.id, 'nfse-1');
+});
+
 test('hasExplicitNfseServicoSelection — índice ou código contam; texto livre não', () => {
   assert.equal(hasExplicitNfseServicoSelection({ descricao: 'pintura' }), false);
   assert.equal(hasExplicitNfseServicoSelection({ tomadorNome: 'Rafael', valor: 2 }), false);

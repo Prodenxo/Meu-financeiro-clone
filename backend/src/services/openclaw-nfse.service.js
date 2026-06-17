@@ -604,17 +604,19 @@ export const pickClienteCatalogoByNomeResult = (rows, nome) => {
   };
 };
 
+const NFSE_CATALOG_CLIENTES_OPTS = { documentType: 'NFSE' };
+
 const findClienteCatalogoByDocumento = async (userId, documento) => {
   const doc = normalizeDoc(documento);
   if (!doc) return null;
-  const rows = await listarCatalogoClientes(userId, { q: doc, limit: 20 });
+  const rows = await listarCatalogoClientes(userId, { q: doc, limit: 20, ...NFSE_CATALOG_CLIENTES_OPTS });
   return (rows || []).find((r) => normalizeDoc(r.documento) === doc) || null;
 };
 
 const findClienteCatalogoByNome = async (userId, nome) => {
   const q = String(nome || '').trim();
   if (!q) return { kind: 'missing' };
-  const rows = await listarCatalogoClientes(userId, { q, limit: 20 });
+  const rows = await listarCatalogoClientes(userId, { q, limit: 20, ...NFSE_CATALOG_CLIENTES_OPTS });
   return pickClienteCatalogoByNomeResult(rows, q);
 };
 
@@ -689,7 +691,7 @@ const resolveTomador = async (userId, payload) => {
         code: 'NFSE_TOMADOR_AMBIGUOUS',
         tomadorNome,
         matches: (lookup.matches || []).map(mapClienteResumo),
-        botHint: 'Liste nome + documento de cada match e peça ao utilizador para escolher um.',
+        botHint: 'Liste nome + documento de cada match (só catálogo NFSe) e peça ao utilizador para escolher um.',
       });
     }
     catalogo = lookup.cliente;
@@ -1250,7 +1252,7 @@ export const fetchOpenclawNfsePdfBase64 = async (userId, { id, sync = true } = {
 };
 
 export const listOpenclawNfseClientes = async (userId, { q = '', limit = 20 } = {}) =>
-  listarCatalogoClientes(userId, { q, limit });
+  listarCatalogoClientes(userId, { q, limit, documentType: 'NFSE' });
 
 export const listOpenclawNfseProdutos = async (userId, { q = '', limit = 20, documentType } = {}) =>
   listarCatalogoProdutos(userId, { q, limit, ...(documentType ? { documentType } : {}) });

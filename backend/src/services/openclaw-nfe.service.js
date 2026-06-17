@@ -445,6 +445,7 @@ const resolveDestinatarioNfe = async (userId, payload) => {
   const clientes = await listarCatalogoClientes(userId, {
     q: tomador.tomadorCpfCnpj,
     limit: 5,
+    documentType: 'NFE',
   });
   const catalogo = (clientes || []).find(
     (c) => normalizeDoc(c.documento) === tomador.tomadorCpfCnpj,
