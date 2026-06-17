@@ -61,6 +61,83 @@ export function resolveNextNfseRpsNumero(plugnotasNumero, localMaxNumero) {
 }
 
 /**
+ * Estima o maior RPS já consumido quando notas antigas não guardaram `rps` no payload.
+ * Cada tentativa de emissão (incluindo rejeitadas) consome um número na prefeitura.
+ * @param {{ maxKnownNumero?: number|null, nfseEmitCount?: number|null }} input
+ * @returns {number|null}
+ */
+export function resolveNfseRpsLocalMaxFromHistory(input = {}) {
+  const maxKnown = parsePositiveInt(input.maxKnownNumero, 0);
+  const emitCount = parsePositiveInt(input.nfseEmitCount, 0);
+  const floorFromCount = emitCount >= 1 ? emitCount : 0;
+  const effective = Math.max(maxKnown, floorFromCount);
+  return effective > 0 ? effective : null;
+}
+
+const patchPlugnotasEmpresaRpsNextNumero = async (cnpj, empresaJson, { serie, lote, numero }) => {
+  const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
+  const nfseAtivo = empresa?.nfse?.ativo !== false;
+  const existingConfig = empresa?.nfse?.config && typeof empresa.nfse.config === 'object'
+    ? empresa.nfse.config
+    : { producao: true };
+
+  await atualizarEmpresaPlugNotas({
+    cpfCnpj: cnpj,
+    rps: {
+      lote,
+      numeracao: [{ serie, numero }]
+    },
+    nfse: {
+      ativo: nfseAtivo,
+      config: {
+        ...existingConfig,
+        rps: { serie, numero, lote }
+      }
+    }
+  });
+};
+
+/**
+ * Alinha o contador RPS no PlugNotas ao número que será emitido (config pode estar atrasada).
+ * @param {string} cnpjInput
+ * @param {{ serie: string, lote: number, numero: number }} targetRps
+ * @param {unknown} [empresaJson]
+ */
+export async function syncPlugnotasNfseRpsBeforeEmit(cnpjInput, targetRps, empresaJson = null) {
+  const cnpj = normalizeDoc(cnpjInput);
+  const targetNumero = parsePositiveInt(targetRps?.numero);
+  if (cnpj.length !== 14 || !Number.isFinite(targetNumero)) return;
+
+  const usedSerie = String(targetRps?.serie ?? '1').trim() || '1';
+  const usedLote = parsePositiveInt(targetRps?.lote, 1);
+
+  let empresa = empresaJson;
+  if (!empresa) {
+    try {
+      empresa = await consultarEmpresaPlugNotas(cnpj);
+    } catch {
+      return;
+    }
+  }
+
+  const current = readPlugnotasNfseNextRpsFromEmpresa(empresa);
+  if (current && current.numero >= targetNumero) return;
+
+  try {
+    await patchPlugnotasEmpresaRpsNextNumero(cnpj, empresa, {
+      serie: usedSerie,
+      lote: usedLote,
+      numero: targetNumero
+    });
+  } catch (error) {
+    console.warn(
+      '[plugnotas-rps] falha ao sincronizar contador RPS antes da emissão',
+      error instanceof Error ? error.message : error
+    );
+  }
+}
+
+/**
  * Lê série/número/lote configurados em `nfse.config.rps` (GET empresa PlugNotas).
  * @param {unknown} empresaJson
  * @returns {{ serie: string, numero: number, lote: number }|null}
@@ -111,6 +188,12 @@ export async function applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, cnpjIn
     lote,
     numeracao: [{ serie, numero }]
   };
+
+  if (empresaJson) {
+    await syncPlugnotasNfseRpsBeforeEmit(cnpj, { serie, lote, numero }, empresaJson);
+  } else {
+    await syncPlugnotasNfseRpsBeforeEmit(cnpj, { serie, lote, numero });
+  }
 }
 
 /**
@@ -138,26 +221,11 @@ export async function advancePlugnotasNfseRpsAfterEmit(cnpjInput, usedRps) {
   const current = readPlugnotasNfseNextRpsFromEmpresa(empresaJson);
   if (current && current.numero >= targetNext) return;
 
-  const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
-  const nfseAtivo = empresa?.nfse?.ativo !== false;
-  const existingConfig = empresa?.nfse?.config && typeof empresa.nfse.config === 'object'
-    ? empresa.nfse.config
-    : { producao: true };
-
   try {
-    await atualizarEmpresaPlugNotas({
-      cpfCnpj: cnpj,
-      rps: {
-        lote: usedLote,
-        numeracao: [{ serie: usedSerie, numero: targetNext }]
-      },
-      nfse: {
-        ativo: nfseAtivo,
-        config: {
-          ...existingConfig,
-          rps: { serie: usedSerie, numero: targetNext, lote: usedLote }
-        }
-      }
+    await patchPlugnotasEmpresaRpsNextNumero(cnpj, empresaJson, {
+      serie: usedSerie,
+      lote: usedLote,
+      numero: targetNext
     });
   } catch (error) {
     console.warn(

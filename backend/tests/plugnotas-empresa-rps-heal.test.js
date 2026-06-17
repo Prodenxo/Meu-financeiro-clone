@@ -9,7 +9,9 @@ import {
   readPlugnotasNfseNextRpsFromEmpresa,
   readRpsFromNfseEmitPayload,
   readRpsNumeroFromNfseHistoryRow,
-  resolveNextNfseRpsNumero
+  resolveNextNfseRpsNumero,
+  resolveNfseRpsLocalMaxFromHistory,
+  syncPlugnotasNfseRpsBeforeEmit
 } from '../src/services/plugnotas/plugnotas-empresa-rps-heal.js';
 
 test('resolveNextNfseRpsNumero usa o maior entre PlugNotas e histórico local', () => {
@@ -23,6 +25,44 @@ test('readRpsFromNfseEmitPayload lê numeracao do payload de emissão', () => {
     readRpsFromNfseEmitPayload({ rps: { lote: 1, numeracao: [{ serie: '1', numero: 12 }] } }),
     { serie: '1', numero: 12, lote: 1 }
   );
+});
+
+test('resolveNfseRpsLocalMaxFromHistory usa contagem de tentativas quando payload não tem rps', () => {
+  assert.equal(resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: 3, nfseEmitCount: 17 }), 17);
+  assert.equal(resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: 0, nfseEmitCount: 17 }), 17);
+  assert.equal(resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: 0, nfseEmitCount: 0 }), null);
+});
+
+test('syncPlugnotasNfseRpsBeforeEmit faz PATCH quando contador PlugNotas está atrás', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (String(url).includes('/empresa/12345678000199') && options.method === 'GET') {
+      return new Response(JSON.stringify({
+        cpfCnpj: '12345678000199',
+        nfse: { ativo: true, config: { rps: { numeracao: [{ serie: '1', numero: 5 }], lote: 1 } } }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (String(url).includes('/empresa/12345678000199') && options.method === 'PATCH') {
+      return new Response(JSON.stringify({ message: 'ok' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  try {
+    await syncPlugnotasNfseRpsBeforeEmit('12.345.678/0001-99', { serie: '1', numero: 18, lote: 1 });
+    const patchCall = calls.find((c) => c.options.method === 'PATCH');
+    assert.ok(patchCall);
+    const body = JSON.parse(patchCall.options.body);
+    assert.equal(body.nfse.config.rps.numero, 18);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test('readRpsNumeroFromNfseHistoryRow lê número do payload ou da resposta PlugNotas', () => {

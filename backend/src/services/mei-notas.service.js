@@ -16,7 +16,8 @@ import {
   applyPlugnotasNfseEmitRpsFromEmpresaConfig,
   ensureEmpresaPlugnotasRpsForNfseEmit,
   readRpsNumeroFromNfseHistoryRow,
-  readRpsFromNfseEmitPayload
+  readRpsFromNfseEmitPayload,
+  resolveNfseRpsLocalMaxFromHistory
 } from './plugnotas/plugnotas-empresa-rps-heal.js';
 import {
   ensureMeiNfsePlugnotasCadastroBeforeEmit,
@@ -1063,7 +1064,8 @@ const queryMaxRpsNumeroEmitted = async (userId, cnpjPrestador) => {
     .limit(500);
   if (error) throw badRequest(error.message);
 
-  let max = 0;
+  let maxKnown = 0;
+  let nfseEmitCount = 0;
   for (const row of data || []) {
     const docType = row.document_type;
     if (docType && docType !== DOCUMENT_TYPE_NFSE) continue;
@@ -1072,10 +1074,11 @@ const queryMaxRpsNumeroEmitted = async (userId, cnpjPrestador) => {
       || normalizeDoc(row.payload_json?.prestador?.cpfCnpj);
     if (rowCnpj && rowCnpj !== cnpj) continue;
 
+    nfseEmitCount += 1;
     const numero = readRpsNumeroFromNfseHistoryRow(row);
-    if (numero > max) max = numero;
+    if (numero > maxKnown) maxKnown = numero;
   }
-  return max > 0 ? max : null;
+  return resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: maxKnown, nfseEmitCount });
 };
 
 const mapInsertRecordError = (error) => {
