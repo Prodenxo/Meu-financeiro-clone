@@ -1,8 +1,16 @@
 #!/bin/bash
-# Easypanel → OpenClaw → Console → Bash — patch SOUL (NFSe servicoIndice).
+# Easypanel → serviço **OpenClaw** (NÃO backend) → Console → aba **Bash**
+# Caminho esperado: /home/node/.openclaw/workspace/SOUL.md
+# Se estiver em /app/backend → container errado; abra o Console do serviço OpenClaw.
 # Use quando o bot inventar descricao/servico ou ignorar a lista numerada do catálogo.
 set -e
 SOUL=/home/node/.openclaw/workspace/SOUL.md
+if [ ! -d "$(dirname "$SOUL")" ]; then
+  echo "ERRO: $(dirname "$SOUL") não existe neste container."
+  echo "Estás no BACKEND (/app/backend). Abre Easypanel → serviço OpenClaw → Console → Bash."
+  echo "Teste no container certo: ls -la /home/node/.openclaw/workspace/SOUL.md"
+  exit 1
+fi
 NODE_BIN="$(command -v node 2>/dev/null || true)"
 [ -z "$NODE_BIN" ] && NODE_BIN=/usr/local/bin/node
 [ -x "$NODE_BIN" ] || NODE_BIN=/usr/bin/node
