@@ -193,11 +193,11 @@ const buildPlugnotasEmpresaRpsBlocks = ({ serie, lote, numero }) => ({
     lote,
     numeracao: [{ serie, numero }]
   },
+  // PATCH empresa: numeracao só na raiz `rps`; config.rps é flat (contrato PlugNotas).
   configRps: {
     serie,
     numero,
-    lote,
-    numeracao: [{ serie, numero }]
+    lote
   }
 });
 

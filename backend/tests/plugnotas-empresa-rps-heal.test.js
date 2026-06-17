@@ -89,7 +89,8 @@ test('syncPlugnotasNfseRpsBeforeEmit faz PATCH quando contador PlugNotas está a
     assert.ok(patchCall);
     const body = JSON.parse(patchCall.options.body);
     assert.equal(body.nfse.config.rps.numero, 18);
-    assert.deepEqual(body.nfse.config.rps.numeracao, [{ serie: '1', numero: 18 }]);
+    assert.equal(body.nfse.config.rps.serie, '1');
+    assert.equal('numeracao' in body.nfse.config.rps, false);
   } finally {
     global.fetch = originalFetch;
   }
@@ -205,7 +206,7 @@ test('advancePlugnotasNfseRpsAfterEmit faz PATCH quando contador PlugNotas está
     const body = JSON.parse(patchCall.options.body);
     assert.equal(body.nfse.config.rps.numero, 9);
     assert.equal(body.rps.numeracao[0].numero, 9);
-    assert.deepEqual(body.nfse.config.rps.numeracao, [{ serie: '1', numero: 9 }]);
+    assert.equal('numeracao' in body.nfse.config.rps, false);
   } finally {
     global.fetch = originalFetch;
   }
@@ -358,12 +359,7 @@ test('ensureEmpresaPlugnotasRpsForNfseEmit faz PATCH só quando rps ausente', as
       lote: 1,
       numeracao: [{ numero: 1, serie: '1' }]
     });
-    assert.deepEqual(body.nfse.config.rps, {
-      serie: '1',
-      numero: 1,
-      lote: 1,
-      numeracao: [{ serie: '1', numero: 1 }]
-    });
+    assert.deepEqual(body.nfse.config.rps, { serie: '1', numero: 1, lote: 1 });
   } finally {
     global.fetch = originalFetch;
   }

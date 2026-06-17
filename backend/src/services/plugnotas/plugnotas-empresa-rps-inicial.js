@@ -64,16 +64,14 @@ export const sanitizeEmpresaPlugnotasRpsPayload = (payload) => {
  */
 export const normalizeNfseConfigRps = (raw) => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return {
-      ...EMPRESA_PLUGNOTAS_NFSE_CONFIG_RPS_CANONICAL,
-      numeracao: [{ numero: 1, serie: '1' }]
-    };
+    return { ...EMPRESA_PLUGNOTAS_NFSE_CONFIG_RPS_CANONICAL };
   }
   const numeracaoFirst = Array.isArray(raw.numeracao) ? raw.numeracao[0] : null;
   const serie = String(raw.serie ?? numeracaoFirst?.serie ?? '').trim() || '1';
   const numero = parsePositiveInt(raw.numero ?? numeracaoFirst?.numero, 1);
   const lote = parsePositiveInt(raw.lote, 1);
-  return { serie, numero, lote, numeracao: [{ serie, numero }] };
+  // PlugNotas PATCH: `nfse.config.rps` aceita só serie/numero/lote — sem `numeracao`.
+  return { serie, numero, lote };
 };
 
 /**
