@@ -142,13 +142,15 @@ export const isVagueNfItemLabel = (value) => {
   return VAGUE_NF_ITEM_REGEX.some((re) => re.test(s));
 };
 
-export const formatNfseCatalogChoiceMessage = (produtos = []) => {
+export const formatNfseCatalogChoiceMessage = (produtos = [], options = {}) => {
   const list = Array.isArray(produtos) ? produtos : [];
   if (!list.length) {
     return 'Você ainda não tem serviços cadastrados. Cadastre na app (MEI → Notas) e peça a nota de novo.';
   }
+  const intro = String(options.prefix || '').trim()
+    || 'Qual serviço você quer na nota? Responda com o número ou o nome exato:';
   const lines = list.map((p, i) => `${i + 1}. ${String(p.discriminacao || '—').trim()}`);
-  return `Qual serviço você quer na nota? Responda com o número ou o nome exato:\n${lines.join('\n')}`;
+  return `${intro}\n${lines.join('\n')}`;
 };
 
 export const formatNfeCatalogChoiceMessage = (produtos = []) => {

@@ -481,7 +481,6 @@ const buildPayloadFromInput = (input, userId) => {
       email: input?.tomador?.email || input?.tomadorEmail || null,
       endereco: tomadorEndereco
     }),
-    rps: prune(input?.rps || null),
     cidadePrestacao: prune(input?.cidadePrestacao || null),
     servico: servicosList
   });

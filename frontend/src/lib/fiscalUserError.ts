@@ -396,7 +396,8 @@ export function mapMeiFiscalErrorToCopy(input: {
       title: 'Numeração da nota já utilizada (E0014)',
       description:
         'A prefeitura recusou porque série + número desta nota já foram usados numa emissão anterior. '
-        + 'Não é bloqueio por cliente: emita uma nova nota para a mesma pessoa — o sistema usará o próximo número automaticamente.',
+        + 'Não é bloqueio por cliente nem por valor: pode emitir várias notas para a mesma pessoa, '
+        + 'inclusive com valores iguais — emita de novo que o sistema usará o próximo número automaticamente.',
     };
   }
 

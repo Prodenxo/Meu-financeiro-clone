@@ -48,6 +48,30 @@ const stripDiacritics = (value) =>
 const normalizeNameForMatch = (value) =>
   stripDiacritics(String(value || '').trim().toLowerCase()).replace(/\s+/g, ' ');
 
+/** Normaliza discriminação do catálogo para comparação (pontuação, espaços). */
+export const normalizeCatalogDiscriminacao = (value) =>
+  normalizeNameForMatch(value)
+    .replace(/[.,;:!?…]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * O utilizador ou o agente escolheu o serviço de forma inequívoca (não só texto livre do LLM).
+ * @param {Record<string, unknown>} [payload]
+ */
+export const hasExplicitNfseServicoSelection = (payload = {}) => Boolean(
+  firstNonEmpty(
+    payload?.codigoServico,
+    payload?.codigo,
+    payload?.servicoIndice,
+    payload?.servicoNumero,
+    payload?.indice,
+    payload?.produtoId,
+    payload?.servicoId,
+    payload?.catalogoProdutoId,
+  ),
+);
+
 /** Número em formato BR (1.200,50 / 1.200 / 1200). */
 const parseBrNumericToken = (token) => {
   let t = String(token).trim().replace(/\s/g, '');
@@ -146,17 +170,25 @@ const pickServicoNomeFromPayload = (payload) =>
  * @param {string} nome
  */
 export const pickProdutoCatalogoByNomeResult = (rows, nome) => {
-  const q = normalizeNameForMatch(nome);
+  const q = normalizeCatalogDiscriminacao(nome);
   if (!q) return { kind: 'missing' };
   const list = Array.isArray(rows) ? rows : [];
   if (!list.length) return { kind: 'not_found', q: nome };
 
-  const exact = list.filter((r) => normalizeNameForMatch(r.discriminacao) === q);
+  const exact = list.filter(
+    (r) => normalizeCatalogDiscriminacao(r.discriminacao) === q,
+  );
   if (exact.length === 1) return { kind: 'ok', produto: exact[0] };
 
+  const partial = list.filter((r) => {
+    const n = normalizeCatalogDiscriminacao(r.discriminacao);
+    return n.includes(q) || q.includes(n);
+  });
+  if (partial.length === 1) return { kind: 'ok', produto: partial[0] };
+
   const allWordsMatch = list.filter((r) => {
-    const n = normalizeNameForMatch(r.discriminacao);
-    const words = q.split(' ').filter((w) => w.length >= 2);
+    const n = normalizeCatalogDiscriminacao(r.discriminacao);
+    const words = q.split(' ').filter((w) => w.length >= 3);
     if (!words.length) return false;
     return words.every((w) => n.includes(w));
   });
@@ -164,7 +196,7 @@ export const pickProdutoCatalogoByNomeResult = (rows, nome) => {
 
   if (list.length === 1) return { kind: 'ok', produto: list[0] };
 
-  return { kind: 'ambiguous', matches: list, q: nome };
+  return { kind: 'ambiguous', matches: partial.length ? partial : list, q: nome };
 };
 
 const normalizeProdutoCodigoForMatch = (value) =>
@@ -173,38 +205,75 @@ const normalizeProdutoCodigoForMatch = (value) =>
 const normalizeProdutoCnaeForMatch = (value) => normalizeDoc(value).slice(0, 7);
 
 /**
+ * Resolve serviço do catálogo por código municipal (e CNAE opcional).
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {string} codigo
+ * @param {string} [cnae]
+ */
+export const pickProdutoCatalogoByCodigoResult = (rows, codigo, cnae) => {
+  const codigoNorm = normalizeProdutoCodigoForMatch(codigo);
+  if (!codigoNorm) return { kind: 'missing' };
+
+  const list = Array.isArray(rows) ? rows : [];
+  let matches = list.filter(
+    (row) => normalizeProdutoCodigoForMatch(row.codigo) === codigoNorm,
+  );
+
+  const cnaeNorm = normalizeProdutoCnaeForMatch(cnae);
+  if (cnaeNorm.length === 7) {
+    matches = matches.filter(
+      (row) => normalizeProdutoCnaeForMatch(row.cnae) === cnaeNorm,
+    );
+  }
+
+  if (matches.length === 1) return { kind: 'ok', produto: matches[0] };
+  if (matches.length > 1) return { kind: 'ambiguous', matches, codigo: codigoNorm, cnae: cnaeNorm };
+  return { kind: 'not_found', codigo: codigoNorm, cnae: cnaeNorm };
+};
+
+/**
  * Evita duplicar serviço quando o robô reenvia código + CNAE com outra discriminação.
  * @param {Array<Record<string, unknown>>} rows
  * @param {string} codigo
  * @param {string} cnae
  */
-export const pickProdutoCatalogoByCodigoCnaeResult = (rows, codigo, cnae) => {
-  const codigoNorm = normalizeProdutoCodigoForMatch(codigo);
-  const cnaeNorm = normalizeProdutoCnaeForMatch(cnae);
-  if (!codigoNorm || cnaeNorm.length !== 7) return { kind: 'missing' };
-
-  const list = Array.isArray(rows) ? rows : [];
-  const matches = list.filter((row) => {
-    const rowCodigo = normalizeProdutoCodigoForMatch(row.codigo);
-    const rowCnae = normalizeProdutoCnaeForMatch(row.cnae);
-    return rowCodigo === codigoNorm && rowCnae === cnaeNorm;
-  });
-
-  if (matches.length === 1) return { kind: 'ok', produto: matches[0] };
-  if (matches.length > 1) return { kind: 'multiple', matches, codigo: codigoNorm, cnae: cnaeNorm };
-  return { kind: 'not_found', codigo: codigoNorm, cnae: cnaeNorm };
-};
+export const pickProdutoCatalogoByCodigoCnaeResult = (rows, codigo, cnae) =>
+  pickProdutoCatalogoByCodigoResult(rows, codigo, cnae);
 
 const findProdutoCatalogoByCodigoCnae = async (userId, codigo, cnae) => {
-  const rows = await listarCatalogoProdutos(userId, { limit: 50 });
-  return pickProdutoCatalogoByCodigoCnaeResult(rows, codigo, cnae);
+  const rows = await listarCatalogoProdutos(userId, { limit: 50, documentType: 'NFSE' });
+  return pickProdutoCatalogoByCodigoResult(rows, codigo, cnae);
 };
 
 const findProdutoCatalogoByNome = async (userId, nome) => {
   const q = String(nome || '').trim();
   if (!q) return { kind: 'missing' };
-  const rows = await listarCatalogoProdutos(userId, { q, limit: 20 });
-  return pickProdutoCatalogoByNomeResult(rows, q);
+
+  let rows = await listarCatalogoProdutos(userId, { q, limit: 20, documentType: 'NFSE' });
+  let result = pickProdutoCatalogoByNomeResult(rows, q);
+  if (result.kind === 'not_found' || result.kind === 'ambiguous') {
+    const all = await listarCatalogoProdutos(userId, { limit: 50, documentType: 'NFSE' });
+    result = pickProdutoCatalogoByNomeResult(all, q);
+  }
+  return result;
+};
+
+const pickProdutoCatalogoByIndexResult = (rows, indexRaw) => {
+  const index = Number(indexRaw);
+  if (!Number.isInteger(index) || index < 1) return { kind: 'missing' };
+  const list = Array.isArray(rows) ? rows : [];
+  const produto = list[index - 1];
+  if (!produto) return { kind: 'not_found', index };
+  return { kind: 'ok', produto };
+};
+
+const pickProdutoCatalogoByIdResult = (rows, idRaw) => {
+  const id = String(idRaw || '').trim();
+  if (!id) return { kind: 'missing' };
+  const list = Array.isArray(rows) ? rows : [];
+  const matches = list.filter((row) => String(row.id || '') === id);
+  if (matches.length === 1) return { kind: 'ok', produto: matches[0] };
+  return { kind: 'not_found', id };
 };
 
 const pickCodigoNbsFromCatalogMetadata = (metadataJson) => {
@@ -237,6 +306,26 @@ const applyProdutoCatalogoToServico = (produto, refs) => {
   return next;
 };
 
+const throwNfseServicoChoiceRequired = (catalogNfse, botHint) => {
+  throw badRequest(
+    formatNfseCatalogChoiceMessage(catalogNfse, {
+      prefix:
+        'Você informou cliente e valor, mas ainda não escolheu o serviço. '
+        + 'Qual vai na nota? Responda com o número (1, 2, 3…):',
+    }),
+    {
+      code: 'NFSE_SERVICO_CHOICE_REQUIRED',
+      servicos: catalogNfse.map((p) => ({
+        id: p.id,
+        discriminacao: p.discriminacao,
+        codigo: p.codigo,
+        cnae: p.cnae,
+      })),
+      botHint,
+    },
+  );
+};
+
 const resolveServicoDefaults = async (userId, payload, emitente) => {
   let discriminacao = firstNonEmpty(
     payload?.discriminacao,
@@ -251,6 +340,66 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
   let codigoNbs = firstNonEmpty(payload?.codigoNbs, payload?.codigo_nbs);
   let aliquotaRaw = payload?.aliquota ?? payload?.aliquotaIss;
 
+  const catalogNfse = await listarCatalogoProdutos(userId, { limit: 50, documentType: 'NFSE' });
+
+  if (catalogNfse.length > 1 && !hasExplicitNfseServicoSelection(payload)) {
+    throwNfseServicoChoiceRequired(
+      catalogNfse,
+      'O utilizador NÃO informou qual serviço. PROIBIDO inventar descricao/codigoServico. '
+      + 'Mostre a lista numerada, espere a escolha (1, 2, 3…) e use preview_nfse com servicoIndice. '
+      + 'Não use emit_nfse neste passo.',
+    );
+  }
+
+  const applyCatalogProduto = (produto) => {
+    const merged = applyProdutoCatalogoToServico(produto, {
+      codigo,
+      cnae,
+      codigoNbs,
+      aliquotaRaw,
+      discriminacao,
+    });
+    codigo = merged.codigo || codigo;
+    cnae = merged.cnae || cnae;
+    codigoNbs = merged.codigoNbs || codigoNbs;
+    aliquotaRaw = merged.aliquotaRaw ?? aliquotaRaw;
+    if (produto?.discriminacao) {
+      discriminacao = String(produto.discriminacao).trim();
+    } else if (merged.discriminacao) {
+      discriminacao = merged.discriminacao;
+    }
+  };
+
+  const produtoId = firstNonEmpty(payload?.produtoId, payload?.servicoId, payload?.catalogoProdutoId);
+  if (produtoId) {
+    const byId = pickProdutoCatalogoByIdResult(catalogNfse, produtoId);
+    if (byId.kind === 'ok') applyCatalogProduto(byId.produto);
+  }
+
+  const servicoIndice = firstNonEmpty(payload?.servicoIndice, payload?.servicoNumero, payload?.indice);
+  if (!codigo && servicoIndice) {
+    const byIndex = pickProdutoCatalogoByIndexResult(catalogNfse, servicoIndice);
+    if (byIndex.kind === 'ok') applyCatalogProduto(byIndex.produto);
+  }
+
+  if (codigo && (!cnae || !discriminacao)) {
+    const byCodigo = pickProdutoCatalogoByCodigoResult(catalogNfse, codigo, cnae);
+    if (byCodigo.kind === 'ok') applyCatalogProduto(byCodigo.produto);
+    else if (byCodigo.kind === 'ambiguous') {
+      throw badRequest(formatNfCatalogAmbiguousMessage(codigo, byCodigo.matches, 'NFSE'), {
+        code: 'NFSE_SERVICO_AMBIGUOUS',
+        codigo,
+        matches: (byCodigo.matches || []).map((p) => ({
+          id: p.id,
+          discriminacao: p.discriminacao,
+          codigo: p.codigo,
+          cnae: p.cnae,
+        })),
+        botHint: 'Use codigoServico + cnae do catálogo ou servicoIndice (1, 2, 3…).',
+      });
+    }
+  }
+
   const servicoNomeRaw = pickServicoNomeFromPayload(payload);
   const servicoNome = isVagueNfItemLabel(servicoNomeRaw) ? '' : servicoNomeRaw;
   let servicoLookupKind = servicoNome ? 'pending' : 'missing';
@@ -259,13 +408,7 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
     const lookup = await findProdutoCatalogoByNome(userId, servicoNome);
     servicoLookupKind = lookup.kind;
     if (lookup.kind === 'ok') {
-      ({ codigo, cnae, codigoNbs, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(lookup.produto, {
-        codigo,
-        cnae,
-        codigoNbs,
-        aliquotaRaw,
-        discriminacao,
-      }));
+      applyCatalogProduto(lookup.produto);
     } else if (lookup.kind === 'ambiguous') {
       throw badRequest(formatNfCatalogAmbiguousMessage(servicoNome, lookup.matches, 'NFSE'), {
         code: 'NFSE_SERVICO_AMBIGUOUS',
@@ -276,12 +419,10 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
           codigo: p.codigo,
           cnae: p.cnae,
         })),
-        botHint: 'Mostre a lista numerada e só depois chame preview_nfse com descricao igual ao catálogo.',
+        botHint: 'Mostre a lista numerada e use servicoIndice ou codigoServico do catálogo.',
       });
     }
   }
-
-  const catalogNfse = await listarCatalogoProdutos(userId, { limit: 20, documentType: 'NFSE' });
 
   if (!codigo || !cnae || !discriminacao) {
     if (!catalogNfse.length) {
@@ -295,13 +436,30 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
     }
 
     if (catalogNfse.length === 1 && !servicoNome) {
-      ({ codigo, cnae, codigoNbs, aliquotaRaw, discriminacao } = applyProdutoCatalogoToServico(catalogNfse[0], {
-        codigo,
-        cnae,
-        codigoNbs,
-        aliquotaRaw,
-        discriminacao,
-      }));
+      applyCatalogProduto(catalogNfse[0]);
+    } else if (codigo) {
+      const byCodigo = pickProdutoCatalogoByCodigoResult(catalogNfse, codigo, cnae);
+      if (byCodigo.kind === 'ok') {
+        applyCatalogProduto(byCodigo.produto);
+      } else if (servicoNome && servicoLookupKind === 'not_found') {
+        throw badRequest(
+          formatNfCatalogNotFoundMessage(servicoNome, catalogNfse, 'NFSE'),
+          {
+            code: 'NFSE_SERVICO_NOT_FOUND',
+            servicoNome,
+            codigo,
+            servicos: catalogNfse.map((p) => ({
+              id: p.id,
+              discriminacao: p.discriminacao,
+              codigo: p.codigo,
+              cnae: p.cnae,
+            })),
+            botHint:
+              'Use codigoServico do catálogo (ex.: 140101) ou servicoIndice após list_catalog_servicos. '
+              + 'Não invente descrição abreviada.',
+          },
+        );
+      }
     } else if (servicoNome && servicoLookupKind === 'not_found') {
       throw badRequest(
         formatNfCatalogNotFoundMessage(servicoNome, catalogNfse, 'NFSE'),
@@ -314,7 +472,7 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
             codigo: p.codigo,
             cnae: p.cnae,
           })),
-          botHint: 'Liste o catálogo e espere o utilizador escolher antes de preview_nfse.',
+          botHint: 'Liste o catálogo e use servicoIndice ou codigoServico antes de preview_nfse.',
         },
       );
     } else {
@@ -327,8 +485,8 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
           cnae: p.cnae,
         })),
         botHint:
-          'O utilizador não disse qual serviço. Use list_catalog_servicos, mostre a lista e só depois preview_nfse '
-          + 'com descricao do item escolhido. PROIBIDO inventar "nota fiscal de serviços".',
+          'Use list_catalog_servicos, mostre a lista numerada e chame preview_nfse com servicoIndice '
+          + 'ou codigoServico. PROIBIDO inventar serviços que não estão no catálogo.',
       });
     }
   }
@@ -672,7 +830,7 @@ export const registerOpenclawNfseProduto = async (userId, payload = {}) => {
       dedupeReason: 'codigo_cnae',
     };
   }
-  if (existingByCodigoCnae.kind === 'multiple') {
+  if (existingByCodigoCnae.kind === 'ambiguous') {
     return {
       alreadyRegistered: true,
       produto: existingByCodigoCnae.matches[0],

@@ -46,15 +46,6 @@ export function resolveNextNfseRpsNumero(plugnotasNumero, localMaxNumero) {
   return Math.max(plug, fromLocal);
 }
 
-const emitPayloadHasExplicitRps = (payload) => {
-  if (!payload?.rps || typeof payload.rps !== 'object' || Array.isArray(payload.rps)) return false;
-  if (parsePositiveInt(payload.rps.numero) >= 1) return true;
-  const numeracao = payload.rps.numeracao;
-  if (!Array.isArray(numeracao) || numeracao.length < 1) return false;
-  const first = numeracao[0];
-  return parsePositiveInt(first?.numero) >= 1;
-};
-
 /**
  * Lê série/número/lote configurados em `nfse.config.rps` (GET empresa PlugNotas).
  * @param {unknown} empresaJson
@@ -74,15 +65,14 @@ export function readPlugnotasNfseNextRpsFromEmpresa(empresaJson) {
 }
 
 /**
- * NFS-e Nacional: quando o cliente não informa `rps`, a PlugNotas pode ignorar o cadastro
- * e repetir numeração presa. Injeta série/número explícitos do cadastro da empresa.
+ * NFS-e Nacional: sempre injeta série/número explícitos antes do POST — mesmo que o payload
+ * já traga `rps` (reemissão, payload antigo ou contador PlugNotas desatualizado).
  * @param {Record<string, unknown>} payload
  * @param {string} cnpjInput
  * @param {{ localMaxRpsNumero?: number|null }} [opts]
  */
 export async function applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, cnpjInput, opts = {}) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
-  if (emitPayloadHasExplicitRps(payload)) return;
 
   const cnpj = normalizeDoc(cnpjInput);
   if (cnpj.length !== 14) return;

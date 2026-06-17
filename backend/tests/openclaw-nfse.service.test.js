@@ -2,12 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatOpenclawNfseProdutosMessage,
+  hasExplicitNfseServicoSelection,
   isNfsePdfReadyStatus,
+  normalizeCatalogDiscriminacao,
   parseValorReais,
   pickClienteCatalogoByNomeResult,
   pickProdutoCatalogoByCodigoCnaeResult,
+  pickProdutoCatalogoByCodigoResult,
   pickProdutoCatalogoByNomeResult,
 } from '../src/services/openclaw-nfse.service.js';
+import { formatNfseCatalogChoiceMessage } from '../src/services/openclaw-nf-user-messages.js';
 
 /** Valor da nota fiscal (emit_nfse), não lançamento financeiro. */
 test('parseValorReais NFSe — número e formato BR', () => {
@@ -70,6 +74,65 @@ test('pickClienteCatalogoByNomeResult — único resultado da busca', () => {
   const r = pickClienteCatalogoByNomeResult(rows, 'Jose');
   assert.equal(r.kind, 'ok');
   assert.equal(r.cliente.id, '1');
+});
+
+test('hasExplicitNfseServicoSelection — índice ou código contam; texto livre não', () => {
+  assert.equal(hasExplicitNfseServicoSelection({ descricao: 'pintura' }), false);
+  assert.equal(hasExplicitNfseServicoSelection({ tomadorNome: 'Rafael', valor: 2 }), false);
+  assert.equal(hasExplicitNfseServicoSelection({ servicoIndice: 2 }), true);
+  assert.equal(hasExplicitNfseServicoSelection({ codigoServico: '140101' }), true);
+});
+
+test('normalizeCatalogDiscriminacao ignora pontuação final', () => {
+  const a = normalizeCatalogDiscriminacao(
+    'Serviços de manutenção e reparação mecânica de veículos automotores, incluindo revisão.',
+  );
+  const b = normalizeCatalogDiscriminacao(
+    'Serviços de manutenção e reparação mecânica de veículos automotores, incluindo revisão',
+  );
+  assert.equal(a, b);
+});
+
+test('formatNfseCatalogChoiceMessage — prefixo quando falta escolha do serviço', () => {
+  const msg = formatNfseCatalogChoiceMessage(
+    [{ discriminacao: 'Manutenção de computador' }],
+    { prefix: 'Ainda não escolheu o serviço. Qual vai na nota?' },
+  );
+  assert.match(msg, /Ainda não escolheu/);
+  assert.match(msg, /1\. Manutenção de computador/);
+});
+
+test('pickProdutoCatalogoByCodigoResult — apenas código municipal', () => {
+  const rows = [
+    {
+      id: '1',
+      discriminacao:
+        'Serviços de manutenção e reparação mecânica de veículos automotores, incluindo revisão',
+      codigo: '140101',
+      cnae: '4520001',
+    },
+  ];
+  const r = pickProdutoCatalogoByCodigoResult(rows, '140101');
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.produto.id, '1');
+});
+
+test('pickProdutoCatalogoByNomeResult — descrição abreviada pelo bot', () => {
+  const rows = [
+    {
+      id: '1',
+      discriminacao:
+        'Serviços de manutenção e reparação mecânica de veículos automotores, incluindo revisão',
+      codigo: '140101',
+      cnae: '4520001',
+    },
+  ];
+  const r = pickProdutoCatalogoByNomeResult(
+    rows,
+    'Serviço de manutenção e reparação mecânica de veículos automotores',
+  );
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.produto.id, '1');
 });
 
 test('pickProdutoCatalogoByCodigoCnaeResult — reutiliza serviço existente (evita duplicata)', () => {
