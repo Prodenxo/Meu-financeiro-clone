@@ -16,6 +16,7 @@ import {
   applyPlugnotasNfseEmitRpsFromEmpresaConfig,
   ensureEmpresaPlugnotasRpsForNfseEmit,
   readRpsNumeroFromNfseHistoryRow,
+  readRpsNumeroFromNfsePlugnotasBody,
   readRpsFromNfseEmitPayload,
   resolveNfseRpsLocalMaxFromHistory
 } from './plugnotas/plugnotas-empresa-rps-heal.js';
@@ -1051,6 +1052,21 @@ const resolveIdIntegracaoForEmit = async (userId, proposed) => {
   return trimmed;
 };
 
+const resolveUsedNfseRpsFromEmit = (emitPayload, response) => {
+  const fromPayload = readRpsFromNfseEmitPayload(emitPayload);
+  if (fromPayload) return fromPayload;
+  const numero = readRpsNumeroFromNfsePlugnotasBody(response);
+  if (!Number.isFinite(numero)) return null;
+  return { serie: '1', numero, lote: 1 };
+};
+
+const maybeAdvanceNfseRpsAfterPlugnotas = (cnpjPrestador, emitPayload, response) => {
+  if (normalizeDoc(cnpjPrestador).length !== 14) return;
+  const usedRps = resolveUsedNfseRpsFromEmit(emitPayload, response);
+  if (!usedRps) return;
+  advancePlugnotasNfseRpsAfterEmit(cnpjPrestador, usedRps).catch(() => {});
+};
+
 const queryMaxRpsNumeroEmitted = async (userId, cnpjPrestador) => {
   const cnpj = normalizeDoc(cnpjPrestador);
   if (!userId || cnpj.length !== 14) return null;
@@ -1065,7 +1081,6 @@ const queryMaxRpsNumeroEmitted = async (userId, cnpjPrestador) => {
   if (error) throw badRequest(error.message);
 
   let maxKnown = 0;
-  let nfseEmitCount = 0;
   for (const row of data || []) {
     const docType = row.document_type;
     if (docType && docType !== DOCUMENT_TYPE_NFSE) continue;
@@ -1074,11 +1089,10 @@ const queryMaxRpsNumeroEmitted = async (userId, cnpjPrestador) => {
       || normalizeDoc(row.payload_json?.prestador?.cpfCnpj);
     if (rowCnpj && rowCnpj !== cnpj) continue;
 
-    nfseEmitCount += 1;
     const numero = readRpsNumeroFromNfseHistoryRow(row);
     if (numero > maxKnown) maxKnown = numero;
   }
-  return resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: maxKnown, nfseEmitCount });
+  return resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: maxKnown });
 };
 
 const mapInsertRecordError = (error) => {
@@ -1508,10 +1522,7 @@ export const emitirNota = async (userId, input) => {
     }
 
     if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
-      const usedRps = readRpsFromNfseEmitPayload(emitPayload);
-      if (usedRps) {
-        advancePlugnotasNfseRpsAfterEmit(cnpjPrestadorNfse, usedRps).catch(() => {});
-      }
+      maybeAdvanceNfseRpsAfterPlugnotas(cnpjPrestadorNfse, emitPayload, response);
     }
 
     const duration_ms = Date.now() - startedAt;
@@ -2111,10 +2122,11 @@ export const obterNota = async (userId, id, { sync = false, skipWhatsappDelivery
   ) {
     const cnpjPrestador = normalizeDoc(updated.cnpj_prestador)
       || normalizeDoc(updated.payload_json?.prestador?.cpfCnpj);
-    const usedRps = readRpsFromNfseEmitPayload(updated.payload_json);
-    if (cnpjPrestador.length === 14 && usedRps) {
-      advancePlugnotasNfseRpsAfterEmit(cnpjPrestador, usedRps).catch(() => {});
-    }
+    maybeAdvanceNfseRpsAfterPlugnotas(
+      cnpjPrestador,
+      updated.payload_json,
+      response,
+    );
   }
 
   if (!skipWhatsappDelivery) {

@@ -33,6 +33,59 @@ export function readRpsFromNfseEmitPayload(payload) {
   return { serie, numero, lote };
 }
 
+const collectPlugnotasNfseBodies = (response) => {
+  if (Array.isArray(response)) return response.filter((item) => item && typeof item === 'object');
+  if (!response || typeof response !== 'object') return [];
+  const list = [response];
+  if (Array.isArray(response.documents)) list.push(...response.documents);
+  if (Array.isArray(response.documentos)) list.push(...response.documentos);
+  if (response.data !== undefined && response.data !== null) {
+    if (Array.isArray(response.data)) list.push(...response.data);
+    else if (typeof response.data === 'object') list.push(response.data);
+  }
+  if (response.nfse && typeof response.nfse === 'object') list.push(response.nfse);
+  if (response.documento && typeof response.documento === 'object') list.push(response.documento);
+  return list;
+};
+
+const parseDpsIdNumero = (dpsId) => {
+  const id = String(dpsId || '').trim();
+  if (!id) return NaN;
+  const match = id.match(/(\d{1,15})$/);
+  if (!match) return NaN;
+  return parsePositiveInt(match[1]);
+};
+
+/**
+ * Lê o maior número RPS/DPS numa resposta PlugNotas (array ou objeto, `rps` flat ou `dps`).
+ * @param {unknown} body
+ * @returns {number|null}
+ */
+export function readRpsNumeroFromNfsePlugnotasBody(body) {
+  const candidates = collectPlugnotasNfseBodies(body);
+  if (!candidates.length && body && typeof body === 'object') candidates.push(body);
+
+  let max = 0;
+  for (const candidate of candidates) {
+    const fromRps = readRpsFromNfseEmitPayload(candidate)?.numero;
+    const fromDps = parsePositiveInt(candidate?.dps?.numero);
+    const fromDpsId = parseDpsIdNumero(candidate?.dps?.id);
+    for (const n of [fromRps, fromDps, fromDpsId]) {
+      if (Number.isFinite(n) && n >= 1 && n > max) max = n;
+    }
+  }
+  return max > 0 ? max : null;
+}
+
+export const isNfseE0014DuplicateRpsMessage = (text) => {
+  const lower = String(text || '').toLowerCase();
+  return /e0014/.test(lower)
+    || lower.includes('dps já existe')
+    || lower.includes('dps ja existe')
+    || (lower.includes('conjunto de série') && lower.includes('já existe'))
+    || (lower.includes('conjunto de serie') && lower.includes('ja existe'));
+};
+
 /**
  * Maior número RPS já usado numa linha do histórico (payload de emissão ou resposta PlugNotas).
  * @param {{ payload_json?: unknown, response_json?: unknown }|null|undefined} row
@@ -40,11 +93,10 @@ export function readRpsFromNfseEmitPayload(payload) {
  */
 export function readRpsNumeroFromNfseHistoryRow(row) {
   if (!row || typeof row !== 'object') return null;
-  const fromPayload = readRpsFromNfseEmitPayload(row.payload_json)?.numero;
-  if (Number.isFinite(fromPayload) && fromPayload >= 1) return fromPayload;
-  const fromResponse = readRpsFromNfseEmitPayload(row.response_json)?.numero;
-  if (Number.isFinite(fromResponse) && fromResponse >= 1) return fromResponse;
-  return null;
+  const fromPayload = readRpsNumeroFromNfsePlugnotasBody(row.payload_json);
+  const fromResponse = readRpsNumeroFromNfsePlugnotasBody(row.response_json);
+  const max = Math.max(fromPayload ?? 0, fromResponse ?? 0);
+  return max > 0 ? max : null;
 }
 
 /**
@@ -61,17 +113,12 @@ export function resolveNextNfseRpsNumero(plugnotasNumero, localMaxNumero) {
 }
 
 /**
- * Estima o maior RPS já consumido quando notas antigas não guardaram `rps` no payload.
- * Cada tentativa de emissão (incluindo rejeitadas) consome um número na prefeitura.
- * @param {{ maxKnownNumero?: number|null, nfseEmitCount?: number|null }} input
- * @returns {number|null}
+ * @deprecated Preferir max conhecido via {@link readRpsNumeroFromNfseHistoryRow}.
+ * Mantido só para testes de regressão — contagem de linhas ≠ número RPS na prefeitura.
  */
 export function resolveNfseRpsLocalMaxFromHistory(input = {}) {
   const maxKnown = parsePositiveInt(input.maxKnownNumero, 0);
-  const emitCount = parsePositiveInt(input.nfseEmitCount, 0);
-  const floorFromCount = emitCount >= 1 ? emitCount : 0;
-  const effective = Math.max(maxKnown, floorFromCount);
-  return effective > 0 ? effective : null;
+  return maxKnown > 0 ? maxKnown : null;
 }
 
 const patchPlugnotasEmpresaRpsNextNumero = async (cnpj, empresaJson, { serie, lote, numero }) => {
@@ -197,7 +244,16 @@ export async function applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, cnpjIn
 }
 
 /**
- * Avança o contador RPS no PlugNotas após emissão aceita (evita repetir número na próxima nota).
+ * Após E0014 ou emissão com número conhecido, garante contador PlugNotas em `numero + 1`.
+ * @param {string} cnpjInput
+ * @param {{ serie?: string, numero: number, lote?: number }} usedRps
+ */
+export async function healPlugnotasNfseRpsAfterUsedNumero(cnpjInput, usedRps) {
+  await advancePlugnotasNfseRpsAfterEmit(cnpjInput, usedRps);
+}
+
+/**
+ * Avança o contador RPS no PlugNotas após emissão (aceita ou rejeitada com número consumido).
  * Falhas são ignoradas — a reserva local em `resolveNextNfseRpsNumero` cobre o intervalo.
  * @param {string} cnpjInput
  * @param {{ serie?: string, numero: number, lote?: number }} usedRps

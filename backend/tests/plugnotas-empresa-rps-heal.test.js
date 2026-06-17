@@ -9,6 +9,7 @@ import {
   readPlugnotasNfseNextRpsFromEmpresa,
   readRpsFromNfseEmitPayload,
   readRpsNumeroFromNfseHistoryRow,
+  readRpsNumeroFromNfsePlugnotasBody,
   resolveNextNfseRpsNumero,
   resolveNfseRpsLocalMaxFromHistory,
   syncPlugnotasNfseRpsBeforeEmit
@@ -27,10 +28,36 @@ test('readRpsFromNfseEmitPayload lê numeracao do payload de emissão', () => {
   );
 });
 
-test('resolveNfseRpsLocalMaxFromHistory usa contagem de tentativas quando payload não tem rps', () => {
-  assert.equal(resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: 3, nfseEmitCount: 17 }), 17);
-  assert.equal(resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: 0, nfseEmitCount: 17 }), 17);
-  assert.equal(resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: 0, nfseEmitCount: 0 }), null);
+test('resolveNfseRpsLocalMaxFromHistory usa só o maior número conhecido', () => {
+  assert.equal(resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: 45 }), 45);
+  assert.equal(resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: 0 }), null);
+});
+
+test('readRpsNumeroFromNfsePlugnotasBody lê resposta em array com rps flat e dps (Postman)', () => {
+  const postmanBody = [{
+    rps: { lote: 1, serie: '1', numero: 45 },
+    dps: { id: 'DPS330455726580558300017300001000000000000045', numero: 45, serie: '1' },
+    retorno: {
+      mensagemRetorno: 'E0014 - Conjunto de Série, Número...',
+      situacao: 'REJEITADA'
+    }
+  }];
+  assert.equal(readRpsNumeroFromNfsePlugnotasBody(postmanBody), 45);
+});
+
+test('readRpsNumeroFromNfseHistoryRow lê número da resposta PlugNotas em array', () => {
+  assert.equal(
+    readRpsNumeroFromNfseHistoryRow({
+      payload_json: {},
+      response_json: [{ rps: { serie: '1', numero: 45, lote: 1 } }]
+    }),
+    45
+  );
+});
+
+test('resolveNextNfseRpsNumero após E0014 no 45 deve emitir 46', () => {
+  assert.equal(resolveNextNfseRpsNumero(43, 45), 46);
+  assert.equal(resolveNextNfseRpsNumero(45, 45), 46);
 });
 
 test('syncPlugnotasNfseRpsBeforeEmit faz PATCH quando contador PlugNotas está atrás', async () => {
