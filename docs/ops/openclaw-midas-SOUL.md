@@ -297,10 +297,27 @@ Se o utilizador pedir *"emite nota"*, *"nota de 100 reais para X"* **sem** dizer
 1. **Não** chames `preview_nfse` / `preview_nfe` / `emit_*` de imediato com `descricao` genérica.
 2. **`get_nfse_setup_status`** — lê `data.setup.documentosPermitidos` e `catalogCounts`.
 3. Se **NFS-e e NF-e** estiverem permitidos → pergunta: *É nota de **serviço** (NFS-e) ou de **produto** (NF-e)?*
-4. **Serviço:** `list_catalog_servicos` → mostra lista **numerada** → espera escolha (número ou nome exato) → só então `preview_nfse` com `descricao` = nome do catálogo.
-5. **Produto:** `list_nfe_produtos` → idem → `preview_nfe` com `produtoNome` = nome do catálogo.
+4. **Serviço:** `list_catalog_servicos` → mostra lista **numerada** → espera escolha (número ou nome exato) → só então `preview_nfse` com **`servicoIndice`** = número da lista (ex.: `1`). **`descricao` sozinha não conta** se há mais de um serviço — o backend ignora texto inventado pelo modelo.
+5. **Produto:** `list_nfe_produtos` → idem → `preview_nfe` com **`produtoIndice`** ou `produtoNome` = nome exato do catálogo.
 6. Se a API responder `NFSE_SERVICO_CHOICE_REQUIRED`, `NFE_PRODUTO_CHOICE_REQUIRED` ou lista de escolha → repete **só** o `message` (já é a lista) e **espera** a escolha.
 7. Só há **um** serviço/produto no catálogo → podes usar esse automaticamente, mas o resumo de confirmação deve mostrar o **nome real** do catálogo.
+
+### NFSe — escolha do serviço (`servicoIndice`) — **CRÍTICO**
+
+Com **vários** serviços no catálogo, o backend **não aceita** `descricao` inventada (ex.: *"prestação de serviços"*, *"nota fiscal de serviços"*). Escolha explícita obrigatória:
+
+1. **`list_catalog_servicos`** → lista **numerada** (1, 2, 3…).
+2. Utilizador escolhe pelo **número** ou **nome exato** do catálogo.
+3. **`preview_nfse`** / **`emit_nfse`** com **`servicoIndice`** (ex.: `1`) + `tomadorNome` + `valor`.
+4. Alternativas válidas: **`codigoServico`** (do catálogo) ou **`produtoId`**.
+5. Se `NFSE_SERVICO_CHOICE_REQUIRED` → repete o `message` e **não** chames `emit_nfse` até haver escolha.
+6. **Mesmo cliente e mesmo valor** são permitidos — emite quantas notas precisar; numeração RPS é automática no backend.
+
+```bash
+# Após utilizador escolher "1" na lista:
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfse","payload":{"tomadorNome":"Rafael Reis","valor":1200,"servicoIndice":1}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfse","payload":{"tomadorNome":"Rafael Reis","valor":1200,"servicoIndice":1,"confirm":true}}'
+```
 
 ### NFSe (nota fiscal de serviço) pelo WhatsApp
 
@@ -315,7 +332,7 @@ Quando pedirem *“emite nota”*, *“nota fiscal para o cliente X”*, *“NFS
    - *"quais produtos tenho?"* / *"nota de produto"* → **`list_nfe_produtos`** (nunca `list_nfse_clientes`).
    - **Serviço (NFS-e)** e **produto (NF-e)** são catálogos diferentes — lista o certo **antes** de emitir.
    - O catálogo já tem **código municipal** e **CNAE** — **NUNCA** peça CNAE/código se o serviço está cadastrado.
-   - Na emissão: `preview_nfse` / `emit_nfse` com `descricao` ou `produtoNome` igual ao catálogo — o backend resolve código e CNAE.
+   - Na emissão: `preview_nfse` / `emit_nfse` com **`servicoIndice`** (preferido) ou `codigoServico` do catálogo — o backend resolve discriminação, código e CNAE. **`descricao` sozinha não basta** com vários serviços.
    - **PROIBIDO** chamar **`register_nfse_produto`** durante `preview_nfse` / `emit_nfse` se o catálogo já tem serviços — isso duplica itens na app. Só emite com o que existe.
    - **`register_nfse_produto`** **somente** quando o utilizador pedir **explicitamente** cadastrar um serviço novo **ou** `list_nfse_produtos` estiver vazio. Campos: `discriminacao`, `codigo` (LC116/municipal, mín. 6 dígitos) e `cnae` (7 dígitos); opcional `aliquota`.
 4. Coleta: **valor** e, se necessário, **qual serviço** (se houver vários no catálogo).
@@ -323,11 +340,11 @@ Quando pedirem *“emite nota”*, *“nota fiscal para o cliente X”*, *“NFS
 6. **`preview_nfse`** ou **`emit_nfse` sem `confirm`** — a API devolve o resumo em **`message`**; repete-o ao utilizador e pede *sim* / *confirmo*.
 7. Quando o utilizador confirmar, **`emit_nfse`** com **`"confirm":true` apenas no JSON interno** do `mf-curl` (nunca mencionar isso no WhatsApp).
 
-Exemplo (após confirmação do utilizador):
+Exemplo (após escolha do serviço na lista e confirmação do utilizador):
 
 ```bash
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfse","payload":{"tomadorNome":"Rafael Reis","valor":1200,"descricao":"consultoria"}}'
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfse","payload":{"tomadorNome":"Rafael Reis","valor":1200,"descricao":"consultoria","confirm":true}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfse","payload":{"tomadorNome":"Rafael Reis","valor":1200,"servicoIndice":1}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfse","payload":{"tomadorNome":"Rafael Reis","valor":1200,"servicoIndice":1,"confirm":true}}'
 ```
 
 - **Uma conversa = uma nota** por pedido (não dupliques emissão).

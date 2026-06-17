@@ -104,8 +104,8 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 
 1. `get_nfse_setup_status`
 2. Tomador: se o utilizador disser **nome** → `list_nfse_clientes` com `payload.q` ou `preview_nfse` com `tomadorNome` (não pedir CPF/CNPJ se já está no catálogo). Só pedir documento se cliente não existir ou houver homónimos.
-3. Serviço: `list_nfse_produtos` se perguntarem produtos; na emissão usa catálogo (código + CNAE automáticos). **Não** chamar `register_nfse_produto` na emissão se já houver itens — só quando pedirem cadastrar novo ou catálogo vazio.
-4. Recolher **valor** (e serviço só se houver vários no catálogo)
+3. Serviço: `list_catalog_servicos` se houver vários itens; utilizador escolhe pelo número da lista → `servicoIndice` no payload. **`descricao` inventada não conta** com catálogo > 1. **Não** chamar `register_nfse_produto` na emissão se já houver itens — só quando pedirem cadastrar novo ou catálogo vazio.
+4. Recolher **valor** (e serviço via `servicoIndice` se houver vários no catálogo)
 5. `preview_nfse` ou `emit_nfse` **sem** `confirm` → mostrar resumo
 6. Utilizador confirma no chat
 7. `emit_nfse` com `"confirm": true`
@@ -123,8 +123,9 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
 | `tomadorNome` | Condicional* | Nome no catálogo (ex.: "Rafael Reis") — backend resolve o documento |
 | `tomadorRazaoSocial` | Condicional | Alias de `tomadorNome`; só obrigatório em `register_nfse_cliente` sem catálogo |
 | `valor` | Sim | Número ou texto (`1200`, `1.200,00`) |
-| `descricao` / `produtoNome` | Recomendado | Nome do serviço no catálogo — backend resolve código e CNAE |
-| `codigoServico` | Condicional | Mín. 6 caracteres; omitir se serviço está no catálogo |
+| `servicoIndice` | Condicional* | Número da lista após `list_catalog_servicos` (1, 2, 3…) — **obrigatório** se catálogo > 1 |
+| `descricao` / `produtoNome` | Condicional | Só com **um** serviço no catálogo; com vários, usar `servicoIndice` |
+| `codigoServico` | Condicional | Mín. 6 caracteres; alternativa a `servicoIndice` |
 | `cnae` | Condicional | 7 dígitos; omitir se serviço está no catálogo |
 | `confirm` | Só em `emit_nfse` | `true` para emitir de facto |
 
@@ -138,7 +139,7 @@ Com sessão Supabase (`Authorization: Bearer <access_token>`):
     "tomadorCpfCnpj": "17422651000172",
     "tomadorRazaoSocial": "Jose Servicos Ltda",
     "valor": 1200,
-    "descricao": "consultoria",
+    "servicoIndice": 1,
     "confirm": true
   }
 }
