@@ -4,8 +4,10 @@ import assert from 'node:assert/strict';
 import {
   advancePlugnotasNfseRpsAfterEmit,
   applyPlugnotasNfseEmitRpsFromEmpresaConfig,
+  emitNfseWithPlugnotasRpsHeal,
   empresaPlugnotasTemRpsCadastrado,
   ensureEmpresaPlugnotasRpsForNfseEmit,
+  queryMaxRpsNumeroFromPlugnotasPeriodo,
   readPlugnotasNfseNextRpsFromEmpresa,
   readRpsFromNfseEmitPayload,
   readRpsNumeroFromNfseHistoryRow,
@@ -87,6 +89,7 @@ test('syncPlugnotasNfseRpsBeforeEmit faz PATCH quando contador PlugNotas está a
     assert.ok(patchCall);
     const body = JSON.parse(patchCall.options.body);
     assert.equal(body.nfse.config.rps.numero, 18);
+    assert.deepEqual(body.nfse.config.rps.numeracao, [{ serie: '1', numero: 18 }]);
   } finally {
     global.fetch = originalFetch;
   }
@@ -111,7 +114,13 @@ test('readRpsNumeroFromNfseHistoryRow lê número do payload ou da resposta Plug
 
 test('applyPlugnotasNfseEmitRpsFromEmpresaConfig usa histórico local se GET empresa falhar', async () => {
   const originalFetch = global.fetch;
-  global.fetch = async () => {
+  global.fetch = async (url) => {
+    if (String(url).includes('/nfse/consultar/periodo')) {
+      return new Response(JSON.stringify({ notas: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     throw new Error('plugnotas indisponível');
   };
 
@@ -133,11 +142,23 @@ test('applyPlugnotasNfseEmitRpsFromEmpresaConfig avança número com localMaxRps
   const originalFetch = global.fetch;
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/consultar/periodo')) {
+      return new Response(JSON.stringify({ notas: [{ numero: 88 }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     if (String(url).includes('/empresa/12345678000199') && options.method === 'GET') {
       return new Response(JSON.stringify({
         cpfCnpj: '12345678000199',
         nfse: { config: { rps: { numeracao: [{ serie: '1', numero: 5 }], lote: 1 } } }
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (String(url).includes('/empresa/12345678000199') && options.method === 'PATCH') {
+      return new Response(JSON.stringify({ message: 'ok' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
     return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
   };
@@ -149,7 +170,7 @@ test('applyPlugnotasNfseEmitRpsFromEmpresaConfig avança número com localMaxRps
     });
     assert.deepEqual(payload.rps, {
       lote: 1,
-      numeracao: [{ serie: '1', numero: 8 }]
+      numeracao: [{ serie: '1', numero: 89 }]
     });
   } finally {
     global.fetch = originalFetch;
@@ -184,6 +205,7 @@ test('advancePlugnotasNfseRpsAfterEmit faz PATCH quando contador PlugNotas está
     const body = JSON.parse(patchCall.options.body);
     assert.equal(body.nfse.config.rps.numero, 9);
     assert.equal(body.rps.numeracao[0].numero, 9);
+    assert.deepEqual(body.nfse.config.rps.numeracao, [{ serie: '1', numero: 9 }]);
   } finally {
     global.fetch = originalFetch;
   }
@@ -203,6 +225,12 @@ test('applyPlugnotasNfseEmitRpsFromEmpresaConfig injeta rps explícito quando au
   const originalFetch = global.fetch;
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/consultar/periodo')) {
+      return new Response(JSON.stringify({ notas: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     if (String(url).includes('/empresa/12345678000199') && options.method === 'GET') {
       return new Response(JSON.stringify({
         cpfCnpj: '12345678000199',
@@ -228,6 +256,12 @@ test('applyPlugnotasNfseEmitRpsFromEmpresaConfig substitui rps obsoleto pelo pr�
   const originalFetch = global.fetch;
 
   global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/consultar/periodo')) {
+      return new Response(JSON.stringify({ notas: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     if (String(url).includes('/empresa/12345678000199') && options.method === 'GET') {
       return new Response(JSON.stringify({
         cpfCnpj: '12345678000199',
@@ -324,7 +358,98 @@ test('ensureEmpresaPlugnotasRpsForNfseEmit faz PATCH só quando rps ausente', as
       lote: 1,
       numeracao: [{ numero: 1, serie: '1' }]
     });
-    assert.deepEqual(body.nfse.config.rps, { serie: '1', numero: 1, lote: 1 });
+    assert.deepEqual(body.nfse.config.rps, {
+      serie: '1',
+      numero: 1,
+      lote: 1,
+      numeracao: [{ serie: '1', numero: 1 }]
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('queryMaxRpsNumeroFromPlugnotasPeriodo pagina até hashProximaPagina null', async () => {
+  const originalFetch = global.fetch;
+  let page = 0;
+
+  global.fetch = async (url) => {
+    if (!String(url).includes('/nfse/consultar/periodo')) {
+      return new Response(JSON.stringify({}), { status: 500 });
+    }
+    page += 1;
+    if (page === 1) {
+      return new Response(JSON.stringify({
+        hashProximaPagina: 'next-page',
+        notas: [{ numero: 55 }, { numero: 88 }]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({
+      hashProximaPagina: null,
+      notas: [{ numero: 12 }]
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  try {
+    const max = await queryMaxRpsNumeroFromPlugnotasPeriodo('65.805.583/0001-73');
+    assert.equal(max, 88);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('emitNfseWithPlugnotasRpsHeal reenvia com próximo DPS após E0014', async () => {
+  const originalFetch = global.fetch;
+  const emitCalls = [];
+
+  global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/empresa/') && options.method === 'PATCH') {
+      return new Response(JSON.stringify({ message: 'ok' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  const adapter = {
+    emitir: async (payload) => {
+      emitCalls.push(payload);
+      if (emitCalls.length === 1) {
+        return [{
+          dps: { numero: 55 },
+          retorno: {
+            mensagemRetorno: 'E0014 - Conjunto de Série, Número...',
+            situacao: 'REJEITADA'
+          },
+          status: 'REJEITADO'
+        }];
+      }
+      return [{
+        dps: { numero: 56 },
+        status: 'PROCESSANDO'
+      }];
+    }
+  };
+
+  try {
+    const initial = {
+      idIntegracao: 'teste-1',
+      rps: { lote: 1, numeracao: [{ serie: '1', numero: 55 }] }
+    };
+    const { response, emitPayload } = await emitNfseWithPlugnotasRpsHeal(
+      adapter,
+      initial,
+      '65805583000173',
+      () => 'teste-2'
+    );
+    assert.equal(emitCalls.length, 2);
+    assert.deepEqual(emitCalls[1].rps, {
+      lote: 1,
+      numeracao: [{ serie: '1', numero: 56 }]
+    });
+    assert.equal(emitPayload.idIntegracao, 'teste-2');
+    assert.equal(readRpsNumeroFromNfsePlugnotasBody(response), 56);
   } finally {
     global.fetch = originalFetch;
   }

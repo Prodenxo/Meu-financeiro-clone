@@ -149,6 +149,27 @@ export const consultarNfsePorIdOuProtocolo = async (idOrProtocol) => {
   return await requestJson('GET', `/nfse/consultar/${encodeURIComponent(idOrProtocol)}`);
 };
 
+/**
+ * Lista NFS-e do prestador (paginada). Sem datas retorna todo o histórico (25/página).
+ * @param {{ cpfCnpj: string, dataInicial?: string, dataFinal?: string, hashProximaPagina?: string }} params
+ */
+export const consultarNfsePorPeriodo = async ({
+  cpfCnpj,
+  dataInicial,
+  dataFinal,
+  hashProximaPagina
+} = {}) => {
+  const cleanCnpj = String(cpfCnpj || '').replace(/\D/g, '');
+  if (cleanCnpj.length !== 14) {
+    throw badRequest('CNPJ do prestador deve ter 14 dígitos');
+  }
+  const params = new URLSearchParams({ cpfCnpj: cleanCnpj });
+  if (dataInicial) params.set('dataInicial', String(dataInicial));
+  if (dataFinal) params.set('dataFinal', String(dataFinal));
+  if (hashProximaPagina) params.set('hashProximaPagina', String(hashProximaPagina));
+  return await requestJson('GET', `/nfse/consultar/periodo?${params.toString()}`);
+};
+
 /** Path Plugnotas: POST /nfse/cancelar/{idNota} — ver Central de Atendimento Tecnospeed. */
 export const resolveNfseCancelPath = (id) => {
   const template = String(env.PLUGNOTAS_NFSE_CANCEL_PATH || '/nfse/cancelar/:id').trim();

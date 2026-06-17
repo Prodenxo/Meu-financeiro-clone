@@ -14,6 +14,7 @@ import {
 import {
   advancePlugnotasNfseRpsAfterEmit,
   applyPlugnotasNfseEmitRpsFromEmpresaConfig,
+  emitNfseWithPlugnotasRpsHeal,
   ensureEmpresaPlugnotasRpsForNfseEmit,
   readRpsNumeroFromNfseHistoryRow,
   readRpsNumeroFromNfsePlugnotasBody,
@@ -1470,7 +1471,18 @@ export const emitirNota = async (userId, input) => {
     }
     let response;
     try {
-      response = await adapter.emitir(emitPayload);
+      if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
+        const healed = await emitNfseWithPlugnotasRpsHeal(
+          adapter,
+          emitPayload,
+          cnpjPrestadorNfse,
+          () => buildMeiIdIntegracao(userId)
+        );
+        response = healed.response;
+        emitPayload = healed.emitPayload;
+      } else {
+        response = await adapter.emitir(emitPayload);
+      }
     } catch (emitError) {
       if (documentType === DOCUMENT_TYPE_NFSE) {
         rethrowIfPlugnotasEmpresaNaoCadastrada(emitError);

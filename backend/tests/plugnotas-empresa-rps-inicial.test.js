@@ -17,7 +17,12 @@ test('applyEmpresaPlugnotasRpsInicialForPost é idempotente e canónico', () => 
     lote: EMPRESA_PLUGNOTAS_RPS_INICIAL_POST.lote,
     numeracao: [{ numero: 1, serie: '1' }]
   });
-  assert.deepEqual(payload.nfse.config.rps, { serie: '1', numero: 1, lote: 1 });
+  assert.deepEqual(payload.nfse.config.rps, {
+    serie: '1',
+    numero: 1,
+    lote: 1,
+    numeracao: [{ serie: '1', numero: 1 }]
+  });
   applyEmpresaPlugnotasRpsInicialForPost(payload);
   assert.deepEqual(payload.rps, {
     lote: 1,
@@ -47,7 +52,12 @@ test('hasNfseConfigRpsShape valida nfse.config.rps', () => {
 test('applyEmpresaPlugnotasNfseConfigRps preenche config.rps quando NFS-e activa', () => {
   const payload = { nfse: { ativo: true, tipoContrato: 0, config: { producao: true } } };
   applyEmpresaPlugnotasNfseConfigRps(payload);
-  assert.deepEqual(payload.nfse.config.rps, { serie: '1', numero: 1, lote: 1 });
+  assert.deepEqual(payload.nfse.config.rps, {
+    serie: '1',
+    numero: 1,
+    lote: 1,
+    numeracao: [{ serie: '1', numero: 1 }]
+  });
 });
 
 test('applyEmpresaPlugnotasRpsInicialForPost sanitiza e preserva rps válido do cliente', () => {

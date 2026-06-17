@@ -1,5 +1,6 @@
 import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
 import { atualizarEmpresaPlugNotas, consultarEmpresaPlugNotas } from './empresa.service.js';
+import { consultarNfsePorPeriodo } from './nfse.service.js';
 import {
   cloneEmpresaPlugnotasRpsInicialPost,
   EMPRESA_PLUGNOTAS_NFSE_CONFIG_RPS_CANONICAL,
@@ -87,6 +88,72 @@ export const isNfseE0014DuplicateRpsMessage = (text) => {
 };
 
 /**
+ * Mensagem de rejeição da prefeitura em resposta PlugNotas (array ou objeto).
+ * @param {unknown} response
+ * @returns {string}
+ */
+export function extractNfseRejectionMessage(response) {
+  const candidates = collectPlugnotasNfseBodies(response);
+  for (const candidate of candidates) {
+    const msg = candidate?.retorno?.mensagemRetorno
+      || candidate?.mensagem
+      || candidate?.message
+      || '';
+    if (msg) return String(msg);
+  }
+  return '';
+}
+
+/** @param {unknown} response */
+export function isNfseE0014FromPlugnotasResponse(response) {
+  return isNfseE0014DuplicateRpsMessage(extractNfseRejectionMessage(response));
+}
+
+const PLUGNOTAS_NFSE_PERIODO_MAX_PAGES = 40;
+
+/**
+ * Maior número RPS/DPS já enviado ao PlugNotas para o CNPJ (todas as situações).
+ * Fonte autoritativa quando o contador da empresa está desatualizado.
+ * @param {string} cnpjInput
+ * @returns {Promise<number|null>}
+ */
+export async function queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjInput) {
+  const cnpj = normalizeDoc(cnpjInput);
+  if (cnpj.length !== 14) return null;
+
+  let hashProximaPagina;
+  let maxKnown = 0;
+
+  for (let page = 0; page < PLUGNOTAS_NFSE_PERIODO_MAX_PAGES; page += 1) {
+    let body;
+    try {
+      body = await consultarNfsePorPeriodo({
+        cpfCnpj: cnpj,
+        ...(hashProximaPagina ? { hashProximaPagina } : {})
+      });
+    } catch (error) {
+      console.warn(
+        '[plugnotas-rps] falha ao consultar histórico NFS-e por período',
+        error instanceof Error ? error.message : error
+      );
+      break;
+    }
+
+    const notas = Array.isArray(body?.notas) ? body.notas : [];
+    for (const nota of notas) {
+      const numero = parsePositiveInt(nota?.numero);
+      if (numero > maxKnown) maxKnown = numero;
+    }
+
+    const nextHash = body?.hashProximaPagina;
+    if (!nextHash || typeof nextHash !== 'string') break;
+    hashProximaPagina = nextHash;
+  }
+
+  return maxKnown > 0 ? maxKnown : null;
+}
+
+/**
  * Maior número RPS já usado numa linha do histórico (payload de emissão ou resposta PlugNotas).
  * @param {{ payload_json?: unknown, response_json?: unknown }|null|undefined} row
  * @returns {number|null}
@@ -121,24 +188,35 @@ export function resolveNfseRpsLocalMaxFromHistory(input = {}) {
   return maxKnown > 0 ? maxKnown : null;
 }
 
+const buildPlugnotasEmpresaRpsBlocks = ({ serie, lote, numero }) => ({
+  rootRps: {
+    lote,
+    numeracao: [{ serie, numero }]
+  },
+  configRps: {
+    serie,
+    numero,
+    lote,
+    numeracao: [{ serie, numero }]
+  }
+});
+
 const patchPlugnotasEmpresaRpsNextNumero = async (cnpj, empresaJson, { serie, lote, numero }) => {
   const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
   const nfseAtivo = empresa?.nfse?.ativo !== false;
   const existingConfig = empresa?.nfse?.config && typeof empresa.nfse.config === 'object'
     ? empresa.nfse.config
     : { producao: true };
+  const { rootRps, configRps } = buildPlugnotasEmpresaRpsBlocks({ serie, lote, numero });
 
   await atualizarEmpresaPlugNotas({
     cpfCnpj: cnpj,
-    rps: {
-      lote,
-      numeracao: [{ serie, numero }]
-    },
+    rps: rootRps,
     nfse: {
       ativo: nfseAtivo,
       config: {
         ...existingConfig,
-        rps: { serie, numero, lote }
+        rps: configRps
       }
     }
   });
@@ -168,7 +246,7 @@ export async function syncPlugnotasNfseRpsBeforeEmit(cnpjInput, targetRps, empre
   }
 
   const current = readPlugnotasNfseNextRpsFromEmpresa(empresa);
-  if (current && current.numero >= targetNumero) return;
+  if (current && current.numero === targetNumero) return;
 
   try {
     await patchPlugnotasEmpresaRpsNextNumero(cnpj, empresa, {
@@ -223,13 +301,23 @@ export async function applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, cnpjIn
   }
 
   const next = empresaJson ? readPlugnotasNfseNextRpsFromEmpresa(empresaJson) : null;
+
+  let plugnotasApiMax = parsePositiveInt(opts.plugnotasApiMaxRpsNumero, 0);
+  if (!plugnotasApiMax && opts.skipPlugnotasPeriodoQuery !== true) {
+    plugnotasApiMax = parsePositiveInt(await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpj), 0);
+  }
+
   const localMax = parsePositiveInt(opts.localMaxRpsNumero, 0);
-  if (!next && localMax < 1) return;
+  const combinedMax = Math.max(localMax, plugnotasApiMax);
+  if (!next && combinedMax < 1) return;
 
   const serie = next?.serie ?? '1';
   const lote = next?.lote ?? 1;
   const plugNumero = next?.numero ?? 1;
-  const numero = resolveNextNfseRpsNumero(plugNumero, opts.localMaxRpsNumero);
+  const numero = resolveNextNfseRpsNumero(
+    plugNumero,
+    combinedMax > 0 ? combinedMax : opts.localMaxRpsNumero
+  );
 
   payload.rps = {
     lote,
@@ -241,6 +329,61 @@ export async function applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, cnpjIn
   } else {
     await syncPlugnotasNfseRpsBeforeEmit(cnpj, { serie, lote, numero });
   }
+}
+
+const DEFAULT_NFSE_E0014_EMIT_RETRIES = 4;
+
+/**
+ * Emite NFS-e com realinhamento do contador PlugNotas e reenvio automático em E0014.
+ * @param {{ emitir: (payload: Record<string, unknown>) => Promise<unknown> }} adapter
+ * @param {Record<string, unknown>} emitPayload
+ * @param {string} cnpjInput
+ * @param {() => string} buildFreshIdIntegracao
+ * @param {{ maxRetries?: number }} [opts]
+ * @returns {Promise<{ response: unknown, emitPayload: Record<string, unknown> }>}
+ */
+export async function emitNfseWithPlugnotasRpsHeal(
+  adapter,
+  emitPayload,
+  cnpjInput,
+  buildFreshIdIntegracao,
+  opts = {}
+) {
+  const cnpj = normalizeDoc(cnpjInput);
+  const maxRetries = Number.isFinite(opts.maxRetries)
+    ? Math.max(0, Math.trunc(opts.maxRetries))
+    : DEFAULT_NFSE_E0014_EMIT_RETRIES;
+
+  let payload = emitPayload;
+  let response;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    response = await adapter.emitir(payload);
+
+    if (!isNfseE0014FromPlugnotasResponse(response)) {
+      return { response, emitPayload: payload };
+    }
+
+    const usedNumero = readRpsNumeroFromNfsePlugnotasBody(response);
+    if (!Number.isFinite(usedNumero) || attempt >= maxRetries) {
+      return { response, emitPayload: payload };
+    }
+
+    const currentRps = readRpsFromNfseEmitPayload(payload);
+    const serie = currentRps?.serie ?? '1';
+    const lote = currentRps?.lote ?? 1;
+    const nextNumero = usedNumero + 1;
+
+    payload = { ...payload };
+    payload.rps = { lote, numeracao: [{ serie, numero: nextNumero }] };
+    if (typeof buildFreshIdIntegracao === 'function') {
+      payload.idIntegracao = buildFreshIdIntegracao();
+    }
+
+    await syncPlugnotasNfseRpsBeforeEmit(cnpj, { serie, lote, numero: nextNumero });
+  }
+
+  return { response, emitPayload: payload };
 }
 
 /**

@@ -64,12 +64,16 @@ export const sanitizeEmpresaPlugnotasRpsPayload = (payload) => {
  */
 export const normalizeNfseConfigRps = (raw) => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { ...EMPRESA_PLUGNOTAS_NFSE_CONFIG_RPS_CANONICAL };
+    return {
+      ...EMPRESA_PLUGNOTAS_NFSE_CONFIG_RPS_CANONICAL,
+      numeracao: [{ numero: 1, serie: '1' }]
+    };
   }
-  const serie = String(raw.serie ?? '').trim() || '1';
-  const numero = parsePositiveInt(raw.numero, 1);
+  const numeracaoFirst = Array.isArray(raw.numeracao) ? raw.numeracao[0] : null;
+  const serie = String(raw.serie ?? numeracaoFirst?.serie ?? '').trim() || '1';
+  const numero = parsePositiveInt(raw.numero ?? numeracaoFirst?.numero, 1);
   const lote = parsePositiveInt(raw.lote, 1);
-  return { serie, numero, lote };
+  return { serie, numero, lote, numeracao: [{ serie, numero }] };
 };
 
 /**
