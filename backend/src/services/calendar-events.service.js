@@ -5,7 +5,10 @@ import {
   resolveCalendarEventFromPayload,
   resolveCompletionDateIso,
 } from './calendar-checklist-completion.service.js';
-import { badRequest, HttpError } from '../utils/errors.js';
+import { badRequest } from '../utils/errors.js';
+
+const isHttpError = (err) =>
+  Boolean(err && typeof err.status === 'number' && err.status >= 400 && err.status < 600);
 import * as transactionsService from './transactions.service.js';
 import { getCertificateValidity } from './mei-certificate-store.js';
 import {
@@ -693,7 +696,7 @@ export const completeCalendarEventForUser = async (userId, payload = {}) => {
       data: checklist,
     };
   } catch (err) {
-    if (err instanceof HttpError) throw err;
+    if (isHttpError(err)) throw err;
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[calendar-complete] failed', { userId, msg });
     throw badRequest(msg || 'Falha ao marcar compromisso como concluído');

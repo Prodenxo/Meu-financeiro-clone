@@ -1095,29 +1095,36 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'complete_calendar_event') {
-    const completionPayload = {
-      ...payload,
-      ...(input?.text ? { text: input.text } : {}),
-      ...(input?.message ? { message: input.message } : {}),
-    };
-    const result = await calendarEventsService.completeCalendarEventForUser(
-      userId,
-      completionPayload,
-    );
-    return {
-      ok: result.ok !== false,
-      message: result.message,
-      data: {
-        ...result,
+    try {
+      const completionPayload = {
+        ...payload,
+        ...(input?.text ? { text: input.text } : {}),
+        ...(input?.message ? { message: input.message } : {}),
+      };
+      const result = await calendarEventsService.completeCalendarEventForUser(
         userId,
-        actorContext,
-        ...linkDebug,
-        agentInstructions:
-          'Compromisso marcado como concluído (ou pedido de desambiguação). '
-          + 'Repita APENAS message. Se ambiguous, aguarde o número do item (ex.: «feito 2»). '
-          + 'Não invente itens — use os números da última checklist.',
-      },
-    };
+        completionPayload,
+      );
+      return {
+        ok: result.ok !== false,
+        message: result.message,
+        data: {
+          checklist: result.data ?? null,
+          matchedBy: result.matchedBy ?? null,
+          userId,
+          actorContext,
+          ...linkDebug,
+          agentInstructions:
+            'Compromisso marcado como concluído (ou pedido de desambiguação). '
+            + 'Repita APENAS message. Se ambiguous, aguarde o número do item (ex.: «feito 2»). '
+            + 'Não invente itens — use os números da última checklist.',
+        },
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[OpenClaw] complete_calendar_event:', msg, err);
+      throw err;
+    }
   }
 
   if (action === 'get_next_calendar_event') {

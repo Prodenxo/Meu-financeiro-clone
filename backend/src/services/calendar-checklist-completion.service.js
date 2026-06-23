@@ -1,5 +1,15 @@
 import { createSupabaseClient } from '../config/supabase.js';
-import { badRequest, HttpError } from '../utils/errors.js';
+import { ensureCalendarChecklistTable } from './db-bootstrap.service.js';
+import { badRequest } from '../utils/errors.js';
+
+const isHttpError = (err) =>
+  Boolean(err && typeof err.status === 'number' && err.status >= 400 && err.status < 600);
+
+const isMissingTableError = (msg) =>
+  /does not exist|schema cache|42P01|relation.*calendar_checklist/i.test(String(msg || ''));
+
+const isUniqueViolation = (err) =>
+  String(err?.code || '') === '23505' || /duplicate key|unique constraint/i.test(String(err?.message || ''));
 
 const todayIsoSaoPaulo = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
@@ -38,40 +48,68 @@ export const loadManualCompletionKeys = async (userId, dateIso) => {
 };
 
 /**
- * @param {string} userId
- * @param {object} event
- * @param {string} dateIso
+ * Grava conclusão manual (insert ou update se já existir).
+ * @returns {Promise<{ message?: string, code?: string }|null>}
  */
+const persistCalendarCompletion = async (admin, row) => {
+  const { error: insertError } = await admin.from('calendar_checklist_completions').insert(row);
+  if (!insertError) return null;
+
+  if (isUniqueViolation(insertError)) {
+    const { error: updateError } = await admin
+      .from('calendar_checklist_completions')
+      .update({
+        title: row.title,
+        event_id: row.event_id,
+        completed_at: row.completed_at,
+      })
+      .eq('user_id', row.user_id)
+      .eq('event_date', row.event_date)
+      .eq('event_key', row.event_key);
+    if (!updateError) return null;
+    throw badRequest(updateError.message || 'Falha ao atualizar conclusão');
+  }
+
+  return insertError;
+};
+
 export const markCalendarEventCompleted = async (userId, event, dateIso) => {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw badRequest('Conclusão manual indisponível (SUPABASE_SERVICE_ROLE_KEY).');
   }
   try {
     const eventKey = buildCalendarEventKey(event);
+    const row = {
+      user_id: userId,
+      event_date: dateIso,
+      event_id: event.id ? String(event.id) : null,
+      event_key: eventKey,
+      title: String(event.title || 'Compromisso').trim(),
+      completed_at: new Date().toISOString(),
+    };
     const admin = createSupabaseClient({ useServiceRole: true });
-    const { error } = await admin.from('calendar_checklist_completions').upsert(
-      {
-        user_id: userId,
-        event_date: dateIso,
-        event_id: event.id ? String(event.id) : null,
-        event_key: eventKey,
-        title: String(event.title || 'Compromisso').trim(),
-        completed_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id,event_date,event_key' },
-    );
-    if (error) {
-      const missingTable = /does not exist|schema cache|42P01/i.test(String(error.message || ''));
-      const hint = missingTable
-        ? ' Tabela calendar_checklist_completions em falta — redeploy com SUPABASE_DB_URL ou execute scripts/one-time/create-calendar-checklist-completions.sql no Supabase.'
-        : '';
-      throw badRequest(`${error.message || 'Falha ao gravar conclusão'}${hint}`);
+
+    let persistErr = await persistCalendarCompletion(admin, row);
+    if (persistErr && isMissingTableError(persistErr.message)) {
+      const ensured = await ensureCalendarChecklistTable({ force: true });
+      if (!ensured.ok) {
+        throw badRequest(
+          (ensured.reason || ensured.error || 'Tabela calendar_checklist_completions em falta.')
+          + ' Execute create-calendar-checklist-completions.sql no Supabase SQL Editor.',
+        );
+      }
+      persistErr = await persistCalendarCompletion(admin, row);
     }
+
+    if (persistErr) {
+      throw badRequest(persistErr.message || 'Falha ao gravar conclusão');
+    }
+
     return { eventKey, title: event.title };
   } catch (err) {
-    if (err instanceof HttpError) throw err;
+    if (isHttpError(err)) throw err;
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[calendar-checklist] mark failed', { userId, dateIso, msg });
+    console.error('[calendar-checklist] mark failed', { userId, dateIso, msg, err });
     throw badRequest(msg || 'Falha ao marcar compromisso como concluído');
   }
 };

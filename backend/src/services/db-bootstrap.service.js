@@ -77,7 +77,7 @@ const createPgClient = async (connectionString, sslEnabled) => {
   return client;
 };
 
-const CALENDAR_CHECKLIST_COMPLETIONS_SQL = `
+export const CALENDAR_CHECKLIST_COMPLETIONS_SQL = `
 create table if not exists public.calendar_checklist_completions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
@@ -93,10 +93,48 @@ create index if not exists idx_calendar_checklist_completions_user_date
   on public.calendar_checklist_completions (user_id, event_date);
 `;
 
+let calendarTableEnsured = false;
+
+/**
+ * Cria a tabela de conclusões manuais (idempotente). Usa SUPABASE_DB_URL.
+ * @param {object} [options]
+ */
+export const ensureCalendarChecklistTable = async (options = {}) => {
+  if (calendarTableEnsured && !options.force) return { ok: true, cached: true };
+  const dbUrl = options.dbUrl ?? env.SUPABASE_DB_URL;
+  if (!dbUrl) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: 'SUPABASE_DB_URL ausente — execute create-calendar-checklist-completions.sql no Supabase.',
+    };
+  }
+  const sslEnabled = options.sslEnabled ?? parseBoolean(env.DB_BOOTSTRAP_SSL, true);
+  const dbClientFactory = options.dbClientFactory || createPgClient;
+  let client;
+  try {
+    client = await dbClientFactory(dbUrl, sslEnabled);
+    await client.query(CALENDAR_CHECKLIST_COMPLETIONS_SQL);
+    calendarTableEnsured = true;
+    // eslint-disable-next-line no-console
+    console.info('[db-bootstrap] calendar_checklist_completions garantida');
+    return { ok: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    // eslint-disable-next-line no-console
+    console.warn('[db-bootstrap] falha ao criar calendar_checklist_completions:', msg);
+    return { ok: false, error: msg };
+  } finally {
+    if (client?.end) await client.end();
+  }
+};
+
+const CALENDAR_CHECKLIST_COMPLETIONS_SQL_INTERNAL = CALENDAR_CHECKLIST_COMPLETIONS_SQL;
+
 const ensureDasSchema = async (client) => {
   await client.query(DAS_STATUS_SCHEMA_SQL);
   await client.query(DAS_JOB_RUNS_SCHEMA_SQL);
-  await client.query(CALENDAR_CHECKLIST_COMPLETIONS_SQL);
+  await client.query(CALENDAR_CHECKLIST_COMPLETIONS_SQL_INTERNAL);
 };
 
 export const bootstrapDatabase = async (options = {}) => {
@@ -116,6 +154,13 @@ export const bootstrapDatabase = async (options = {}) => {
 
   if (!dbUrl) {
     const error = new Error('SUPABASE_DB_URL não configurado para bootstrap automático do schema DAS.');
+    if (ensureCalendarSchema && !autoSchema) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[db-bootstrap] CALENDAR_CHECKLIST_SCHEMA_ENSURE=true mas SUPABASE_DB_URL ausente — '
+        + 'execute create-calendar-checklist-completions.sql no Supabase.',
+      );
+    }
     if (failFast && autoSchema) {
       throw error;
     }
@@ -131,7 +176,8 @@ export const bootstrapDatabase = async (options = {}) => {
     if (autoSchema) {
       await ensureDasSchema(client);
     } else if (ensureCalendarSchema) {
-      await client.query(CALENDAR_CHECKLIST_COMPLETIONS_SQL);
+      await client.query(CALENDAR_CHECKLIST_COMPLETIONS_SQL_INTERNAL);
+      calendarTableEnsured = true;
       // eslint-disable-next-line no-console
       console.info('[db-bootstrap] schema calendar_checklist_completions garantido');
     }
