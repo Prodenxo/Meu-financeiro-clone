@@ -1,13 +1,22 @@
 #!/bin/bash
-# Easypanel → serviço **OpenClaw** → Console → Bash
-# Reforça escolha de carteira em lançamentos (Nubank, Poupança, etc.)
+# Easypanel → serviço **OpenClaw** (NÃO backend) → Console → aba **Bash**
+# O repo NÃO existe no container — NÃO uses: bash Site/docs/ops/...
+# Cola ESTE FICHEIRO INTEIRO no Console (ou: bash -s < apply-soul-patch-carteira-flex-easypanel.sh)
+#
+# Teste que estás no container certo:
+#   ls -la /home/node/.openclaw/workspace/SOUL.md
 set -e
 SOUL=/home/node/.openclaw/workspace/SOUL.md
 if [ ! -f "$SOUL" ]; then
-  echo "ERRO: $SOUL não existe — abre o Console do serviço OpenClaw."
+  echo "ERRO: $SOUL não existe neste container."
+  echo "Estás no BACKEND? Abre Easypanel → serviço OpenClaw → Console → Bash."
   exit 1
 fi
-NODE_BIN="$(command -v node 2>/dev/null || echo /usr/local/bin/node)"
+NODE_BIN="$(command -v node 2>/dev/null || true)"
+[ -z "$NODE_BIN" ] && NODE_BIN=/usr/local/bin/node
+[ -x "$NODE_BIN" ] || NODE_BIN=/usr/bin/node
+[ -x "$NODE_BIN" ] || { echo "ERRO: node não encontrado"; exit 1; }
+
 cp "$SOUL" "${SOUL}.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
 
 "$NODE_BIN" << 'NODE'
@@ -16,11 +25,20 @@ const soulPath = '/home/node/.openclaw/workspace/SOUL.md';
 let cur = fs.readFileSync(soulPath, 'utf8');
 
 const marker = '### Carteiras, saldo e lançamentos — NÃO confundir';
-const nextMarker = '### Mensagens de nota fiscal — utilizador final (OBRIGATÓRIO)';
+const nextMarkers = [
+  '### Mensagens de nota fiscal — utilizador final (OBRIGATÓRIO)',
+  '### Escolher serviço ou produto antes de emitir (OBRIGATÓRIO)',
+  '### Mensagens de nota fiscal',
+];
 const start = cur.indexOf(marker);
-const end = cur.indexOf(nextMarker);
-if (start < 0 || end < 0 || end <= start) {
-  console.error('ERRO: secção de carteiras não encontrada — copia openclaw-midas-SOUL.md do repo.');
+let end = -1;
+for (const nm of nextMarkers) {
+  const i = cur.indexOf(nm);
+  if (i > start && (end < 0 || i < end)) end = i;
+}
+if (start < 0 || end < 0) {
+  console.error('ERRO: secção de carteiras não encontrada no SOUL.md');
+  console.error('Cola o bloco de openclaw-midas-SOUL.md do repo ou corre apply-soul-patches-all-easypanel.sh');
   process.exit(1);
 }
 
@@ -55,4 +73,4 @@ fs.writeFileSync(soulPath, cur);
 console.log('[ok] SOUL carteiras actualizado em', soulPath);
 NODE
 
-echo "Reinicia OpenClaw + WhatsApp /new nos chats de teste."
+echo "OK — Restart OpenClaw no Easypanel + /new no WhatsApp de teste."
