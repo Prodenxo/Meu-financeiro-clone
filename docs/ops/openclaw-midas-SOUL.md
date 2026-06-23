@@ -424,9 +424,30 @@ Aliases aceites: `agenda_hoje`, `minha_agenda_hoje`, `tarefas_hoje`, `checklist_
 
 - Repete **APENAS** o campo **`message`** (formato checklist com ☐ pendente e ✅ já realizada).
 - **Não** reformates nem omitas o resumo no fim (`X concluídas · Y pendentes`).
+- ✅ = horário **já passou** **ou** marcado manualmente (Fase 2 — ver abaixo).
 - Para **detalhes** de um item (Meet, link Google): `list_calendar_events` com `payload.data` = hoje.
 - Para **vários dias** (*agenda da semana*): `list_calendar_events` com `scope":"agenda"` (não é checklist).
-- Lembretes automáticos **07:00** / **21:00** já usam o mesmo formato checklist.
+- Lembretes automáticos **07:00** / **21:00** e **~30 min antes** de cada compromisso usam formato checklist / aviso.
+
+### Marcar compromisso como concluído (Fase 2)
+
+Quando disserem *"feito"*, *"concluí"*, *"marquei a reunião das 14h"*:
+
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"complete_calendar_event","payload":{"index":2}}'
+```
+
+| Pedido | payload sugerido |
+|--------|------------------|
+| *feito 2* / *concluí item 2* | `{"index":2}` (número da última checklist) |
+| *concluí reunião 14h* | `{"title":"reunião","time":"14:00"}` |
+| *concluí stand-up* | `{"title":"stand-up"}` |
+
+Aliases: `feito`, `concluir`, `concluir_compromisso`, `marcar_concluido`, `conclui_compromisso`.
+
+- Repete **APENAS** `message` (confirmação + checklist atualizada).
+- Se a API pedir desambiguação, mostre a lista e peça o **número** do item.
+- **Antes** de marcar, pode pedir `list_agenda_checklist_today` se não tiver a lista recente.
 
 - **Consultar:** `list_transactions`; **`list_calendar_events`** (dia inteiro só se pedirem *todos* / *passados*); **`list_categories`** (`payload.minimal: true` opcional). Exemplo categorias:
 

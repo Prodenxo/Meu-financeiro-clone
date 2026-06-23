@@ -251,6 +251,15 @@ export const env = {
   AGENDA_WHATSAPP_SCHEDULER_ENABLED:
     process.env.AGENDA_WHATSAPP_SCHEDULER_ENABLED || "",
   /**
+   * `true`: envia WhatsApp ~N min antes de cada compromisso (scheduler 5 min).
+   * Padrão: mesmo que AGENDA_WHATSAPP_REMINDERS_ENABLED.
+   */
+  AGENDA_UPCOMING_WHATSAPP_ENABLED:
+    process.env.AGENDA_UPCOMING_WHATSAPP_ENABLED || "",
+  /** Minutos antes do início para o lembrete (padrão 30, mín 5, máx 120). */
+  AGENDA_UPCOMING_MINUTES_BEFORE:
+    process.env.AGENDA_UPCOMING_MINUTES_BEFORE || "30",
+  /**
    * `true`: após `emit_nfse` pelo OpenClaw, agenda envio do PDF via Z-API (cron
    * `/api/cron/nfse-whatsapp-pending`). Requer Z-API outbound (não usa n8n).
    */

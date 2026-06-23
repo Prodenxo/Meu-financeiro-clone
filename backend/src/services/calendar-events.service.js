@@ -1,3 +1,10 @@
+import {
+  buildCalendarEventKey,
+  loadManualCompletionKeys,
+  markCalendarEventCompleted,
+  resolveCalendarEventFromPayload,
+  resolveCompletionDateIso,
+} from './calendar-checklist-completion.service.js';
 import { badRequest } from '../utils/errors.js';
 import * as transactionsService from './transactions.service.js';
 import { getCertificateValidity } from './mei-certificate-store.js';
@@ -523,10 +530,12 @@ export const formatCalendarEventChecklistLine = (e, opts = {}) => {
 /**
  * @param {string} dateDisplay
  * @param {object[]} events
- * @param {{ googleCalendarLinked?: boolean, googleCalendarNote?: string|null, now?: Date }} [meta]
+ * @param {{ googleCalendarLinked?: boolean, googleCalendarNote?: string|null, now?: Date, manualKeys?: Set<string>, numbered?: boolean }} [meta]
  */
 export const buildDayAgendaChecklistMessage = (dateDisplay, events, meta = {}) => {
   const now = meta.now ?? new Date();
+  const manualKeys = meta.manualKeys ?? new Set();
+  const numbered = meta.numbered !== false;
   if (!events.length) {
     let msg = `📋 Nenhuma atividade para ${dateDisplay}.`;
     if (!meta.googleCalendarLinked && meta.googleCalendarNote) {
@@ -539,12 +548,14 @@ export const buildDayAgendaChecklistMessage = (dateDisplay, events, meta = {}) =
 
   const pending = [];
   const done = [];
-  for (const e of events) {
-    const completed = !isCalendarEventStillRelevant(e, now);
-    const line = formatCalendarEventChecklistLine(e, { completed });
+  events.forEach((e, idx) => {
+    const completed =
+      manualKeys.has(buildCalendarEventKey(e)) || !isCalendarEventStillRelevant(e, now);
+    const prefix = numbered ? `${idx + 1}. ` : '';
+    const line = prefix + formatCalendarEventChecklistLine(e, { completed });
     if (completed) done.push(line);
     else pending.push(line);
-  }
+  });
 
   const body = [...pending, ...done].join('\n');
   const doneCount = done.length;
@@ -556,26 +567,31 @@ export const buildDayAgendaChecklistMessage = (dateDisplay, events, meta = {}) =
 
   let msg = `📋 Suas atividades — ${dateDisplay}\n\n${body}\n${footer}`;
   if (pendingCount > 0) {
-    msg += '\n\n_Digite o número do item para ver detalhes._';
+    msg += '\n\n_Para concluir: «feito 2» ou «concluí reunião 14h»._';
   }
   return msg;
 };
 
 /**
- * Agenda de hoje em formato checklist (MVP WhatsApp — Fase 1).
+ * Checklist de um dia (com conclusões manuais).
  * @param {string} userId
+ * @param {{ date?: string, data?: string }} [options]
  */
-export const listTodayAgendaChecklistForUser = async (userId) => {
-  const day = await listCalendarEventsForUser(userId, { date: 'hoje', data: 'hoje' });
+export const listAgendaChecklistForUser = async (userId, options = {}) => {
+  const day = await listCalendarEventsForUser(userId, options);
   const events = day.events || [];
   const now = new Date();
-  const pending = events.filter((e) => isCalendarEventStillRelevant(e, now));
-  const completed = events.filter((e) => !isCalendarEventStillRelevant(e, now));
+  const manualKeys = await loadManualCompletionKeys(userId, day.date);
+  const isDone = (e) =>
+    manualKeys.has(buildCalendarEventKey(e)) || !isCalendarEventStillRelevant(e, now);
+  const pending = events.filter((e) => !isDone(e));
+  const completed = events.filter((e) => isDone(e));
 
   const message = buildDayAgendaChecklistMessage(day.dateDisplay, events, {
     googleCalendarLinked: day.googleCalendarLinked,
     googleCalendarNote: day.googleCalendarNote,
     now,
+    manualKeys,
   });
 
   return {
@@ -588,8 +604,65 @@ export const listTodayAgendaChecklistForUser = async (userId) => {
     completedCount: completed.length,
     message,
     empty: events.length === 0,
-    scope: 'checklist_hoje',
+    scope: 'checklist',
     format: 'checklist',
+  };
+};
+
+/**
+ * Agenda de hoje em formato checklist (Fase 1).
+ * @param {string} userId
+ */
+export const listTodayAgendaChecklistForUser = async (userId) => {
+  const checklist = await listAgendaChecklistForUser(userId, { date: 'hoje', data: 'hoje' });
+  return { ...checklist, scope: 'checklist_hoje' };
+};
+
+/**
+ * Marca compromisso como concluído manualmente (Fase 2) e devolve checklist atualizado.
+ * @param {string} userId
+ * @param {Record<string, unknown>} payload
+ */
+export const completeCalendarEventForUser = async (userId, payload = {}) => {
+  const dateIso = resolveCompletionDateIso(payload);
+  const day = await listCalendarEventsForUser(userId, { date: dateIso, data: dateIso });
+  const events = day.events || [];
+  if (!events.length) {
+    return {
+      ok: false,
+      message: `Não há compromissos em ${day.dateDisplay} para marcar como concluído.`,
+      empty: true,
+    };
+  }
+
+  const resolved = resolveCalendarEventFromPayload(events, payload);
+  if (resolved.ambiguous) {
+    const lines = resolved.candidates.map(
+      (c) => `${c.index}. ${c.title}${c.time ? ` (${String(c.time).slice(0, 5)})` : ''}`,
+    );
+    return {
+      ok: false,
+      ambiguous: true,
+      message: `Qual compromisso?\n${lines.join('\n')}\n\nResponda com o número (ex.: «feito 2»).`,
+      candidates: resolved.candidates,
+    };
+  }
+  if (resolved.notFound || !resolved.event) {
+    return {
+      ok: false,
+      message:
+        'Não encontrei esse compromisso na agenda. Peça «minha agenda hoje» e use o número do item.',
+    };
+  }
+
+  await markCalendarEventCompleted(userId, resolved.event, dateIso);
+  const checklist = await listAgendaChecklistForUser(userId, { date: dateIso, data: dateIso });
+  const title = String(resolved.event.title || 'Compromisso').trim();
+  return {
+    ok: true,
+    message: `✅ «${title}» marcado como concluído.\n\n${checklist.message}`,
+    matchedBy: resolved.matchedBy,
+    data: checklist,
   };
 };
 

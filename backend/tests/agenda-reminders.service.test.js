@@ -9,6 +9,7 @@ import {
   tryAcquireAgendaReminderBatchMemory,
 } from '../src/services/agenda-reminders.service.js';
 import {
+  buildDayAgendaChecklistMessage,
   calendarDateAddDaysInSaoPaulo,
   calendarDateTodayInSaoPaulo,
 } from '../src/services/calendar-events.service.js';
@@ -21,16 +22,16 @@ test('formatAgendaReminderWhatsappMessage: null quando sem eventos', () => {
 });
 
 test('formatAgendaReminderWhatsappMessage: lista compromissos', () => {
-  const msg = formatAgendaReminderWhatsappMessage(
-    {
-      dateDisplay: '25/05/2026',
-      events: [
-        { title: 'Reunião', time: '10:30:00', allDay: false },
-        { title: 'Vencimento', allDay: true },
-      ],
-    },
-    'noite'
-  );
+  const events = [
+    { title: 'Reunião', time: '10:30:00', allDay: false },
+    { title: 'Vencimento', allDay: true },
+  ];
+  const checklist = {
+    dateDisplay: '25/05/2026',
+    events,
+    message: buildDayAgendaChecklistMessage('25/05/2026', events, {}),
+  };
+  const msg = formatAgendaReminderWhatsappMessage(checklist, 'noite');
   assert.ok(msg?.includes('Boa noite'));
   assert.ok(msg?.includes('amanhã'));
   assert.ok(msg?.includes('📋 Suas atividades'));

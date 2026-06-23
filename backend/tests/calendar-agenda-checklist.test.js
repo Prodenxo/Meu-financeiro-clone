@@ -45,3 +45,18 @@ test('buildDayAgendaChecklistMessage: dia vazio', () => {
   const msg = buildDayAgendaChecklistMessage('16/06/2099', [], { googleCalendarLinked: true });
   assert.ok(msg.includes('Nenhuma atividade'));
 });
+
+test('buildDayAgendaChecklistMessage: conclusão manual via manualKeys', () => {
+  const future = {
+    id: 'evt-x',
+    title: 'Reunião',
+    time: '23:59:00',
+    date: '2099-06-16',
+    endTime: '23:59:59',
+  };
+  const now = new Date('2099-06-16T12:00:00-03:00');
+  const manualKeys = new Set(['id:evt-x']);
+  const msg = buildDayAgendaChecklistMessage('16/06/2099', [future], { now, manualKeys });
+  assert.ok(msg.includes('✅ 23:59 · Reunião'));
+  assert.ok(msg.includes('1 concluída · 0 pendente'));
+});

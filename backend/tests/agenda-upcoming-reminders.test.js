@@ -1,0 +1,56 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  buildUpcomingReminderRunKey,
+  formatUpcomingAgendaWhatsappMessage,
+  isEventInUpcomingReminderWindow,
+} from '../src/services/agenda-upcoming-reminders.service.js';
+
+test('isEventInUpcomingReminderWindow: dentro da janela', () => {
+  const now = new Date('2099-06-16T13:45:00-03:00');
+  const event = {
+    title: 'Call',
+    time: '14:00:00',
+    date: '2099-06-16',
+    allDay: false,
+  };
+  assert.equal(isEventInUpcomingReminderWindow(event, 30, now), true);
+});
+
+test('isEventInUpcomingReminderWindow: já passou ou muito longe', () => {
+  const now = new Date('2099-06-16T14:05:00-03:00');
+  const event = {
+    title: 'Call',
+    time: '14:00:00',
+    date: '2099-06-16',
+    allDay: false,
+  };
+  assert.equal(isEventInUpcomingReminderWindow(event, 30, now), false);
+
+  const far = new Date('2099-06-16T10:00:00-03:00');
+  assert.equal(isEventInUpcomingReminderWindow(event, 30, far), false);
+});
+
+test('isEventInUpcomingReminderWindow: ignora dia inteiro', () => {
+  const now = new Date('2099-06-16T10:00:00-03:00');
+  assert.equal(
+    isEventInUpcomingReminderWindow({ title: 'X', allDay: true }, 30, now),
+    false,
+  );
+});
+
+test('formatUpcomingAgendaWhatsappMessage: inclui lembrete e dica de concluir', () => {
+  const event = { title: 'Reunião', time: '14:00:00', date: '2099-06-16', allDay: false };
+  const msg = formatUpcomingAgendaWhatsappMessage(event, 30);
+  assert.ok(msg.includes('⏰'));
+  assert.ok(msg.includes('Reunião'));
+  assert.ok(msg.includes('concluí'));
+});
+
+test('buildUpcomingReminderRunKey: estável', () => {
+  assert.equal(
+    buildUpcomingReminderRunKey('u1', 'evt-1', '2099-06-16'),
+    'upcoming:u1:2099-06-16:evt-1',
+  );
+});

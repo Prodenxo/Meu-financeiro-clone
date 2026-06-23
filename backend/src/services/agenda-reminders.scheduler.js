@@ -6,6 +6,11 @@ import {
   runAgendaWhatsappReminders,
 } from './agenda-reminders.service.js';
 import { calendarDateTodayInSaoPaulo } from './calendar-events.service.js';
+import {
+  getAgendaUpcomingMinutesBefore,
+  isAgendaUpcomingWhatsappEnabled,
+  runAgendaUpcomingWhatsappReminders,
+} from './agenda-upcoming-reminders.service.js';
 
 const SCHEDULER_INTERVAL_MS = 5 * 60 * 1000;
 const SCHEDULER_TIMEZONE = 'America/Sao_Paulo';
@@ -61,11 +66,26 @@ export const isAgendaRemindersSchedulerEnabled = () => {
   if (explicit) {
     return explicit.toLowerCase() === 'true';
   }
-  return isAgendaWhatsappRemindersEnabled();
+  return isAgendaWhatsappRemindersEnabled() || isAgendaUpcomingWhatsappEnabled();
 };
 
 const runSchedulerTick = async () => {
-  if (!isAgendaRemindersSchedulerEnabled() || !isAgendaWhatsappRemindersEnabled()) {
+  if (!isAgendaRemindersSchedulerEnabled()) {
+    return;
+  }
+
+  if (isAgendaUpcomingWhatsappEnabled()) {
+    try {
+      await runAgendaUpcomingWhatsappReminders();
+    } catch (err) {
+      console.warn(
+        '[agenda-upcoming] scheduler falhou',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  if (!isAgendaWhatsappRemindersEnabled()) {
     return;
   }
 
@@ -102,15 +122,19 @@ export const startAgendaRemindersScheduler = () => {
     console.info('[agenda-reminders] Scheduler interno desligado');
     return;
   }
-  if (!isAgendaWhatsappRemindersEnabled()) {
+  const dailyOn = isAgendaWhatsappRemindersEnabled();
+  const upcomingOn = isAgendaUpcomingWhatsappEnabled();
+  if (!dailyOn && !upcomingOn) {
     console.info(
-      '[agenda-reminders] Scheduler ignorado (AGENDA_WHATSAPP_REMINDERS_ENABLED≠true)',
+      '[agenda-reminders] Scheduler ignorado (AGENDA_WHATSAPP_REMINDERS_ENABLED e upcoming desligados)',
     );
     return;
   }
 
+  const dailyLabel = dailyOn ? `${MANHA_HOUR}h e ${NOITE_HOUR}h` : 'desligado';
+  const upcomingLabel = upcomingOn ? `lembretes ~${getAgendaUpcomingMinutesBefore()}min` : 'desligado';
   console.info(
-    `[agenda-reminders] Scheduler interno ativo (${MANHA_HOUR}h e ${NOITE_HOUR}h ${SCHEDULER_TIMEZONE})`,
+    `[agenda-reminders] Scheduler interno ativo (${dailyLabel} + ${upcomingLabel} ${SCHEDULER_TIMEZONE})`,
   );
   schedulerHandle = setInterval(() => {
     void runSchedulerTick();

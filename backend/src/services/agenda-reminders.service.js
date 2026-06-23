@@ -8,7 +8,7 @@ import { resolveOpenclawWhatsappPhone } from './openclaw-bot.service.js';
 import {
   calendarDateAddDaysInSaoPaulo,
   calendarDateTodayInSaoPaulo,
-  buildDayAgendaChecklistMessage,
+  listAgendaChecklistForUser,
   listCalendarEventsForUser,
 } from './calendar-events.service.js';
 import {
@@ -89,7 +89,7 @@ export const resolveAgendaReminderDateIso = (slot, explicitDateIso) => {
 export const isAgendaWhatsappRemindersEnabled = () =>
   String(env.AGENDA_WHATSAPP_REMINDERS_ENABLED || '').toLowerCase() === 'true';
 
-const listUsersWithWhatsappLink = async () => {
+export const listUsersWithWhatsappLink = async () => {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurada');
   }
@@ -121,14 +121,11 @@ const listUsersWithWhatsappLink = async () => {
  * @param {{ events?: Array<{ title?: string, time?: string|null, allDay?: boolean }>, dateDisplay?: string }} calendar
  * @param {'manha'|'noite'} slot
  */
-export const formatAgendaReminderWhatsappMessage = (calendar, slot = 'manha') => {
-  const events = calendar?.events || [];
-  if (!events.length) return null;
+export const formatAgendaReminderWhatsappMessage = (checklist, slot = 'manha') => {
+  if (!checklist?.events?.length) return null;
   const greeting = slot === 'noite' ? 'Boa noite' : 'Bom dia';
-  const dateLabel = calendar.dateDisplay || (slot === 'noite' ? 'amanhã' : 'hoje');
   const dayWord = slot === 'noite' ? 'amanhã' : 'hoje';
-  const checklist = buildDayAgendaChecklistMessage(dateLabel, events, {});
-  return `${greeting}! Compromissos de ${dayWord}:\n\n${checklist}`;
+  return `${greeting}! Compromissos de ${dayWord}:\n\n${checklist.message}`;
 };
 
 const trySendAgendaReminder = async ({ userId, phone, message, slot, dateIso }) => {
@@ -162,8 +159,8 @@ const runAgendaWhatsappRemindersInner = async (options) => {
 
   for (const { userId, phone } of users) {
     try {
-      const calendar = await listCalendarEventsForUser(userId, { date: dateIso });
-      if (calendar.empty || !calendar.events?.length) {
+      const checklist = await listAgendaChecklistForUser(userId, { date: dateIso, data: dateIso });
+      if (checklist.empty || !checklist.events?.length) {
         results.push({
           userId,
           status: 'skipped_empty',
@@ -172,7 +169,7 @@ const runAgendaWhatsappRemindersInner = async (options) => {
         continue;
       }
 
-      const message = formatAgendaReminderWhatsappMessage(calendar, slot);
+      const message = formatAgendaReminderWhatsappMessage(checklist, slot);
       if (!message) {
         results.push({
           userId,
@@ -192,7 +189,7 @@ const runAgendaWhatsappRemindersInner = async (options) => {
       results.push({
         userId,
         status: whatsappStatus === 'sent' ? 'sent' : whatsappStatus,
-        count: calendar.count,
+        count: checklist.count,
         whatsappStatus,
       });
     } catch (err) {
