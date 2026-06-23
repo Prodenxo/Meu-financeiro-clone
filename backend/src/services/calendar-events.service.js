@@ -567,7 +567,25 @@ export const buildDayAgendaChecklistMessage = (dateDisplay, events, meta = {}) =
 
   let msg = `📋 Suas atividades — ${dateDisplay}\n\n${body}\n${footer}`;
   if (pendingCount > 0) {
-    msg += '\n\n_Para concluir: «feito 2» ou «concluí reunião 14h»._';
+    const firstPendingIdx = events.findIndex((e) => {
+      const completed =
+        manualKeys.has(buildCalendarEventKey(e)) || !isCalendarEventStillRelevant(e, now);
+      return !completed;
+    });
+    const n = firstPendingIdx + 1;
+    const firstPending = events[firstPendingIdx];
+    const timeHint = firstPending?.time ? String(firstPending.time).slice(0, 5) : null;
+    const titleWords = String(firstPending?.title || 'compromisso')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .join(' ')
+      .toLowerCase();
+    if (timeHint) {
+      msg += `\n\n_Para concluir: «feito ${n}» ou «concluí ${titleWords} ${timeHint}»._`;
+    } else {
+      msg += `\n\n_Para concluir: «feito ${n}»._`;
+    }
   }
   return msg;
 };
@@ -636,6 +654,15 @@ export const completeCalendarEventForUser = async (userId, payload = {}) => {
   }
 
   const resolved = resolveCalendarEventFromPayload(events, payload);
+  if (resolved.invalidIndex) {
+    return {
+      ok: false,
+      invalidIndex: true,
+      message:
+        `Só há ${resolved.maxIndex} item${resolved.maxIndex === 1 ? '' : 'ns'} na agenda de ${day.dateDisplay}. `
+        + `Use «feito 1»${resolved.maxIndex > 1 ? ` a «feito ${resolved.maxIndex}»` : ''}.`,
+    };
+  }
   if (resolved.ambiguous) {
     const lines = resolved.candidates.map(
       (c) => `${c.index}. ${c.title}${c.time ? ` (${String(c.time).slice(0, 5)})` : ''}`,

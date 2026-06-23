@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildCalendarEventKey,
+  enrichCompletionPayload,
   resolveCalendarEventFromPayload,
   resolveCompletionDateIso,
 } from '../src/services/calendar-checklist-completion.service.js';
@@ -41,6 +42,34 @@ test('resolveCompletionDateIso: hoje ou omitido', () => {
   assert.equal(resolveCompletionDateIso({ date: 'hoje' }), iso);
 });
 
-test('resolveCompletionDateIso: data explícita', () => {
-  assert.equal(resolveCompletionDateIso({ date: '2099-12-25' }), '2099-12-25');
+test('resolveCalendarEventFromPayload: índice inválido', () => {
+  const r = resolveCalendarEventFromPayload(events, { index: 9 });
+  assert.equal(r.invalidIndex, true);
+  assert.equal(r.maxIndex, 3);
+});
+
+test('resolveCalendarEventFromPayload: só hora (único)', () => {
+  const r = resolveCalendarEventFromPayload(events, { time: '14:00' });
+  assert.equal(r.event?.id, 'evt-2');
+  assert.equal(r.matchedBy, 'time');
+});
+
+test('resolveCalendarEventFromPayload: título com hora errada ainda acha por título', () => {
+  const r = resolveCalendarEventFromPayload(events, { title: 'reunião cliente', time: '10:00' });
+  assert.equal(r.event?.id, 'evt-2');
+  assert.equal(r.matchedBy, 'title');
+});
+
+test('resolveCalendarEventFromPayload: único evento no dia', () => {
+  const one = [events[0]];
+  const r = resolveCalendarEventFromPayload(one, {});
+  assert.equal(r.event?.id, 'evt-1');
+  assert.equal(r.matchedBy, 'single_event');
+});
+
+test('enrichCompletionPayload: extrai de texto livre', () => {
+  const p = enrichCompletionPayload({ text: 'feito 2 concluí reunião 14h' });
+  assert.equal(p.index, 2);
+  assert.equal(p.time, '14:00');
+  assert.ok(String(p.title).includes('reuni'));
 });

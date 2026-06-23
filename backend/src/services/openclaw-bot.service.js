@@ -1095,7 +1095,15 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'complete_calendar_event') {
-    const result = await calendarEventsService.completeCalendarEventForUser(userId, payload);
+    const completionPayload = {
+      ...payload,
+      ...(input?.text ? { text: input.text } : {}),
+      ...(input?.message ? { message: input.message } : {}),
+    };
+    const result = await calendarEventsService.completeCalendarEventForUser(
+      userId,
+      completionPayload,
+    );
     return {
       ok: result.ok !== false,
       message: result.message,
