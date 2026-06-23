@@ -240,7 +240,7 @@ export function MeiLimiteFaturamentoBlock({
                 >
                   <p>
                     Total das NFS-e autorizadas por esta conta no ano civil, comparado ao limite de referência configurado.
-                    Notas ainda em processamento ou canceladas não entram no somatório.
+                    Notas arquivadas entram no total. Só notas em processamento ou canceladas ficam de fora.
                   </p>
                   <p className="text-sm text-slate-700 dark:text-slate-200">
                     NF-e e NFC-e seguem regras de ICMS/SEFAZ e <strong className="font-semibold">não são somadas</strong>{' '}

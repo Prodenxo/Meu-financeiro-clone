@@ -100,6 +100,28 @@ test('agregarLimiteMeiDasLinhas: ignora NFE e NFCE mesmo com valor alto (FR-GUIA
   assert.equal(r.notasConsideradas, 1);
 });
 
+test('agregarLimiteMeiDasLinhas: inclui NFSE arquivada (arquivar ≠ cancelar)', () => {
+  const rows = [
+    {
+      document_type: 'NFSE',
+      status: 'Concluída',
+      created_at: '2026-03-01T12:00:00.000Z',
+      archived_at: '2026-03-15T12:00:00.000Z',
+      payload_json: { servico: [{ valor: { servico: 100 } }] }
+    },
+    {
+      document_type: 'NFSE',
+      status: 'Concluída',
+      created_at: '2026-04-01T12:00:00.000Z',
+      archived_at: null,
+      payload_json: { servico: [{ valor: { servico: 50 } }] }
+    }
+  ];
+  const r = agregarLimiteMeiDasLinhas(rows, 2026);
+  assert.equal(r.total, 150);
+  assert.equal(r.notasConsideradas, 2);
+});
+
 test('agregarLimiteMeiDasLinhas: só NFSE concluída no ano com payload_json', () => {
   const rows = [
     {
