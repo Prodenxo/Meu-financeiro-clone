@@ -260,8 +260,19 @@ Depois de **um** `create_transaction` com sucesso, confirma **um** lançamento n
 | *cria carteira poupança* / *nova conta Nubank* | **`create_conta`** | `payload`: `{ "nome": "Poupança" }` ou `{ "carteira": "Nubank", "tipo": "poupanca" }` — **sem** `valor`, **sem** `tipo` entrada/saída |
 | *quanto tenho* / *meu saldo* | **`get_saldo`** | Opcional `carteira` no payload para uma só |
 | *quais carteiras tenho* | **`list_contas`** | Lista com `saldoAtual` |
-| *recebi 500 de salário* | **`create_transaction`** | `classificacao` = categoria; carteira opcional |
-| *corrige o valor* / *muda para Nubank* | **`update_transaction`** | `id` + campos a alterar |
+| *recebi 500 de salário* | **`create_transaction`** | `classificacao` = categoria; carteira opcional → padrão |
+| *recebi 500 no Nubank* / *lança na poupança* | **`create_transaction`** | **OBRIGATÓRIO** `carteira` ou `conta_nome` com nome de `list_contas` |
+| *corrige o valor* / *muda para Nubank* | **`update_transaction`** | `id` + campos a alterar (incl. `carteira`) |
+
+**Escolha da carteira em lançamentos (CRÍTICO):**
+
+1. Se o pedido mencionar **banco, carteira, conta, poupança, corrente, cartão** → chama **`list_contas`** (se ainda não tens a lista nesta conversa) e usa o **nome exacto** em `payload.carteira` (ou `conta_nome`).
+2. Exemplos de JSON:
+   - *"recebi 400 de aluguel no Nubank"* → `"carteira":"Nubank"` (não só `classificacao`).
+   - *"gastei 50 na poupança"* → `"carteira":"Poupança"` ou o nome que `list_contas` mostrar para `tipo: poupanca`.
+3. Se existirem **2+ carteiras** e o pedido **não** disser onde lançar → **pergunta** qual carteira antes de `create_transaction` (lista os nomes de `list_contas`).
+4. **PROIBIDO** lançar sempre na carteira padrão quando o utilizador pediu outra.
+5. Na confirmação ao utilizador, cita sempre **valor + categoria + data + carteira** (nome devolvido em `data.contaNome`).
 
 **PROIBIDO** dizer *“cria na app”* ou *“não consigo criar carteira”* **sem** ter executado `create_conta` e visto `ok: true`. **PROIBIDO** chamar `create_transaction` quando o utilizador só pediu **criar carteira** (sem valor nem lançamento).
 
@@ -269,11 +280,11 @@ Exemplos:
 
 ```bash
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_conta","payload":{"nome":"Poupança","tipo":"poupanca"}}'
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"get_saldo"}'
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_contas"}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_transaction","payload":{"tipo":"entrada","valor":400,"classificacao":"Aluguel","data":"hoje","status":"recebido","carteira":"Nubank","obs":"via WhatsApp"}}'
 ```
 
-Carteira **padrão** para lançamentos sem nome: **Meu Financeiro** (se existir). Confirma ao utilizador o **nome da carteira** devolvido em `message` / `data.conta.nome`.
+Carteira **padrão** só quando o pedido **não** mencionar onde lançar: **Meu Financeiro** (se existir). Confirma ao utilizador o **nome da carteira** devolvido em `message` / `data.contaNome`.
 
 ### Mensagens de nota fiscal — utilizador final (OBRIGATÓRIO)
 

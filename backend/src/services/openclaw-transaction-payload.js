@@ -1,8 +1,11 @@
 import { badRequest } from '../utils/errors.js';
 import {
+  extractCarteiraHintFromText,
+  getWalletNameFromPayload,
   matchContaByName,
+  matchContaByTipoHint,
   pickDefaultContaFinanceira,
-  resolveContaIdFromPayload,
+  resolveExplicitContaFromPayload,
 } from './conta-financeira-default.js';
 
 /**
@@ -89,6 +92,71 @@ const resolveDataIso = (raw) => {
 
 const isNumericCategoryCode = (value) => /^\d{3,8}$/.test(String(value || '').trim());
 
+const hasExplicitWalletIdInPayload = (payload = {}) => {
+  const raw = payload?.conta_id ?? payload?.contaId ?? payload?.conta_uuid ?? null;
+  return raw != null && String(raw).trim() !== '';
+};
+
+/**
+ * Resolve carteira para create_transaction (sem fallback silencioso quando o nome foi pedido).
+ * @param {Array<{ id?: string, nome?: string, tipo?: string, ativo?: boolean }>} contas
+ * @param {object} payload
+ */
+const resolveContaForOpenclawTransaction = (contas = [], payload = {}) => {
+  let requestedName = getWalletNameFromPayload(payload);
+  if (!requestedName) {
+    const hintText = [
+      payload?.obs,
+      payload?.observacao,
+      payload?.description,
+      payload?.descricao,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    requestedName = extractCarteiraHintFromText(hintText);
+  }
+
+  let conta = resolveExplicitContaFromPayload(contas, payload);
+  if (!conta && requestedName && !getWalletNameFromPayload(payload)) {
+    conta =
+      matchContaByName(contas, requestedName)
+      ?? matchContaByTipoHint(contas, requestedName);
+  }
+
+  if (hasExplicitWalletIdInPayload(payload) && !conta) {
+    throw badRequest(
+      'conta_id inválido ou carteira inactiva. Chame list_contas e use um id válido.',
+      { code: 'CARTEIRA_INVALIDA' },
+    );
+  }
+
+  if (getWalletNameFromPayload(payload) && contas.length && !conta) {
+    throw badRequest(
+      `Carteira/conta "${getWalletNameFromPayload(payload)}" não encontrada. `
+      + 'Chame list_contas e use o nome exacto, tipo (poupança/corrente) ou conta_id (UUID).',
+      { code: 'CARTEIRA_NAO_ENCONTRADA' },
+    );
+  }
+
+  if (requestedName && contas.length && !conta) {
+    throw badRequest(
+      `Carteira "${requestedName}" não encontrada no texto do pedido. `
+      + 'Chame list_contas e repita com o campo carteira no payload.',
+      { code: 'CARTEIRA_NAO_ENCONTRADA' },
+    );
+  }
+
+  if (!conta) {
+    conta = pickDefaultContaFinanceira(contas);
+  }
+
+  return {
+    conta_id: conta?.id ?? null,
+    conta_nome: conta?.nome ?? null,
+    requestedName: requestedName || null,
+  };
+};
+
 /**
  * Corrige payload do OpenClaw antes de createTransaction.
  * @param {object} payload
@@ -162,36 +230,7 @@ export const normalizeOpenclawTransactionPayload = (payload = {}, options = {}) 
   }
 
   const contas = options.contas || [];
-  let conta_id = resolveContaIdFromPayload(contas, payload);
-  const requestedName = String(
-    payload?.conta
-    ?? payload?.conta_nome
-    ?? payload?.contaNome
-    ?? payload?.carteira
-    ?? payload?.wallet
-    ?? '',
-  ).trim();
-
-  if (requestedName && contas.length && !conta_id) {
-    throw badRequest(
-      `Carteira/conta "${requestedName}" não encontrada. `
-      + 'Chame list_contas e use o nome exacto ou conta_id (UUID).',
-    );
-  }
-
-  const defaultConta = pickDefaultContaFinanceira(contas);
-  if (!conta_id && defaultConta?.id) {
-    conta_id = defaultConta.id;
-  }
-
-  let conta_nome = null;
-  if (conta_id && contas.length) {
-    conta_nome = contas.find((c) => String(c?.id) === String(conta_id))?.nome ?? null;
-  } else if (requestedName && conta_id) {
-    conta_nome = matchContaByName(contas, requestedName)?.nome ?? requestedName;
-  } else if (defaultConta?.nome) {
-    conta_nome = defaultConta.nome;
-  }
+  const { conta_id, conta_nome } = resolveContaForOpenclawTransaction(contas, payload);
 
   return {
     tipo,
@@ -261,23 +300,21 @@ export const normalizeOpenclawTransactionUpdate = (payload = {}, options = {}) =
   }
 
   const hasCarteiraField =
-    payload?.conta_id != null
-    || payload?.contaId != null
-    || payload?.conta != null
-    || payload?.conta_nome != null
-    || payload?.carteira != null
-    || payload?.wallet != null;
+    hasExplicitWalletIdInPayload(payload)
+    || getWalletNameFromPayload(payload) !== '';
   if (hasCarteiraField && contas.length) {
-    const conta_id = resolveContaIdFromPayload(contas, payload);
-    const requestedName = String(
-      payload?.conta ?? payload?.conta_nome ?? payload?.carteira ?? payload?.wallet ?? '',
-    ).trim();
-    if (requestedName && !conta_id) {
+    const conta = resolveExplicitContaFromPayload(contas, payload);
+    const requestedName = getWalletNameFromPayload(payload);
+    if (hasExplicitWalletIdInPayload(payload) && !conta) {
+      throw badRequest('conta_id inválido. Use list_contas.', { code: 'CARTEIRA_INVALIDA' });
+    }
+    if (requestedName && !conta) {
       throw badRequest(
         `Carteira "${requestedName}" não encontrada. Use list_contas.`,
+        { code: 'CARTEIRA_NAO_ENCONTRADA' },
       );
     }
-    if (conta_id) patch.conta_id = conta_id;
+    if (conta?.id) patch.conta_id = conta.id;
   }
 
   if (Object.keys(patch).length === 1) {

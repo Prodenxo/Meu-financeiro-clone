@@ -886,8 +886,10 @@ export const runOpenclawAction = async (input) => {
           'Carteiras: create_conta, update_conta, delete_conta. '
           + 'Lançamentos: create_transaction, update_transaction, delete_transaction. '
           + 'Saldo: get_saldo (opcional carteira/conta_id). '
-          + 'create_transaction sem carteira → conta padrão '
-          + `(geralmente "${defaultNome || 'Meu Financeiro'}").`,
+          + 'Em create_transaction use payload.carteira ou conta_nome com o nome EXACTO de uma linha abaixo '
+          + `(ex.: Nubank, Poupança). Sem carteira → padrão "${defaultNome || 'Meu Financeiro'}". `
+          + 'Se o utilizador mencionar banco/carteira no pedido, OBRIGATÓRIO incluir carteira no JSON — '
+          + 'nunca assumir só a padrão quando ele pediu outra.',
       },
     };
   }
@@ -956,7 +958,8 @@ export const runOpenclawAction = async (input) => {
         ...linkDebug,
         agentInstructions:
           'Formate nomes para o utilizador (entrada/saída). Nunca diga "problemas técnicos" — '
-          + 'estes dados já vieram da app. Para lançamento use o nome exacto em classificacao.',
+          + 'estes dados já vieram da app. Para lançamento use o nome exacto em classificacao. '
+          + 'Carteira (Nubank, Poupança, etc.) é campo separado: list_contas → payload.carteira em create_transaction.',
       },
     };
   }

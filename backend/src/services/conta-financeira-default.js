@@ -74,32 +74,99 @@ export const matchContaByName = (contas, rawName) => {
   );
 };
 
+const CONTA_TIPO_HINTS = {
+  poupanca: 'poupanca',
+  poupança: 'poupanca',
+  corrente: 'corrente',
+  cartao: 'cartao_credito',
+  cartão: 'cartao_credito',
+  'cartao de credito': 'cartao_credito',
+  'cartão de crédito': 'cartao_credito',
+  credito: 'cartao_credito',
+  crédito: 'cartao_credito',
+  dinheiro: 'dinheiro',
+};
+
 /**
- * Resolve conta_id a partir do payload do bot ou fallback padrão.
- * @returns {string | null}
+ * Nome explícito de carteira no payload (sem inferir de obs).
+ * @param {object} payload
+ * @returns {string}
  */
-export const resolveContaIdFromPayload = (contas = [], payload = {}) => {
+export const getWalletNameFromPayload = (payload = {}) =>
+  String(
+    payload?.conta
+    ?? payload?.conta_nome
+    ?? payload?.contaNome
+    ?? payload?.carteira
+    ?? payload?.wallet
+    ?? '',
+  ).trim();
+
+/**
+ * Extrai menção de carteira em texto livre (ex.: "no Nubank", "na poupança").
+ * @param {string} text
+ * @returns {string}
+ */
+export const extractCarteiraHintFromText = (text) => {
+  const s = String(text || '').trim();
+  if (!s) return '';
+
+  const tipoOnly = s.match(
+    /\b(poupan[cç]a|corrente|cart[aã]o(?:\s+de\s+cr[eé]dito)?|dinheiro)\b/i,
+  );
+  if (tipoOnly?.[1]) return tipoOnly[1].trim();
+
+  const phrase = s.match(
+    /\b(?:na|no|em|pela|pelo|carteira|conta)\s+([A-Za-zÀ-ú][A-Za-zÀ-ú0-9\s.-]{1,28})/i,
+  );
+  return phrase?.[1]?.trim() ?? '';
+};
+
+/**
+ * @param {Array<{ id?: string, nome?: string, tipo?: string, ativo?: boolean }>} contas
+ * @param {string} rawHint
+ * @returns {{ id?: string, nome?: string, tipo?: string, ativo?: boolean } | null}
+ */
+export const matchContaByTipoHint = (contas, rawHint) => {
+  const key = normalizeContaNomeKey(rawHint);
+  if (!key) return null;
+  const tipo = CONTA_TIPO_HINTS[key];
+  if (!tipo) return null;
+  const active = contas.filter((c) => c?.ativo !== false && c?.tipo === tipo);
+  if (active.length === 1) return active[0];
+  return null;
+};
+
+/**
+ * Resolve carteira só com campos explícitos do payload (sem default).
+ * @returns {{ id?: string, nome?: string, tipo?: string, ativo?: boolean } | null}
+ */
+export const resolveExplicitContaFromPayload = (contas = [], payload = {}) => {
   const explicit =
     payload?.conta_id ?? payload?.contaId ?? payload?.conta_uuid ?? null;
   if (explicit) {
     const id = String(explicit).trim();
     if (UUID_RE.test(id)) {
       const found = contas.find((c) => String(c?.id) === id && c?.ativo !== false);
-      if (found) return found.id;
+      if (found) return found;
+      return null;
     }
   }
 
-  const nameRaw =
-    payload?.conta
-    ?? payload?.conta_nome
-    ?? payload?.contaNome
-    ?? payload?.carteira
-    ?? payload?.wallet
-    ?? null;
+  const nameRaw = getWalletNameFromPayload(payload);
   if (nameRaw) {
-    const matched = matchContaByName(contas, nameRaw);
-    if (matched?.id) return matched.id;
+    return matchContaByName(contas, nameRaw) ?? matchContaByTipoHint(contas, nameRaw);
   }
 
+  return null;
+};
+
+/**
+ * Resolve conta_id a partir do payload do bot ou fallback padrão.
+ * @returns {string | null}
+ */
+export const resolveContaIdFromPayload = (contas = [], payload = {}) => {
+  const matched = resolveExplicitContaFromPayload(contas, payload);
+  if (matched?.id) return matched.id;
   return pickDefaultContaFinanceira(contas)?.id ?? null;
 };
