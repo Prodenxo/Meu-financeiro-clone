@@ -8,7 +8,7 @@ import { resolveOpenclawWhatsappPhone } from './openclaw-bot.service.js';
 import {
   calendarDateAddDaysInSaoPaulo,
   calendarDateTodayInSaoPaulo,
-  formatCalendarEventDisplayLine,
+  buildDayAgendaChecklistMessage,
   listCalendarEventsForUser,
 } from './calendar-events.service.js';
 import {
@@ -127,13 +127,8 @@ export const formatAgendaReminderWhatsappMessage = (calendar, slot = 'manha') =>
   const greeting = slot === 'noite' ? 'Boa noite' : 'Bom dia';
   const dateLabel = calendar.dateDisplay || (slot === 'noite' ? 'amanhã' : 'hoje');
   const dayWord = slot === 'noite' ? 'amanhã' : 'hoje';
-  const lines = events.map((e) => {
-    const sub = [`• ${formatCalendarEventDisplayLine(e)}`];
-    if (e.meetLink) sub.push(`  Meet: ${e.meetLink}`);
-    if (e.reminderSummary) sub.push(`  Lembrete: ${e.reminderSummary}`);
-    return sub.join('\n');
-  });
-  return `${greeting}! Compromissos de ${dayWord} (${dateLabel}):\n${lines.join('\n')}`;
+  const checklist = buildDayAgendaChecklistMessage(dateLabel, events, {});
+  return `${greeting}! Compromissos de ${dayWord}:\n\n${checklist}`;
 };
 
 const trySendAgendaReminder = async ({ userId, phone, message, slot, dateIso }) => {

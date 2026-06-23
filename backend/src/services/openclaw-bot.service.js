@@ -648,6 +648,10 @@ export const runOpenclawAction = async (input) => {
     minha_agenda: 'list_calendar_events',
     compromissos_agenda: 'list_calendar_events',
     agenda_compromissos: 'list_calendar_events',
+    minha_agenda_hoje: 'list_agenda_checklist_today',
+    agenda_hoje: 'list_agenda_checklist_today',
+    tarefas_hoje: 'list_agenda_checklist_today',
+    checklist_agenda: 'list_agenda_checklist_today',
   };
   let action = String(input?.action || '').trim();
   const rawAction = action;
@@ -1061,6 +1065,24 @@ export const runOpenclawAction = async (input) => {
       ok: true,
       message: 'Transação removida',
       data: { success: true, id: txId, actorContext },
+    };
+  }
+
+  if (action === 'list_agenda_checklist_today') {
+    const checklist = await calendarEventsService.listTodayAgendaChecklistForUser(userId);
+    return {
+      ok: true,
+      message: checklist.message,
+      data: {
+        ...checklist,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Agenda de HOJE em formato checklist (☐ pendente / ✅ concluída). '
+          + 'Repita APENAS message. NÃO reformate nem omita o resumo no fim. '
+          + 'Para detalhes de um item, use list_calendar_events com data de hoje.',
+      },
     };
   }
 
@@ -2266,6 +2288,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, list_catalog_servicos, list_nfe_produtos, register_nfse_produto, register_nfe_cliente, register_nfe_produto, preview_nfse, emit_nfse, preview_nfe, emit_nfe, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_agenda_checklist_today, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, list_catalog_servicos, list_nfe_produtos, register_nfse_produto, register_nfe_cliente, register_nfe_produto, preview_nfse, emit_nfse, preview_nfe, emit_nfe, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

@@ -411,6 +411,22 @@ Exemplo:
 
 - **Apagar:** só `delete_transaction` depois de `list_transactions`; payload com **`id`** ou **`transactionId`** (UUID da lista). **Só** com confirmação explícita.
 - **Próximo compromisso** (*qual o meu próximo*, *próxima reunião*): **`get_next_calendar_event`** — **não** `list_calendar_events` de hoje (essa lista inclui reuniões **já terminadas**). Repete ao utilizador **Data** + horário da API.
+
+### Agenda de hoje — checklist (☐ / ✅)
+
+Quando pedirem *“minha agenda hoje”*, *“tarefas de hoje”*, *“o que tenho hoje”*, *“compromissos de hoje”* (resumo visual):
+
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_agenda_checklist_today"}'
+```
+
+Aliases aceites: `agenda_hoje`, `minha_agenda_hoje`, `tarefas_hoje`, `checklist_agenda`.
+
+- Repete **APENAS** o campo **`message`** (formato checklist com ☐ pendente e ✅ já realizada).
+- **Não** reformates nem omitas o resumo no fim (`X concluídas · Y pendentes`).
+- Para **detalhes** de um item (Meet, link Google): `list_calendar_events` com `payload.data` = hoje.
+- Para **vários dias** (*agenda da semana*): `list_calendar_events` com `scope":"agenda"` (não é checklist).
+- Lembretes automáticos **07:00** / **21:00** já usam o mesmo formato checklist.
 - **Consultar:** `list_transactions`; **`list_calendar_events`** (dia inteiro só se pedirem *todos* / *passados*); **`list_categories`** (`payload.minimal: true` opcional). Exemplo categorias:
 
 ```bash

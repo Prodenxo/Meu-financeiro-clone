@@ -33,7 +33,7 @@ test('formatAgendaReminderWhatsappMessage: lista compromissos', () => {
   );
   assert.ok(msg?.includes('Boa noite'));
   assert.ok(msg?.includes('amanhã'));
-  assert.ok(msg?.includes('25/05/2026'));
+  assert.ok(msg?.includes('📋 Suas atividades'));
   assert.ok(msg?.includes('10:30'));
   assert.ok(msg?.includes('dia inteiro'));
 });

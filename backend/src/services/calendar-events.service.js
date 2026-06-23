@@ -504,6 +504,96 @@ const buildUpcomingDayAgendaMessage = (dateDisplay, events, meta = {}) => {
 };
 
 /**
+ * Linha estilo checklist WhatsApp: ☐ pendente / ✅ já realizada.
+ * @param {object} e
+ * @param {{ completed?: boolean }} [opts]
+ */
+export const formatCalendarEventChecklistLine = (e, opts = {}) => {
+  const icon = opts.completed ? '✅' : '☐';
+  const title = String(e?.title || 'Compromisso').trim();
+  if (e?.allDay || !e?.time) {
+    return `${icon} ${title} (dia inteiro)`;
+  }
+  const time = String(e.time).slice(0, 5);
+  let line = `${icon} ${time} · ${title}`;
+  if (e?.meetLink) line += '\n   🔗 Meet disponível';
+  return line;
+};
+
+/**
+ * @param {string} dateDisplay
+ * @param {object[]} events
+ * @param {{ googleCalendarLinked?: boolean, googleCalendarNote?: string|null, now?: Date }} [meta]
+ */
+export const buildDayAgendaChecklistMessage = (dateDisplay, events, meta = {}) => {
+  const now = meta.now ?? new Date();
+  if (!events.length) {
+    let msg = `📋 Nenhuma atividade para ${dateDisplay}.`;
+    if (!meta.googleCalendarLinked && meta.googleCalendarNote) {
+      msg += `\n\n${meta.googleCalendarNote}`;
+    } else if (meta.googleCalendarLinked) {
+      msg += '\n\n(Sua agenda Google está conectada; não há eventos neste dia.)';
+    }
+    return msg;
+  }
+
+  const pending = [];
+  const done = [];
+  for (const e of events) {
+    const completed = !isCalendarEventStillRelevant(e, now);
+    const line = formatCalendarEventChecklistLine(e, { completed });
+    if (completed) done.push(line);
+    else pending.push(line);
+  }
+
+  const body = [...pending, ...done].join('\n');
+  const doneCount = done.length;
+  const pendingCount = pending.length;
+  const footer = [
+    '━━━━━━━━━━━━━━━━━━━━',
+    `${doneCount} concluída${doneCount === 1 ? '' : 's'} · ${pendingCount} pendente${pendingCount === 1 ? '' : 's'}`,
+  ].join('\n');
+
+  let msg = `📋 Suas atividades — ${dateDisplay}\n\n${body}\n${footer}`;
+  if (pendingCount > 0) {
+    msg += '\n\n_Digite o número do item para ver detalhes._';
+  }
+  return msg;
+};
+
+/**
+ * Agenda de hoje em formato checklist (MVP WhatsApp — Fase 1).
+ * @param {string} userId
+ */
+export const listTodayAgendaChecklistForUser = async (userId) => {
+  const day = await listCalendarEventsForUser(userId, { date: 'hoje', data: 'hoje' });
+  const events = day.events || [];
+  const now = new Date();
+  const pending = events.filter((e) => isCalendarEventStillRelevant(e, now));
+  const completed = events.filter((e) => !isCalendarEventStillRelevant(e, now));
+
+  const message = buildDayAgendaChecklistMessage(day.dateDisplay, events, {
+    googleCalendarLinked: day.googleCalendarLinked,
+    googleCalendarNote: day.googleCalendarNote,
+    now,
+  });
+
+  return {
+    ...day,
+    events,
+    pending,
+    completed,
+    count: events.length,
+    pendingCount: pending.length,
+    completedCount: completed.length,
+    message,
+    empty: events.length === 0,
+    scope: 'checklist_hoje',
+    format: 'checklist',
+  };
+};
+
+/**
  * Hora/minuto atuais em America/Sao_Paulo.
  * @param {Date} [now]
  */
