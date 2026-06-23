@@ -262,6 +262,9 @@ export const env = {
   /** Minutos antes do início para o lembrete (padrão 30, mín 5, máx 120). */
   AGENDA_UPCOMING_MINUTES_BEFORE:
     process.env.AGENDA_UPCOMING_MINUTES_BEFORE || "30",
+  /** Tick do scheduler de lembretes (1–5 min). Padrão: 2. */
+  AGENDA_SCHEDULER_INTERVAL_MINUTES:
+    process.env.AGENDA_SCHEDULER_INTERVAL_MINUTES || "2",
   /**
    * `true`: após `emit_nfse` pelo OpenClaw, agenda envio do PDF via Z-API (cron
    * `/api/cron/nfse-whatsapp-pending`). Requer Z-API outbound (não usa n8n).

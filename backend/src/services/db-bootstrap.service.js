@@ -93,6 +93,19 @@ create index if not exists idx_calendar_checklist_completions_user_date
   on public.calendar_checklist_completions (user_id, event_date);
 `;
 
+export const CALENDAR_UPCOMING_REMINDER_SENT_SQL = `
+create table if not exists public.calendar_upcoming_reminder_sent (
+  user_id uuid not null,
+  event_date date not null,
+  event_key text not null,
+  sent_at timestamptz not null default now(),
+  constraint calendar_upcoming_reminder_sent_pkey primary key (user_id, event_date, event_key)
+);
+`;
+
+export const CALENDAR_AGENDA_WHATSAPP_SQL =
+  `${CALENDAR_CHECKLIST_COMPLETIONS_SQL}\n${CALENDAR_UPCOMING_REMINDER_SENT_SQL}`;
+
 let calendarTableEnsured = false;
 
 /**
@@ -114,10 +127,10 @@ export const ensureCalendarChecklistTable = async (options = {}) => {
   let client;
   try {
     client = await dbClientFactory(dbUrl, sslEnabled);
-    await client.query(CALENDAR_CHECKLIST_COMPLETIONS_SQL);
+    await client.query(CALENDAR_AGENDA_WHATSAPP_SQL);
     calendarTableEnsured = true;
     // eslint-disable-next-line no-console
-    console.info('[db-bootstrap] calendar_checklist_completions garantida');
+    console.info('[db-bootstrap] tabelas agenda WhatsApp garantidas');
     return { ok: true };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -129,12 +142,10 @@ export const ensureCalendarChecklistTable = async (options = {}) => {
   }
 };
 
-const CALENDAR_CHECKLIST_COMPLETIONS_SQL_INTERNAL = CALENDAR_CHECKLIST_COMPLETIONS_SQL;
-
 const ensureDasSchema = async (client) => {
   await client.query(DAS_STATUS_SCHEMA_SQL);
   await client.query(DAS_JOB_RUNS_SCHEMA_SQL);
-  await client.query(CALENDAR_CHECKLIST_COMPLETIONS_SQL_INTERNAL);
+  await client.query(CALENDAR_AGENDA_WHATSAPP_SQL);
 };
 
 export const bootstrapDatabase = async (options = {}) => {
@@ -176,10 +187,10 @@ export const bootstrapDatabase = async (options = {}) => {
     if (autoSchema) {
       await ensureDasSchema(client);
     } else if (ensureCalendarSchema) {
-      await client.query(CALENDAR_CHECKLIST_COMPLETIONS_SQL_INTERNAL);
+      await client.query(CALENDAR_AGENDA_WHATSAPP_SQL);
       calendarTableEnsured = true;
       // eslint-disable-next-line no-console
-      console.info('[db-bootstrap] schema calendar_checklist_completions garantido');
+      console.info('[db-bootstrap] schema agenda WhatsApp garantido');
     }
     // eslint-disable-next-line no-console
     console.info('[db-bootstrap] conexão OK');

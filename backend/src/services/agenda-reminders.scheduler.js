@@ -6,19 +6,34 @@ import {
   runAgendaWhatsappReminders,
 } from './agenda-reminders.service.js';
 import { calendarDateTodayInSaoPaulo } from './calendar-events.service.js';
+import { isWhatsappOutboundConfigured } from './whatsapp-outbound.service.js';
 import {
   getAgendaUpcomingMinutesBefore,
   isAgendaUpcomingWhatsappEnabled,
   runAgendaUpcomingWhatsappReminders,
 } from './agenda-upcoming-reminders.service.js';
 
-const SCHEDULER_INTERVAL_MS = 5 * 60 * 1000;
 const SCHEDULER_TIMEZONE = 'America/Sao_Paulo';
 const MANHA_HOUR = 7;
 const NOITE_HOUR = 21;
+const DEFAULT_SCHEDULER_INTERVAL_MINUTES = 2;
+const MIN_SCHEDULER_INTERVAL_MINUTES = 1;
+const MAX_SCHEDULER_INTERVAL_MINUTES = 5;
 
 /** @type {ReturnType<typeof setInterval> | null} */
 let schedulerHandle = null;
+
+export const getAgendaSchedulerIntervalMs = () => {
+  const min = Number.parseInt(env.AGENDA_SCHEDULER_INTERVAL_MINUTES || '', 10);
+  if (
+    Number.isFinite(min)
+    && min >= MIN_SCHEDULER_INTERVAL_MINUTES
+    && min <= MAX_SCHEDULER_INTERVAL_MINUTES
+  ) {
+    return min * 60_000;
+  }
+  return DEFAULT_SCHEDULER_INTERVAL_MINUTES * 60_000;
+};
 
 /** runKey já disparado neste processo (ex.: agenda:manha:2026-05-27) */
 const firedRunKeys = new Set();
@@ -126,18 +141,26 @@ export const startAgendaRemindersScheduler = () => {
   const upcomingOn = isAgendaUpcomingWhatsappEnabled();
   if (!dailyOn && !upcomingOn) {
     console.info(
-      '[agenda-reminders] Scheduler ignorado (AGENDA_WHATSAPP_REMINDERS_ENABLED e upcoming desligados)',
+      '[agenda-reminders] Scheduler ignorado — defina AGENDA_WHATSAPP_REMINDERS_ENABLED=true '
+      + 'ou AGENDA_UPCOMING_WHATSAPP_ENABLED=true',
     );
     return;
+  }
+  if (upcomingOn && !isWhatsappOutboundConfigured()) {
+    console.warn(
+      '[agenda-upcoming] lembretes activos mas WhatsApp outbound não configurado (Z-API ou n8n)',
+    );
   }
 
   const dailyLabel = dailyOn ? `${MANHA_HOUR}h e ${NOITE_HOUR}h` : 'desligado';
   const upcomingLabel = upcomingOn ? `lembretes ~${getAgendaUpcomingMinutesBefore()}min` : 'desligado';
+  const tickMin = getAgendaSchedulerIntervalMs() / 60_000;
   console.info(
-    `[agenda-reminders] Scheduler interno ativo (${dailyLabel} + ${upcomingLabel} ${SCHEDULER_TIMEZONE})`,
+    `[agenda-reminders] Scheduler interno ativo (tick ${tickMin}min · ${dailyLabel} + ${upcomingLabel} ${SCHEDULER_TIMEZONE})`,
   );
+  const intervalMs = getAgendaSchedulerIntervalMs();
   schedulerHandle = setInterval(() => {
     void runSchedulerTick();
-  }, SCHEDULER_INTERVAL_MS);
+  }, intervalMs);
   void runSchedulerTick();
 };

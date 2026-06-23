@@ -1,9 +1,6 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-
 import { env } from '../config/env.js';
-import { resolveOpenclawWhatsappPhone } from './openclaw-bot.service.js';
+import { createSupabaseClient } from '../config/supabase.js';
+import { buildCalendarEventKey } from './calendar-checklist-completion.service.js';
 import { listUsersWithWhatsappLink } from './agenda-reminders.service.js';
 import {
   calendarDateTodayInSaoPaulo,
@@ -19,6 +16,9 @@ import {
 const DEFAULT_MINUTES_BEFORE = 30;
 const MIN_LEAD_MINUTES = 5;
 
+/** Dedup em memória (fallback + cache após gravar no Supabase). */
+const sentThisProcess = new Set();
+
 export const isAgendaUpcomingWhatsappEnabled = () => {
   const explicit = String(env.AGENDA_UPCOMING_WHATSAPP_ENABLED || '').trim();
   if (explicit) return explicit.toLowerCase() === 'true';
@@ -31,22 +31,61 @@ export const getAgendaUpcomingMinutesBefore = () => {
   return DEFAULT_MINUTES_BEFORE;
 };
 
-export const buildUpcomingReminderRunKey = (userId, eventKey, dateIso) =>
-  `upcoming:${userId}:${dateIso}:${eventKey}`;
+export const buildUpcomingReminderDedupKey = (userId, dateIso, eventKey) =>
+  `${userId}:${dateIso}:${eventKey}`;
 
-export const tryAcquireUpcomingReminderFile = (runKey) => {
-  const safe = runKey.replace(/[^a-z0-9:_-]/gi, '_');
-  const file = path.join(os.tmpdir(), `mf-agenda-upcoming-${safe}.lock`);
-  try {
-    fs.writeFileSync(file, `${new Date().toISOString()}\n`, { flag: 'wx', encoding: 'utf8' });
-    return true;
-  } catch (err) {
-    if (err && typeof err === 'object' && err.code === 'EEXIST') return false;
+const isDuplicateKeyError = (error) =>
+  String(error?.code || '') === '23505'
+  || /duplicate|unique constraint|already exists/i.test(String(error?.message || ''));
+
+const isMissingTableError = (msg) =>
+  /does not exist|schema cache|42P01|relation.*calendar_upcoming/i.test(String(msg || ''));
+
+/**
+ * Garante 1 lembrete por compromisso/dia (persistido no Supabase).
+ * @returns {Promise<boolean>} true = pode enviar agora
+ */
+export const tryAcquireUpcomingReminderSlot = async (userId, dateIso, eventKey) => {
+  const localKey = buildUpcomingReminderDedupKey(userId, dateIso, eventKey);
+  if (sentThisProcess.has(localKey)) return false;
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    sentThisProcess.add(localKey);
     return true;
   }
+
+  const admin = createSupabaseClient({ useServiceRole: true });
+  const { error } = await admin.from('calendar_upcoming_reminder_sent').insert({
+    user_id: userId,
+    event_date: dateIso,
+    event_key: eventKey,
+    sent_at: new Date().toISOString(),
+  });
+
+  if (!error) {
+    sentThisProcess.add(localKey);
+    return true;
+  }
+
+  if (isDuplicateKeyError(error)) {
+    sentThisProcess.add(localKey);
+    return false;
+  }
+
+  if (isMissingTableError(error.message)) {
+    console.warn(
+      '[agenda-upcoming] tabela calendar_upcoming_reminder_sent em falta — '
+      + 'execute create-calendar-agenda-whatsapp-tables.sql no Supabase',
+    );
+    return false;
+  }
+
+  console.warn('[agenda-upcoming] dedup falhou (não envia para evitar flood):', error.message);
+  return false;
 };
 
 /**
+ * Compromisso dentro da janela de ~30 min antes (primeiro tick que entrar envia 1x).
  * @param {object} event
  * @param {number} minutesBefore
  * @param {Date} [now]
@@ -57,7 +96,6 @@ export const isEventInUpcomingReminderWindow = (event, minutesBefore, now = new 
   if (!start) return false;
   const msUntil = start.getTime() - now.getTime();
   const maxMs = minutesBefore * 60_000;
-  const minMs = MIN_LEAD_MINUTES * 60_000;
   return msUntil > 0 && msUntil <= maxMs;
 };
 
@@ -74,7 +112,7 @@ export const formatUpcomingAgendaWhatsappMessage = (event, minutesBefore) => {
 };
 
 /**
- * Lembretes X min antes de cada compromisso (tick a cada 5 min no scheduler).
+ * Lembretes ~30 min antes — 1 envio por compromisso (dedup Supabase).
  */
 export const runAgendaUpcomingWhatsappReminders = async () => {
   if (!isAgendaUpcomingWhatsappEnabled()) {
@@ -97,9 +135,9 @@ export const runAgendaUpcomingWhatsappReminders = async () => {
         isEventInUpcomingReminderWindow(e, minutesBefore, now),
       );
       for (const event of upcoming) {
-        const eventKey = event.id || `${event.title}|${event.time}`;
-        const runKey = buildUpcomingReminderRunKey(userId, eventKey, dateIso);
-        if (!tryAcquireUpcomingReminderFile(runKey)) continue;
+        const eventKey = buildCalendarEventKey(event);
+        const canSend = await tryAcquireUpcomingReminderSlot(userId, dateIso, eventKey);
+        if (!canSend) continue;
 
         const message = formatUpcomingAgendaWhatsappMessage(event, minutesBefore);
         await sendWhatsappMessage({
@@ -111,6 +149,7 @@ export const runAgendaUpcomingWhatsappReminders = async () => {
           eventId: event.id,
         });
         sent += 1;
+        console.info('[agenda-upcoming] enviado', { userId, eventId: event.id, dateIso });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -124,3 +163,10 @@ export const runAgendaUpcomingWhatsappReminders = async () => {
 
   return { ok: true, dateIso, minutesBefore, sent, users: users.length };
 };
+
+/** @deprecated use buildUpcomingReminderDedupKey */
+export const buildUpcomingReminderRunKey = (userId, eventKey, dateIso) =>
+  buildUpcomingReminderDedupKey(userId, dateIso, eventKey);
+
+/** @deprecated dedup em ficheiro removido — usar tryAcquireUpcomingReminderSlot */
+export const tryAcquireUpcomingReminderFile = () => false;

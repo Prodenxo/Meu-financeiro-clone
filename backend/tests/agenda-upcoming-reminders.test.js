@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  buildUpcomingReminderRunKey,
+  buildUpcomingReminderDedupKey,
   formatUpcomingAgendaWhatsappMessage,
   isEventInUpcomingReminderWindow,
 } from '../src/services/agenda-upcoming-reminders.service.js';
@@ -48,9 +48,9 @@ test('formatUpcomingAgendaWhatsappMessage: inclui lembrete e dica de concluir', 
   assert.ok(msg.includes('concluí'));
 });
 
-test('buildUpcomingReminderRunKey: estável', () => {
+test('buildUpcomingReminderDedupKey: estável', () => {
   assert.equal(
-    buildUpcomingReminderRunKey('u1', 'evt-1', '2099-06-16'),
-    'upcoming:u1:2099-06-16:evt-1',
+    buildUpcomingReminderDedupKey('u1', '2099-06-16', 'id:evt-1'),
+    'u1:2099-06-16:id:evt-1',
   );
 });
