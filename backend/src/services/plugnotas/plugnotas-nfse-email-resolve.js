@@ -35,6 +35,77 @@ const pruneEndereco = (endereco) => {
   return Object.keys(next).length ? next : null;
 };
 
+const mergeEnderecoLayers = (...layers) => {
+  const merged = {};
+  for (const layer of layers) {
+    const pruned = pruneEndereco(isPlainObject(layer) ? layer : null);
+    if (pruned) Object.assign(merged, pruned);
+  }
+  return Object.keys(merged).length ? pruneEndereco(merged) : null;
+};
+
+const isEmitPayloadLike = (value) => (
+  isPlainObject(value)
+  && (
+    value.tomadorCep !== undefined
+    || value.tomadorEndereco !== undefined
+    || value.tomador?.endereco !== undefined
+    || value.endereco !== undefined
+    || value.tomadorLogradouro !== undefined
+    || value.tomadorBairro !== undefined
+    || value.tomadorCodigoCidade !== undefined
+    || value.tomadorIbge !== undefined
+    || value.tomadorCidade !== undefined
+    || value.tomadorUf !== undefined
+  )
+);
+
+/**
+ * Aceita tomadorEndereco aninhado ou campos planos do OpenClaw (tomadorCep, tomadorLogradouro, …).
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @returns {Record<string, string>|null}
+ */
+export const normalizeTomadorEnderecoFromEmitPayload = (payload) => {
+  if (!isPlainObject(payload)) return null;
+
+  const nested = isPlainObject(payload.tomadorEndereco)
+    ? payload.tomadorEndereco
+    : (
+        isPlainObject(payload.endereco)
+          ? payload.endereco
+          : (isPlainObject(payload.tomador?.endereco) ? payload.tomador.endereco : null)
+      );
+
+  const flat = {
+    cep: payload.tomadorCep ?? payload.cep,
+    logradouro: payload.tomadorLogradouro ?? payload.logradouro,
+    numero: payload.tomadorNumero ?? payload.numero,
+    bairro: payload.tomadorBairro ?? payload.bairro,
+    codigoCidade:
+      payload.tomadorCodigoCidade
+      ?? payload.tomadorIbge
+      ?? payload.codigoIbge
+      ?? payload.codigoCidade
+      ?? payload.ibge,
+    descricaoCidade:
+      payload.tomadorCidade
+      ?? payload.tomadorDescricaoCidade
+      ?? payload.cidade
+      ?? payload.descricaoCidade,
+    estado: payload.tomadorUf ?? payload.tomadorEstado ?? payload.uf ?? payload.estado,
+    complemento: payload.tomadorComplemento ?? payload.complemento,
+  };
+
+  return mergeEnderecoLayers(flat, nested);
+};
+
+const pruneEnderecoFromEmitArg = (payloadOrEndereco) => {
+  if (isEmitPayloadLike(payloadOrEndereco)) {
+    return normalizeTomadorEnderecoFromEmitPayload(payloadOrEndereco);
+  }
+  return pruneEndereco(isPlainObject(payloadOrEndereco) ? payloadOrEndereco : null);
+};
+
 export const hasCompleteTomadorEndereco = (endereco) => {
   const e = pruneEndereco(endereco);
   if (!e) return false;
@@ -106,7 +177,7 @@ export const resolveCatalogClienteRecord = async (userId, documento, documentTyp
   const doc = normalizeDoc(documento);
   if (!userId || !doc) return null;
   try {
-    const db = createSupabaseClient();
+    const db = createSupabaseClient({ useServiceRole: true });
     const { data, error } = await db
       .from(CLIENTS_TABLE)
       .select('email, metadata_json')
@@ -155,24 +226,26 @@ export const enderecoFromCnpjLookupNfse = (lookup) => {
  * @param {unknown} payloadEndereco
  * @returns {Promise<Record<string, string>|null>}
  */
-export const resolveTomadorEmitEndereco = async (userId, tomadorDoc, payloadEndereco) => {
-  const fromPayload = pruneEndereco(isPlainObject(payloadEndereco) ? payloadEndereco : null);
+export const resolveTomadorEmitEndereco = async (userId, tomadorDoc, payloadOrEndereco) => {
+  const fromPayload = pruneEnderecoFromEmitArg(payloadOrEndereco);
   if (hasCompleteTomadorEndereco(fromPayload)) return fromPayload;
 
   const catalogEndereco = await resolveCatalogClienteEndereco(userId, tomadorDoc);
-  if (hasCompleteTomadorEndereco(catalogEndereco)) return catalogEndereco;
 
-  if (tomadorDoc.length !== 14) return fromPayload;
-
-  try {
-    const lookup = await lookupCnpjCascade(tomadorDoc);
-    const fromLookup = enderecoFromCnpjLookupNfse(lookup);
-    if (fromLookup) return fromLookup;
-  } catch {
-    /* consulta opcional — validação final informa campos faltantes */
+  let fromLookup = null;
+  if (tomadorDoc.length === 14) {
+    try {
+      const lookup = await lookupCnpjCascade(tomadorDoc);
+      fromLookup = enderecoFromCnpjLookupNfse(lookup);
+    } catch {
+      /* consulta opcional — validação final informa campos faltantes */
+    }
   }
 
-  return fromPayload;
+  const merged = mergeEnderecoLayers(fromPayload, catalogEndereco, fromLookup);
+  if (hasCompleteTomadorEndereco(merged)) return merged;
+
+  return merged || fromPayload;
 };
 
 /**
@@ -245,7 +318,11 @@ export const enrichNfseEmitPayloadEmails = async (userId, payload, options = {})
   }
 
   if (tomadorDoc.length === 14) {
-    const tomadorEndereco = await resolveTomadorEmitEndereco(userId, tomadorDoc, tomador.endereco);
+    const tomadorEndereco = await resolveTomadorEmitEndereco(
+      userId,
+      tomadorDoc,
+      options.emitInput || tomador.endereco,
+    );
     if (tomadorEndereco) tomador.endereco = tomadorEndereco;
   }
 

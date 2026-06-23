@@ -28,6 +28,7 @@ import {
 import {
   assertNfsePrestadorEmailOrThrow,
   enrichNfseEmitPayloadEmails,
+  normalizeTomadorEnderecoFromEmitPayload,
   resolvePrestadorEmitEmail,
 } from './plugnotas/plugnotas-nfse-email-resolve.js';
 import {
@@ -424,6 +425,7 @@ const buildPrestadorEnderecoFromInput = (input) => {
 };
 
 const buildTomadorEnderecoFromInput = (input) => {
+  const flatFromPayload = normalizeTomadorEnderecoFromEmitPayload(input) || {};
   const enderecoInput = (
     input?.tomadorEndereco
     && typeof input.tomadorEndereco === 'object'
@@ -437,7 +439,7 @@ const buildTomadorEnderecoFromInput = (input) => {
             : {}
         )
   );
-  return buildPartyEnderecoFromInput(enderecoInput);
+  return buildPartyEnderecoFromInput({ ...flatFromPayload, ...enderecoInput });
 };
 
 const buildPayloadFromInput = (input, userId) => {
@@ -1459,6 +1461,7 @@ export const emitirNota = async (userId, input) => {
       emitPayload = await enrichNfseEmitPayloadEmails(userId, emitPayload, {
         prestadorDoc,
         tomadorDoc,
+        emitInput: input,
       });
     }
 

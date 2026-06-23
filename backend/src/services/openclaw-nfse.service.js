@@ -27,7 +27,6 @@ import {
   NFSE_SERVICO_CODIGO_MIN_LENGTH,
 } from './mei-notas.service.js';
 import {
-  enderecoFromCnpjLookupNfse,
   hasCompleteTomadorEndereco,
   resolveCatalogClienteEndereco,
   resolveTomadorEmitEndereco,
@@ -733,37 +732,9 @@ const resolveTomador = async (userId, payload) => {
   };
 };
 
-const pickTomadorEnderecoFromPayload = (payload) => {
-  const raw = payload?.tomadorEndereco || payload?.endereco || payload?.tomador?.endereco;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const mapped = {
-    cep: raw.cep,
-    logradouro: raw.logradouro,
-    numero: raw.numero,
-    bairro: raw.bairro,
-    codigoCidade: raw.codigoCidade || raw.codigo_ibge || raw.ibge,
-    descricaoCidade: raw.descricaoCidade || raw.cidade,
-    estado: raw.estado || raw.uf,
-    complemento: raw.complemento,
-  };
-  return hasCompleteTomadorEndereco(mapped) ? mapped : null;
-};
-
-const resolveEnderecoForOpenclawCliente = async (documento, payload) => {
-  const fromPayload = pickTomadorEnderecoFromPayload(payload);
-  if (fromPayload) return fromPayload;
-
-  if (documento.length !== 14) return null;
-
-  try {
-    const lookup = await lookupCnpjBrasilApi(documento);
-    const fromLookup = enderecoFromCnpjLookupNfse(lookup);
-    if (fromLookup) return fromLookup;
-  } catch {
-    /* consulta opcional */
-  }
-
-  return null;
+const resolveEnderecoForOpenclawCliente = async (userId, documento, payload) => {
+  const endereco = await resolveTomadorEmitEndereco(userId, documento, payload);
+  return hasCompleteTomadorEndereco(endereco) ? endereco : null;
 };
 
 const buildClienteMetadataFromEndereco = (endereco) => {
@@ -793,7 +764,7 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
       };
     }
 
-    const endereco = await resolveEnderecoForOpenclawCliente(documento, payload);
+    const endereco = await resolveEnderecoForOpenclawCliente(userId, documento, payload);
     if (endereco) {
       const metadata_json = {
         ...(typeof existing.metadata_json === 'object' && existing.metadata_json
@@ -849,7 +820,7 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
   }
 
   const emailRaw = firstNonEmpty(payload?.email, payload?.tomadorEmail);
-  const endereco = await resolveEnderecoForOpenclawCliente(documento, payload);
+  const endereco = await resolveEnderecoForOpenclawCliente(userId, documento, payload);
   const metadata_json = buildClienteMetadataFromEndereco(endereco);
   const cliente = await criarCatalogoCliente(userId, {
     documento,
@@ -1096,11 +1067,7 @@ export const buildOpenclawNfseEmitInput = async (userId, payload = {}) => {
   const prestador = emitenteToPrestadorInput(emitente);
   const tomadorDoc = normalizeDoc(tomador.tomadorCpfCnpj || '');
   const tomadorEndereco = tomadorDoc.length === 14
-    ? await resolveTomadorEmitEndereco(
-      userId,
-      tomadorDoc,
-      payload?.tomadorEndereco || payload?.tomador?.endereco,
-    )
+    ? await resolveTomadorEmitEndereco(userId, tomadorDoc, payload)
     : null;
 
   return {

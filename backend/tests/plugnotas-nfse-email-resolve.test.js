@@ -6,6 +6,7 @@ import {
   enrichNfseEmitPayloadEmails,
   hasCompleteTomadorEndereco,
   isValidPlugnotasEmitEmail,
+  normalizeTomadorEnderecoFromEmitPayload,
   pickFirstValidEmitEmail,
 } from '../src/services/plugnotas/plugnotas-nfse-email-resolve.js';
 
@@ -65,6 +66,37 @@ test('enderecoFromCnpjLookupNfse usa S/N quando número ausente', () => {
   });
   assert.equal(endereco?.numero, 'S/N');
   assert.equal(hasCompleteTomadorEndereco(endereco), true);
+});
+
+test('normalizeTomadorEnderecoFromEmitPayload lê tomadorCep plano do OpenClaw', () => {
+  const endereco = normalizeTomadorEnderecoFromEmitPayload({
+    tomadorCep: '21635001',
+    tomadorLogradouro: 'Rua A',
+    tomadorNumero: '100',
+    tomadorBairro: 'Centro',
+    tomadorCodigoCidade: '3304557',
+    tomadorCidade: 'Rio de Janeiro',
+    tomadorUf: 'RJ',
+  });
+  assert.equal(endereco?.cep, '21635001');
+  assert.equal(hasCompleteTomadorEndereco(endereco), true);
+});
+
+test('normalizeTomadorEnderecoFromEmitPayload prioriza tomadorEndereco aninhado', () => {
+  const endereco = normalizeTomadorEnderecoFromEmitPayload({
+    tomadorCep: '00000000',
+    tomadorEndereco: {
+      cep: '21635001',
+      logradouro: 'Rua B',
+      numero: '50',
+      bairro: 'Bangu',
+      codigoCidade: '3304557',
+      descricaoCidade: 'Rio de Janeiro',
+      estado: 'RJ',
+    },
+  });
+  assert.equal(endereco?.cep, '21635001');
+  assert.equal(endereco?.logradouro, 'Rua B');
 });
 
 test('assertNfsePrestadorEmailOrThrow exige e-mail do prestador', () => {
