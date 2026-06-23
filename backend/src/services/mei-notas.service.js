@@ -16,6 +16,7 @@ import {
   applyPlugnotasNfseEmitRpsFromEmpresaConfig,
   emitNfseWithPlugnotasRpsHeal,
   ensureEmpresaPlugnotasRpsForNfseEmit,
+  isNfseE0014FromPlugnotasResponse,
   readRpsNumeroFromNfseHistoryRow,
   readRpsNumeroFromNfsePlugnotasBody,
   readRpsFromNfseEmitPayload,
@@ -1561,7 +1562,14 @@ export const emitirNota = async (userId, input) => {
     }
 
     if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
-      maybeAdvanceNfseRpsAfterPlugnotas(cnpjPrestadorNfse, emitPayload, response);
+      const usedRps = resolveUsedNfseRpsFromEmit(emitPayload, response);
+      const isDuplicateRpsRejection = normalizeStatus(status) === 'rejeitado'
+        && isNfseE0014FromPlugnotasResponse(response);
+      if (isDuplicateRpsRejection && usedRps) {
+        await advancePlugnotasNfseRpsAfterEmit(cnpjPrestadorNfse, usedRps).catch(() => {});
+      } else {
+        maybeAdvanceNfseRpsAfterPlugnotas(cnpjPrestadorNfse, emitPayload, response);
+      }
     }
 
     const duration_ms = Date.now() - startedAt;

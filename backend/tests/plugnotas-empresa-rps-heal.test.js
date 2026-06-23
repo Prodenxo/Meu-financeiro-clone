@@ -7,6 +7,7 @@ import {
   emitNfseWithPlugnotasRpsHeal,
   empresaPlugnotasTemRpsCadastrado,
   ensureEmpresaPlugnotasRpsForNfseEmit,
+  isNfseE0014FromPlugnotasResponse,
   queryMaxRpsNumeroFromPlugnotasPeriodo,
   readPlugnotasNfseNextRpsFromEmpresa,
   readRpsFromNfseEmitPayload,
@@ -389,6 +390,73 @@ test('queryMaxRpsNumeroFromPlugnotasPeriodo pagina até hashProximaPagina null',
   try {
     const max = await queryMaxRpsNumeroFromPlugnotasPeriodo('65.805.583/0001-73');
     assert.equal(max, 88);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('isNfseE0014FromPlugnotasResponse reconhece mensagem humanizada de numeração repetida', () => {
+  assert.equal(
+    isNfseE0014FromPlugnotasResponse({
+      retorno: {
+        mensagemRetorno: 'E0014: Conjunto de Série, Número, Código do Município Emissor...',
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    isNfseE0014FromPlugnotasResponse({
+      retorno: {
+        mensagemRetorno: 'Numeração repetida (série + número da nota): combinação já foi usada',
+      },
+    }),
+    true,
+  );
+});
+
+test('emitNfseWithPlugnotasRpsHeal usa número do payload quando resposta E0014 não traz dps', async () => {
+  const originalFetch = global.fetch;
+  const emitCalls = [];
+
+  global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/empresa/') && options.method === 'PATCH') {
+      return new Response(JSON.stringify({ message: 'ok' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  const adapter = {
+    emitir: async (payload) => {
+      emitCalls.push(payload);
+      if (emitCalls.length === 1) {
+        return [{
+          retorno: {
+            mensagemRetorno: 'E0014 - Conjunto de Série, Número...',
+            situacao: 'REJEITADA',
+          },
+          status: 'REJEITADO',
+        }];
+      }
+      return [{ status: 'PROCESSANDO', rps: { numero: 56, serie: '1', lote: 1 } }];
+    },
+  };
+
+  try {
+    const { response } = await emitNfseWithPlugnotasRpsHeal(
+      adapter,
+      {
+        idIntegracao: 'teste-1',
+        rps: { lote: 1, numeracao: [{ serie: '1', numero: 55 }] },
+      },
+      '65805583000173',
+      () => 'teste-2',
+    );
+    assert.equal(emitCalls.length, 2);
+    assert.equal(emitCalls[1].rps.numeracao[0].numero, 56);
+    assert.equal(readRpsNumeroFromNfsePlugnotasBody(response), 56);
   } finally {
     global.fetch = originalFetch;
   }

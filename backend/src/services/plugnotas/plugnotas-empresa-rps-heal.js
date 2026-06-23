@@ -83,8 +83,20 @@ export const isNfseE0014DuplicateRpsMessage = (text) => {
   return /e0014/.test(lower)
     || lower.includes('dps já existe')
     || lower.includes('dps ja existe')
+    || lower.includes('numeração repetida')
+    || lower.includes('numeracao repetida')
     || (lower.includes('conjunto de série') && lower.includes('já existe'))
-    || (lower.includes('conjunto de serie') && lower.includes('ja existe'));
+    || (lower.includes('conjunto de serie') && lower.includes('ja existe'))
+    || (
+      (lower.includes('série') || lower.includes('serie'))
+      && (lower.includes('número') || lower.includes('numero'))
+      && (
+        lower.includes('já foi usada')
+        || lower.includes('ja foi usada')
+        || lower.includes('já utiliz')
+        || lower.includes('ja utiliz')
+      )
+    );
 };
 
 /**
@@ -141,7 +153,8 @@ export async function queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjInput) {
 
     const notas = Array.isArray(body?.notas) ? body.notas : [];
     for (const nota of notas) {
-      const numero = parsePositiveInt(nota?.numero);
+      const numero = readRpsNumeroFromNfsePlugnotasBody(nota)
+        ?? parsePositiveInt(nota?.numero);
       if (numero > maxKnown) maxKnown = numero;
     }
 
@@ -364,8 +377,19 @@ export async function emitNfseWithPlugnotasRpsHeal(
       return { response, emitPayload: payload };
     }
 
-    const usedNumero = readRpsNumeroFromNfsePlugnotasBody(response);
+    const usedNumero = readRpsNumeroFromNfsePlugnotasBody(response)
+      ?? readRpsFromNfseEmitPayload(payload)?.numero;
     if (!Number.isFinite(usedNumero) || attempt >= maxRetries) {
+      if (Number.isFinite(usedNumero)) {
+        const currentRps = readRpsFromNfseEmitPayload(payload);
+        const serie = currentRps?.serie ?? '1';
+        const lote = currentRps?.lote ?? 1;
+        await syncPlugnotasNfseRpsBeforeEmit(cnpj, {
+          serie,
+          lote,
+          numero: usedNumero + 1,
+        });
+      }
       return { response, emitPayload: payload };
     }
 
