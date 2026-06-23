@@ -935,6 +935,22 @@ const buildClienteCatalogEntry = (payload, { documentType = DOCUMENT_TYPE_NFSE }
   };
 };
 
+const mergeClienteCatalogMetadata = (existingMeta, incomingMeta) => {
+  const existing = toObject(existingMeta);
+  const incoming = toObject(incomingMeta);
+  if (!Object.keys(incoming).length) {
+    return Object.keys(existing).length ? existing : null;
+  }
+  const merged = { ...existing, ...incoming };
+  const existingEnd = toObject(existing.endereco);
+  const incomingEnd = toObject(incoming.endereco);
+  if (Object.keys(existingEnd).length || Object.keys(incomingEnd).length) {
+    const enderecoMerged = prune({ ...existingEnd, ...incomingEnd });
+    if (enderecoMerged) merged.endereco = enderecoMerged;
+  }
+  return Object.keys(merged).length ? merged : null;
+};
+
 const buildClienteCatalogMetadataFromPayload = (payload, documentType) => {
   const normalizedType = normalizeDocumentType(documentType);
   const dest = normalizedType === DOCUMENT_TYPE_NFSE
@@ -1169,7 +1185,15 @@ const upsertClienteCatalogo = async (userId, payload, { documentType = DOCUMENT_
     updated_at: now
   };
   if (fiscalMeta) {
-    upsertRow.metadata_json = fiscalMeta;
+    const { data: existingRow } = await dbClient
+      .from(CLIENTS_TABLE)
+      .select('metadata_json')
+      .eq('user_id', userId)
+      .eq('document_type', normalizedType)
+      .eq('dedupe_key', entry.dedupe_key)
+      .maybeSingle();
+    const merged = mergeClienteCatalogMetadata(existingRow?.metadata_json, fiscalMeta);
+    if (merged) upsertRow.metadata_json = merged;
   }
   const { error } = await dbClient
     .from(CLIENTS_TABLE)

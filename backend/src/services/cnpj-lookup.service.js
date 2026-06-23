@@ -45,7 +45,7 @@ const lookupCepBrasilApi = async (cepInput) => {
   }
 };
 
-/** Preenche logradouro/cidade/UF faltantes via CEP quando a Receita retorna só bairro+CEP. */
+/** Preenche logradouro/cidade/UF/IBGE faltantes via CEP quando a Receita retorna endereço incompleto. */
 const enrichEnderecoFromCep = async (data) => {
   const endereco = data?.endereco || {};
   const cep = normalizeDoc(endereco.cep || '').slice(0, 8);
@@ -53,12 +53,21 @@ const enrichEnderecoFromCep = async (data) => {
   const needsBairro = !hasText(endereco.bairro);
   const needsCidade = !hasText(endereco.descricaoCidade);
   const needsUf = !hasText(endereco.estado);
-  if (cep.length !== 8 || (!needsLogradouro && !needsBairro && !needsCidade && !needsUf)) {
+  const needsIbge = normalizeDoc(endereco.codigoCidade || '').length !== 7;
+  if (
+    cep.length !== 8
+    || (!needsLogradouro && !needsBairro && !needsCidade && !needsUf && !needsIbge)
+  ) {
     return data;
   }
 
   const cepRaw = await lookupCepBrasilApi(cep);
   if (!cepRaw) return data;
+
+  const ibgeFromCep =
+    cepRaw.city_ibge_code != null && String(cepRaw.city_ibge_code).trim()
+      ? padZeros(cepRaw.city_ibge_code, 7)
+      : null;
 
   return {
     ...data,
@@ -68,6 +77,10 @@ const enrichEnderecoFromCep = async (data) => {
       bairro: hasText(endereco.bairro) ? endereco.bairro : (cepRaw.neighborhood || null),
       descricaoCidade: hasText(endereco.descricaoCidade) ? endereco.descricaoCidade : (cepRaw.city || null),
       estado: hasText(endereco.estado) ? endereco.estado : (cepRaw.state || null),
+      codigoCidade:
+        normalizeDoc(endereco.codigoCidade || '').length === 7
+          ? String(endereco.codigoCidade).replace(/\D/g, '').slice(0, 7)
+          : ibgeFromCep,
       cep,
     },
   };
