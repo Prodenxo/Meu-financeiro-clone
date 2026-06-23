@@ -427,6 +427,7 @@ Aliases aceites: `agenda_hoje`, `minha_agenda_hoje`, `tarefas_hoje`, `checklist_
 - Para **detalhes** de um item (Meet, link Google): `list_calendar_events` com `payload.data` = hoje.
 - Para **vários dias** (*agenda da semana*): `list_calendar_events` com `scope":"agenda"` (não é checklist).
 - Lembretes automáticos **07:00** / **21:00** já usam o mesmo formato checklist.
+
 - **Consultar:** `list_transactions`; **`list_calendar_events`** (dia inteiro só se pedirem *todos* / *passados*); **`list_categories`** (`payload.minimal: true` opcional). Exemplo categorias:
 
 ```bash

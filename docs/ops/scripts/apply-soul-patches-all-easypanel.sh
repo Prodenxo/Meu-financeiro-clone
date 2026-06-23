@@ -78,6 +78,25 @@ const calendarBlock = `## Agenda — consultar e criar (Google Calendar + bot)
 - Lista de agenda = **só Google Calendar** (não misturar com \`list_transactions\`).
 - Se \`googleCalendarLinked=false\`, diga para conectar Google Calendar na app.
 
+### Agenda de hoje — checklist (☐ / ✅) — Fase 1
+
+| Pedido do utilizador | action |
+|----------------------|--------|
+| *minha agenda hoje* / *tarefas de hoje* / *o que tenho hoje* | \`list_agenda_checklist_today\` |
+| *agenda da semana* / *próximos dias* | \`list_calendar_events\` com \`{"scope":"agenda"}\` |
+
+\`\`\`bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_agenda_checklist_today"}'
+\`\`\`
+
+Aliases: \`agenda_hoje\`, \`minha_agenda_hoje\`, \`tarefas_hoje\`, \`checklist_agenda\`.
+
+- Repete **APENAS** o campo JSON \`message\` (☐ pendente / ✅ já realizada **pelo horário**).
+- **NÃO** reformates nem omitas o resumo (\`X concluídas · Y pendentes\`).
+- **Nesta fase:** utilizador **não** marca manualmente *"concluí"* — ✅ = compromisso cujo horário **já passou**.
+- Detalhes (Meet, link Google): \`list_calendar_events\` com \`{"data":"hoje"}\`.
+- Lembretes automáticos **07:00** / **21:00** usam o mesmo formato (backend).
+
 ### Excluir compromisso
 
 | Pedido | action | payload |
@@ -287,7 +306,7 @@ for (const m of calMarkers) {
   if (i >= 0 && (calIdx < 0 || i < calIdx)) calIdx = i;
 }
 const phoneIdx2 = cur.indexOf(phoneSection);
-const needsAgendaV3 = !cur.includes('get_next_calendar_event') || !cur.includes('delete_calendar_event') || !cur.includes('add_calendar_event_meet');
+const needsAgendaV3 = !cur.includes('get_next_calendar_event') || !cur.includes('delete_calendar_event') || !cur.includes('add_calendar_event_meet') || !cur.includes('list_agenda_checklist_today');
 
 if (calIdx >= 0) {
   const sliceEnd = phoneIdx2 > calIdx ? phoneIdx2 : cur.length;
@@ -429,8 +448,12 @@ if ! grep -q "delete_calendar_event" "$SOUL"; then
   echo "ERRO: SOUL sem delete_calendar_event — secção excluir não aplicou"
   exit 1
 fi
-if ! grep -q "add_calendar_event_meet" "$SOUL"; then
+if (!grep -q "add_calendar_event_meet" "$SOUL"; then
   echo "ERRO: SOUL sem add_calendar_event_meet — secção Meet não aplicou"
+  exit 1
+fi
+if ! grep -q "list_agenda_checklist_today" "$SOUL"; then
+  echo "ERRO: SOUL sem list_agenda_checklist_today — secção checklist agenda não aplicou"
   exit 1
 fi
 echo ""
