@@ -1,5 +1,5 @@
 import { createSupabaseClient } from '../config/supabase.js';
-import { badRequest } from '../utils/errors.js';
+import { badRequest, HttpError } from '../utils/errors.js';
 
 const todayIsoSaoPaulo = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
@@ -46,21 +46,34 @@ export const markCalendarEventCompleted = async (userId, event, dateIso) => {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw badRequest('Conclusão manual indisponível (SUPABASE_SERVICE_ROLE_KEY).');
   }
-  const eventKey = buildCalendarEventKey(event);
-  const admin = createSupabaseClient({ useServiceRole: true });
-  const { error } = await admin.from('calendar_checklist_completions').upsert(
-    {
-      user_id: userId,
-      event_date: dateIso,
-      event_id: event.id ? String(event.id) : null,
-      event_key: eventKey,
-      title: String(event.title || 'Compromisso').trim(),
-      completed_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id,event_date,event_key' },
-  );
-  if (error) throw badRequest(error.message);
-  return { eventKey, title: event.title };
+  try {
+    const eventKey = buildCalendarEventKey(event);
+    const admin = createSupabaseClient({ useServiceRole: true });
+    const { error } = await admin.from('calendar_checklist_completions').upsert(
+      {
+        user_id: userId,
+        event_date: dateIso,
+        event_id: event.id ? String(event.id) : null,
+        event_key: eventKey,
+        title: String(event.title || 'Compromisso').trim(),
+        completed_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,event_date,event_key' },
+    );
+    if (error) {
+      const missingTable = /does not exist|schema cache|42P01/i.test(String(error.message || ''));
+      const hint = missingTable
+        ? ' Tabela calendar_checklist_completions em falta — redeploy com SUPABASE_DB_URL ou execute scripts/one-time/create-calendar-checklist-completions.sql no Supabase.'
+        : '';
+      throw badRequest(`${error.message || 'Falha ao gravar conclusão'}${hint}`);
+    }
+    return { eventKey, title: event.title };
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[calendar-checklist] mark failed', { userId, dateIso, msg });
+    throw badRequest(msg || 'Falha ao marcar compromisso como concluído');
+  }
 };
 
 const normalizeTitle = (s) =>

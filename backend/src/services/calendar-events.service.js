@@ -5,7 +5,7 @@ import {
   resolveCalendarEventFromPayload,
   resolveCompletionDateIso,
 } from './calendar-checklist-completion.service.js';
-import { badRequest } from '../utils/errors.js';
+import { badRequest, HttpError } from '../utils/errors.js';
 import * as transactionsService from './transactions.service.js';
 import { getCertificateValidity } from './mei-certificate-store.js';
 import {
@@ -642,55 +642,62 @@ export const listTodayAgendaChecklistForUser = async (userId) => {
  * @param {Record<string, unknown>} payload
  */
 export const completeCalendarEventForUser = async (userId, payload = {}) => {
-  const dateIso = resolveCompletionDateIso(payload);
-  const day = await listCalendarEventsForUser(userId, { date: dateIso, data: dateIso });
-  const events = day.events || [];
-  if (!events.length) {
-    return {
-      ok: false,
-      message: `Não há compromissos em ${day.dateDisplay} para marcar como concluído.`,
-      empty: true,
-    };
-  }
+  try {
+    const dateIso = resolveCompletionDateIso(payload);
+    const day = await listCalendarEventsForUser(userId, { date: dateIso, data: dateIso });
+    const events = day.events || [];
+    if (!events.length) {
+      return {
+        ok: false,
+        message: `Não há compromissos em ${day.dateDisplay} para marcar como concluído.`,
+        empty: true,
+      };
+    }
 
-  const resolved = resolveCalendarEventFromPayload(events, payload);
-  if (resolved.invalidIndex) {
-    return {
-      ok: false,
-      invalidIndex: true,
-      message:
-        `Só há ${resolved.maxIndex} item${resolved.maxIndex === 1 ? '' : 'ns'} na agenda de ${day.dateDisplay}. `
-        + `Use «feito 1»${resolved.maxIndex > 1 ? ` a «feito ${resolved.maxIndex}»` : ''}.`,
-    };
-  }
-  if (resolved.ambiguous) {
-    const lines = resolved.candidates.map(
-      (c) => `${c.index}. ${c.title}${c.time ? ` (${String(c.time).slice(0, 5)})` : ''}`,
-    );
-    return {
-      ok: false,
-      ambiguous: true,
-      message: `Qual compromisso?\n${lines.join('\n')}\n\nResponda com o número (ex.: «feito 2»).`,
-      candidates: resolved.candidates,
-    };
-  }
-  if (resolved.notFound || !resolved.event) {
-    return {
-      ok: false,
-      message:
-        'Não encontrei esse compromisso na agenda. Peça «minha agenda hoje» e use o número do item.',
-    };
-  }
+    const resolved = resolveCalendarEventFromPayload(events, payload);
+    if (resolved.invalidIndex) {
+      return {
+        ok: false,
+        invalidIndex: true,
+        message:
+          `Só há ${resolved.maxIndex} item${resolved.maxIndex === 1 ? '' : 'ns'} na agenda de ${day.dateDisplay}. `
+          + `Use «feito 1»${resolved.maxIndex > 1 ? ` a «feito ${resolved.maxIndex}»` : ''}.`,
+      };
+    }
+    if (resolved.ambiguous) {
+      const lines = resolved.candidates.map(
+        (c) => `${c.index}. ${c.title}${c.time ? ` (${String(c.time).slice(0, 5)})` : ''}`,
+      );
+      return {
+        ok: false,
+        ambiguous: true,
+        message: `Qual compromisso?\n${lines.join('\n')}\n\nResponda com o número (ex.: «feito 2»).`,
+        candidates: resolved.candidates,
+      };
+    }
+    if (resolved.notFound || !resolved.event) {
+      return {
+        ok: false,
+        message:
+          'Não encontrei esse compromisso na agenda. Peça «minha agenda hoje» e use o número do item.',
+      };
+    }
 
-  await markCalendarEventCompleted(userId, resolved.event, dateIso);
-  const checklist = await listAgendaChecklistForUser(userId, { date: dateIso, data: dateIso });
-  const title = String(resolved.event.title || 'Compromisso').trim();
-  return {
-    ok: true,
-    message: `✅ «${title}» marcado como concluído.\n\n${checklist.message}`,
-    matchedBy: resolved.matchedBy,
-    data: checklist,
-  };
+    await markCalendarEventCompleted(userId, resolved.event, dateIso);
+    const checklist = await listAgendaChecklistForUser(userId, { date: dateIso, data: dateIso });
+    const title = String(resolved.event.title || 'Compromisso').trim();
+    return {
+      ok: true,
+      message: `✅ «${title}» marcado como concluído.\n\n${checklist.message}`,
+      matchedBy: resolved.matchedBy,
+      data: checklist,
+    };
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[calendar-complete] failed', { userId, msg });
+    throw badRequest(msg || 'Falha ao marcar compromisso como concluído');
+  }
 };
 
 /**

@@ -69,6 +69,9 @@ export const env = {
   DB_BOOTSTRAP_AUTO_SCHEMA: process.env.DB_BOOTSTRAP_AUTO_SCHEMA || "",
   DB_BOOTSTRAP_FAIL_FAST: process.env.DB_BOOTSTRAP_FAIL_FAST || "",
   DB_BOOTSTRAP_SSL: process.env.DB_BOOTSTRAP_SSL || "",
+  /** Garante tabela calendar_checklist_completions no arranque (default true). */
+  CALENDAR_CHECKLIST_SCHEMA_ENSURE:
+    process.env.CALENDAR_CHECKLIST_SCHEMA_ENSURE || "",
   FRONTEND_URL:
     process.env.FRONTEND_URL || "https://meu-financeiro-frontend.vercel.app",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "",

@@ -24,6 +24,16 @@ export const errorHandler = (err, req, res, _next) => {
       query: req?.query,
       body: summarizeBody(req?.body)
     });
+  } else if (status >= 500) {
+    // eslint-disable-next-line no-console
+    console.error('[error]', {
+      status,
+      message: err?.message || '(sem mensagem)',
+      stack: err?.stack,
+      method: req?.method,
+      url: req?.originalUrl,
+      action: req?.body?.action,
+    });
   }
 
   res.status(status).json({

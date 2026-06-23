@@ -102,18 +102,21 @@ const ensureDasSchema = async (client) => {
 export const bootstrapDatabase = async (options = {}) => {
   const autoSchemaDefault = env.NODE_ENV !== 'production';
   const autoSchema = options.autoSchema ?? parseBoolean(env.DB_BOOTSTRAP_AUTO_SCHEMA, autoSchemaDefault);
+  const ensureCalendarSchema = options.ensureCalendarSchema
+    ?? parseBoolean(env.CALENDAR_CHECKLIST_SCHEMA_ENSURE, true);
   const failFast = options.failFast ?? parseBoolean(env.DB_BOOTSTRAP_FAIL_FAST, true);
   const sslEnabled = options.sslEnabled ?? parseBoolean(env.DB_BOOTSTRAP_SSL, true);
   const dbUrl = options.dbUrl ?? env.SUPABASE_DB_URL;
   const dbClientFactory = options.dbClientFactory || createPgClient;
 
-  if (!autoSchema && !options.forceConnectionCheck) {
+  const shouldConnect = autoSchema || ensureCalendarSchema || options.forceConnectionCheck;
+  if (!shouldConnect) {
     return { connected: false, schemaEnsured: false, skipped: true };
   }
 
   if (!dbUrl) {
     const error = new Error('SUPABASE_DB_URL não configurado para bootstrap automático do schema DAS.');
-    if (failFast) {
+    if (failFast && autoSchema) {
       throw error;
     }
     // eslint-disable-next-line no-console
@@ -127,10 +130,14 @@ export const bootstrapDatabase = async (options = {}) => {
     await client.query('select 1');
     if (autoSchema) {
       await ensureDasSchema(client);
+    } else if (ensureCalendarSchema) {
+      await client.query(CALENDAR_CHECKLIST_COMPLETIONS_SQL);
+      // eslint-disable-next-line no-console
+      console.info('[db-bootstrap] schema calendar_checklist_completions garantido');
     }
     // eslint-disable-next-line no-console
-    console.info('[db-bootstrap] conexão OK e schema DAS/agenda garantido');
-    return { connected: true, schemaEnsured: autoSchema };
+    console.info('[db-bootstrap] conexão OK');
+    return { connected: true, schemaEnsured: autoSchema || ensureCalendarSchema };
   } catch (error) {
     // eslint-disable-next-line no-console
     console.warn('[db-bootstrap] falha ao validar/criar schema DAS', error instanceof Error ? error.message : error);
