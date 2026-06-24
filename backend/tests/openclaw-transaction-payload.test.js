@@ -32,10 +32,47 @@ test('create_transaction usa carteira explícita Nubank', () => {
   assert.equal(r.conta_nome, 'Nubank');
 });
 
-test('create_transaction sem carteira usa padrão Meu Financeiro', () => {
-  const r = normalizeOpenclawTransactionPayload(basePayload, { categories, contas });
+test('create_transaction sem carteira com uma só conta usa essa conta', () => {
+  const r = normalizeOpenclawTransactionPayload(basePayload, {
+    categories,
+    contas: [contas[0]],
+  });
   assert.equal(r.conta_id, 'id-mf');
   assert.equal(r.conta_nome, 'Meu Financeiro');
+});
+
+test('create_transaction sem carteira e várias contas exige escolha', () => {
+  assert.throws(
+    () => normalizeOpenclawTransactionPayload(basePayload, { categories, contas }),
+    (err) => {
+      assert.match(String(err.message), /várias carteiras/i);
+      assert.equal(err.errors?.code, 'CARTEIRA_ESCOLHA_OBRIGATORIA');
+      return true;
+    },
+  );
+});
+
+test('create_transaction converte pendente em pago/recebido para o dashboard', () => {
+  const saida = normalizeOpenclawTransactionPayload(
+    {
+      tipo: 'saida',
+      valor: 35,
+      classificacao: 'Aluguel',
+      data: '2026-06-24',
+      status: 'pendente',
+    },
+    { categories, contas: [contas[0]] },
+  );
+  assert.equal(saida.status, 'pago');
+
+  const entrada = normalizeOpenclawTransactionPayload(
+    {
+      ...basePayload,
+      status: 'pendente',
+    },
+    { categories, contas: [contas[0]] },
+  );
+  assert.equal(entrada.status, 'recebido');
 });
 
 test('create_transaction com carteira inexistente não cai no padrão silenciosamente', () => {

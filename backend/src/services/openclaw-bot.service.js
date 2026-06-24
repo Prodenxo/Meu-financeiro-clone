@@ -897,7 +897,9 @@ export const runOpenclawAction = async (input) => {
           + 'Lançamentos: create_transaction, update_transaction, delete_transaction. '
           + 'Saldo: get_saldo (opcional carteira/conta_id). '
           + 'Em create_transaction use payload.carteira ou conta_nome com o nome EXACTO de uma linha abaixo '
-          + `(ex.: Nubank, Poupança). Sem carteira → padrão "${defaultNome || 'Meu Financeiro'}". `
+          + `(ex.: Nubank, Poupança). Com **2+ carteiras** e pedido sem destino → **pergunte** qual usar (não assuma padrão). `
+          + 'Com **1 carteira** pode lançar sem perguntar. '
+          + 'Gastos/receitas já realizados: status **pago** (saída) ou **recebido** (entrada) — nunca **pendente**. '
           + 'Se o utilizador mencionar banco/carteira no pedido, OBRIGATÓRIO incluir carteira no JSON — '
           + 'nunca assumir só a padrão quando ele pediu outra.',
       },
@@ -969,7 +971,8 @@ export const runOpenclawAction = async (input) => {
         agentInstructions:
           'Formate nomes para o utilizador (entrada/saída). Nunca diga "problemas técnicos" — '
           + 'estes dados já vieram da app. Para lançamento use o nome exacto em classificacao. '
-          + 'Carteira (Nubank, Poupança, etc.) é campo separado: list_contas → payload.carteira em create_transaction.',
+          + 'Carteira (Nubank, Poupança, etc.) é campo separado: list_contas → payload.carteira em create_transaction. '
+          + 'Status: pago (saída) ou recebido (entrada) para movimentos já feitos.',
       },
     };
   }
@@ -978,10 +981,37 @@ export const runOpenclawAction = async (input) => {
     const account = await fetchOpenclawAccountSummary(userId);
     const allCategories = await categoriesService.listCategories(userId);
     const contas = await transactionsService.listActiveContasFinanceiras(userId);
-    const normalized = normalizeOpenclawTransactionPayload(payload, {
-      categories: allCategories,
-      contas,
-    });
+    let normalized;
+    try {
+      normalized = normalizeOpenclawTransactionPayload(payload, {
+        categories: allCategories,
+        contas,
+      });
+    } catch (err) {
+      if (err?.errors?.code === 'CARTEIRA_ESCOLHA_OBRIGATORIA') {
+        const nomes = (err.errors.contas || contas)
+          .map((c) => c?.nome)
+          .filter(Boolean);
+        const lista = nomes.length ? nomes.join(', ') : 'carteiras da conta';
+        return {
+          ok: false,
+          message:
+            `Várias carteiras activas (${lista}). Pergunte em qual lançar antes de registar.`,
+          data: {
+            userId,
+            account,
+            actorContext,
+            contas: err.errors.contas || contas,
+            ...linkDebug,
+            agentInstructions:
+              `${err.errors.botHint || ''} Chame list_contas, mostre a lista numerada e aguarde a resposta. `
+              + 'Depois repita create_transaction com payload.carteira. '
+              + 'Status: pago (saída) ou recebido (entrada) — nunca pendente para gastos já feitos.',
+          },
+        };
+      }
+      throw err;
+    }
     const statusNorm = transactionsService.normalizeTransactionStatus(
       normalized.tipo,
       normalized.status,
@@ -1024,7 +1054,7 @@ export const runOpenclawAction = async (input) => {
           + `*Conta:* ${accountLabel} (telefone ${phoneDigits}). `
           + `*Carteira:* ${carteiraLabel}. `
           + 'Se o nome não for de quem está a falar, NÃO diga que registrou — reporte erro interno. '
-          + 'Cite valor, classificacao, data e carteira.',
+          + 'Cite valor, classificacao, data, carteira e se já contabiliza no saldo (pago/recebido).',
       },
     };
   }

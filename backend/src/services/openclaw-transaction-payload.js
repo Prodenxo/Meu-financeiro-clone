@@ -97,12 +97,34 @@ const hasExplicitWalletIdInPayload = (payload = {}) => {
   return raw != null && String(raw).trim() !== '';
 };
 
+const hasExplicitWalletChoiceInPayload = (payload = {}, requestedName = '') => (
+  hasExplicitWalletIdInPayload(payload)
+  || Boolean(getWalletNameFromPayload(payload))
+  || Boolean(requestedName)
+);
+
+/**
+ * Lançamentos via WhatsApp costumam ser realizados (já pagou/recebeu).
+ * "pendente" no modelo não contabiliza no dashboard — usar pago/recebido.
+ */
+const resolveOpenclawCreateStatus = (tipo, rawStatus) => {
+  const raw = String(rawStatus ?? '').trim().toLowerCase();
+  if (raw === 'a_pagar' || raw === 'a_receber') return raw;
+  if (tipo === 'entrada') {
+    if (!raw || raw === 'pendente' || raw === 'pago') return 'recebido';
+    return raw;
+  }
+  if (!raw || raw === 'pendente' || raw === 'recebido') return 'pago';
+  return raw;
+};
+
 /**
  * Resolve carteira para create_transaction (sem fallback silencioso quando o nome foi pedido).
  * @param {Array<{ id?: string, nome?: string, tipo?: string, ativo?: boolean }>} contas
  * @param {object} payload
  */
 const resolveContaForOpenclawTransaction = (contas = [], payload = {}) => {
+  const activeContas = contas.filter((c) => c?.ativo !== false);
   let requestedName = getWalletNameFromPayload(payload);
   if (!requestedName) {
     const hintText = [
@@ -143,6 +165,20 @@ const resolveContaForOpenclawTransaction = (contas = [], payload = {}) => {
       `Carteira "${requestedName}" não encontrada no texto do pedido. `
       + 'Chame list_contas e repita com o campo carteira no payload.',
       { code: 'CARTEIRA_NAO_ENCONTRADA' },
+    );
+  }
+
+  if (!conta && activeContas.length > 1 && !hasExplicitWalletChoiceInPayload(payload, requestedName)) {
+    throw badRequest(
+      'Várias carteiras activas e o pedido não indicou qual usar. '
+      + 'Chame list_contas, mostre a lista numerada e peça ao utilizador antes de create_transaction.',
+      {
+        code: 'CARTEIRA_ESCOLHA_OBRIGATORIA',
+        botHint:
+          'Pergunte em qual carteira lançar (ex.: Banco do Brasil, Nubank, Poupança). '
+          + 'Não assuma a carteira padrão quando há mais de uma.',
+        contas: activeContas.map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo })),
+      },
     );
   }
 
@@ -237,7 +273,7 @@ export const normalizeOpenclawTransactionPayload = (payload = {}, options = {}) 
     valor,
     classificacao,
     data,
-    status: payload?.status,
+    status: resolveOpenclawCreateStatus(tipo, payload?.status),
     obs: payload?.obs ?? payload?.observacao ?? null,
     conta_id,
     conta_nome,

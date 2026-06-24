@@ -51,19 +51,26 @@ const block = `### Carteiras, saldo e lançamentos — NÃO confundir
 | *cria carteira poupança* / *nova conta Nubank* | **\`create_conta\`** | \`payload\`: \`{ "nome": "Poupança" }\` — **sem** \`valor\`, **sem** \`tipo\` entrada/saída |
 | *quanto tenho* / *meu saldo* | **\`get_saldo\`** | Opcional \`carteira\` no payload |
 | *quais carteiras tenho* | **\`list_contas\`** | Lista com \`saldoAtual\` |
-| *recebi 500 de salário* | **\`create_transaction\`** | \`classificacao\` = categoria; carteira opcional → padrão |
+| *recebi 500 de salário* | **\`create_transaction\`** | \`classificacao\` = categoria; **2+ carteiras** → pergunta antes |
+| *gastei 35 de remédio* / *paguei aluguel* | **\`create_transaction\`** | Status **pago** (saída) ou **recebido** (entrada) — **nunca pendente** |
 | *recebi 500 no Nubank* / *lança na poupança* | **\`create_transaction\`** | **OBRIGATÓRIO** \`carteira\` com nome de \`list_contas\` |
 | *muda para Nubank* | **\`update_transaction\`** | \`id\` + \`carteira\` |
 
 **Escolha da carteira (CRÍTICO):**
 1. Mencionou banco/carteira/poupança → **\`list_contas\`** + \`payload.carteira\` no JSON.
-2. **2+ carteiras** e pedido sem destino → **pergunta** qual antes de lançar.
-3. **PROIBIDO** usar só a padrão quando pediu outra carteira.
-4. Confirmação: valor + categoria + data + **carteira** (\`data.contaNome\`).
+2. **2+ carteiras** e pedido sem destino → **pergunta** qual antes de lançar (a API **rejeita** \`create_transaction\` sem \`carteira\`).
+3. **1 carteira** → pode lançar sem perguntar.
+4. **PROIBIDO** usar só a padrão quando há várias carteiras.
+5. Confirmação: valor + categoria + data + **carteira** (\`data.contaNome\`) + se já contabiliza (pago/recebido).
+
+**Status (CRÍTICO — dashboard):**
+- Gasto/receita **já feito** → \`pago\` (saída) ou \`recebido\` (entrada).
+- **Nunca** \`pendente\` para compras/pagamentos já realizados — não aparecem no dashboard.
+- Só use \`a_pagar\` / \`a_receber\` quando o utilizador disser que ainda vai pagar/receber.
 
 \`\`\`bash
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_contas"}'
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_transaction","payload":{"tipo":"entrada","valor":400,"classificacao":"Aluguel","data":"hoje","status":"recebido","carteira":"Nubank"}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"create_transaction","payload":{"tipo":"saida","valor":35,"classificacao":"Despesas Diversas","data":"hoje","status":"pago","carteira":"Nubank"}}'
 \`\`\`
 
 `;
