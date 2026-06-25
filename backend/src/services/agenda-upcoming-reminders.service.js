@@ -1,6 +1,5 @@
 import { env } from '../config/env.js';
 import { createSupabaseClient } from '../config/supabase.js';
-import { buildCalendarEventKey } from './calendar-checklist-completion.service.js';
 import { listUsersWithWhatsappLink } from './agenda-reminders.service.js';
 import {
   calendarDateTodayInSaoPaulo,
@@ -33,6 +32,53 @@ export const getAgendaUpcomingMinutesBefore = () => {
 
 export const buildUpcomingReminderDedupKey = (userId, dateIso, eventKey) =>
   `${userId}:${dateIso}:${eventKey}`;
+
+const normalizeUpcomingEventTitle = (title) =>
+  String(title || 'Compromisso')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ');
+
+/**
+ * Chave estável para dedup (~30 min): data + hora + título (ignora id Google variável).
+ * Evita 2 lembretes quando o mesmo compromisso aparece com chaves diferentes (ex.: com/sem Meet).
+ * @param {object} event
+ */
+export const buildUpcomingReminderEventKey = (event) => {
+  const title = normalizeUpcomingEventTitle(event?.title);
+  const time = event?.allDay || !event?.time ? 'allday' : String(event.time).slice(0, 5);
+  const date = String(event?.date || '');
+  return `slot:${date}|${time}|${title}`;
+};
+
+/**
+ * Mesmo compromisso pode vir duplicado na listagem (ids distintos, Meet preenchido só num).
+ * @param {object[]} events
+ */
+export const dedupeUpcomingCalendarEvents = (events) => {
+  /** @type {Map<string, object>} */
+  const byKey = new Map();
+  for (const event of events || []) {
+    const key = buildUpcomingReminderEventKey(event);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, event);
+      continue;
+    }
+    const prevMeet = Boolean(prev?.meetLink);
+    const nextMeet = Boolean(event?.meetLink);
+    if (nextMeet && !prevMeet) {
+      byKey.set(key, event);
+      continue;
+    }
+    if (!prev?.id && event?.id) {
+      byKey.set(key, event);
+    }
+  }
+  return [...byKey.values()];
+};
 
 const isDuplicateKeyError = (error) =>
   String(error?.code || '') === '23505'
@@ -131,11 +177,13 @@ export const runAgendaUpcomingWhatsappReminders = async () => {
   for (const { userId, phone } of users) {
     try {
       const calendar = await listCalendarEventsForUser(userId, { date: dateIso });
-      const upcoming = (calendar.events || []).filter((e) =>
-        isEventInUpcomingReminderWindow(e, minutesBefore, now),
+      const upcoming = dedupeUpcomingCalendarEvents(
+        (calendar.events || []).filter((e) =>
+          isEventInUpcomingReminderWindow(e, minutesBefore, now),
+        ),
       );
       for (const event of upcoming) {
-        const eventKey = buildCalendarEventKey(event);
+        const eventKey = buildUpcomingReminderEventKey(event);
         const canSend = await tryAcquireUpcomingReminderSlot(userId, dateIso, eventKey);
         if (!canSend) continue;
 

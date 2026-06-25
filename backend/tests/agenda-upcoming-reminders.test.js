@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 import {
   buildUpcomingReminderDedupKey,
+  buildUpcomingReminderEventKey,
+  dedupeUpcomingCalendarEvents,
   formatUpcomingAgendaWhatsappMessage,
   isEventInUpcomingReminderWindow,
 } from '../src/services/agenda-upcoming-reminders.service.js';
@@ -53,4 +55,44 @@ test('buildUpcomingReminderDedupKey: estável', () => {
     buildUpcomingReminderDedupKey('u1', '2099-06-16', 'id:evt-1'),
     'u1:2099-06-16:id:evt-1',
   );
+});
+
+test('buildUpcomingReminderEventKey: ignora id Google — só data+hora+título', () => {
+  const keyA = buildUpcomingReminderEventKey({
+    id: 'google-a',
+    title: 'Reunião com Dani',
+    time: '18:15:00',
+    date: '2099-06-25',
+    allDay: false,
+  });
+  const keyB = buildUpcomingReminderEventKey({
+    id: null,
+    title: 'Reunião com Dani',
+    time: '18:15:00',
+    date: '2099-06-25',
+    allDay: false,
+  });
+  assert.equal(keyA, keyB);
+});
+
+test('dedupeUpcomingCalendarEvents: um compromisso duplicado → prefere com Meet', () => {
+  const merged = dedupeUpcomingCalendarEvents([
+    {
+      id: 'evt-1',
+      title: 'Reunião com Dani da Espanha',
+      time: '18:15:00',
+      date: '2099-06-25',
+      allDay: false,
+    },
+    {
+      id: 'evt-2',
+      title: 'Reunião com Dani da Espanha',
+      time: '18:15:00',
+      date: '2099-06-25',
+      allDay: false,
+      meetLink: 'https://meet.google.com/abc-def-ghi',
+    },
+  ]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].meetLink, 'https://meet.google.com/abc-def-ghi');
 });
