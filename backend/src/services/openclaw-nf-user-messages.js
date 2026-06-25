@@ -76,7 +76,42 @@ export const buildNfEmittedUserMessage = (preview = {}, opts = {}) => {
 export const BOT_NF_CONFIRM_INSTRUCTION =
   'INSTRUÇÃO INTERNA: se o utilizador responder sim/confirmo/pode emitir/ok, chame emit_nfse ou emit_nfe '
   + 'com os MESMOS dados do preview e "confirm":true no JSON do mf-curl. '
-  + 'PROIBIDO pedir payload, confirm:true ou comandos técnicos ao utilizador.';
+  + 'PROIBIDO pedir payload, confirm:true ou comandos técnicos ao utilizador. '
+  + 'AGUARDE o exec terminar antes de responder — nunca repita o preview enquanto o exec corre.';
+
+/** Evita loop preview → sim → preview quando o utilizador já confirmou. */
+export const BOT_NF_PREVIEW_LOOP_GUARD =
+  'Se o utilizador JÁ disse sim/confirmo nesta conversa, PROIBIDO repetir este resumo — '
+  + 'chame emit_nfse (ou emit_nfe) com confirm:true e os MESMOS dados.';
+
+/** Após falha na emissão (não voltar ao preview). */
+export const BOT_NF_EMIT_FAILED_INSTRUCTION =
+  'Emissão falhou. Repita APENAS message ao utilizador (motivo em português curto). '
+  + 'Se pedir para tentar de novo: emit_nfse com confirm:true e os MESMOS dados — '
+  + 'PROIBIDO chamar emit_nfse sem confirm:true após falha ou confirmação. '
+  + 'AGUARDE o exec terminar antes de responder.';
+
+/**
+ * Mensagem amigável para erros técnicos de emissão NFS-e (WhatsApp).
+ * @param {string} rawMessage
+ */
+export const formatNfseEmitErrorForUser = (rawMessage = '') => {
+  const msg = String(rawMessage || '').trim();
+  if (/alinhar a numeração|operation was aborted|aborted/i.test(msg)) {
+    return (
+      'Não consegui concluir a emissão agora — a PlugNotas demorou a responder '
+      + '(sincronização da numeração). Aguarde cerca de 1 minuto e diga *tentar de novo*, '
+      + 'ou emita pelo app Meu Financeiro → MEI → Notas.'
+    );
+  }
+  if (/certificado|plugnotas/i.test(msg)) {
+    return (
+      'Não foi possível emitir a nota. Verifique certificado A1 e dados fiscais '
+      + 'no app Meu Financeiro → MEI → Notas.'
+    );
+  }
+  return msg || 'Não foi possível emitir a nota fiscal agora. Tente de novo em instantes.';
+};
 
 const CONFIRM_WORDS = new Set([
   'sim',

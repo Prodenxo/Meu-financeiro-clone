@@ -59,6 +59,7 @@ import {
 } from './openclaw-nfe.service.js';
 import {
   BOT_NF_CONFIRM_INSTRUCTION,
+  BOT_NF_PREVIEW_LOOP_GUARD,
   buildNfConfirmRequestUserMessage,
   buildNfEmittedUserMessage,
 } from './openclaw-nf-user-messages.js';
@@ -1934,7 +1935,8 @@ export const runOpenclawAction = async (input) => {
           actorContext,
           ...linkDebug,
           agentInstructions:
-            `${BOT_NF_CONFIRM_INSTRUCTION} Repita APENAS o campo message ao utilizador.`,
+            `${BOT_NF_CONFIRM_INSTRUCTION} ${BOT_NF_PREVIEW_LOOP_GUARD} `
+              + 'Repita APENAS o campo message ao utilizador.',
         },
       };
     } catch (err) {
@@ -1958,7 +1960,8 @@ export const runOpenclawAction = async (input) => {
             actorContext,
             ...linkDebug,
             agentInstructions:
-              `${BOT_NF_CONFIRM_INSTRUCTION} Repita APENAS o campo message ao utilizador.`,
+              `${BOT_NF_CONFIRM_INSTRUCTION} ${BOT_NF_PREVIEW_LOOP_GUARD} `
+              + 'Repita APENAS o campo message ao utilizador.',
           },
         };
       }
@@ -2046,7 +2049,8 @@ export const runOpenclawAction = async (input) => {
           actorContext,
           ...linkDebug,
           agentInstructions:
-            `${BOT_NF_CONFIRM_INSTRUCTION} Repita APENAS o campo message ao utilizador.`,
+            `${BOT_NF_CONFIRM_INSTRUCTION} ${BOT_NF_PREVIEW_LOOP_GUARD} `
+              + 'Repita APENAS o campo message ao utilizador.',
         },
       };
     } catch (err) {
@@ -2069,7 +2073,8 @@ export const runOpenclawAction = async (input) => {
             actorContext,
             ...linkDebug,
             agentInstructions:
-              `${BOT_NF_CONFIRM_INSTRUCTION} Repita APENAS o campo message ao utilizador.`,
+              `${BOT_NF_CONFIRM_INSTRUCTION} ${BOT_NF_PREVIEW_LOOP_GUARD} `
+              + 'Repita APENAS o campo message ao utilizador.',
           },
         };
       }

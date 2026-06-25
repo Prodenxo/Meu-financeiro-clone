@@ -31,8 +31,15 @@ import {
   resolveCatalogClienteEndereco,
   resolveTomadorEmitEndereco,
 } from './plugnotas/plugnotas-nfse-email-resolve.js';
-import { isVagueNfItemLabel, formatNfseCatalogChoiceMessage, formatNfCatalogAmbiguousMessage, formatNfCatalogNotFoundMessage } from './openclaw-nf-user-messages.js';
-import { isNfEmitConfirmed } from './openclaw-nf-user-messages.js';
+import {
+  isVagueNfItemLabel,
+  formatNfseCatalogChoiceMessage,
+  formatNfCatalogAmbiguousMessage,
+  formatNfCatalogNotFoundMessage,
+  isNfEmitConfirmed,
+  BOT_NF_EMIT_FAILED_INSTRUCTION,
+  formatNfseEmitErrorForUser,
+} from './openclaw-nf-user-messages.js';
 import { lookupCnpjBrasilApi } from './cnpj-lookup.service.js';
 import { isValidCpfOrCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
 
@@ -1342,15 +1349,24 @@ export const formatOpenclawNfseProdutosMessage = (produtos) => {
 
 export const rethrowNfseErrorForBot = (err) => {
   const code = err?.errors?.code || err?.code;
-  const botHint = err?.errors?.botHint || err?.botHint;
-  if (botHint) {
-    throw badRequest(err.message, { code, botHint });
+  const existingHint = err?.errors?.botHint || err?.botHint;
+  const rawMsg = String(err?.message || '');
+  const userMessage = formatNfseEmitErrorForUser(rawMsg);
+  const loopGuard = `${BOT_NF_EMIT_FAILED_INSTRUCTION} ${existingHint || ''}`.trim();
+
+  if (existingHint) {
+    throw badRequest(userMessage, { code, botHint: loopGuard });
   }
-  const msg = String(err?.message || '');
-  if (/certificado|plugnotas/i.test(msg)) {
-    throw badRequest(msg, {
+  if (/alinhar a numeração|operation was aborted|aborted/i.test(rawMsg)) {
+    throw badRequest(userMessage, {
+      code: code || 'NFSE_RPS_SYNC',
+      botHint: loopGuard,
+    });
+  }
+  if (/certificado|plugnotas/i.test(rawMsg)) {
+    throw badRequest(userMessage, {
       code: code || 'NFSE_PLUGNOTAS',
-      botHint: 'Oriente cadastro do certificado e empresa na app MEI → Notas.',
+      botHint: loopGuard,
     });
   }
   throw err;

@@ -4,6 +4,7 @@ import {
   buildNfConfirmRequestUserMessage,
   buildNfEmittedUserMessage,
   formatNfseCatalogChoiceMessage,
+  formatNfseEmitErrorForUser,
   formatValorBr,
   isNfEmitConfirmed,
   isVagueNfItemLabel,
@@ -62,6 +63,15 @@ test('isNfEmitConfirmed aceita linguagem natural', () => {
   assert.equal(isNfEmitConfirmed({ confirmar: 'sim' }), true);
   assert.equal(isNfEmitConfirmed({}), false);
   assert.equal(isNfEmitConfirmed({ confirm: 'talvez' }), false);
+});
+
+test('formatNfseEmitErrorForUser traduz timeout PlugNotas', () => {
+  const msg = formatNfseEmitErrorForUser(
+    'Não foi possível alinhar a numeração na PlugNotas: This operation was aborted',
+  );
+  assert.match(msg, /PlugNotas/i);
+  assert.match(msg, /tentar de novo/i);
+  assert.doesNotMatch(msg, /aborted/i);
 });
 
 test('isVagueNfItemLabel rejeita nomes genéricos do áudio', () => {
