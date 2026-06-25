@@ -93,6 +93,7 @@ import {
   mapMeiFiscalErrorToCopy,
   resolveMeiFiscalScenario
 } from '../lib/fiscalUserError';
+import { isHiddenNfseE0014RejectedRecord } from '../lib/meiNfseE0014';
 import { formatPlugnotasIntegrationError as formatFiscalError } from '../utils/plugnotasIntegrationErrorMessage';
 import { getNfseServicoCodigoValidationError } from '../utils/nfseServicoCodigo';
 import {
@@ -2896,6 +2897,9 @@ export default function GuidesMei() {
 
   const filteredNfseList = useMemo(() => {
     return nfseList.filter((item) => {
+      if (!nfseShowArchived && isHiddenNfseE0014RejectedRecord(item)) {
+        return false;
+      }
       if (nfseDocumentTypeFilter !== 'all') {
         const raw = String(item.document_type || '').trim().toUpperCase();
         const effective = raw || 'NFSE';
@@ -2911,7 +2915,7 @@ export default function GuidesMei() {
       }
       return true;
     });
-  }, [nfseDocumentTypeFilter, nfseList, nfsePeriodFilter, nfseStatusFilter]);
+  }, [nfseDocumentTypeFilter, nfseList, nfsePeriodFilter, nfseShowArchived, nfseStatusFilter]);
 
   const meiLimiteBundle = useMemo(() => {
     const anoCivil = new Date().getFullYear();
