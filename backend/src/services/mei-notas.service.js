@@ -1121,9 +1121,9 @@ const parsePositiveIntLocal = (value, fallback = NaN) => {
 };
 
 const NFSE_EMIT_TERMINAL_POLL_MAX_MS = 8000;
-const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 22000;
-const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 700;
-const MAX_NFSE_AUTO_EMIT_ATTEMPTS = 6;
+const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 75000;
+const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 2000;
+const MAX_NFSE_AUTO_EMIT_ATTEMPTS = 10;
 
 const autoArchiveNfseE0014RecordIfNeeded = async (userId, record, response, status) => {
   if (!record?.id || !userId) return record;
@@ -1453,24 +1453,39 @@ const emitNfseWithAutoRpsRecovery = async (
       emitPayload,
       cnpjPrestadorNfse,
       () => buildMeiIdIntegracao(userId),
-      { maxRetries: 4, localMaxRpsNumero: effectiveLocalMax },
+      { maxRetries: 0, localMaxRpsNumero: effectiveLocalMax },
     );
     emitPayload = healed.emitPayload;
     for (const numero of healed.attemptedNumeros || []) {
       if (Number.isFinite(numero)) {
         attemptedNumeros.add(numero);
         cachedLocalMax = Math.max(cachedLocalMax, numero);
+        cachedPeriodoMax = Math.max(cachedPeriodoMax, numero);
       }
     }
     const payloadNumero = readRpsFromNfseEmitPayload(emitPayload)?.numero;
     if (Number.isFinite(payloadNumero)) {
       attemptedNumeros.add(payloadNumero);
       cachedLocalMax = Math.max(cachedLocalMax, payloadNumero);
+      cachedPeriodoMax = Math.max(cachedPeriodoMax, payloadNumero);
     }
 
-    const response = healed.response;
-    const status = extractPlugNotasStatus(response);
-    const normalized = normalizeStatus(status);
+    let response = healed.response;
+    let status = extractPlugNotasStatus(response);
+    let normalized = normalizeStatus(status);
+
+    const integracaoPoll = extractIntegracaoId(response) || emitPayload.idIntegracao;
+    if (normalized !== 'concluido' && integracaoPoll && cnpjPrestadorNfse.length === 14) {
+      response = await awaitNfseEmitTerminalResponse(adapter, {
+        initialResponse: response,
+        idIntegracao: integracaoPoll,
+        cnpjPrestador: cnpjPrestadorNfse,
+        maxWaitMs: NFSE_EMIT_PROCESSING_POLL_MAX_MS,
+        intervalMs: NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS,
+      });
+      status = extractPlugNotasStatus(response);
+      normalized = normalizeStatus(status);
+    }
 
     console.info('[plugnotas-rps] emit response', {
       attempt: attempt + 1,
@@ -1484,11 +1499,18 @@ const emitNfseWithAutoRpsRecovery = async (
       return { response, emitPayload };
     }
 
-    if (normalized === 'processando' && !isNfseRpsDuplicateRejectionLoose(response)) {
-      return { response, emitPayload };
-    }
+    const isE0014 = isNfseDuplicateRpsRejectedEmit(response, status)
+      || (normalized === 'rejeitado' && isNfseRpsDuplicateRejectionLoose(response))
+      || isNfseRpsDuplicateRejectionLoose(response);
 
-    if (!isNfseDuplicateRpsRejectedEmit(response, status)) {
+    if (!isE0014) {
+      if (normalized === 'processando') {
+        throw badRequest(
+          'A nota ainda está na fila da prefeitura (pode levar até 2 minutos). '
+          + 'Aguarde um pouco e confira em Documentos emitidos — não emita de novo ainda.',
+          { code: 'NFSE_STILL_PROCESSING' },
+        );
+      }
       return { response, emitPayload };
     }
 
@@ -2026,6 +2048,12 @@ export const emitirNota = async (userId, input) => {
         emitPayload,
         cnpjPrestadorNfse,
       );
+      if (normalizeStatus(status) !== 'concluido') {
+        throw badRequest(
+          'A NFS-e não foi autorizada. Verifique o motivo e tente novamente.',
+          { code: 'NFSE_NOT_AUTHORIZED' },
+        );
+      }
     }
     const created = await insertRecord(userId, {
       plugnotas_id: plugnotasId,

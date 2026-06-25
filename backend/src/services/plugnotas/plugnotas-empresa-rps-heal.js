@@ -191,12 +191,19 @@ export async function queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjInput, opts = {}
 
   let hashProximaPagina;
   let maxKnown = 0;
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 365);
+  const dataInicial = start.toISOString().slice(0, 10);
+  const dataFinal = end.toISOString().slice(0, 10);
 
   for (let page = 0; page < maxPages; page += 1) {
     let body;
     try {
       body = await consultarNfsePorPeriodo({
         cpfCnpj: cnpj,
+        dataInicial,
+        dataFinal,
         ...(hashProximaPagina ? { hashProximaPagina } : {})
       });
     } catch (error) {
@@ -471,7 +478,7 @@ export async function applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, cnpjIn
 }
 
 const DEFAULT_NFSE_E0014_EMIT_RETRIES = 6;
-const NFSE_HEAL_PROCESSING_POLL_MAX_MS = 12000;
+const NFSE_HEAL_PROCESSING_POLL_MAX_MS = 15000;
 const NFSE_HEAL_PROCESSING_POLL_INTERVAL_MS = 700;
 
 const extractResponseStatusToken = (response) => {
