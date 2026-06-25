@@ -131,6 +131,49 @@ test('syncPlugnotasNfseRpsBeforeEmit faz PATCH quando contador PlugNotas está a
   }
 });
 
+test('syncPlugnotasNfseRpsBeforeEmit não reenvia credenciais prefeitura no PATCH de RPS', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (String(url).includes('/empresa/12345678000199') && options.method === 'PATCH') {
+      return new Response(JSON.stringify({ message: 'ok' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  const empresaComPrefeitura = {
+    cpfCnpj: '12345678000199',
+    nfse: {
+      ativo: true,
+      config: {
+        producao: true,
+        rps: { serie: '1', numero: 5, lote: 1 },
+        prefeitura: { login: 'user', senha: 'secret' },
+      },
+    },
+  };
+
+  try {
+    await syncPlugnotasNfseRpsBeforeEmit(
+      '12.345.678/0001-99',
+      { serie: '1', numero: 115, lote: 1 },
+      empresaComPrefeitura,
+    );
+    const patchCall = calls.find((c) => c.options.method === 'PATCH');
+    assert.ok(patchCall);
+    const body = JSON.parse(patchCall.options.body);
+    assert.equal(body.nfse.config.rps.numero, 115);
+    assert.equal(body.nfse.config.prefeitura, undefined);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('readRpsNumeroFromNfseHistoryRow lê número do payload ou da resposta PlugNotas', () => {
   assert.equal(
     readRpsNumeroFromNfseHistoryRow({

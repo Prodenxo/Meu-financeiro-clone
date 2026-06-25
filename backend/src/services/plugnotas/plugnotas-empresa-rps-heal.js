@@ -335,6 +335,17 @@ const buildPlugnotasEmpresaRpsBlocks = ({ serie, lote, numero }) => ({
   }
 });
 
+/** PATCH só de RPS — sem `prefeitura.login/senha` (evita bloqueio NFS-e Nacional). */
+const buildMinimalNfseConfigForRpsPatch = (existingConfig, configRps) => {
+  const base = existingConfig && typeof existingConfig === 'object' && !Array.isArray(existingConfig)
+    ? existingConfig
+    : {};
+  return {
+    producao: base.producao !== false,
+    rps: configRps,
+  };
+};
+
 const patchPlugnotasEmpresaRpsNextNumero = async (cnpj, empresaJson, { serie, lote, numero }) => {
   const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
   const nfseAtivo = empresa?.nfse?.ativo !== false;
@@ -348,10 +359,7 @@ const patchPlugnotasEmpresaRpsNextNumero = async (cnpj, empresaJson, { serie, lo
     rps: rootRps,
     nfse: {
       ativo: nfseAtivo,
-      config: {
-        ...existingConfig,
-        rps: configRps
-      }
+      config: buildMinimalNfseConfigForRpsPatch(existingConfig, configRps),
     }
   });
 };
