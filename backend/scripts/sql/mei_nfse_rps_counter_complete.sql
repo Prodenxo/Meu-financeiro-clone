@@ -1,5 +1,11 @@
--- Contador atômico de DPS/RPS por CNPJ prestador (evita E0014 com múltiplas instâncias do backend).
--- Executar uma vez no Supabase SQL Editor (produção).
+-- =============================================================================
+-- Meu Financeiro — contador atômico DPS/RPS (NFS-e Nacional)
+-- Rodar UMA VEZ no Supabase SQL Editor (produção). Idempotente: pode reexecutar.
+-- Requer backend v17+ (/health → 2026-06-25-nfse-rps-heal-v17)
+-- =============================================================================
+-- Uma linha por CNPJ prestador; o backend passa o CNPJ de cada emissão.
+-- Não precisa INSERT manual por cliente.
+-- =============================================================================
 
 CREATE TABLE IF NOT EXISTS mei_nfse_rps_counters (
   cnpj_prestador text PRIMARY KEY,
@@ -9,6 +15,7 @@ CREATE TABLE IF NOT EXISTS mei_nfse_rps_counters (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Reserva o próximo DPS (incrementa contador de forma atômica).
 CREATE OR REPLACE FUNCTION mei_nfse_reserve_rps(p_cnpj text, p_floor integer DEFAULT 0)
 RETURNS integer
 LANGUAGE plpgsql
@@ -35,9 +42,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION mei_nfse_reserve_rps(text, integer) TO service_role;
-
--- Alinha o contador ao maior DPS já usado, sem incrementar (pós-E0014 / bootstrap).
+-- Alinha o contador ao maior DPS já usado, sem incrementar (pós-E0014).
 CREATE OR REPLACE FUNCTION mei_nfse_sync_rps_floor(p_cnpj text, p_floor integer DEFAULT 0)
 RETURNS void
 LANGUAGE plpgsql
@@ -55,4 +60,5 @@ BEGIN
 END;
 $$;
 
+GRANT EXECUTE ON FUNCTION mei_nfse_reserve_rps(text, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION mei_nfse_sync_rps_floor(text, integer) TO service_role;
