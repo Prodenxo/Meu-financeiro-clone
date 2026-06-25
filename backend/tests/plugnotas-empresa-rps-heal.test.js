@@ -23,9 +23,9 @@ import {
   syncPlugnotasNfseRpsBeforeEmit
 } from '../src/services/plugnotas/plugnotas-empresa-rps-heal.js';
 
-test('resolveNextNfseRpsNumero usa o maior entre PlugNotas e histórico local', () => {
+test('resolveNextNfseRpsNumero prioriza histórico local; PlugNotas só sem histórico', () => {
   assert.equal(resolveNextNfseRpsNumero(5, 7), 8);
-  assert.equal(resolveNextNfseRpsNumero(10, 3), 10);
+  assert.equal(resolveNextNfseRpsNumero(10, 3), 4);
   assert.equal(resolveNextNfseRpsNumero(1, null), 1);
 });
 
@@ -82,9 +82,10 @@ test('resolveNextNfseRpsNumero após E0014 no 45 deve emitir 46', () => {
   assert.equal(resolveNextNfseRpsNumero(45, 45), 46);
 });
 
-test('resolveNextNfseRpsFromSources usa maior entre empresa, local e período + 1', () => {
+test('resolveNextNfseRpsFromSources usa histórico real + 1; empresa à frente não pula DPS', () => {
   assert.equal(resolveNextNfseRpsFromSources({ empresaNumero: 34, localMaxNumero: 35, periodoMaxNumero: 36 }), 37);
   assert.equal(resolveNextNfseRpsFromSources({ empresaNumero: 34, localMaxNumero: 35, periodoMaxNumero: null }), 36);
+  assert.equal(resolveNextNfseRpsFromSources({ empresaNumero: 92, localMaxNumero: 90, periodoMaxNumero: 90 }), 91);
   assert.equal(resolveNextNfseRpsFromSources({ empresaNumero: 5, localMaxNumero: null, periodoMaxNumero: null }), 5);
   assert.equal(resolveNextNfseRpsFromSources({ empresaNumero: null, localMaxNumero: null, periodoMaxNumero: null }), 1);
 });

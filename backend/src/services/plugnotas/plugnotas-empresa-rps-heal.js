@@ -251,10 +251,10 @@ export function readRpsNumeroFromNfseHistoryRow(row) {
  * @returns {number}
  */
 export function resolveNextNfseRpsNumero(plugnotasNumero, localMaxNumero) {
-  const plug = parsePositiveInt(plugnotasNumero, 1);
   const localMax = parsePositiveInt(localMaxNumero, 0);
-  const fromLocal = localMax >= 1 ? localMax + 1 : 1;
-  return Math.max(plug, fromLocal);
+  if (localMax >= 1) return localMax + 1;
+  const plug = parsePositiveInt(plugnotasNumero, 1);
+  return plug >= 1 ? plug : 1;
 }
 
 /**
@@ -286,9 +286,10 @@ export function resolveNextNfseRpsFromSources(sources = {}) {
   const periodoMax = parsePositiveInt(sources.periodoMaxNumero, 0);
   const empresaNext = parsePositiveInt(sources.empresaNumero, 0);
   const maxUsed = Math.max(localMax, periodoMax);
-  const fromHistories = maxUsed >= 1 ? maxUsed + 1 : 1;
-  const fromEmpresa = empresaNext >= 1 ? empresaNext : 1;
-  return Math.max(fromHistories, fromEmpresa);
+  // Histórico real (local + período) é autoritativo — contador PlugNotas à frente não pode pular DPS.
+  if (maxUsed >= 1) return maxUsed + 1;
+  if (empresaNext >= 1) return empresaNext;
+  return 1;
 }
 
 /**

@@ -1121,6 +1121,32 @@ const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 1000;
 const NFSE_PERIODO_FAST_PAGES = 6;
 const NFSE_PROCESSING_FOLLOWUP_MS = 95000;
 
+/** Serializa emissões NFS-e por CNPJ prestador — evita duas requisições paralelas queimando DPS seguidos. */
+const nfseEmitLockTailByCnpj = new Map();
+
+const withNfseEmitLock = async (cnpjPrestador, task) => {
+  const cnpj = normalizeDoc(cnpjPrestador);
+  if (cnpj.length !== 14) return await task();
+
+  const previous = nfseEmitLockTailByCnpj.get(cnpj) || Promise.resolve();
+  let release = () => {};
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const current = previous.then(() => gate);
+  nfseEmitLockTailByCnpj.set(cnpj, current);
+
+  await previous;
+  try {
+    return await task();
+  } finally {
+    release();
+    if (nfseEmitLockTailByCnpj.get(cnpj) === current) {
+      nfseEmitLockTailByCnpj.delete(cnpj);
+    }
+  }
+};
+
 const isHiddenNfseE0014RejectedRow = (row) => {
   if (normalizeDocumentType(row?.document_type || DOCUMENT_TYPE_NFSE) !== DOCUMENT_TYPE_NFSE) {
     return false;
@@ -1416,26 +1442,39 @@ const emitNfseWithAutoRpsRecovery = async (
   });
 
   const empresaJsonCache = prep.empresaJson ?? null;
-  const effectiveLocalMax = Math.max(cachedLocalMax, cachedPeriodoMax);
 
   const rpsPlan = await resolveAndApplySafeNfseRpsBeforeEmit(emitPayload, cnpjPrestadorNfse, {
-    localMaxRpsNumero: effectiveLocalMax,
+    localMaxRpsNumero: cachedLocalMax,
     plugnotasApiMaxRpsNumero: cachedPeriodoMax || null,
     skipPlugnotasPeriodoQuery: true,
     empresaJson: empresaJsonCache,
   });
+  if (!rpsPlan) {
+    throw badRequest('Não foi possível calcular a numeração da NFS-e.', { code: 'NFSE_RPS_PLAN_FAILED' });
+  }
+
+  const freshMax = await queryAuthoritativeNfseRpsMaxUsed(cnpjPrestadorNfse, cachedLocalMax);
   const safeNext = resolveNextNfseRpsFromSources({
-    empresaNumero: rpsPlan?.empresaNumero,
-    localMaxNumero: effectiveLocalMax,
-    periodoMaxNumero: cachedPeriodoMax,
+    empresaNumero: rpsPlan.empresaNumero,
+    localMaxNumero: Math.max(cachedLocalMax, freshMax),
+    periodoMaxNumero: freshMax,
   });
-  const serie = rpsPlan?.serie ?? '1';
-  const lote = rpsPlan?.lote ?? 1;
-  emitPayload.rps = { lote, numeracao: [{ serie, numero: safeNext }] };
+  if (safeNext !== rpsPlan.safeNext) {
+    emitPayload.rps = {
+      lote: rpsPlan.lote,
+      numeracao: [{ serie: rpsPlan.serie, numero: safeNext }],
+    };
+    await syncPlugnotasNfseRpsBeforeEmit(
+      cnpjPrestadorNfse,
+      { serie: rpsPlan.serie, lote: rpsPlan.lote, numero: safeNext },
+      empresaJsonCache,
+    );
+  }
 
   console.info('[plugnotas-rps] emit plan', {
     safeNext,
     localMax: cachedLocalMax,
+    freshMax,
     periodoMax: cachedPeriodoMax || rpsPlan?.periodoMax,
     empresaNumero: rpsPlan?.empresaNumero,
     elapsedMs: Date.now() - emitStartedAt,
@@ -1447,7 +1486,7 @@ const emitNfseWithAutoRpsRecovery = async (
     emitPayload,
     cnpjPrestadorNfse,
     () => buildMeiIdIntegracao(userId),
-    { maxRetries: 0, localMaxRpsNumero: effectiveLocalMax },
+    { maxRetries: 0, localMaxRpsNumero: Math.max(cachedLocalMax, freshMax) },
   );
   emitPayload = healed.emitPayload;
 
@@ -1897,13 +1936,13 @@ export const emitirNota = async (userId, input) => {
     let response;
     try {
       if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
-        const auto = await emitNfseWithAutoRpsRecovery(
+        const auto = await withNfseEmitLock(cnpjPrestadorNfse, () => emitNfseWithAutoRpsRecovery(
           adapter,
           userId,
           cnpjPrestadorNfse,
           emitPayload,
           nfseEmitPrep ?? {},
-        );
+        ));
         response = auto.response;
         emitPayload = auto.emitPayload;
       } else {
