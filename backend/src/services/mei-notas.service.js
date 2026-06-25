@@ -19,11 +19,13 @@ import {
   isNfseRejectedPlugnotasResponse,
   isNfseRpsDuplicateRejectionLoose,
   queryMaxRpsNumeroFromPlugnotasPeriodo,
+  readPlugnotasNfseNextRpsFromEmpresa,
   readRpsNumeroFromNfseHistoryRow,
   readRpsNumeroFromNfsePlugnotasBody,
   readRpsFromNfseEmitPayload,
   resolveAndApplySafeNfseRpsBeforeEmit,
   resolveNextNfseRpsAfterFailure,
+  resolveNextNfseRpsFromSources,
   resolveNextNfseRpsNumero,
   resolveNfseRpsLocalMaxFromHistory,
   syncPlugnotasNfseRpsBeforeEmit,
@@ -1119,7 +1121,7 @@ const parsePositiveIntLocal = (value, fallback = NaN) => {
 };
 
 const NFSE_EMIT_TERMINAL_POLL_MAX_MS = 8000;
-const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 15000;
+const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 22000;
 const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 700;
 const MAX_NFSE_AUTO_EMIT_ATTEMPTS = 6;
 
@@ -1224,6 +1226,37 @@ const finalizeNfseEmitStateBeforePersist = async (
   }
 
   return { response: currentResponse, status };
+};
+
+const assertNfseSafeToPersistOrThrow = async (
+  response,
+  status,
+  emitPayload,
+  cnpjPrestadorNfse,
+) => {
+  if (isNfseDuplicateRpsRejectedEmit(response, status)) {
+    const usedRps = resolveUsedNfseRpsFromEmit(emitPayload, response);
+    if (usedRps && cnpjPrestadorNfse.length === 14) {
+      await advancePlugnotasNfseRpsAfterEmit(cnpjPrestadorNfse, usedRps).catch(() => {});
+    }
+    throw badRequest(
+      'Numeração RPS em conflito — o contador foi realinhado. Clique em Emitir novamente.',
+      { code: 'NFSE_RPS_DUPLICATE_REALIGNED' },
+    );
+  }
+  if (
+    normalizeStatus(status) === 'rejeitado'
+    && isNfseRpsDuplicateRejectionLoose(response)
+  ) {
+    const usedRps = resolveUsedNfseRpsFromEmit(emitPayload, response);
+    if (usedRps && cnpjPrestadorNfse.length === 14) {
+      await advancePlugnotasNfseRpsAfterEmit(cnpjPrestadorNfse, usedRps).catch(() => {});
+    }
+    throw badRequest(
+      'Numeração RPS em conflito — o contador foi realinhado. Clique em Emitir novamente.',
+      { code: 'NFSE_RPS_DUPLICATE_REALIGNED' },
+    );
+  }
 };
 
 const sleep = (ms) => new Promise((resolve) => {
@@ -1358,10 +1391,28 @@ const emitNfseWithAutoRpsRecovery = async (
   const emitStartedAt = Date.now();
   let emitPayload = { ...basePayload };
   const attemptedNumeros = new Set();
-  let cachedPeriodoMax = 0;
+  let cachedPeriodoMax = parsePositiveIntLocal(prep.periodoMax, 0);
   let cachedLocalMax = parsePositiveIntLocal(prep.initialLocalMax, 0)
     || parsePositiveIntLocal(await queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse), 0);
   let empresaJsonCache = prep.empresaJson ?? null;
+
+  if (!cachedPeriodoMax) {
+    console.info('[plugnotas-rps] consultando histórico PlugNotas (período)');
+    cachedPeriodoMax = parsePositiveIntLocal(
+      await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjPrestadorNfse),
+      0,
+    );
+  }
+
+  console.info('[plugnotas-rps] emit baseline', {
+    localMax: cachedLocalMax,
+    periodoMax: cachedPeriodoMax,
+    nextHint: resolveNextNfseRpsFromSources({
+      localMaxNumero: cachedLocalMax,
+      periodoMaxNumero: cachedPeriodoMax,
+      empresaNumero: readPlugnotasNfseNextRpsFromEmpresa(empresaJsonCache)?.numero,
+    }),
+  });
 
   for (let attempt = 0; attempt < MAX_NFSE_AUTO_EMIT_ATTEMPTS; attempt += 1) {
     const inRequestMax = attemptedNumeros.size > 0 ? Math.max(...attemptedNumeros) : 0;
@@ -1373,7 +1424,14 @@ const emitNfseWithAutoRpsRecovery = async (
       skipPlugnotasPeriodoQuery: true,
       empresaJson: empresaJsonCache,
     });
-    const safeNext = bumpRpsNumeroAboveUsed(rpsPlan?.safeNext ?? 1, attemptedNumeros);
+    const safeNext = bumpRpsNumeroAboveUsed(
+      resolveNextNfseRpsFromSources({
+        empresaNumero: rpsPlan?.empresaNumero,
+        localMaxNumero: effectiveLocalMax,
+        periodoMaxNumero: cachedPeriodoMax,
+      }),
+      attemptedNumeros,
+    );
     const serie = rpsPlan?.serie ?? '1';
     const lote = rpsPlan?.lote ?? 1;
     emitPayload.rps = { lote, numeracao: [{ serie, numero: safeNext }] };
@@ -1422,7 +1480,11 @@ const emitNfseWithAutoRpsRecovery = async (
       elapsedMs: Date.now() - emitStartedAt,
     });
 
-    if (normalized === 'concluido' || normalized === 'processando') {
+    if (normalized === 'concluido') {
+      return { response, emitPayload };
+    }
+
+    if (normalized === 'processando' && !isNfseRpsDuplicateRejectionLoose(response)) {
       return { response, emitPayload };
     }
 
@@ -1448,9 +1510,15 @@ const emitNfseWithAutoRpsRecovery = async (
 
     if (!cachedPeriodoMax) {
       cachedPeriodoMax = parsePositiveIntLocal(
-        await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjPrestadorNfse, { maxPages: 5 }),
+        await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjPrestadorNfse),
         0,
       );
+    } else {
+      const refreshedPeriodo = parsePositiveIntLocal(
+        await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjPrestadorNfse),
+        0,
+      );
+      if (refreshedPeriodo > cachedPeriodoMax) cachedPeriodoMax = refreshedPeriodo;
     }
 
     const nextFromFailure = resolveNextNfseRpsAfterFailure(
@@ -1889,8 +1957,11 @@ export const emitirNota = async (userId, input) => {
       if (cnpjPrestadorNfse.length === 14) {
         const empresaJsonCache = await ensureMeiNfsePlugnotasCadastroBeforeEmit(userId, cnpjPrestadorNfse);
         await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestadorNfse, empresaJsonCache);
-        const initialLocalMax = await queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse);
-        nfseEmitPrep = { empresaJson: empresaJsonCache, initialLocalMax };
+        const [initialLocalMax, periodoMax] = await Promise.all([
+          queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse),
+          queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjPrestadorNfse),
+        ]);
+        nfseEmitPrep = { empresaJson: empresaJsonCache, initialLocalMax, periodoMax };
       }
     }
     let response;
@@ -1927,6 +1998,12 @@ export const emitirNota = async (userId, input) => {
       });
       response = finalized.response;
       status = finalized.status;
+      await assertNfseSafeToPersistOrThrow(
+        response,
+        status,
+        emitPayload,
+        cnpjPrestadorNfse,
+      );
     }
 
     if (isPlugnotasDebugExplicitlyEnabled()) {
@@ -1942,6 +2019,14 @@ export const emitirNota = async (userId, input) => {
     }
 
     phase = 'insert_record';
+    if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
+      await assertNfseSafeToPersistOrThrow(
+        response,
+        status,
+        emitPayload,
+        cnpjPrestadorNfse,
+      );
+    }
     const created = await insertRecord(userId, {
       plugnotas_id: plugnotasId,
       protocol,
