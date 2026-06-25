@@ -1,3 +1,4 @@
+import { consultarEmpresaPlugNotas } from './empresa.service.js';
 import {
   queryAuthoritativeNfseRpsMaxUsed,
   readPlugnotasNfseNextRpsFromEmpresa,
@@ -35,6 +36,33 @@ export async function readNfseRpsCounterLast(getDb, cnpj) {
   }
 
   return Math.max(parsePositiveInt(data?.last_numero, 0), 0);
+}
+
+/**
+ * Define o contador Postgres exatamente (pode reduzir — heal v20).
+ * @param {() => import('@supabase/supabase-js').SupabaseClient} getDb
+ * @param {string} cnpj
+ * @param {number} lastNumero
+ */
+export async function setNfseRpsCounterLast(getDb, cnpj, lastNumero) {
+  const normalizedCnpj = normalizeDoc(cnpj);
+  const last = Math.max(parsePositiveInt(lastNumero, 0), 0);
+  if (normalizedCnpj.length !== 14) return;
+
+  const db = getDb();
+  const { error } = await db.rpc('mei_nfse_set_rps_last', {
+    p_cnpj: normalizedCnpj,
+    p_last: last,
+  });
+
+  if (error) {
+    console.warn('[plugnotas-rps] RPC mei_nfse_set_rps_last falhou — upsert direto', error.message);
+    await db.from('mei_nfse_rps_counters').upsert({
+      cnpj_prestador: normalizedCnpj,
+      last_numero: last,
+      updated_at: new Date().toISOString(),
+    });
+  }
 }
 
 /**
@@ -97,7 +125,7 @@ export async function reserveNextNfseRpsNumber(getDb, { cnpj, floor = 0 }) {
 
   const counterLast = await readNfseRpsCounterLast(getDb, normalizedCnpj);
   const next = Math.max(safeFloor, counterLast) + 1;
-  await forceNfseRpsCounterFloor(getDb, normalizedCnpj, next);
+  await setNfseRpsCounterLast(getDb, normalizedCnpj, next);
   return next;
 }
 
@@ -133,7 +161,7 @@ export async function queryKnownNfseRpsMax(getDb, cnpj, localMax = 0) {
 }
 
 /**
- * Reserva o próximo DPS: histórico PlugNotas + Postgres + contador empresa (quando à frente).
+ * Próximo DPS seguro: histórico PlugNotas + GET empresa fresco (nunca pula só por Postgres inflado).
  * @param {() => import('@supabase/supabase-js').SupabaseClient} getDb
  * @param {string} cnpj
  * @param {number} localMax
@@ -142,23 +170,38 @@ export async function queryKnownNfseRpsMax(getDb, cnpj, localMax = 0) {
 export async function allocateNfseRpsForEmit(getDb, cnpj, localMax = 0, empresaJson = null) {
   const normalizedCnpj = normalizeDoc(cnpj);
   const historyMax = await queryPlugnotasAndLocalNfseRpsMax(normalizedCnpj, localMax);
-  const counterLast = await readNfseRpsCounterLast(getDb, normalizedCnpj);
-  const empresaNext = readPlugnotasNfseNextRpsFromEmpresa(empresaJson);
-  const empresaFloor = empresaNext?.numero >= 1 ? empresaNext.numero - 1 : 0;
-  const floor = Math.max(historyMax, counterLast, empresaFloor);
 
-  await forceNfseRpsCounterFloor(getDb, normalizedCnpj, floor);
+  let empresaJsonFresh = empresaJson;
+  try {
+    empresaJsonFresh = await consultarEmpresaPlugNotas(normalizedCnpj);
+  } catch (error) {
+    console.warn('[plugnotas-rps] GET empresa antes da reserva falhou — usando cache', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const empresaNext = readPlugnotasNfseNextRpsFromEmpresa(empresaJsonFresh);
+  const empresaNumero = empresaNext?.numero >= 1 ? empresaNext.numero : 0;
+  const safeNext = Math.max(
+    historyMax + 1,
+    empresaNumero >= 1 ? empresaNumero : 1,
+  );
+  const targetFloor = safeNext - 1;
+  const counterBefore = await readNfseRpsCounterLast(getDb, normalizedCnpj);
+
+  await setNfseRpsCounterLast(getDb, normalizedCnpj, targetFloor);
   const numero = await reserveNextNfseRpsNumber(getDb, {
     cnpj: normalizedCnpj,
-    floor,
+    floor: targetFloor,
   });
 
   console.info('[plugnotas-rps] DPS reservado', {
     cnpj: `${normalizedCnpj.slice(0, 2)}***${normalizedCnpj.slice(-4)}`,
     historyMax,
-    counterLast,
-    empresaFloor,
-    floor,
+    empresaNumero: empresaNumero || null,
+    counterBefore,
+    safeNext,
+    targetFloor,
     numero,
   });
 
@@ -166,14 +209,15 @@ export async function allocateNfseRpsForEmit(getDb, cnpj, localMax = 0, empresaJ
     numero,
     serie: String(empresaNext?.serie ?? '1').trim() || '1',
     lote: parsePositiveInt(empresaNext?.lote, 1),
-    floor,
+    floor: targetFloor,
+    empresaJson: empresaJsonFresh,
   };
 }
 
 /**
  * @param {Record<string, unknown>} emitPayload
  * @param {string} cnpj
- * @param {{ numero: number, serie?: string, lote?: number }} allocation
+ * @param {{ numero: number, serie?: string, lote?: number, empresaJson?: unknown }} allocation
  * @param {unknown} [empresaJson]
  */
 export async function applyAllocatedNfseRpsToEmitPayload(
@@ -190,6 +234,7 @@ export async function applyAllocatedNfseRpsToEmitPayload(
   }
 
   emitPayload.rps = { lote, numeracao: [{ serie, numero }] };
-  await syncPlugnotasNfseRpsBeforeEmit(cnpj, { serie, lote, numero }, empresaJson);
+  const empresaForSync = allocation?.empresaJson ?? empresaJson;
+  await syncPlugnotasNfseRpsBeforeEmit(cnpj, { serie, lote, numero }, empresaForSync, { strict: true });
   return readRpsFromNfseEmitPayload(emitPayload);
 }

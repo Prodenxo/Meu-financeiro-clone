@@ -27,6 +27,7 @@ import {
   allocateNfseRpsForEmit,
   applyAllocatedNfseRpsToEmitPayload,
   forceNfseRpsCounterFloor,
+  setNfseRpsCounterLast,
 } from './plugnotas/nfse-rps-allocator.js';
 import {
   ensureMeiNfsePlugnotasCadastroBeforeEmit,
@@ -1090,7 +1091,7 @@ const syncNfseRpsAfterE0014 = async (cnpjPrestadorNfse, emitPayload, response) =
   const usedRps = resolveUsedNfseRpsFromEmit(emitPayload, response);
   if (!usedRps || normalizeDoc(cnpjPrestadorNfse).length !== 14) return;
   await advancePlugnotasNfseRpsAfterEmit(cnpjPrestadorNfse, usedRps).catch(() => {});
-  await forceNfseRpsCounterFloor(getDb, cnpjPrestadorNfse, usedRps.numero).catch(() => {});
+  await setNfseRpsCounterLast(getDb, cnpjPrestadorNfse, usedRps.numero).catch(() => {});
 };
 
 const maybeAdvanceNfseRpsAfterPlugnotas = (cnpjPrestador, emitPayload, response) => {
@@ -1122,7 +1123,7 @@ const parsePositiveIntLocal = (value, fallback = NaN) => {
 const NFSE_EMIT_TERMINAL_POLL_MAX_MS = 8000;
 const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 28000;
 const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 1000;
-const NFSE_EMIT_E0014_RETRY_MAX = 3;
+const NFSE_EMIT_E0014_RETRY_MAX = 2;
 const NFSE_PERIODO_FAST_PAGES = 6;
 const NFSE_PROCESSING_FOLLOWUP_MS = 95000;
 

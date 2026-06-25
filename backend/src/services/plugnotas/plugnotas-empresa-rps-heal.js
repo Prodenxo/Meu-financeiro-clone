@@ -361,8 +361,9 @@ const patchPlugnotasEmpresaRpsNextNumero = async (cnpj, empresaJson, { serie, lo
  * @param {string} cnpjInput
  * @param {{ serie: string, lote: number, numero: number }} targetRps
  * @param {unknown} [empresaJson]
+ * @param {{ strict?: boolean }} [opts]
  */
-export async function syncPlugnotasNfseRpsBeforeEmit(cnpjInput, targetRps, empresaJson = null) {
+export async function syncPlugnotasNfseRpsBeforeEmit(cnpjInput, targetRps, empresaJson = null, opts = {}) {
   const cnpj = normalizeDoc(cnpjInput);
   const targetNumero = parsePositiveInt(targetRps?.numero);
   if (cnpj.length !== 14 || !Number.isFinite(targetNumero)) return;
@@ -386,10 +387,11 @@ export async function syncPlugnotasNfseRpsBeforeEmit(cnpjInput, targetRps, empre
       numero: targetNumero
     });
   } catch (error) {
-    console.warn(
-      '[plugnotas-rps] falha ao sincronizar contador RPS antes da emissão',
-      error instanceof Error ? error.message : error
-    );
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('[plugnotas-rps] falha ao sincronizar contador RPS antes da emissão', message);
+    if (opts.strict === true) {
+      throw new Error(`Não foi possível alinhar a numeração na PlugNotas: ${message}`);
+    }
   }
 }
 
