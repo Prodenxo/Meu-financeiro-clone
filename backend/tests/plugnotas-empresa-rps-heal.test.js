@@ -8,11 +8,14 @@ import {
   empresaPlugnotasTemRpsCadastrado,
   ensureEmpresaPlugnotasRpsForNfseEmit,
   isNfseE0014FromPlugnotasResponse,
+  isNfseRejectedPlugnotasResponse,
+  isNfseRpsDuplicateRejectionLoose,
   queryMaxRpsNumeroFromPlugnotasPeriodo,
   readPlugnotasNfseNextRpsFromEmpresa,
   readRpsFromNfseEmitPayload,
   readRpsNumeroFromNfseHistoryRow,
   readRpsNumeroFromNfsePlugnotasBody,
+  resolveAndApplySafeNfseRpsBeforeEmit,
   resolveNextNfseRpsAfterFailure,
   resolveNextNfseRpsFromSources,
   resolveNextNfseRpsNumero,
@@ -423,6 +426,60 @@ test('queryMaxRpsNumeroFromPlugnotasPeriodo pagina até hashProximaPagina null',
   } finally {
     global.fetch = originalFetch;
   }
+});
+
+test('resolveAndApplySafeNfseRpsBeforeEmit usa max 40 → próximo 41 (caso Yasmim)', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/consultar/periodo')) {
+      return new Response(JSON.stringify({
+        notas: [
+          { dps: { numero: 40, serie: '1' }, status: 'REJEITADO' },
+          { dps: { numero: 38, serie: '1' }, status: 'REJEITADO' },
+        ],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (String(url).includes('/empresa/65805583000173') && options.method === 'GET') {
+      return new Response(JSON.stringify({
+        cpfCnpj: '65805583000173',
+        nfse: { config: { rps: { serie: '1', numero: 38, lote: 1 } } },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (String(url).includes('/empresa/') && options.method === 'PATCH') {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  try {
+    const payload = { idIntegracao: 'teste' };
+    const plan = await resolveAndApplySafeNfseRpsBeforeEmit(payload, '65805583000173', {
+      localMaxRpsNumero: 40,
+      plugnotasApiMaxRpsNumero: 40,
+      skipPlugnotasPeriodoQuery: true,
+    });
+    assert.equal(plan?.safeNext, 41);
+    assert.equal(payload.rps.numeracao[0].numero, 41);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('isNfseRpsDuplicateRejectionLoose detecta JSON real rejeitado DPS 36', () => {
+  const body = {
+    rps: { numero: 36, serie: '1', lote: 1 },
+    dps: { numero: 36, serie: '1' },
+    retorno: {
+      mensagemRetorno: 'E0014 - Conjunto de Série, Número, Código do Município Emissor...',
+      situacao: 'REJEITADA',
+    },
+    status: 'REJEITADO',
+  };
+  assert.equal(isNfseRpsDuplicateRejectionLoose(body), true);
+  assert.equal(isNfseRejectedPlugnotasResponse(body, ''), true);
 });
 
 test('isNfseE0014FromPlugnotasResponse reconhece mensagem humanizada de numeração repetida', () => {

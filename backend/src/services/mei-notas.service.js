@@ -17,10 +17,13 @@ import {
   emitNfseWithPlugnotasRpsHeal,
   ensureEmpresaPlugnotasRpsForNfseEmit,
   isNfseE0014FromPlugnotasResponse,
+  isNfseRejectedPlugnotasResponse,
+  isNfseRpsDuplicateRejectionLoose,
   queryMaxRpsNumeroFromPlugnotasPeriodo,
   readRpsNumeroFromNfseHistoryRow,
   readRpsNumeroFromNfsePlugnotasBody,
   readRpsFromNfseEmitPayload,
+  resolveAndApplySafeNfseRpsBeforeEmit,
   resolveNextNfseRpsAfterFailure,
   resolveNextNfseRpsNumero,
   resolveNfseRpsLocalMaxFromHistory,
@@ -1092,7 +1095,8 @@ const maybeAdvanceNfseRpsAfterPlugnotas = (cnpjPrestador, emitPayload, response)
 };
 
 const isNfseDuplicateRpsRejectedEmit = (response, status) => (
-  normalizeStatus(status) === 'rejeitado' && isNfseE0014FromPlugnotasResponse(response)
+  isNfseRejectedPlugnotasResponse(response, normalizeStatus(status))
+  && isNfseRpsDuplicateRejectionLoose(response)
 );
 
 const isNfseEmitStatusTerminal = (status) => {
@@ -1113,7 +1117,7 @@ const sleep = (ms) => new Promise((resolve) => {
  */
 const awaitNfseEmitTerminalResponse = async (
   adapter,
-  { initialResponse, idIntegracao, cnpjPrestador, maxWaitMs = 22000, intervalMs = 1500 },
+  { initialResponse, idIntegracao, cnpjPrestador, maxWaitMs = 45000, intervalMs = 1200 },
 ) => {
   let response = initialResponse;
   let status = extractPlugNotasStatus(response);
@@ -1214,6 +1218,97 @@ const recoverNfseEmitAfterDuplicateRps = async ({
   }
 
   return { response: currentResponse, emitPayload: currentPayload };
+};
+
+const MAX_NFSE_AUTO_EMIT_ATTEMPTS = 16;
+
+/**
+ * Emite NFS-e em loop: em E0014 avança RPS e tenta de novo na mesma requisição.
+ */
+const emitNfseWithAutoRpsRecovery = async (adapter, userId, cnpjPrestadorNfse, basePayload) => {
+  let emitPayload = { ...basePayload };
+
+  for (let attempt = 0; attempt < MAX_NFSE_AUTO_EMIT_ATTEMPTS; attempt += 1) {
+    const localMax = await queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse);
+    const rpsPlan = await resolveAndApplySafeNfseRpsBeforeEmit(emitPayload, cnpjPrestadorNfse, {
+      localMaxRpsNumero: localMax,
+    });
+    console.info('[plugnotas-rps] emit plan', {
+      attempt: attempt + 1,
+      safeNext: rpsPlan?.safeNext,
+      localMax: rpsPlan?.localMax,
+      periodoMax: rpsPlan?.periodoMax,
+      empresaNumero: rpsPlan?.empresaNumero,
+    });
+    emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
+
+    const healed = await emitNfseWithPlugnotasRpsHeal(
+      adapter,
+      emitPayload,
+      cnpjPrestadorNfse,
+      () => buildMeiIdIntegracao(userId),
+      { maxRetries: 8 },
+    );
+    emitPayload = healed.emitPayload;
+
+    let response = await awaitNfseEmitTerminalResponse(adapter, {
+      initialResponse: healed.response,
+      idIntegracao: extractIntegracaoId(healed.response) || emitPayload.idIntegracao,
+      cnpjPrestador: cnpjPrestadorNfse,
+    });
+
+    const status = extractPlugNotasStatus(response);
+    const normalized = normalizeStatus(status);
+
+    if (normalized === 'concluido' || normalized === 'processando') {
+      return { response, emitPayload };
+    }
+
+    if (!isNfseDuplicateRpsRejectedEmit(response, status)) {
+      return { response, emitPayload };
+    }
+
+    const usedRps = resolveUsedNfseRpsFromEmit(emitPayload, response);
+    if (usedRps) {
+      await advancePlugnotasNfseRpsAfterEmit(cnpjPrestadorNfse, usedRps);
+    }
+
+    const periodoMax = await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjPrestadorNfse);
+    const failedNumero = usedRps?.numero
+      ?? readRpsNumeroFromNfsePlugnotasBody(response)
+      ?? readRpsFromNfseEmitPayload(emitPayload)?.numero
+      ?? 0;
+    const nextFromFailure = resolveNextNfseRpsAfterFailure(failedNumero, localMax, periodoMax);
+    const freshLocalMax = await queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse);
+    const freshPlan = await resolveAndApplySafeNfseRpsBeforeEmit(
+      { ...emitPayload },
+      cnpjPrestadorNfse,
+      { localMaxRpsNumero: freshLocalMax },
+    );
+    const nextNumero = Math.max(nextFromFailure, freshPlan?.safeNext ?? 1);
+    const serie = usedRps?.serie ?? readRpsFromNfseEmitPayload(emitPayload)?.serie ?? '1';
+    const lote = usedRps?.lote ?? readRpsFromNfseEmitPayload(emitPayload)?.lote ?? 1;
+
+    console.warn('[plugnotas-rps] E0014 auto-retry', {
+      attempt: attempt + 1,
+      failedNumero,
+      nextNumero,
+      localMax,
+      periodoMax,
+    });
+
+    emitPayload = {
+      ...emitPayload,
+      idIntegracao: buildMeiIdIntegracao(userId),
+      rps: { lote, numeracao: [{ serie, numero: nextNumero }] },
+    };
+    await syncPlugnotasNfseRpsBeforeEmit(cnpjPrestadorNfse, { serie, lote, numero: nextNumero });
+  }
+
+  throw badRequest(
+    'Não foi possível emitir após várias tentativas de numeração. Aguarde 1 minuto e tente novamente.',
+    { code: 'NFSE_RPS_DUPLICATE_REALIGNED' },
+  );
 };
 
 const queryMaxRpsNumeroEmitted = async (userId, cnpjPrestador) => {
@@ -1629,38 +1724,14 @@ export const emitirNota = async (userId, input) => {
     let response;
     try {
       if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
-        const healed = await emitNfseWithPlugnotasRpsHeal(
+        const auto = await emitNfseWithAutoRpsRecovery(
           adapter,
-          emitPayload,
+          userId,
           cnpjPrestadorNfse,
-          () => buildMeiIdIntegracao(userId)
+          emitPayload,
         );
-        const recovered = await recoverNfseEmitAfterDuplicateRps({
-          adapter,
-          userId,
-          cnpjPrestadorNfse,
-          emitPayload: healed.emitPayload,
-          response: healed.response,
-        });
-        response = recovered.response;
-        emitPayload = recovered.emitPayload;
-
-        const idIntegracaoPoll = extractIntegracaoId(response) || emitPayload.idIntegracao;
-        response = await awaitNfseEmitTerminalResponse(adapter, {
-          initialResponse: response,
-          idIntegracao: idIntegracaoPoll,
-          cnpjPrestador: cnpjPrestadorNfse,
-        });
-
-        const postPoll = await recoverNfseEmitAfterDuplicateRps({
-          adapter,
-          userId,
-          cnpjPrestadorNfse,
-          emitPayload,
-          response,
-        });
-        response = postPoll.response;
-        emitPayload = postPoll.emitPayload;
+        response = auto.response;
+        emitPayload = auto.emitPayload;
       } else {
         response = await adapter.emitir(emitPayload);
       }
@@ -1677,33 +1748,12 @@ export const emitirNota = async (userId, input) => {
 
     if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
       if (isNfseDuplicateRpsRejectedEmit(response, status)) {
-        const lastChance = await recoverNfseEmitAfterDuplicateRps({
-          adapter,
-          userId,
-          cnpjPrestadorNfse,
-          emitPayload,
-          response,
-        });
-        response = lastChance.response;
-        emitPayload = lastChance.emitPayload;
-        status = extractPlugNotasStatus(response);
-
-        const idIntegracaoFinal = extractIntegracaoId(response) || emitPayload.idIntegracao;
-        response = await awaitNfseEmitTerminalResponse(adapter, {
-          initialResponse: response,
-          idIntegracao: idIntegracaoFinal,
-          cnpjPrestador: cnpjPrestadorNfse,
-        });
-        status = extractPlugNotasStatus(response);
-      }
-
-      if (isNfseDuplicateRpsRejectedEmit(response, status)) {
         const usedRps = resolveUsedNfseRpsFromEmit(emitPayload, response);
         if (usedRps) {
           await advancePlugnotasNfseRpsAfterEmit(cnpjPrestadorNfse, usedRps).catch(() => {});
         }
         throw badRequest(
-          'A numeração da NFS-e foi realinhada. Emita novamente agora — o próximo número já está reservado.',
+          'Numeração RPS em conflito — o contador foi realinhado. Clique em Emitir novamente.',
           { code: 'NFSE_RPS_DUPLICATE_REALIGNED' },
         );
       }
@@ -2646,6 +2696,18 @@ export const processarWebhook = async (payload) => {
 
   if (!data) {
     throw notFound('Nota fiscal referente ao webhook não encontrada');
+  }
+
+  if (
+    normalizeDocumentType(data.document_type || DOCUMENT_TYPE_NFSE) === DOCUMENT_TYPE_NFSE
+    && isNfseDuplicateRpsRejectedEmit(payload, status)
+  ) {
+    const cnpjPrestador = normalizeDoc(data.cnpj_prestador)
+      || normalizeDoc(data.payload_json?.prestador?.cpfCnpj);
+    const usedRps = resolveUsedNfseRpsFromEmit(data.payload_json, payload);
+    if (usedRps && cnpjPrestador.length === 14) {
+      await advancePlugnotasNfseRpsAfterEmit(cnpjPrestador, usedRps).catch(() => {});
+    }
   }
 
   return data;
