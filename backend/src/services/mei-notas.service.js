@@ -13,7 +13,6 @@ import {
 } from './plugnotas/nfse.service.js';
 import {
   advancePlugnotasNfseRpsAfterEmit,
-  emitNfseWithPlugnotasRpsHeal,
   ensureEmpresaPlugnotasRpsForNfseEmit,
   isNfseE0014FromPlugnotasResponse,
   isNfseRejectedPlugnotasResponse,
@@ -1121,8 +1120,9 @@ const parsePositiveIntLocal = (value, fallback = NaN) => {
 };
 
 const NFSE_EMIT_TERMINAL_POLL_MAX_MS = 8000;
-const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 12000;
+const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 28000;
 const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 1000;
+const NFSE_EMIT_E0014_RETRY_MAX = 3;
 const NFSE_PERIODO_FAST_PAGES = 6;
 const NFSE_PROCESSING_FOLLOWUP_MS = 95000;
 
@@ -1245,6 +1245,18 @@ const finalizeNfseEmitStateBeforePersist = async (
   }
 
   if (normalized === 'processando') {
+    const integracao = extractIntegracaoId(currentResponse) || emitPayload?.idIntegracao;
+    if (integracao && cnpjPrestadorNfse.length === 14) {
+      currentResponse = await awaitNfseEmitTerminalResponse(adapter, {
+        initialResponse: currentResponse,
+        idIntegracao: integracao,
+        cnpjPrestador: cnpjPrestadorNfse,
+        maxWaitMs: NFSE_EMIT_PROCESSING_POLL_MAX_MS,
+        intervalMs: NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS,
+      });
+      status = extractPlugNotasStatus(currentResponse);
+      normalized = normalizeStatus(status);
+    }
     if (isNfseDuplicateRpsRejectedEmit(currentResponse, status)
       || isNfseRpsDuplicateRejectionLoose(currentResponse)) {
       await syncNfseRpsAfterE0014(cnpjPrestadorNfse, emitPayload, currentResponse);
@@ -1252,6 +1264,9 @@ const finalizeNfseEmitStateBeforePersist = async (
         'Numeração RPS em conflito — o contador foi realinhado. Clique em Emitir novamente.',
         { code: 'NFSE_RPS_DUPLICATE_REALIGNED' },
       );
+    }
+    if (normalized !== 'processando') {
+      return { response: currentResponse, status };
     }
     return { response: currentResponse, status };
   }
@@ -1362,7 +1377,7 @@ const awaitNfseEmitTerminalResponse = async (
 };
 
 /**
- * Emite NFS-e com um único POST e numeração reservada atomicamente (RPC Postgres).
+ * Emite NFS-e com reserva atômica (RPC Postgres) e até 3 tentativas em E0014 no mesmo clique.
  */
 const emitNfseWithAutoRpsRecovery = async (
   adapter,
@@ -1372,63 +1387,76 @@ const emitNfseWithAutoRpsRecovery = async (
   prep = {},
 ) => {
   const emitStartedAt = Date.now();
-  let emitPayload = { ...basePayload };
-  const localMax = parsePositiveIntLocal(prep.initialLocalMax, 0)
+  let localMax = parsePositiveIntLocal(prep.initialLocalMax, 0)
     || parsePositiveIntLocal(await queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse), 0);
 
   const empresaJsonCache = prep.empresaJson ?? null;
-  const allocation = await allocateNfseRpsForEmit(getDb, cnpjPrestadorNfse, localMax);
+  let emitPayload = { ...basePayload };
+  let response;
 
-  console.info('[plugnotas-rps] emit baseline', {
-    localMax,
-    floor: allocation.floor,
-    reserved: allocation.numero,
-    nextHint: allocation.numero,
-  });
+  for (let attempt = 0; attempt < NFSE_EMIT_E0014_RETRY_MAX; attempt += 1) {
+    emitPayload = { ...basePayload };
+    const allocation = await allocateNfseRpsForEmit(
+      getDb,
+      cnpjPrestadorNfse,
+      localMax,
+      empresaJsonCache,
+    );
+    localMax = Math.max(localMax, allocation.numero);
 
-  await applyAllocatedNfseRpsToEmitPayload(
-    emitPayload,
-    cnpjPrestadorNfse,
-    allocation,
-    empresaJsonCache,
-  );
-
-  console.info('[plugnotas-rps] emit plan', {
-    safeNext: allocation.numero,
-    floor: allocation.floor,
-    elapsedMs: Date.now() - emitStartedAt,
-  });
-  emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
-
-  const healed = await emitNfseWithPlugnotasRpsHeal(
-    adapter,
-    emitPayload,
-    cnpjPrestadorNfse,
-    () => buildMeiIdIntegracao(userId),
-    { maxRetries: 0, localMaxRpsNumero: Math.max(localMax, allocation.floor) },
-  );
-  emitPayload = healed.emitPayload;
-
-  let response = healed.response;
-  let status = extractPlugNotasStatus(response);
-  let normalized = normalizeStatus(status);
-
-  const integracaoPoll = extractIntegracaoId(response) || emitPayload.idIntegracao;
-  if (normalized !== 'concluido' && integracaoPoll && cnpjPrestadorNfse.length === 14) {
-    response = await awaitNfseEmitTerminalResponse(adapter, {
-      initialResponse: response,
-      idIntegracao: integracaoPoll,
-      cnpjPrestador: cnpjPrestadorNfse,
-      maxWaitMs: NFSE_EMIT_PROCESSING_POLL_MAX_MS,
-      intervalMs: NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS,
+    console.info('[plugnotas-rps] emit baseline', {
+      attempt: attempt + 1,
+      localMax,
+      floor: allocation.floor,
+      reserved: allocation.numero,
     });
-    status = extractPlugNotasStatus(response);
-    normalized = normalizeStatus(status);
+
+    await applyAllocatedNfseRpsToEmitPayload(
+      emitPayload,
+      cnpjPrestadorNfse,
+      allocation,
+      empresaJsonCache,
+    );
+
+    emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
+    response = await adapter.emitir(emitPayload);
+
+    const integracaoPoll = extractIntegracaoId(response) || emitPayload.idIntegracao;
+    let status = extractPlugNotasStatus(response);
+    let normalized = normalizeStatus(status);
+
+    if (normalized !== 'concluido' && integracaoPoll && cnpjPrestadorNfse.length === 14) {
+      response = await awaitNfseEmitTerminalResponse(adapter, {
+        initialResponse: response,
+        idIntegracao: integracaoPoll,
+        cnpjPrestador: cnpjPrestadorNfse,
+        maxWaitMs: NFSE_EMIT_PROCESSING_POLL_MAX_MS,
+        intervalMs: NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS,
+      });
+      status = extractPlugNotasStatus(response);
+      normalized = normalizeStatus(status);
+    }
+
+    if (!isNfseE0014FromPlugnotasResponse(response)) {
+      break;
+    }
+
+    const usedRps = resolveUsedNfseRpsFromEmit(emitPayload, response);
+    if (usedRps) {
+      await syncNfseRpsAfterE0014(cnpjPrestadorNfse, emitPayload, response);
+      localMax = Math.max(localMax, usedRps.numero);
+    }
+
+    console.warn('[plugnotas-rps] E0014 na emissão — nova reserva no mesmo clique', {
+      attempt: attempt + 1,
+      usedDps: usedRps?.numero,
+      nextLocalMax: localMax,
+    });
   }
 
   const payloadNumero = readRpsFromNfseEmitPayload(emitPayload)?.numero;
   console.info('[plugnotas-rps] emit response', {
-    status: normalized,
+    status: normalizeStatus(extractPlugNotasStatus(response)),
     dps: payloadNumero,
     elapsedMs: Date.now() - emitStartedAt,
   });

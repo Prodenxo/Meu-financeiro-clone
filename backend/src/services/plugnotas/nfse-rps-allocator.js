@@ -1,5 +1,6 @@
 import {
   queryAuthoritativeNfseRpsMaxUsed,
+  readPlugnotasNfseNextRpsFromEmpresa,
   readRpsFromNfseEmitPayload,
   syncPlugnotasNfseRpsBeforeEmit,
 } from './plugnotas-empresa-rps-heal.js';
@@ -95,7 +96,9 @@ export async function reserveNextNfseRpsNumber(getDb, { cnpj, floor = 0 }) {
   }
 
   const counterLast = await readNfseRpsCounterLast(getDb, normalizedCnpj);
-  return Math.max(safeFloor, counterLast) + 1;
+  const next = Math.max(safeFloor, counterLast) + 1;
+  await forceNfseRpsCounterFloor(getDb, normalizedCnpj, next);
+  return next;
 }
 
 /**
@@ -130,28 +133,41 @@ export async function queryKnownNfseRpsMax(getDb, cnpj, localMax = 0) {
 }
 
 /**
- * Reserva o próximo DPS: alinha contador ao histórico real e incrementa uma vez.
+ * Reserva o próximo DPS: histórico PlugNotas + Postgres + contador empresa (quando à frente).
  * @param {() => import('@supabase/supabase-js').SupabaseClient} getDb
  * @param {string} cnpj
  * @param {number} localMax
+ * @param {unknown} [empresaJson]
  */
-export async function allocateNfseRpsForEmit(getDb, cnpj, localMax = 0) {
+export async function allocateNfseRpsForEmit(getDb, cnpj, localMax = 0, empresaJson = null) {
   const normalizedCnpj = normalizeDoc(cnpj);
   const historyMax = await queryPlugnotasAndLocalNfseRpsMax(normalizedCnpj, localMax);
+  const counterLast = await readNfseRpsCounterLast(getDb, normalizedCnpj);
+  const empresaNext = readPlugnotasNfseNextRpsFromEmpresa(empresaJson);
+  const empresaFloor = empresaNext?.numero >= 1 ? empresaNext.numero - 1 : 0;
+  const floor = Math.max(historyMax, counterLast, empresaFloor);
 
-  await forceNfseRpsCounterFloor(getDb, normalizedCnpj, historyMax);
+  await forceNfseRpsCounterFloor(getDb, normalizedCnpj, floor);
   const numero = await reserveNextNfseRpsNumber(getDb, {
     cnpj: normalizedCnpj,
-    floor: historyMax,
+    floor,
   });
 
   console.info('[plugnotas-rps] DPS reservado', {
     cnpj: `${normalizedCnpj.slice(0, 2)}***${normalizedCnpj.slice(-4)}`,
     historyMax,
+    counterLast,
+    empresaFloor,
+    floor,
     numero,
   });
 
-  return { numero, serie: '1', lote: 1, floor: historyMax };
+  return {
+    numero,
+    serie: String(empresaNext?.serie ?? '1').trim() || '1',
+    lote: parsePositiveInt(empresaNext?.lote, 1),
+    floor,
+  };
 }
 
 /**

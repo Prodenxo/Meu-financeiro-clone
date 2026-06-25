@@ -379,9 +379,6 @@ export async function syncPlugnotasNfseRpsBeforeEmit(cnpjInput, targetRps, empre
     }
   }
 
-  const current = readPlugnotasNfseNextRpsFromEmpresa(empresa);
-  if (current && current.numero === targetNumero) return;
-
   try {
     await patchPlugnotasEmpresaRpsNextNumero(cnpj, empresa, {
       serie: usedSerie,

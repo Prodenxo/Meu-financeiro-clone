@@ -1,7 +1,7 @@
 import { nfseStatusKeyParaLimite } from './meiLimiteFaturamento';
 
 const NFSE_REJECTION_RPS_DUPLICATE_RE =
-  /E0014|dps já existe|dps ja existe|conjunto de série,\s*número|conjunto de serie,\s*numero/i;
+  /E0014|dps já existe|dps ja existe|numeração repetida|numeracao repetida|conjunto de série,\s*número|conjunto de serie,\s*numero/i;
 
 /** Oculta rejeições E0014 (numeração repetida) da lista principal. */
 export function isHiddenNfseE0014RejectedRecord(

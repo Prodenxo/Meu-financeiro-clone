@@ -23,6 +23,7 @@ test('reserveNextNfseRpsNumber usa RPC quando disponível', async () => {
 });
 
 test('reserveNextNfseRpsNumber faz fallback floor+1 sem RPC', async () => {
+  let upserted = null;
   const getDb = () => ({
     from: () => ({
       select: () => ({
@@ -30,12 +31,22 @@ test('reserveNextNfseRpsNumber faz fallback floor+1 sem RPC', async () => {
           maybeSingle: async () => ({ data: null, error: null }),
         }),
       }),
+      upsert: async (row) => {
+        upserted = row;
+        return { error: null };
+      },
     }),
-    rpc: async () => ({ data: null, error: { message: 'function not found', code: '42883' } }),
+    rpc: async (name) => {
+      if (name === 'mei_nfse_sync_rps_floor') {
+        return { error: { message: 'function not found' } };
+      }
+      return { data: null, error: { message: 'function not found', code: '42883' } };
+    },
   });
 
   const numero = await reserveNextNfseRpsNumber(getDb, { cnpj: '65805583000173', floor: 94 });
   assert.equal(numero, 95);
+  assert.equal(upserted?.last_numero, 95);
 });
 
 test('allocateNfseRpsForEmit combina histórico PlugNotas com reserva', async () => {
@@ -54,7 +65,7 @@ test('allocateNfseRpsForEmit combina histórico PlugNotas com reserva', async ()
       from: () => ({
         select: () => ({
           eq: () => ({
-            maybeSingle: async () => ({ data: { last_numero: 110 }, error: null }),
+            maybeSingle: async () => ({ data: { last_numero: 100 }, error: null }),
           }),
         }),
         upsert: async () => ({ error: null }),
@@ -69,9 +80,11 @@ test('allocateNfseRpsForEmit combina histórico PlugNotas com reserva', async ()
       },
     });
 
-    const allocation = await allocateNfseRpsForEmit(getDb, '65805583000173', 100);
-    assert.equal(allocation.floor, 102);
-    assert.equal(allocation.numero, 103);
+    const allocation = await allocateNfseRpsForEmit(getDb, '65805583000173', 100, {
+      nfse: { config: { rps: { serie: '1', numero: 110, lote: 1 } } },
+    });
+    assert.equal(allocation.floor, 109);
+    assert.equal(allocation.numero, 110);
     assert.equal(reserveCalls, 1);
   } finally {
     global.fetch = original;
