@@ -44,7 +44,7 @@ test('allocateNfseRpsForEmit combina histórico PlugNotas com reserva', async ()
     ok: true,
     status: 200,
     json: async () => ({
-      notas: [{ dps: { numero: 90, serie: '1' }, rps: { numero: 90, serie: '1' } }],
+      notas: [{ dps: { numero: 102, serie: '1' }, rps: { numero: 102, serie: '1' } }],
     }),
   });
 
@@ -54,7 +54,7 @@ test('allocateNfseRpsForEmit combina histórico PlugNotas com reserva', async ()
       from: () => ({
         select: () => ({
           eq: () => ({
-            maybeSingle: async () => ({ data: { last_numero: 100 }, error: null }),
+            maybeSingle: async () => ({ data: { last_numero: 110 }, error: null }),
           }),
         }),
         upsert: async () => ({ error: null }),
@@ -69,9 +69,10 @@ test('allocateNfseRpsForEmit combina histórico PlugNotas com reserva', async ()
       },
     });
 
-    const allocation = await allocateNfseRpsForEmit(getDb, '65805583000173', 88);
-    assert.equal(allocation.numero, 101);
-    assert.ok(reserveCalls >= 1);
+    const allocation = await allocateNfseRpsForEmit(getDb, '65805583000173', 100);
+    assert.equal(allocation.floor, 102);
+    assert.equal(allocation.numero, 103);
+    assert.equal(reserveCalls, 1);
   } finally {
     global.fetch = original;
   }

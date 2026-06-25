@@ -99,7 +99,25 @@ export async function reserveNextNfseRpsNumber(getDb, { cnpj, floor = 0 }) {
 }
 
 /**
- * Maior DPS conhecido: PlugNotas período + histórico local + contador Postgres.
+ * Maior DPS já usado no PlugNotas + histórico local (sem contador Postgres).
+ * @param {string} cnpj
+ * @param {number} localMax
+ * @returns {Promise<number>}
+ */
+export async function queryPlugnotasAndLocalNfseRpsMax(cnpj, localMax = 0) {
+  const normalizedCnpj = normalizeDoc(cnpj);
+  const authoritative = await queryAuthoritativeNfseRpsMaxUsed(
+    normalizedCnpj,
+    parsePositiveInt(localMax, 0),
+  );
+  return Math.max(
+    parsePositiveInt(authoritative, 0),
+    parsePositiveInt(localMax, 0),
+  );
+}
+
+/**
+ * Maior DPS conhecido incluindo contador Postgres (para diagnóstico).
  * @param {() => import('@supabase/supabase-js').SupabaseClient} getDb
  * @param {string} cnpj
  * @param {number} localMax
@@ -107,45 +125,33 @@ export async function reserveNextNfseRpsNumber(getDb, { cnpj, floor = 0 }) {
 export async function queryKnownNfseRpsMax(getDb, cnpj, localMax = 0) {
   const normalizedCnpj = normalizeDoc(cnpj);
   const counterLast = await readNfseRpsCounterLast(getDb, normalizedCnpj);
-  const authoritative = await queryAuthoritativeNfseRpsMaxUsed(
-    normalizedCnpj,
-    Math.max(parsePositiveInt(localMax, 0), counterLast),
-  );
-  return Math.max(
-    parsePositiveInt(authoritative, 0),
-    parsePositiveInt(localMax, 0),
-    counterLast,
-  );
+  const historyMax = await queryPlugnotasAndLocalNfseRpsMax(normalizedCnpj, localMax);
+  return Math.max(historyMax, counterLast);
 }
 
 /**
- * Reserva DPS livre: só retorna quando numero > maior DPS visível no PlugNotas/local/contador.
+ * Reserva o próximo DPS: alinha contador ao histórico real e incrementa uma vez.
  * @param {() => import('@supabase/supabase-js').SupabaseClient} getDb
  * @param {string} cnpj
  * @param {number} localMax
  */
 export async function allocateNfseRpsForEmit(getDb, cnpj, localMax = 0) {
   const normalizedCnpj = normalizeDoc(cnpj);
-  let floor = await queryKnownNfseRpsMax(getDb, normalizedCnpj, localMax);
+  const historyMax = await queryPlugnotasAndLocalNfseRpsMax(normalizedCnpj, localMax);
 
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    await forceNfseRpsCounterFloor(getDb, normalizedCnpj, floor);
-    const numero = await reserveNextNfseRpsNumber(getDb, { cnpj: normalizedCnpj, floor });
+  await forceNfseRpsCounterFloor(getDb, normalizedCnpj, historyMax);
+  const numero = await reserveNextNfseRpsNumber(getDb, {
+    cnpj: normalizedCnpj,
+    floor: historyMax,
+  });
 
-    const knownMax = await queryKnownNfseRpsMax(getDb, normalizedCnpj, Math.max(floor, numero - 1));
-    if (numero > knownMax) {
-      return { numero, serie: '1', lote: 1, floor: knownMax };
-    }
+  console.info('[plugnotas-rps] DPS reservado', {
+    cnpj: `${normalizedCnpj.slice(0, 2)}***${normalizedCnpj.slice(-4)}`,
+    historyMax,
+    numero,
+  });
 
-    console.warn('[plugnotas-rps] DPS reservado já consta no histórico — repescando', {
-      numero,
-      knownMax,
-      attempt: attempt + 1,
-    });
-    floor = Math.max(floor, numero, knownMax);
-  }
-
-  throw new Error('Não foi possível reservar um DPS livre após consultar PlugNotas e o contador');
+  return { numero, serie: '1', lote: 1, floor: historyMax };
 }
 
 /**
