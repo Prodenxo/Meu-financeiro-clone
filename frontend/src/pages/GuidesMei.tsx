@@ -840,6 +840,7 @@ export default function GuidesMei() {
 
   /** FR-GUIA-FISC-13: barreira síncrona contra duplo clique antes do re-render de `*Submitting`. */
   const meiEmitInFlightRef = useRef(false);
+  const e0014ArchiveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   /** Próximo POST NFS-e sem `idIntegracao` manual — servidor gera novo id (retry). */
   const omitClientIdIntegracaoOnNextEmitRef = useRef(false);
 
@@ -1375,6 +1376,17 @@ export default function GuidesMei() {
         ...(nfseDocumentTypeFilter !== 'all' ? { documentType: nfseDocumentTypeFilter } : {})
       });
       setNfseList(list);
+      for (const item of list) {
+        if (item.archived_at || !isHiddenNfseE0014RejectedRecord(item)) continue;
+        if (e0014ArchiveTimersRef.current.has(item.id)) continue;
+        const timer = setTimeout(() => {
+          e0014ArchiveTimersRef.current.delete(item.id);
+          void arquivarNfse(item.id, { archived: true })
+            .then(() => loadNfseList())
+            .catch(() => {});
+        }, 20000);
+        e0014ArchiveTimersRef.current.set(item.id, timer);
+      }
     } catch (error) {
       setOperationNfseError(error, 'Erro ao listar NFSe.');
     } finally {
@@ -2606,23 +2618,48 @@ export default function GuidesMei() {
             ...(cidade.estado ? { estado: cidade.estado.trim() } : {})
           };
         }
-      const created = await emitirNfse(payload);
-      const docLabel = GUIA_MEI_NFSE_DOCUMENT_LABEL;
-      const statusKey = String(created?.status ?? '').toLowerCase();
+
       setNfseSuccess(
-        statusKey === 'processando'
-          ? `${docLabel} enviada. A prefeitura está processando — acompanhe na lista.`
-          : created?.protocol
-            ? `${docLabel} enviada. Protocolo ${created.protocol}.`
-            : `${docLabel} enviada. Acompanhe o status na lista.`,
+        `${GUIA_MEI_NFSE_DOCUMENT_LABEL} em envio — acompanhe na lista abaixo.`,
       );
-      await Promise.all([loadNfseList(), loadNfseCatalog(), loadMeiLimiteServidor()]);
       setSelectedCatalogClienteId('');
       setSelectedCatalogProdutoId('');
-      nfseFormBaselineRef.current = JSON.stringify(nfseForm);
+      setNfseSubmitting(false);
+      setActiveWorkspace('nfse');
+      setNfseShowArchived(false);
+      requestAnimationFrame(() => {
+        document.getElementById('mei-nfse-list')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      });
+
+      void (async () => {
+        try {
+          const created = await emitirNfse(payload);
+          const docLabel = GUIA_MEI_NFSE_DOCUMENT_LABEL;
+          const statusKey = getNfseStatusKey(created?.status);
+          if (statusKey === 'rejeitado') {
+            setEmissionNfseError(
+              { message: 'A nota foi rejeitada. Veja o motivo na lista — em cerca de 20s ela vai para Arquivadas.' },
+              'Nota rejeitada pelo emissor fiscal.',
+            );
+          } else {
+            setNfseSuccess(
+              statusKey === 'processando'
+                ? `${docLabel} enviada. A prefeitura está processando — acompanhe na lista.`
+                : created?.protocol
+                  ? `${docLabel} enviada. Protocolo ${created.protocol}.`
+                  : `${docLabel} enviada. Acompanhe o status na lista.`,
+            );
+          }
+          await Promise.all([loadNfseList(), loadNfseCatalog(), loadMeiLimiteServidor()]);
+          nfseFormBaselineRef.current = JSON.stringify(nfseForm);
+        } catch (error) {
+          setEmissionNfseError(error, 'Erro ao emitir nota fiscal.');
+        } finally {
+          meiEmitInFlightRef.current = false;
+        }
+      })();
     } catch (error) {
       setEmissionNfseError(error, 'Erro ao emitir nota fiscal.');
-    } finally {
       meiEmitInFlightRef.current = false;
       setNfseSubmitting(false);
     }
@@ -2724,20 +2761,33 @@ export default function GuidesMei() {
     setNfeLikeSubmitting(true);
     try {
       const payload = buildNfeLikePayloadFromMeiForm(nfeLikeForm, emissionDocumentType);
-      const created =
-        emissionDocumentType === 'NFE' ? await emitirNfe(payload) : await emitirNfce(payload);
-      setNfseSuccess(
-        created?.protocol
-          ? `${docShort}: nota enviada. Protocolo ${created.protocol}.`
-          : `${docShort}: nota enviada. Acompanhe o status na lista.`
-      );
-      await Promise.all([loadNfseList(), loadNfseCatalog(), loadMeiLimiteServidor()]);
-      const nextForm = buildPrefilledNfeLikeFormSnapshot(nfseForm, nfEmissionCompanyForm.razaoSocial || '');
-      setNfeLikeForm(nextForm);
-      nfeLikeBaselineRef.current = serializeMeiNfeLikeFormForDirty(nextForm);
+      setNfseSuccess(`${docShort} em envio — acompanhe na lista abaixo.`);
+      setNfeLikeSubmitting(false);
+      requestAnimationFrame(() => {
+        document.getElementById('mei-nfse-list')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      });
+
+      void (async () => {
+        try {
+          const created =
+            emissionDocumentType === 'NFE' ? await emitirNfe(payload) : await emitirNfce(payload);
+          setNfseSuccess(
+            created?.protocol
+              ? `${docShort}: nota enviada. Protocolo ${created.protocol}.`
+              : `${docShort}: nota enviada. Acompanhe o status na lista.`
+          );
+          await Promise.all([loadNfseList(), loadNfseCatalog(), loadMeiLimiteServidor()]);
+          const nextForm = buildPrefilledNfeLikeFormSnapshot(nfseForm, nfEmissionCompanyForm.razaoSocial || '');
+          setNfeLikeForm(nextForm);
+          nfeLikeBaselineRef.current = serializeMeiNfeLikeFormForDirty(nextForm);
+        } catch (error) {
+          setEmissionNfseError(error, `Erro ao emitir ${docShort}.`);
+        } finally {
+          meiEmitInFlightRef.current = false;
+        }
+      })();
     } catch (error) {
       setEmissionNfseError(error, `Erro ao emitir ${docShort}.`);
-    } finally {
       meiEmitInFlightRef.current = false;
       setNfeLikeSubmitting(false);
     }
@@ -2897,9 +2947,6 @@ export default function GuidesMei() {
 
   const filteredNfseList = useMemo(() => {
     return nfseList.filter((item) => {
-      if (!nfseShowArchived && isHiddenNfseE0014RejectedRecord(item)) {
-        return false;
-      }
       if (nfseDocumentTypeFilter !== 'all') {
         const raw = String(item.document_type || '').trim().toUpperCase();
         const effective = raw || 'NFSE';

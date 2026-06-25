@@ -1126,6 +1126,8 @@ const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 1000;
 const NFSE_EMIT_E0014_RETRY_MAX = 2;
 const NFSE_PERIODO_FAST_PAGES = 6;
 const NFSE_PROCESSING_FOLLOWUP_MS = 95000;
+/** Tempo mínimo na lista principal antes de arquivar E0014 automaticamente. */
+const NFSE_E0014_VISIBLE_BEFORE_ARCHIVE_MS = 20000;
 
 /** Serializa emissões NFS-e por CNPJ prestador — evita duas requisições paralelas queimando DPS seguidos. */
 const nfseEmitLockTailByCnpj = new Map();
@@ -1168,7 +1170,13 @@ const isHiddenNfseE0014RejectedRow = (row) => {
 
 const archiveE0014RejectedRowsOnList = async (userId, rows) => {
   if (!userId || !Array.isArray(rows) || !rows.length) return;
-  const targets = rows.filter((row) => isHiddenNfseE0014RejectedRow(row) && !row.archived_at);
+  const now = Date.now();
+  const targets = rows.filter((row) => {
+    if (!isHiddenNfseE0014RejectedRow(row) || row.archived_at) return false;
+    const createdMs = new Date(row.created_at).getTime();
+    if (!Number.isFinite(createdMs)) return false;
+    return now - createdMs >= NFSE_E0014_VISIBLE_BEFORE_ARCHIVE_MS;
+  });
   if (!targets.length) return;
 
   await Promise.all(targets.map(async (row) => {
@@ -1205,7 +1213,7 @@ const scheduleNfseProcessandoSyncFollowUp = (userId, notaId) => {
   })();
 };
 
-const autoArchiveNfseE0014RecordIfNeeded = async (userId, record, response, status) => {
+const healNfseRpsAfterE0014RecordIfNeeded = async (userId, record, response, status) => {
   if (!record?.id || !userId) return record;
   const isE0014 = isNfseDuplicateRpsRejectedEmit(response, status)
     || isNfseE0014FromPlugnotasResponse(response);
@@ -1218,16 +1226,7 @@ const autoArchiveNfseE0014RecordIfNeeded = async (userId, record, response, stat
     await syncNfseRpsAfterE0014(cnpjPrestador, record.payload_json, response);
   }
 
-  if (record.archived_at) return record;
-
-  return await updateRecord(userId, record.id, {
-    archived_at: new Date().toISOString(),
-    metadata_json: appendAuditEvent(record, {
-      type: 'auto_archive_e0014',
-      nfseRejectionCode: 'E0014',
-      at: new Date().toISOString(),
-    }),
-  });
+  return record;
 };
 
 /**
@@ -1261,10 +1260,6 @@ const finalizeNfseEmitStateBeforePersist = async (
     if (isNfseDuplicateRpsRejectedEmit(currentResponse, status)
       || isNfseRpsDuplicateRejectionLoose(currentResponse)) {
       await syncNfseRpsAfterE0014(cnpjPrestadorNfse, emitPayload, currentResponse);
-      throw badRequest(
-        'Numeração RPS em conflito — o contador foi realinhado. Clique em Emitir novamente.',
-        { code: 'NFSE_RPS_DUPLICATE_REALIGNED' },
-      );
     }
     if (normalized !== 'processando') {
       return { response: currentResponse, status };
@@ -1274,10 +1269,6 @@ const finalizeNfseEmitStateBeforePersist = async (
 
   if (isNfseDuplicateRpsRejectedEmit(currentResponse, status)) {
     await syncNfseRpsAfterE0014(cnpjPrestadorNfse, emitPayload, currentResponse);
-    throw badRequest(
-      'Numeração RPS em conflito — o contador foi realinhado. Clique em Emitir novamente.',
-      { code: 'NFSE_RPS_DUPLICATE_REALIGNED' },
-    );
   }
 
   if (isNfseEmitStatusTerminal(status)) {
@@ -1296,17 +1287,13 @@ const finalizeNfseEmitStateBeforePersist = async (
     status = extractPlugNotasStatus(currentResponse);
     if (isNfseDuplicateRpsRejectedEmit(currentResponse, status)) {
       await syncNfseRpsAfterE0014(cnpjPrestadorNfse, emitPayload, currentResponse);
-      throw badRequest(
-        'Numeração RPS em conflito — o contador foi realinhado. Clique em Emitir novamente.',
-        { code: 'NFSE_RPS_DUPLICATE_REALIGNED' },
-      );
     }
   }
 
   return { response: currentResponse, status };
 };
 
-const assertNfseSafeToPersistOrThrow = async (
+const prepareNfseEmitRpsAfterDuplicateRejection = async (
   response,
   status,
   emitPayload,
@@ -1314,21 +1301,13 @@ const assertNfseSafeToPersistOrThrow = async (
 ) => {
   if (isNfseDuplicateRpsRejectedEmit(response, status)) {
     await syncNfseRpsAfterE0014(cnpjPrestadorNfse, emitPayload, response);
-    throw badRequest(
-      'Numeração RPS em conflito — o contador foi realinhado. Clique em Emitir novamente.',
-      { code: 'NFSE_RPS_DUPLICATE_REALIGNED' },
-    );
+    return;
   }
   if (
     normalizeStatus(status) === 'rejeitado'
     && isNfseRpsDuplicateRejectionLoose(response)
   ) {
-    const usedRps = resolveUsedNfseRpsFromEmit(emitPayload, response);
     await syncNfseRpsAfterE0014(cnpjPrestadorNfse, emitPayload, response);
-    throw badRequest(
-      'Numeração RPS em conflito — o contador foi realinhado. Clique em Emitir novamente.',
-      { code: 'NFSE_RPS_DUPLICATE_REALIGNED' },
-    );
   }
 };
 
@@ -1915,7 +1894,7 @@ export const emitirNota = async (userId, input) => {
       });
       response = finalized.response;
       status = finalized.status;
-      await assertNfseSafeToPersistOrThrow(
+      await prepareNfseEmitRpsAfterDuplicateRejection(
         response,
         status,
         emitPayload,
@@ -1937,20 +1916,19 @@ export const emitirNota = async (userId, input) => {
 
     phase = 'insert_record';
     if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
-      await assertNfseSafeToPersistOrThrow(
+      await prepareNfseEmitRpsAfterDuplicateRejection(
         response,
         status,
         emitPayload,
         cnpjPrestadorNfse,
       );
-      const normalizedEmit = normalizeStatus(status);
-      if (normalizedEmit === 'rejeitado') {
-        throw badRequest(
-          'A NFS-e foi rejeitada. Verifique o motivo e tente novamente.',
-          { code: 'NFSE_NOT_AUTHORIZED' },
-        );
-      }
     }
+    const rejectionMeta = (() => {
+      if (documentType !== DOCUMENT_TYPE_NFSE) return null;
+      if (normalizeStatus(status) !== 'rejeitado') return null;
+      if (!isNfseE0014FromPlugnotasResponse(response)) return null;
+      return { nfseRejectionCode: 'E0014' };
+    })();
     const created = await insertRecord(userId, {
       plugnotas_id: plugnotasId,
       protocol,
@@ -1964,7 +1942,10 @@ export const emitirNota = async (userId, input) => {
         || normalizeDoc(payload?.tomador?.cpfCnpj || payload?.destinatario?.cpfCnpj || ''),
       payload_json: emitPayload,
       response_json: response,
-      metadata_json: Object.keys(metadata).length ? metadata : null
+      metadata_json: prune({
+        ...(Object.keys(metadata).length ? metadata : {}),
+        ...(rejectionMeta ?? {}),
+      }) || null
     });
 
     try {
@@ -2046,9 +2027,8 @@ export const listarNotas = async (
   if (error) throw badRequest(error.message);
   const rows = data || [];
   await archiveE0014RejectedRowsOnList(userId, rows);
-  const visible = rows.filter((row) => !isHiddenNfseE0014RejectedRow(row));
   if (includeArchived) return rows;
-  return visible;
+  return rows.filter((row) => !row.archived_at);
 };
 
 const clampAnoCivilLimite = (value) => {
@@ -2585,7 +2565,7 @@ export const obterNota = async (userId, id, { sync = false, skipWhatsappDelivery
     response_json: response
   });
 
-  const archivedOrUpdated = await autoArchiveNfseE0014RecordIfNeeded(
+  const archivedOrUpdated = await healNfseRpsAfterE0014RecordIfNeeded(
     userId,
     updated,
     response,
@@ -2897,7 +2877,7 @@ export const processarWebhook = async (payload) => {
     && (isNfseDuplicateRpsRejectedEmit(payload, status) || isNfseE0014FromPlugnotasResponse(payload))
     && data.user_id
   ) {
-    return await autoArchiveNfseE0014RecordIfNeeded(data.user_id, data, payload, status);
+    return await healNfseRpsAfterE0014RecordIfNeeded(data.user_id, data, payload, status);
   }
 
   return data;
