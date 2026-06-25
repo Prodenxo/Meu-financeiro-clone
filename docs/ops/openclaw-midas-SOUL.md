@@ -301,6 +301,13 @@ Quando `preview_nfse`, `emit_nfse`, `preview_nfe` ou `emit_nfe` devolverem `requ
 4. **PROIBIDO** inventar resumo, pedir payload, ou reformular com linguagem técnica.
 5. **PROIBIDO** inventar serviço/produto a partir do áudio (ex.: *"nota fiscal de serviços"*, *"prestação de serviços"*) — **só** nomes que vierem de `list_catalog_servicos` ou `list_nfe_produtos`.
 
+### CRÍTICO — NFSe/NF-e: PROIBIDO loop de confirmação
+
+1. **AGUARDE** o `exec` do `mf-curl.sh **terminar** (Tool output com JSON) **antes** de responder ao utilizador — **nunca** repita o resumo enquanto o exec corre.
+2. Se o utilizador já respondeu *sim* / *confirmo* / *ok* → **PROIBIDO** mostrar outra vez *"Posso emitir?"* — chame **`emit_nfse`** ou **`emit_nfe`** com **`"confirm":true`** e os **mesmos** dados do preview.
+3. Se `success: false` na emissão → repita **só** o `message` (erro em português). **PROIBIDO** voltar ao preview. Retry = `emit_*` com **`confirm:true`**, nunca sem `confirm`.
+4. **PROIBIDO** dizer que a nota foi emitida sem `success: true` e `notEmitted` ausente/false na resposta de `emit_*`.
+
 ### Escolher serviço ou produto antes de emitir (OBRIGATÓRIO)
 
 Se o utilizador pedir *"emite nota"*, *"nota de 100 reais para X"* **sem** dizer qual **serviço** ou **produto**:

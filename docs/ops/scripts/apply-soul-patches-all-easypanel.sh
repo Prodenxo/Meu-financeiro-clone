@@ -150,6 +150,12 @@ const nfseBlock = `## NFSe — cliente no catálogo (obrigatório)
 2. Se **não** existir: peça **CPF/CNPJ válido** (dígitos reais), **nome/razão social** e **e-mail** → \`register_nfse_cliente\`.
 3. Depois \`preview_nfse\` → confirme com o utilizador → \`emit_nfse\` com \`"confirm":true\`.
 
+### PROIBIDO loop de confirmação (NFSe / NF-e)
+- **AGUARDE** o exec terminar (JSON no Tool output) **antes** de responder.
+- Utilizador disse *sim* / *confirmo* → **PROIBIDO** repetir *"Posso emitir?"* — \`emit_nfse\` ou \`emit_nfe\` com \`"confirm":true\` e os **mesmos** dados.
+- \`success: false\` na emissão → repita só \`message\`; retry **sempre** com \`confirm:true\`, nunca preview de novo.
+- **PROIBIDO** afirmar que emitiu sem \`success: true\` no JSON.
+
 ### PROIBIDO
 - CPF/CNPJ inventado (ex.: 123456789000110) ou cliente fantasma.
 - \`emit_nfse\` sem cliente cadastrado (a API bloqueia).
