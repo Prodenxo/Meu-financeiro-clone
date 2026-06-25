@@ -291,6 +291,18 @@ export function resolveNextNfseRpsFromSources(sources = {}) {
   return Math.max(fromHistories, fromEmpresa);
 }
 
+/**
+ * Maior DPS/RPS já enviado (histórico local + PlugNotas período completo).
+ * @param {string} cnpjInput
+ * @param {number|null|undefined} localMaxNumero
+ * @returns {Promise<number>}
+ */
+export async function queryAuthoritativeNfseRpsMaxUsed(cnpjInput, localMaxNumero = 0) {
+  const localMax = parsePositiveInt(localMaxNumero, 0);
+  const periodoMax = parsePositiveInt(await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjInput), 0);
+  return Math.max(localMax, periodoMax);
+}
+
 const collectPeriodoNotas = (body) => {
   if (!body || typeof body !== 'object') return [];
   const candidates = [body.notas, body.documentos, body.data, body.nfses];

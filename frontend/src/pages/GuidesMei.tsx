@@ -1,4 +1,4 @@
-﻿import {
+import {
   useCallback,
   useEffect,
   useId,
@@ -2607,10 +2607,13 @@ export default function GuidesMei() {
         }
       const created = await emitirNfse(payload);
       const docLabel = GUIA_MEI_NFSE_DOCUMENT_LABEL;
+      const statusKey = String(created?.status ?? '').toLowerCase();
       setNfseSuccess(
-        created?.protocol
-          ? `${docLabel} enviada. Protocolo ${created.protocol}.`
-          : `${docLabel} enviada. Acompanhe o status na lista.`
+        statusKey === 'processando'
+          ? `${docLabel} enviada. A prefeitura está processando — acompanhe na lista.`
+          : created?.protocol
+            ? `${docLabel} enviada. Protocolo ${created.protocol}.`
+            : `${docLabel} enviada. Acompanhe o status na lista.`,
       );
       await Promise.all([loadNfseList(), loadNfseCatalog(), loadMeiLimiteServidor()]);
       setSelectedCatalogClienteId('');

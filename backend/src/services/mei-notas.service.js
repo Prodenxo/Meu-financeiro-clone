@@ -19,6 +19,7 @@ import {
   isNfseRejectedPlugnotasResponse,
   isNfseRpsDuplicateRejectionLoose,
   queryMaxRpsNumeroFromPlugnotasPeriodo,
+  queryAuthoritativeNfseRpsMaxUsed,
   readPlugnotasNfseNextRpsFromEmpresa,
   readRpsNumeroFromNfseHistoryRow,
   readRpsNumeroFromNfsePlugnotasBody,
@@ -1121,13 +1122,41 @@ const parsePositiveIntLocal = (value, fallback = NaN) => {
 };
 
 const NFSE_EMIT_TERMINAL_POLL_MAX_MS = 8000;
-const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 75000;
-const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 2000;
+const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 12000;
+const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 1000;
+const NFSE_PERIODO_FAST_PAGES = 6;
+const NFSE_PROCESSING_FOLLOWUP_MS = 95000;
 const MAX_NFSE_AUTO_EMIT_ATTEMPTS = 10;
+
+const isHiddenNfseE0014RejectedRow = (row) => {
+  if (normalizeDocumentType(row?.document_type || DOCUMENT_TYPE_NFSE) !== DOCUMENT_TYPE_NFSE) {
+    return false;
+  }
+  if (normalizeStatus(row?.status) !== 'rejeitado') return false;
+  return isNfseRpsDuplicateRejectionLoose(row?.response_json)
+    || isNfseRpsDuplicateRejectionLoose(row?.payload_json);
+};
+
+const scheduleNfseProcessandoSyncFollowUp = (userId, notaId) => {
+  if (!userId || !notaId) return;
+  void (async () => {
+    await sleep(NFSE_PROCESSING_FOLLOWUP_MS);
+    try {
+      await obterNota(userId, notaId, { sync: true, skipWhatsappDelivery: true });
+    } catch (error) {
+      console.warn('[plugnotas-rps] follow-up sync processando falhou', {
+        notaId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  })();
+};
 
 const autoArchiveNfseE0014RecordIfNeeded = async (userId, record, response, status) => {
   if (!record?.id || !userId) return record;
-  if (!isNfseDuplicateRpsRejectedEmit(response, status)) return record;
+  const isE0014 = isNfseDuplicateRpsRejectedEmit(response, status)
+    || isNfseE0014FromPlugnotasResponse(response);
+  if (!isE0014) return record;
 
   const cnpjPrestador = normalizeDoc(record.cnpj_prestador)
     || normalizeDoc(record.payload_json?.prestador?.cpfCnpj);
@@ -1163,19 +1192,8 @@ const finalizeNfseEmitStateBeforePersist = async (
   }
 
   if (normalized === 'processando') {
-    const integracao = extractIntegracaoId(currentResponse) || emitPayload?.idIntegracao;
-    if (integracao && cnpjPrestadorNfse.length === 14) {
-      currentResponse = await awaitNfseEmitTerminalResponse(adapter, {
-        initialResponse: currentResponse,
-        idIntegracao: integracao,
-        cnpjPrestador: cnpjPrestadorNfse,
-        maxWaitMs: NFSE_EMIT_PROCESSING_POLL_MAX_MS,
-        intervalMs: NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS,
-      });
-      status = extractPlugNotasStatus(currentResponse);
-      normalized = normalizeStatus(status);
-    }
-    if (isNfseDuplicateRpsRejectedEmit(currentResponse, status)) {
+    if (isNfseDuplicateRpsRejectedEmit(currentResponse, status)
+      || isNfseRpsDuplicateRejectionLoose(currentResponse)) {
       const usedRps = resolveUsedNfseRpsFromEmit(emitPayload, currentResponse);
       if (usedRps) {
         await advancePlugnotasNfseRpsAfterEmit(cnpjPrestadorNfse, usedRps).catch(() => {});
@@ -1394,25 +1412,17 @@ const emitNfseWithAutoRpsRecovery = async (
   let cachedPeriodoMax = parsePositiveIntLocal(prep.periodoMax, 0);
   let cachedLocalMax = parsePositiveIntLocal(prep.initialLocalMax, 0)
     || parsePositiveIntLocal(await queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse), 0);
-  let empresaJsonCache = prep.empresaJson ?? null;
 
-  if (!cachedPeriodoMax) {
-    console.info('[plugnotas-rps] consultando histórico PlugNotas (período)');
-    cachedPeriodoMax = parsePositiveIntLocal(
-      await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjPrestadorNfse),
-      0,
-    );
-  }
+  cachedPeriodoMax = await queryAuthoritativeNfseRpsMaxUsed(cnpjPrestadorNfse, cachedLocalMax);
+  cachedLocalMax = Math.max(cachedLocalMax, cachedPeriodoMax);
 
   console.info('[plugnotas-rps] emit baseline', {
     localMax: cachedLocalMax,
     periodoMax: cachedPeriodoMax,
-    nextHint: resolveNextNfseRpsFromSources({
-      localMaxNumero: cachedLocalMax,
-      periodoMaxNumero: cachedPeriodoMax,
-      empresaNumero: readPlugnotasNfseNextRpsFromEmpresa(empresaJsonCache)?.numero,
-    }),
+    nextHint: cachedPeriodoMax + 1,
   });
+
+  let empresaJsonCache = prep.empresaJson ?? null;
 
   for (let attempt = 0; attempt < MAX_NFSE_AUTO_EMIT_ATTEMPTS; attempt += 1) {
     const inRequestMax = attemptedNumeros.size > 0 ? Math.max(...attemptedNumeros) : 0;
@@ -1505,11 +1515,7 @@ const emitNfseWithAutoRpsRecovery = async (
 
     if (!isE0014) {
       if (normalized === 'processando') {
-        throw badRequest(
-          'A nota ainda está na fila da prefeitura (pode levar até 2 minutos). '
-          + 'Aguarde um pouco e confira em Documentos emitidos — não emita de novo ainda.',
-          { code: 'NFSE_STILL_PROCESSING' },
-        );
+        return { response, emitPayload };
       }
       return { response, emitPayload };
     }
@@ -1531,17 +1537,17 @@ const emitNfseWithAutoRpsRecovery = async (
     }
 
     if (!cachedPeriodoMax) {
-      cachedPeriodoMax = parsePositiveIntLocal(
-        await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjPrestadorNfse),
-        0,
+      cachedPeriodoMax = await queryAuthoritativeNfseRpsMaxUsed(
+        cnpjPrestadorNfse,
+        Math.max(cachedLocalMax, failedNumero),
       );
     } else {
-      const refreshedPeriodo = parsePositiveIntLocal(
-        await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjPrestadorNfse),
-        0,
+      cachedPeriodoMax = await queryAuthoritativeNfseRpsMaxUsed(
+        cnpjPrestadorNfse,
+        Math.max(cachedLocalMax, failedNumero, cachedPeriodoMax),
       );
-      if (refreshedPeriodo > cachedPeriodoMax) cachedPeriodoMax = refreshedPeriodo;
     }
+    cachedLocalMax = Math.max(cachedLocalMax, cachedPeriodoMax, failedNumero);
 
     const nextFromFailure = resolveNextNfseRpsAfterFailure(
       failedNumero,
@@ -1979,11 +1985,15 @@ export const emitirNota = async (userId, input) => {
       if (cnpjPrestadorNfse.length === 14) {
         const empresaJsonCache = await ensureMeiNfsePlugnotasCadastroBeforeEmit(userId, cnpjPrestadorNfse);
         await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestadorNfse, empresaJsonCache);
-        const [initialLocalMax, periodoMax] = await Promise.all([
+        const [initialLocalMax, authoritativeMax] = await Promise.all([
           queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse),
-          queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjPrestadorNfse),
+          queryAuthoritativeNfseRpsMaxUsed(cnpjPrestadorNfse, 0),
         ]);
-        nfseEmitPrep = { empresaJson: empresaJsonCache, initialLocalMax, periodoMax };
+        nfseEmitPrep = {
+          empresaJson: empresaJsonCache,
+          initialLocalMax: Math.max(initialLocalMax ?? 0, authoritativeMax),
+          periodoMax: authoritativeMax,
+        };
       }
     }
     let response;
@@ -2048,9 +2058,10 @@ export const emitirNota = async (userId, input) => {
         emitPayload,
         cnpjPrestadorNfse,
       );
-      if (normalizeStatus(status) !== 'concluido') {
+      const normalizedEmit = normalizeStatus(status);
+      if (normalizedEmit === 'rejeitado') {
         throw badRequest(
-          'A NFS-e não foi autorizada. Verifique o motivo e tente novamente.',
+          'A NFS-e foi rejeitada. Verifique o motivo e tente novamente.',
           { code: 'NFSE_NOT_AUTHORIZED' },
         );
       }
@@ -2088,6 +2099,9 @@ export const emitirNota = async (userId, input) => {
         await advancePlugnotasNfseRpsAfterEmit(cnpjPrestadorNfse, usedRps).catch(() => {});
       } else {
         maybeAdvanceNfseRpsAfterPlugnotas(cnpjPrestadorNfse, emitPayload, response);
+      }
+      if (normalizeStatus(status) === 'processando') {
+        scheduleNfseProcessandoSyncFollowUp(userId, created.id);
       }
     }
 
@@ -2145,7 +2159,9 @@ export const listarNotas = async (
   }
   const { data, error } = await query;
   if (error) throw badRequest(error.message);
-  return data || [];
+  const rows = data || [];
+  if (includeArchived) return rows;
+  return rows.filter((row) => !isHiddenNfseE0014RejectedRow(row));
 };
 
 const clampAnoCivilLimite = (value) => {
@@ -2991,7 +3007,7 @@ export const processarWebhook = async (payload) => {
 
   if (
     normalizeDocumentType(data.document_type || DOCUMENT_TYPE_NFSE) === DOCUMENT_TYPE_NFSE
-    && isNfseDuplicateRpsRejectedEmit(payload, status)
+    && (isNfseDuplicateRpsRejectedEmit(payload, status) || isNfseE0014FromPlugnotasResponse(payload))
     && data.user_id
   ) {
     return await autoArchiveNfseE0014RecordIfNeeded(data.user_id, data, payload, status);
