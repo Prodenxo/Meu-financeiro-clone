@@ -16,6 +16,8 @@ export function isHiddenNfseE0014RejectedRecord(
   const docType = String(record.document_type || 'NFSE').trim().toUpperCase();
   if (docType && docType !== 'NFSE') return false;
   if (nfseStatusKeyParaLimite(record.status) !== 'rejeitado') return false;
+  const meta = record.metadata_json as { nfseRejectionCode?: string } | null | undefined;
+  if (meta?.nfseRejectionCode === 'E0014') return true;
   try {
     const text = JSON.stringify({
       response: record.response_json,
