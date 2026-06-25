@@ -389,6 +389,8 @@ export function mapMeiFiscalErrorToCopy(input: {
     lower.includes('e0014')
     || lower.includes('dps já existe')
     || lower.includes('dps ja existe')
+    || lower.includes('numeração repetida')
+    || lower.includes('numeracao repetida')
     || (lower.includes('conjunto de série') && lower.includes('já existe'))
     || (lower.includes('conjunto de serie') && lower.includes('ja existe'))
   ) {

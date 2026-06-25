@@ -13,6 +13,8 @@ import {
   readRpsFromNfseEmitPayload,
   readRpsNumeroFromNfseHistoryRow,
   readRpsNumeroFromNfsePlugnotasBody,
+  resolveNextNfseRpsAfterFailure,
+  resolveNextNfseRpsFromSources,
   resolveNextNfseRpsNumero,
   resolveNfseRpsLocalMaxFromHistory,
   syncPlugnotasNfseRpsBeforeEmit
@@ -34,6 +36,20 @@ test('readRpsFromNfseEmitPayload lê numeracao do payload de emissão', () => {
 test('resolveNfseRpsLocalMaxFromHistory usa só o maior número conhecido', () => {
   assert.equal(resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: 45 }), 45);
   assert.equal(resolveNfseRpsLocalMaxFromHistory({ maxKnownNumero: 0 }), null);
+});
+
+test('readRpsNumeroFromNfsePlugnotasBody lê resposta NFS-e Nacional rejeitada (DPS 34)', () => {
+  const body = {
+    rps: { lote: 1, serie: '1', numero: 34 },
+    dps: { id: 'DPS330455726580558300017300001000000000000034', numero: 34, serie: '1' },
+    retorno: {
+      mensagemRetorno: 'E0014 - Conjunto de Série, Número, Código do Município Emissor...',
+      situacao: 'REJEITADA',
+    },
+    status: 'REJEITADO',
+  };
+  assert.equal(readRpsNumeroFromNfsePlugnotasBody(body), 34);
+  assert.equal(isNfseE0014FromPlugnotasResponse(body), true);
 });
 
 test('readRpsNumeroFromNfsePlugnotasBody lê resposta em array com rps flat e dps (Postman)', () => {
@@ -61,6 +77,20 @@ test('readRpsNumeroFromNfseHistoryRow lê número da resposta PlugNotas em array
 test('resolveNextNfseRpsNumero após E0014 no 45 deve emitir 46', () => {
   assert.equal(resolveNextNfseRpsNumero(43, 45), 46);
   assert.equal(resolveNextNfseRpsNumero(45, 45), 46);
+});
+
+test('resolveNextNfseRpsFromSources usa maior entre empresa, local e período + 1', () => {
+  assert.equal(resolveNextNfseRpsFromSources({ empresaNumero: 34, localMaxNumero: 35, periodoMaxNumero: 36 }), 37);
+  assert.equal(resolveNextNfseRpsFromSources({ empresaNumero: 34, localMaxNumero: 35, periodoMaxNumero: null }), 36);
+  assert.equal(resolveNextNfseRpsFromSources({ empresaNumero: 5, localMaxNumero: null, periodoMaxNumero: null }), 5);
+  assert.equal(resolveNextNfseRpsFromSources({ empresaNumero: null, localMaxNumero: null, periodoMaxNumero: null }), 1);
+});
+
+test('resolveNextNfseRpsAfterFailure sempre avança após número rejeitado (caso 34)', () => {
+  assert.equal(resolveNextNfseRpsNumero(34, 33), 34);
+  assert.equal(resolveNextNfseRpsAfterFailure(34, 33, null), 35);
+  assert.equal(resolveNextNfseRpsAfterFailure(34, 33, 36), 37);
+  assert.equal(resolveNextNfseRpsAfterFailure(34, 40, 33), 41);
 });
 
 test('syncPlugnotasNfseRpsBeforeEmit faz PATCH quando contador PlugNotas está atrás', async () => {
@@ -412,6 +442,60 @@ test('isNfseE0014FromPlugnotasResponse reconhece mensagem humanizada de numeraç
     }),
     true,
   );
+});
+
+test('emitNfseWithPlugnotasRpsHeal reenvia quando E0014 não traz número na resposta mas payload tem rps', async () => {
+  const originalFetch = global.fetch;
+  const emitCalls = [];
+
+  global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/nfse/consultar/periodo')) {
+      return new Response(JSON.stringify({ notas: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (String(url).includes('/empresa/') && options.method === 'PATCH') {
+      return new Response(JSON.stringify({ message: 'ok' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  const adapter = {
+    emitir: async (payload) => {
+      emitCalls.push(payload);
+      if (emitCalls.length === 1) {
+        return [{
+          retorno: {
+            mensagemRetorno: 'Numeração repetida (série + número da nota): combinação já foi usada',
+            situacao: 'REJEITADA',
+          },
+          status: 'REJEITADO',
+        }];
+      }
+      return [{ status: 'PROCESSANDO', rps: { numero: 47, serie: '1', lote: 1 } }];
+    },
+  };
+
+  try {
+    const { response } = await emitNfseWithPlugnotasRpsHeal(
+      adapter,
+      {
+        idIntegracao: 'teste-1',
+        rps: { lote: 1, numeracao: [{ serie: '1', numero: 46 }] },
+      },
+      '65805583000173',
+      () => 'teste-2',
+    );
+    assert.equal(emitCalls.length, 2);
+    assert.equal(emitCalls[1].rps.numeracao[0].numero, 47);
+    assert.equal(readRpsNumeroFromNfsePlugnotasBody(response), 47);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test('emitNfseWithPlugnotasRpsHeal usa número do payload quando resposta E0014 não traz dps', async () => {

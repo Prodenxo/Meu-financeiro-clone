@@ -107,11 +107,23 @@ export const isNfseE0014DuplicateRpsMessage = (text) => {
 export function extractNfseRejectionMessage(response) {
   const candidates = collectPlugnotasNfseBodies(response);
   for (const candidate of candidates) {
-    const msg = candidate?.retorno?.mensagemRetorno
-      || candidate?.mensagem
-      || candidate?.message
-      || '';
-    if (msg) return String(msg);
+    const retorno = candidate?.retorno;
+    const messages = [
+      retorno?.mensagemRetorno,
+      retorno?.mensagem,
+      candidate?.mensagem,
+      candidate?.message,
+      candidate?.motivo,
+      candidate?.descricao,
+    ];
+    if (Array.isArray(candidate?.erros)) {
+      for (const err of candidate.erros) {
+        messages.push(err?.mensagem, err?.message, err?.descricao);
+      }
+    }
+    for (const msg of messages) {
+      if (msg) return String(msg);
+    }
   }
   return '';
 }
@@ -151,10 +163,12 @@ export async function queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjInput) {
       break;
     }
 
-    const notas = Array.isArray(body?.notas) ? body.notas : [];
+    const notas = collectPeriodoNotas(body);
     for (const nota of notas) {
       const numero = readRpsNumeroFromNfsePlugnotasBody(nota)
-        ?? parsePositiveInt(nota?.numero);
+        ?? parsePositiveInt(nota?.numero)
+        ?? parseDpsIdNumero(nota?.dps?.id)
+        ?? parseDpsIdNumero(nota?.id);
       if (numero > maxKnown) maxKnown = numero;
     }
 
@@ -191,6 +205,49 @@ export function resolveNextNfseRpsNumero(plugnotasNumero, localMaxNumero) {
   const fromLocal = localMax >= 1 ? localMax + 1 : 1;
   return Math.max(plug, fromLocal);
 }
+
+/**
+ * Próximo número após E0014 — sempre avança em relação ao número que falhou.
+ * Não usar {@link resolveNextNfseRpsNumero} com o número rejeitado como 1º arg (fica no mesmo: 34+33→34).
+ * @param {number|null|undefined} failedNumero
+ * @param {number|null|undefined} localMaxNumero
+ * @param {number|null|undefined} periodoMaxNumero
+ * @returns {number}
+ */
+export function resolveNextNfseRpsAfterFailure(failedNumero, localMaxNumero, periodoMaxNumero) {
+  const failed = parsePositiveInt(failedNumero, 0);
+  const fromFailed = failed >= 1 ? failed + 1 : 1;
+  const localMax = parsePositiveInt(localMaxNumero, 0);
+  const fromLocal = localMax >= 1 ? localMax + 1 : 1;
+  const periodoMax = parsePositiveInt(periodoMaxNumero, 0);
+  const fromPeriodo = periodoMax >= 1 ? periodoMax + 1 : 1;
+  return Math.max(fromFailed, fromLocal, fromPeriodo);
+}
+
+/**
+ * Próximo número antes da 1ª emissão.
+ * `empresaNumero` = próximo sugerido no GET empresa; `localMax`/`periodoMax` = maior já usado.
+ * @param {{ empresaNumero?: number|null, localMaxNumero?: number|null, periodoMaxNumero?: number|null }} sources
+ * @returns {number}
+ */
+export function resolveNextNfseRpsFromSources(sources = {}) {
+  const localMax = parsePositiveInt(sources.localMaxNumero, 0);
+  const periodoMax = parsePositiveInt(sources.periodoMaxNumero, 0);
+  const empresaNext = parsePositiveInt(sources.empresaNumero, 0);
+  const maxUsed = Math.max(localMax, periodoMax);
+  const fromHistories = maxUsed >= 1 ? maxUsed + 1 : 1;
+  const fromEmpresa = empresaNext >= 1 ? empresaNext : 1;
+  return Math.max(fromHistories, fromEmpresa);
+}
+
+const collectPeriodoNotas = (body) => {
+  if (!body || typeof body !== 'object') return [];
+  const candidates = [body.notas, body.documentos, body.data, body.nfses];
+  for (const list of candidates) {
+    if (Array.isArray(list) && list.length) return list;
+  }
+  return [];
+};
 
 /**
  * @deprecated Preferir max conhecido via {@link readRpsNumeroFromNfseHistoryRow}.
@@ -315,22 +372,20 @@ export async function applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, cnpjIn
 
   const next = empresaJson ? readPlugnotasNfseNextRpsFromEmpresa(empresaJson) : null;
 
+  const localMax = parsePositiveInt(opts.localMaxRpsNumero, 0);
   let plugnotasApiMax = parsePositiveInt(opts.plugnotasApiMaxRpsNumero, 0);
   if (!plugnotasApiMax && opts.skipPlugnotasPeriodoQuery !== true) {
     plugnotasApiMax = parsePositiveInt(await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpj), 0);
   }
 
-  const localMax = parsePositiveInt(opts.localMaxRpsNumero, 0);
-  const combinedMax = Math.max(localMax, plugnotasApiMax);
-  if (!next && combinedMax < 1) return;
-
   const serie = next?.serie ?? '1';
   const lote = next?.lote ?? 1;
-  const plugNumero = next?.numero ?? 1;
-  const numero = resolveNextNfseRpsNumero(
-    plugNumero,
-    combinedMax > 0 ? combinedMax : opts.localMaxRpsNumero
-  );
+  const plugNumero = next?.numero ?? null;
+  const numero = resolveNextNfseRpsFromSources({
+    empresaNumero: plugNumero,
+    localMaxNumero: localMax,
+    periodoMaxNumero: plugnotasApiMax,
+  });
 
   payload.rps = {
     lote,
@@ -344,7 +399,7 @@ export async function applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, cnpjIn
   }
 }
 
-const DEFAULT_NFSE_E0014_EMIT_RETRIES = 4;
+const DEFAULT_NFSE_E0014_EMIT_RETRIES = 6;
 
 /**
  * Emite NFS-e com realinhamento do contador PlugNotas e reenvio automático em E0014.
@@ -377,9 +432,15 @@ export async function emitNfseWithPlugnotasRpsHeal(
       return { response, emitPayload: payload };
     }
 
-    const usedNumero = readRpsNumeroFromNfsePlugnotasBody(response)
+    let usedNumero = readRpsNumeroFromNfsePlugnotasBody(response)
       ?? readRpsFromNfseEmitPayload(payload)?.numero;
-    if (!Number.isFinite(usedNumero) || attempt >= maxRetries) {
+
+    if (!Number.isFinite(usedNumero) && cnpj.length === 14) {
+      const periodoMax = parsePositiveInt(await queryMaxRpsNumeroFromPlugnotasPeriodo(cnpj), 0);
+      if (periodoMax > 0) usedNumero = periodoMax;
+    }
+
+    if (attempt >= maxRetries) {
       if (Number.isFinite(usedNumero)) {
         const currentRps = readRpsFromNfseEmitPayload(payload);
         const serie = currentRps?.serie ?? '1';
@@ -391,6 +452,10 @@ export async function emitNfseWithPlugnotasRpsHeal(
         });
       }
       return { response, emitPayload: payload };
+    }
+
+    if (!Number.isFinite(usedNumero)) {
+      usedNumero = parsePositiveInt(readRpsFromNfseEmitPayload(payload)?.numero, 1);
     }
 
     const currentRps = readRpsFromNfseEmitPayload(payload);
