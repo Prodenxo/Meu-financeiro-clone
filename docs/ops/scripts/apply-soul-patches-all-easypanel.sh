@@ -446,6 +446,36 @@ if (!cur.includes(nfseVsTxMarker)) {
   changes.push('NFSe vs transação (já ok)');
 }
 
+const identityBlock = `## CRÍTICO — IDENTIDADE (quem sou eu / qual é a minha conta)
+
+**PROIBIDO** dizer quem é o utilizador usando o **rótulo do contacto** no painel OpenClaw (ex.: *Leonardo Mohammed (+5521…)*). Esse nome vem do **WhatsApp**, não da conta Meu Financeiro.
+
+**OBRIGATÓRIO** em "quem sou eu", "qual é a minha conta", "como me chamo":
+\`\`\`bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE '{"action":"resolve_user"}'
+\`\`\`
+Responde **só** com \`data.account.displayName\` (ou \`message\`) do JSON. Se o utilizador disser que está errado → pede **Configurações → Telefone → Salvar** no site (meiinfinito.com.br) com o WhatsApp dele.
+
+---
+
+`;
+
+if (!cur.includes('IDENTIDADE (quem sou eu')) {
+  const idAnchors = ['## CRÍTICO — SEGURANÇA', '## CRÍTICO — ESCOPO EXCLUSIVO'];
+  let idInserted = false;
+  for (const anchor of idAnchors) {
+    if (cur.includes(anchor)) {
+      cur = cur.replace(anchor, identityBlock + anchor);
+      idInserted = true;
+      break;
+    }
+  }
+  if (!idInserted) cur = identityBlock + cur;
+  changes.push('identidade resolve_user (patch crítico)');
+} else {
+  changes.push('identidade resolve_user (já ok)');
+}
+
 // DAS + saldo
 const dasMarkers = ['## DAS MEI — PDF, saldo', '## DAS MEI', '### DAS no WhatsApp'];
 let dasIdx = -1;
@@ -559,6 +589,10 @@ if ! grep -q "CEP resolve automaticamente" "$SOUL"; then
 fi
 if ! grep -q "NOTA FISCAL ≠ LANÇAMENTO" "$SOUL"; then
   echo "ERRO: SOUL sem patch nota≠transação — bot pode usar create_transaction em vez de emit_nfse"
+  exit 1
+fi
+if ! grep -q "IDENTIDADE (quem sou eu" "$SOUL"; then
+  echo "ERRO: SOUL sem patch identidade — bot pode usar nome do contacto WhatsApp em vez de resolve_user"
   exit 1
 fi
 echo ""
