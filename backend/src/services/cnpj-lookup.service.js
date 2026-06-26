@@ -30,7 +30,7 @@ const padZeros = (value, length) => {
 
 const hasText = (value) => String(value || '').trim().length > 0;
 
-const lookupCepBrasilApi = async (cepInput) => {
+export const lookupCepBrasilApi = async (cepInput) => {
   const cep = normalizeDoc(cepInput).slice(0, 8);
   if (cep.length !== 8) return null;
   try {

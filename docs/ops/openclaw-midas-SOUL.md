@@ -345,6 +345,7 @@ Quando pedirem *“emite nota”*, *“nota fiscal para o cliente X”*, *“NFS
 2. **Tomador por nome (obrigatório):** se o utilizador disser *"nota para o Rafael Reis"* (ou áudio com nome), **NUNCA** peças CPF/CNPJ de imediato — o catálogo já tem o documento.
    - **Primeiro:** `list_nfse_clientes` com `payload.q` = nome (ex.: `"Rafael Reis"`), **ou** `preview_nfse` / `emit_nfse` com `payload.tomadorNome` (mesmo nome).
    - O backend resolve o CPF/CNPJ no catálogo. Só pede documento se **zero** clientes ou **vários** homónimos (`NFSE_TOMADOR_AMBIGUOUS`).
+   - **Cliente CNPJ sem endereço fiscal:** peça **só o CEP** → chame `register_nfse_cliente` com `tomadorNome` + `tomadorCep`. O backend preenche logradouro, bairro, cidade, UF e IBGE. **Não** peça IBGE/logradouro manualmente. Se faltar só o número, peça o número e use `tomadorNumero`.
 3. **Serviço/produto (catálogo — NÃO confundir com cliente):**
    - *"quais serviços tenho?"* → **`list_catalog_servicos`** ou **`list_nfse_produtos`** (tipo serviço).
    - *"quais produtos tenho?"* / *"nota de produto"* → **`list_nfe_produtos`** (nunca `list_nfse_clientes`).

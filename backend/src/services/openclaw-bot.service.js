@@ -1810,16 +1810,27 @@ export const runOpenclawAction = async (input) => {
       const result = await registerOpenclawNfseCliente(userId, payload);
       const nome = result.cliente?.nome || 'Cliente';
       const doc = result.cliente?.documento || '';
+      let message = result.alreadyRegistered
+        ? `Cliente já cadastrado: ${nome} (${doc}).`
+        : `Cliente cadastrado: ${nome} (${doc}).`;
+      if (result.enderecoEnriched && !result.enderecoIncomplete) {
+        message = `Endereço fiscal atualizado para ${nome}. Pode continuar a emissão da nota.`;
+      } else if (result.enderecoIncomplete) {
+        message = result.botHint || `Falta completar o endereço fiscal de ${nome}.`;
+      } else if (!result.enderecoIncomplete) {
+        message += ' Pode emitir a nota quando quiser.';
+      }
       return {
         ok: true,
-        message: result.alreadyRegistered
-          ? `Cliente já cadastrado: ${nome} (${doc}). Pode emitir a nota quando quiser.`
-          : `Cliente cadastrado: ${nome} (${doc}). Já pode pedir a emissão da nota.`,
+        message,
         data: {
           ...result,
           userId,
           actorContext,
           ...linkDebug,
+          ...(result.botHint
+            ? { agentInstructions: result.botHint }
+            : {}),
         },
       };
     } catch (err) {

@@ -1,6 +1,6 @@
 import { createSupabaseClient } from '../../config/supabase.js';
 import { badRequest } from '../../utils/errors.js';
-import { lookupCnpjCascade } from '../cnpj-lookup.service.js';
+import { lookupCepBrasilApi, lookupCnpjCascade } from '../cnpj-lookup.service.js';
 import { getEmitenteNfseSnapshot } from '../mei-certificate-store.js';
 import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
 import { consultarEmpresaPlugNotas } from './empresa.service.js';
@@ -10,9 +10,14 @@ const CLIENTS_TABLE = 'mei_nfse_clientes';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
+const padZeros = (value, length) => {
+  const str = String(value || '').replace(/\D/g, '');
+  return str.padStart(length, '0').slice(-length);
+};
+
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-const pruneEndereco = (endereco) => {
+export const pruneEndereco = (endereco) => {
   if (!isPlainObject(endereco)) return null;
   const cep = normalizeDoc(endereco.cep).slice(0, 8);
   const codigoCidade = String(endereco.codigoCidade || '').trim();
@@ -35,7 +40,7 @@ const pruneEndereco = (endereco) => {
   return Object.keys(next).length ? next : null;
 };
 
-const mergeEnderecoLayers = (...layers) => {
+export const mergeEnderecoLayers = (...layers) => {
   const merged = {};
   for (const layer of layers) {
     const pruned = pruneEndereco(isPlainObject(layer) ? layer : null);
@@ -220,6 +225,43 @@ export const enderecoFromCnpjLookupNfse = (lookup) => {
 };
 
 /**
+ * Preenche logradouro, bairro, cidade, UF e IBGE via BrasilAPI CEP v2.
+ * @param {string} cepInput
+ * @param {Record<string, unknown>|null|undefined} partialEndereco
+ * @returns {Promise<Record<string, string>|null>}
+ */
+export const enderecoFromCepLookupNfse = async (cepInput, partialEndereco = null) => {
+  const cep = normalizeDoc(cepInput).slice(0, 8);
+  if (cep.length !== 8) return null;
+
+  const partial = pruneEndereco(isPlainObject(partialEndereco) ? partialEndereco : null);
+  const cepRaw = await lookupCepBrasilApi(cep);
+  if (!cepRaw) return partial;
+
+  const ibgeFromCep =
+    cepRaw.city_ibge_code != null && String(cepRaw.city_ibge_code).trim()
+      ? padZeros(cepRaw.city_ibge_code, 7)
+      : null;
+
+  return pruneEndereco({
+    cep,
+    logradouro: partial?.logradouro || cepRaw.street || null,
+    numero: partial?.numero || null,
+    bairro: partial?.bairro || cepRaw.neighborhood || null,
+    codigoCidade: partial?.codigoCidade || ibgeFromCep,
+    descricaoCidade: partial?.descricaoCidade || cepRaw.city || null,
+    estado: partial?.estado || cepRaw.state || null,
+    complemento: partial?.complemento || null,
+  });
+};
+
+const applyTomadorNumeroDefault = (endereco) => {
+  const pruned = pruneEndereco(endereco);
+  if (!pruned || String(pruned.numero || '').trim()) return pruned;
+  return pruneEndereco({ ...pruned, numero: 'S/N' });
+};
+
+/**
  * Catálogo → consulta CNPJ (Receita/Plugnotas) antes da validação do payload.
  * @param {string} userId
  * @param {string} tomadorDoc
@@ -242,7 +284,25 @@ export const resolveTomadorEmitEndereco = async (userId, tomadorDoc, payloadOrEn
     }
   }
 
-  const merged = mergeEnderecoLayers(fromPayload, catalogEndereco, fromLookup);
+  let merged = mergeEnderecoLayers(fromPayload, catalogEndereco, fromLookup);
+
+  if (!hasCompleteTomadorEndereco(merged)) {
+    const cepCandidate = normalizeDoc(
+      merged?.cep
+      || fromPayload?.cep
+      || fromPayload?.tomadorCep,
+    ).slice(0, 8);
+    if (cepCandidate.length === 8) {
+      const fromCep = await enderecoFromCepLookupNfse(cepCandidate, merged);
+      if (fromCep) merged = mergeEnderecoLayers(merged, fromCep);
+    }
+  }
+
+  if (!hasCompleteTomadorEndereco(merged)) {
+    const withNumero = applyTomadorNumeroDefault(merged);
+    if (hasCompleteTomadorEndereco(withNumero)) return withNumero;
+  }
+
   if (hasCompleteTomadorEndereco(merged)) return merged;
 
   return merged || fromPayload;

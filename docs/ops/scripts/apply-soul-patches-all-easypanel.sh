@@ -150,6 +150,13 @@ const nfseBlock = `## NFSe — cliente no catálogo (obrigatório)
 2. Se **não** existir: peça **CPF/CNPJ válido** (dígitos reais), **nome/razão social** e **e-mail** → \`register_nfse_cliente\`.
 3. Depois \`preview_nfse\` → confirme com o utilizador → \`emit_nfse\` com \`"confirm":true\`.
 
+### Endereço fiscal PJ (CNPJ) — CEP resolve automaticamente
+- Cliente **CNPJ** sem endereço no catálogo → peça **só o CEP** (8 dígitos).
+- Ao receber o CEP → **obrigatório** chamar \`register_nfse_cliente\` com \`tomadorNome\` + \`tomadorCep\` (ou \`documento\` + \`tomadorCep\`).
+- O backend preenche logradouro, bairro, cidade, UF e IBGE via BrasilAPI. **Não** peça esses campos manualmente.
+- Se a API responder \`enderecoIncomplete\` pedindo número → peça **só o número** (ou "S/N") e chame de novo com \`tomadorNumero\`.
+- Também pode incluir \`tomadorCep\` direto em \`preview_nfse\` / \`emit_nfse\` com \`tomadorNome\`.
+
 ### PROIBIDO loop de confirmação (NFSe / NF-e)
 - **AGUARDE** o exec terminar (JSON no Tool output) **antes** de responder.
 - Utilizador disse *sim* / *confirmo* → **PROIBIDO** repetir *"Posso emitir?"* — \`emit_nfse\` ou \`emit_nfe\` com \`"confirm":true\` e os **mesmos** dados.

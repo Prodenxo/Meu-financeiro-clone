@@ -28,6 +28,8 @@ import {
 } from './mei-notas.service.js';
 import {
   hasCompleteTomadorEndereco,
+  mergeEnderecoLayers,
+  pruneEndereco,
   resolveCatalogClienteEndereco,
   resolveTomadorEmitEndereco,
 } from './plugnotas/plugnotas-nfse-email-resolve.js';
@@ -739,29 +741,91 @@ const resolveTomador = async (userId, payload) => {
   };
 };
 
-const resolveEnderecoForOpenclawCliente = async (userId, documento, payload) => {
-  const endereco = await resolveTomadorEmitEndereco(userId, documento, payload);
-  return hasCompleteTomadorEndereco(endereco) ? endereco : null;
+const resolveEnderecoForOpenclawCliente = async (userId, documento, payload) => (
+  resolveTomadorEmitEndereco(userId, documento, payload)
+);
+
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const mergeClienteMetadataEndereco = (existingMetadata, endereco) => {
+  const pruned = pruneEndereco(isPlainObject(endereco) ? endereco : null);
+  if (!pruned) return undefined;
+  const base = typeof existingMetadata === 'object' && existingMetadata ? existingMetadata : {};
+  const existingEndereco = isPlainObject(base.endereco) ? base.endereco : null;
+  return {
+    ...base,
+    endereco: mergeEnderecoLayers(existingEndereco, pruned),
+  };
 };
 
-const buildClienteMetadataFromEndereco = (endereco) => {
-  if (!hasCompleteTomadorEndereco(endereco)) return undefined;
-  return { endereco };
+const buildClienteMetadataFromEndereco = (endereco, existingMetadata = {}) => (
+  mergeClienteMetadataEndereco(existingMetadata, endereco)
+);
+
+const buildTomadorEnderecoIncompleteBotHint = (endereco) => {
+  const e = pruneEndereco(endereco);
+  const cep = normalizeDoc(e?.cep || '').slice(0, 8);
+  if (cep.length !== 8) {
+    return (
+      'Cliente PJ sem CEP no catálogo. Peça o CEP (8 dígitos) e chame register_nfse_cliente '
+      + 'com tomadorNome (ou documento) + tomadorCep. O backend preenche logradouro, bairro, cidade, UF e IBGE.'
+    );
+  }
+  if (!String(e?.numero || '').trim()) {
+    return (
+      'CEP já registrado. Peça só o número do endereço (ou "S/N") e chame register_nfse_cliente '
+      + 'com tomadorNome + tomadorNumero, ou inclua tomadorNumero no preview_nfse/emit_nfse.'
+    );
+  }
+  return (
+    'Endereço fiscal do CNPJ ainda incompleto. Chame register_nfse_cliente com tomadorNome + tomadorCep '
+    + 'ou cadastre em MEI → Catálogo de clientes.'
+  );
+};
+
+const persistCatalogEnderecoIfResolved = async (userId, catalogoClienteId, existingMetadata, endereco) => {
+  const metadata_json = mergeClienteMetadataEndereco(existingMetadata, endereco);
+  if (!metadata_json?.endereco || !catalogoClienteId) return null;
+  return atualizarCatalogoCliente(userId, catalogoClienteId, { metadata_json });
 };
 
 /**
  * Cadastra tomador no catálogo NFSe (WhatsApp) antes da emissão.
  */
 export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
-  const documento = normalizeDoc(
+  let documento = normalizeDoc(
     payload?.documento
       || payload?.tomadorCpfCnpj
       || payload?.cnpj
       || payload?.cpfCnpj,
   );
+
+  let existing = documento ? await findClienteCatalogoByDocumento(userId, documento) : null;
+
+  if (!documento) {
+    const tomadorNome = pickTomadorNomeFromPayload(payload);
+    if (tomadorNome) {
+      const lookup = await findClienteCatalogoByNome(userId, tomadorNome);
+      if (lookup.kind === 'ok') {
+        existing = lookup.cliente;
+        documento = normalizeDoc(existing?.documento || '');
+      } else if (lookup.kind === 'ambiguous') {
+        throw badRequest(`Vários clientes encontrados para "${tomadorNome}".`, {
+          code: 'NFSE_TOMADOR_AMBIGUOUS',
+          tomadorNome,
+          matches: (lookup.matches || []).map(mapClienteResumo),
+          botHint: 'Liste nome + documento de cada match e peça ao utilizador para escolher um.',
+        });
+      }
+    }
+  }
+
   assertTomadorDocumentoValido(documento);
 
-  const existing = await findClienteCatalogoByDocumento(userId, documento);
+  if (!existing) {
+    existing = await findClienteCatalogoByDocumento(userId, documento);
+  }
+
   if (existing) {
     const catalogEndereco = await resolveCatalogClienteEndereco(userId, documento);
     if (hasCompleteTomadorEndereco(catalogEndereco)) {
@@ -772,18 +836,23 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
     }
 
     const endereco = await resolveEnderecoForOpenclawCliente(userId, documento, payload);
-    if (endereco) {
-      const metadata_json = {
-        ...(typeof existing.metadata_json === 'object' && existing.metadata_json
-          ? existing.metadata_json
-          : {}),
-        endereco,
-      };
+    const metadata_json = mergeClienteMetadataEndereco(existing.metadata_json, endereco);
+    if (metadata_json?.endereco) {
       const cliente = await atualizarCatalogoCliente(userId, existing.id, { metadata_json });
+      const savedEndereco = metadata_json.endereco;
+      if (hasCompleteTomadorEndereco(savedEndereco)) {
+        return {
+          alreadyRegistered: true,
+          cliente,
+          enderecoEnriched: true,
+        };
+      }
       return {
         alreadyRegistered: true,
         cliente,
         enderecoEnriched: true,
+        enderecoIncomplete: true,
+        botHint: buildTomadorEnderecoIncompleteBotHint(savedEndereco),
       };
     }
 
@@ -793,10 +862,7 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
       ...(documento.length === 14
         ? {
             enderecoIncomplete: true,
-            botHint:
-              'Cliente PJ sem endereço fiscal completo no catálogo. '
-              + 'Peça CEP, logradouro, número, bairro, cidade, UF e código IBGE (7 dígitos) '
-              + 'ou cadastre na app MEI → Catálogo de clientes.',
+            botHint: buildTomadorEnderecoIncompleteBotHint(catalogEndereco),
           }
         : {}),
     };
@@ -836,15 +902,16 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
     ...(metadata_json ? { metadata_json } : {}),
   });
 
+  const savedEndereco = metadata_json?.endereco;
+  const enderecoComplete = hasCompleteTomadorEndereco(savedEndereco);
+
   return {
     alreadyRegistered: false,
     cliente,
-    ...(documento.length === 14 && !metadata_json
+    ...(documento.length === 14 && !enderecoComplete
       ? {
           enderecoIncomplete: true,
-          botHint:
-            'Cadastro criado, mas endereço fiscal do CNPJ não foi resolvido automaticamente. '
-            + 'Confirme CEP/cidade/IBGE na app ou envie endereco no register_nfse_cliente.',
+          botHint: buildTomadorEnderecoIncompleteBotHint(savedEndereco),
         }
       : {}),
   };
@@ -1076,6 +1143,27 @@ export const buildOpenclawNfseEmitInput = async (userId, payload = {}) => {
   const tomadorEndereco = tomadorDoc.length === 14
     ? await resolveTomadorEmitEndereco(userId, tomadorDoc, payload)
     : null;
+
+  if (tomadorDoc.length === 14 && !hasCompleteTomadorEndereco(tomadorEndereco)) {
+    throw badRequest('Endereço fiscal do tomador (CNPJ) incompleto.', {
+      code: 'NFSE_TOMADOR_ENDERECO_INCOMPLETE',
+      botHint: buildTomadorEnderecoIncompleteBotHint(tomadorEndereco),
+    });
+  }
+
+  if (tomadorDoc.length === 14 && hasCompleteTomadorEndereco(tomadorEndereco) && tomador.catalogoClienteId) {
+    try {
+      const catalogo = await findClienteCatalogoByDocumento(userId, tomadorDoc);
+      await persistCatalogEnderecoIfResolved(
+        userId,
+        tomador.catalogoClienteId,
+        catalogo?.metadata_json,
+        tomadorEndereco,
+      );
+    } catch {
+      /* catálogo opcional na emissão */
+    }
+  }
 
   return {
     documentType: 'NFSE',
