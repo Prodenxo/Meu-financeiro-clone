@@ -1,6 +1,6 @@
 import { createSupabaseClient } from '../../config/supabase.js';
 import { badRequest } from '../../utils/errors.js';
-import { lookupCepBrasilApi, lookupCnpjCascade } from '../cnpj-lookup.service.js';
+import { lookupCepBrasilApi, lookupCepViaCep, lookupCnpjCascade } from '../cnpj-lookup.service.js';
 import { getEmitenteNfseSnapshot } from '../mei-certificate-store.js';
 import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
 import { consultarEmpresaPlugNotas } from './empresa.service.js';
@@ -125,6 +125,81 @@ export const hasCompleteTomadorEndereco = (endereco) => {
   );
 };
 
+/** Campos obrigatórios do endereço PJ ainda ausentes (ordem de coleta no WhatsApp). */
+export const listMissingTomadorEnderecoFields = (endereco) => {
+  const e = pruneEndereco(endereco);
+  const missing = [];
+  if (!e || normalizeDoc(e.cep).length !== 8) missing.push('cep');
+  if (!String(e?.logradouro || '').trim()) missing.push('logradouro');
+  if (!String(e?.numero || '').trim()) missing.push('numero');
+  if (!String(e?.bairro || '').trim()) missing.push('bairro');
+  if (normalizeDoc(e?.codigoCidade || '').length !== 7) missing.push('codigoCidade');
+  if (!String(e?.descricaoCidade || '').trim()) missing.push('descricaoCidade');
+  if (String(e?.estado || '').trim().length !== 2) missing.push('estado');
+  return missing;
+};
+
+const ENDERECO_FIELD_PAYLOAD_KEYS = {
+  cep: 'tomadorCep',
+  logradouro: 'tomadorLogradouro',
+  numero: 'tomadorNumero',
+  bairro: 'tomadorBairro',
+  codigoCidade: 'tomadorIbge',
+  descricaoCidade: 'tomadorCidade',
+  estado: 'tomadorUf',
+};
+
+const buildEnderecoFieldUserPrompt = (field, nome, endereco) => {
+  const e = pruneEndereco(endereco);
+  const cidade = String(e?.descricaoCidade || '').trim();
+  switch (field) {
+    case 'cep':
+      return `Para emitir a nota para **${nome}**, preciso do **CEP** do endereço fiscal (8 dígitos).`;
+    case 'logradouro':
+      return `Preciso do **logradouro** (rua/avenida) do endereço de **${nome}**.`;
+    case 'numero':
+      return `CEP já salvo para **${nome}**. Qual o **número** do endereço? (pode responder *S/N* se não houver).`;
+    case 'bairro':
+      return `Preciso do **bairro** do endereço de **${nome}**.`;
+    case 'codigoCidade':
+      return cidade
+        ? `Quase lá! Para **${nome}**, falta só o **código IBGE** de ${cidade} (7 dígitos).`
+        : `Para **${nome}**, preciso do **código IBGE** da cidade (7 dígitos).`;
+    case 'descricaoCidade':
+      return `Preciso da **cidade** do endereço fiscal de **${nome}**.`;
+    case 'estado':
+      return `Preciso da **UF** (estado) do endereço de **${nome}**.`;
+    default:
+      return `Falta completar o endereço fiscal de **${nome}** para emitir a nota.`;
+  }
+};
+
+/** Mensagem WhatsApp para o utilizador — só o próximo campo em falta. */
+export const buildTomadorEnderecoMissingUserMessage = (nome, endereco) => {
+  const missing = listMissingTomadorEnderecoFields(endereco);
+  if (!missing.length) return null;
+  return buildEnderecoFieldUserPrompt(missing[0], nome, endereco);
+};
+
+/** Instrução interna ao agente — pedir um campo e gravar com register_nfse_cliente. */
+export const buildTomadorEnderecoMissingBotHint = (nome, endereco) => {
+  const missing = listMissingTomadorEnderecoFields(endereco);
+  if (!missing.length) return null;
+  const field = missing[0];
+  const payloadKey = ENDERECO_FIELD_PAYLOAD_KEYS[field] || field;
+  return (
+    `Endereço PJ incompleto — falta só "${field}". Repita APENAS message (pergunta ao utilizador). `
+    + `Quando o utilizador responder, chame register_nfse_cliente com tomadorNome="${nome}" `
+    + `e ${payloadKey}=valor da resposta (mantenha documento se já souber). `
+    + `Não peça campos já gravados. Se enderecoIncomplete continuar, repita com o próximo campo. `
+    + `Quando completo, siga preview_nfse → emit_nfse.`
+  );
+};
+
+export const resolveTomadorEnderecoPayloadKey = (field) => (
+  ENDERECO_FIELD_PAYLOAD_KEYS[field] || null
+);
+
 /**
  * @param {unknown} value
  * @returns {boolean}
@@ -236,12 +311,30 @@ export const enderecoFromCepLookupNfse = async (cepInput, partialEndereco = null
 
   const partial = pruneEndereco(isPlainObject(partialEndereco) ? partialEndereco : null);
   const cepRaw = await lookupCepBrasilApi(cep);
-  if (!cepRaw) return partial;
+  if (!cepRaw) {
+    const viaOnly = await lookupCepViaCep(cep);
+    if (!viaOnly) return partial;
+    return pruneEndereco({
+      cep,
+      logradouro: partial?.logradouro || viaOnly.logradouro || null,
+      numero: partial?.numero || null,
+      bairro: partial?.bairro || viaOnly.bairro || null,
+      codigoCidade: partial?.codigoCidade || (viaOnly.ibge ? padZeros(viaOnly.ibge, 7) : null),
+      descricaoCidade: partial?.descricaoCidade || viaOnly.localidade || null,
+      estado: partial?.estado || viaOnly.uf || null,
+      complemento: partial?.complemento || viaOnly.complemento || null,
+    });
+  }
 
-  const ibgeFromCep =
-    cepRaw.city_ibge_code != null && String(cepRaw.city_ibge_code).trim()
-      ? padZeros(cepRaw.city_ibge_code, 7)
-      : null;
+  let ibgeFromCep = null;
+  if (cepRaw.city_ibge_code != null && String(cepRaw.city_ibge_code).trim()) {
+    ibgeFromCep = padZeros(cepRaw.city_ibge_code, 7);
+  } else {
+    const viaCep = await lookupCepViaCep(cep);
+    if (viaCep?.ibge != null && String(viaCep.ibge).trim()) {
+      ibgeFromCep = padZeros(viaCep.ibge, 7);
+    }
+  }
 
   return pruneEndereco({
     cep,

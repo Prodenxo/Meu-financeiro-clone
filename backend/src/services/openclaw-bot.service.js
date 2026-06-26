@@ -1815,10 +1815,13 @@ export const runOpenclawAction = async (input) => {
       let message = result.alreadyRegistered
         ? `Cliente já cadastrado: ${nome} (${doc}).`
         : `Cliente cadastrado: ${nome} (${doc}).`;
+      let agentInstructions;
       if (result.enderecoEnriched && !result.enderecoIncomplete) {
         message = `Endereço fiscal atualizado para ${nome}. Pode continuar a emissão da nota.`;
       } else if (result.enderecoIncomplete) {
-        message = result.botHint || `Falta completar o endereço fiscal de ${nome}.`;
+        message = result.userMessage || result.botHint || `Falta completar o endereço fiscal de ${nome}.`;
+        agentInstructions = result.botHint
+          || 'Repita APENAS message. Quando o utilizador responder, register_nfse_cliente com tomadorNome + campo em falta.';
       } else if (!result.enderecoIncomplete) {
         message += ' Pode emitir a nota quando quiser.';
       }
@@ -1830,9 +1833,7 @@ export const runOpenclawAction = async (input) => {
           userId,
           actorContext,
           ...linkDebug,
-          ...(result.botHint
-            ? { agentInstructions: result.botHint }
-            : {}),
+          ...(agentInstructions ? { agentInstructions } : {}),
         },
       };
     } catch (err) {

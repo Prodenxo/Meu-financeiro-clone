@@ -27,7 +27,10 @@ import {
   NFSE_SERVICO_CODIGO_MIN_LENGTH,
 } from './mei-notas.service.js';
 import {
+  buildTomadorEnderecoMissingBotHint,
+  buildTomadorEnderecoMissingUserMessage,
   hasCompleteTomadorEndereco,
+  listMissingTomadorEnderecoFields,
   mergeEnderecoLayers,
   pruneEndereco,
   resolveCatalogClienteEndereco,
@@ -762,25 +765,21 @@ const buildClienteMetadataFromEndereco = (endereco, existingMetadata = {}) => (
   mergeClienteMetadataEndereco(existingMetadata, endereco)
 );
 
-const buildTomadorEnderecoIncompleteBotHint = (endereco) => {
-  const e = pruneEndereco(endereco);
-  const cep = normalizeDoc(e?.cep || '').slice(0, 8);
-  if (cep.length !== 8) {
-    return (
-      'Cliente PJ sem CEP no catálogo. Peça o CEP (8 dígitos) e chame register_nfse_cliente '
-      + 'com tomadorNome (ou documento) + tomadorCep. O backend preenche logradouro, bairro, cidade, UF e IBGE.'
-    );
-  }
-  if (!String(e?.numero || '').trim()) {
-    return (
-      'CEP já registrado. Peça só o número do endereço (ou "S/N") e chame register_nfse_cliente '
-      + 'com tomadorNome + tomadorNumero, ou inclua tomadorNumero no preview_nfse/emit_nfse.'
-    );
-  }
-  return (
-    'Endereço fiscal do CNPJ ainda incompleto. Chame register_nfse_cliente com tomadorNome + tomadorCep '
-    + 'ou cadastre em MEI → Catálogo de clientes.'
-  );
+const buildTomadorEnderecoIncompleteResult = (cliente, savedEndereco) => {
+  const nome = String(cliente?.nome || 'Cliente').trim();
+  const missingEnderecoFields = listMissingTomadorEnderecoFields(savedEndereco);
+  const nextEnderecoField = missingEnderecoFields[0] || null;
+  const userMessage = buildTomadorEnderecoMissingUserMessage(nome, savedEndereco);
+  const botHint = buildTomadorEnderecoMissingBotHint(nome, savedEndereco);
+  return {
+    enderecoIncomplete: true,
+    enderecoEnriched: Boolean(savedEndereco),
+    missingEnderecoFields,
+    nextEnderecoField,
+    enderecoSalvo: savedEndereco || null,
+    userMessage,
+    botHint,
+  };
 };
 
 const persistCatalogEnderecoIfResolved = async (userId, catalogoClienteId, existingMetadata, endereco) => {
@@ -851,8 +850,7 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
         alreadyRegistered: true,
         cliente,
         enderecoEnriched: true,
-        enderecoIncomplete: true,
-        botHint: buildTomadorEnderecoIncompleteBotHint(savedEndereco),
+        ...buildTomadorEnderecoIncompleteResult(cliente, savedEndereco),
       };
     }
 
@@ -860,10 +858,7 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
       alreadyRegistered: true,
       cliente: existing,
       ...(documento.length === 14
-        ? {
-            enderecoIncomplete: true,
-            botHint: buildTomadorEnderecoIncompleteBotHint(catalogEndereco),
-          }
+        ? buildTomadorEnderecoIncompleteResult(existing, catalogEndereco)
         : {}),
     };
   }
@@ -909,10 +904,7 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
     alreadyRegistered: false,
     cliente,
     ...(documento.length === 14 && !enderecoComplete
-      ? {
-          enderecoIncomplete: true,
-          botHint: buildTomadorEnderecoIncompleteBotHint(savedEndereco),
-        }
+      ? buildTomadorEnderecoIncompleteResult(cliente, savedEndereco)
       : {}),
   };
 };
@@ -1145,9 +1137,13 @@ export const buildOpenclawNfseEmitInput = async (userId, payload = {}) => {
     : null;
 
   if (tomadorDoc.length === 14 && !hasCompleteTomadorEndereco(tomadorEndereco)) {
-    throw badRequest('Endereço fiscal do tomador (CNPJ) incompleto.', {
+    const tomadorNome = String(tomador.tomadorRazaoSocial || payload?.tomadorNome || '').trim();
+    const userMessage = buildTomadorEnderecoMissingUserMessage(tomadorNome, tomadorEndereco);
+    throw badRequest(userMessage || 'Endereço fiscal do tomador (CNPJ) incompleto.', {
       code: 'NFSE_TOMADOR_ENDERECO_INCOMPLETE',
-      botHint: buildTomadorEnderecoIncompleteBotHint(tomadorEndereco),
+      missingEnderecoFields: listMissingTomadorEnderecoFields(tomadorEndereco),
+      nextEnderecoField: listMissingTomadorEnderecoFields(tomadorEndereco)[0] || null,
+      botHint: buildTomadorEnderecoMissingBotHint(tomadorNome, tomadorEndereco),
     });
   }
 
@@ -1441,6 +1437,15 @@ export const rethrowNfseErrorForBot = (err) => {
   const rawMsg = String(err?.message || '');
   const userMessage = formatNfseEmitErrorForUser(rawMsg);
   const loopGuard = `${BOT_NF_EMIT_FAILED_INSTRUCTION} ${existingHint || ''}`.trim();
+
+  if (code === 'NFSE_TOMADOR_ENDERECO_INCOMPLETE') {
+    throw badRequest(rawMsg || userMessage, {
+      code,
+      botHint: existingHint,
+      missingEnderecoFields: err?.errors?.missingEnderecoFields,
+      nextEnderecoField: err?.errors?.nextEnderecoField,
+    });
+  }
 
   if (existingHint) {
     throw badRequest(userMessage, { code, botHint: loopGuard });

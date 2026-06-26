@@ -176,6 +176,16 @@ const nfseCepBlock = `### Endereço fiscal PJ (CNPJ) — CEP resolve automaticam
 - Se a API responder \`enderecoIncomplete\` pedindo número → peça **só o número** (ou "S/N") e chame de novo com \`tomadorNumero\`.
 - Também pode incluir \`tomadorCep\` direto em \`preview_nfse\` / \`emit_nfse\` com \`tomadorNome\`.
 
+### Endereço PJ — pedir só o que falta (campo a campo)
+- Se \`register_nfse_cliente\` ou \`preview_nfse\` devolver \`enderecoIncomplete: true\`, leia \`data.nextEnderecoField\` e \`data.missingEnderecoFields\`.
+- **Repita APENAS** \`message\` — já é a pergunta certa (CEP, número, IBGE, etc.). **Não** peça tudo de novo.
+- Quando o utilizador responder → \`register_nfse_cliente\` com \`tomadorNome\` + campo:
+  - \`cep\` → \`tomadorCep\`
+  - \`numero\` → \`tomadorNumero\`
+  - \`codigoCidade\` → \`tomadorIbge\` (7 dígitos)
+- Se ainda faltar outro campo, a API pergunta o **próximo** — repita até \`enderecoIncomplete\` sumir.
+- **PROIBIDO** mandar cadastrar na app se o utilizador já está a responder pelo WhatsApp.
+
 `;
 
 const nfseBlock = `## NFSe — cliente no catálogo (obrigatório)

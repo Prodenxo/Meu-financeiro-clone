@@ -45,6 +45,38 @@ export const lookupCepBrasilApi = async (cepInput) => {
   }
 };
 
+/** Fallback quando BrasilAPI CEP v2 não traz IBGE (ex.: 21221300). */
+export const lookupCepViaCep = async (cepInput) => {
+  const cep = normalizeDoc(cepInput).slice(0, 8);
+  if (cep.length !== 8) return null;
+  try {
+    const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`, {
+      method: 'GET',
+      headers: BRASILAPI_HEADERS,
+    });
+    if (!response.ok) return null;
+    const raw = await response.json();
+    if (!raw || raw.erro) return null;
+    return raw;
+  } catch {
+    return null;
+  }
+};
+
+const ibgeFromCepLookupPayload = async (cep, brasilApiRaw) => {
+  const fromBrasilApi =
+    brasilApiRaw?.city_ibge_code != null && String(brasilApiRaw.city_ibge_code).trim()
+      ? padZeros(brasilApiRaw.city_ibge_code, 7)
+      : null;
+  if (fromBrasilApi) return fromBrasilApi;
+
+  const viaCep = await lookupCepViaCep(cep);
+  if (viaCep?.ibge != null && String(viaCep.ibge).trim()) {
+    return padZeros(viaCep.ibge, 7);
+  }
+  return null;
+};
+
 /** Preenche logradouro/cidade/UF/IBGE faltantes via CEP quando a Receita retorna endereço incompleto. */
 const enrichEnderecoFromCep = async (data) => {
   const endereco = data?.endereco || {};
@@ -64,10 +96,7 @@ const enrichEnderecoFromCep = async (data) => {
   const cepRaw = await lookupCepBrasilApi(cep);
   if (!cepRaw) return data;
 
-  const ibgeFromCep =
-    cepRaw.city_ibge_code != null && String(cepRaw.city_ibge_code).trim()
-      ? padZeros(cepRaw.city_ibge_code, 7)
-      : null;
+  const ibgeFromCep = await ibgeFromCepLookupPayload(cep, cepRaw);
 
   return {
     ...data,
