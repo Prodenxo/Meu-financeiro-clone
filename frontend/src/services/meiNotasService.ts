@@ -474,6 +474,26 @@ export async function listarCatalogoNfseClientes(
   return await apiClient.get<NfseCatalogCliente[]>(`/mei-notas/catalogo/clientes${suffix}`);
 }
 
+/** Endereço fiscal retornado por GET /mei-notas/cep-lookup/:cep (BrasilAPI + ViaCEP + tabela IBGE). */
+export interface NfseTomadorEnderecoLookup {
+  cep?: string;
+  logradouro?: string | null;
+  numero?: string | null;
+  bairro?: string | null;
+  codigoCidade?: string | null;
+  descricaoCidade?: string | null;
+  estado?: string | null;
+  complemento?: string | null;
+}
+
+export async function lookupNfseEnderecoPorCep(cep: string): Promise<NfseTomadorEnderecoLookup> {
+  const digits = String(cep || '').replace(/\D/g, '').slice(0, 8);
+  if (digits.length !== 8) {
+    throw new Error('CEP deve ter 8 dígitos.');
+  }
+  return await apiClient.get<NfseTomadorEnderecoLookup>(`/mei-notas/cep-lookup/${digits}`);
+}
+
 export async function listarCatalogoNfseProdutos(
   options: ListarCatalogoNfseInput = {}
 ): Promise<NfseCatalogProduto[]> {

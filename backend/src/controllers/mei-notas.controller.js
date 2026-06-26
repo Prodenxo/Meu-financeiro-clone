@@ -31,7 +31,8 @@ import {
   decryptPassphrase
 } from '../services/mei-certificate-store.js';
 import { lookupCnpjCascade } from '../services/cnpj-lookup.service.js';
-import { unauthorized } from '../utils/errors.js';
+import { enderecoFromCepLookupNfse } from '../services/plugnotas/plugnotas-nfse-email-resolve.js';
+import { badRequest, unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendSuccess } from '../utils/response.js';
 
@@ -312,6 +313,20 @@ export const lookupCnpj = async (req, res, next) => {
     const cnpj = String(req.params?.cnpj || req.query?.cnpj || '').trim();
     const data = await lookupCnpjCascade(cnpj);
     return sendSuccess(res, data, 'Dados do CNPJ consultados');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+/** Preenche endereço fiscal (logradouro, cidade, UF, IBGE) a partir do CEP — mesma lógica do OpenClaw. */
+export const lookupCep = async (req, res, next) => {
+  try {
+    const cep = String(req.params?.cep || '').trim();
+    const endereco = await enderecoFromCepLookupNfse(cep);
+    if (!endereco) {
+      return next(badRequest('CEP inválido ou não encontrado.'));
+    }
+    return sendSuccess(res, endereco, 'Endereço consultado pelo CEP');
   } catch (error) {
     return next(error);
   }

@@ -6,10 +6,12 @@ const criarMock = vi.fn();
 const atualizarMock = vi.fn();
 const createAdminMock = vi.fn();
 const updateAdminMock = vi.fn();
+const lookupCepMock = vi.fn();
 
 vi.mock('../services/meiNotasService', () => ({
   criarCatalogoNfseCliente: (...args: unknown[]) => criarMock(...args),
-  atualizarCatalogoNfseCliente: (...args: unknown[]) => atualizarMock(...args)
+  atualizarCatalogoNfseCliente: (...args: unknown[]) => atualizarMock(...args),
+  lookupNfseEnderecoPorCep: (...args: unknown[]) => lookupCepMock(...args),
 }));
 
 vi.mock('../services/adminUserDataService', () => ({
@@ -26,6 +28,15 @@ describe('MeiCatalogoClienteModal', () => {
     atualizarMock.mockReset();
     createAdminMock.mockReset();
     updateAdminMock.mockReset();
+    lookupCepMock.mockReset();
+    lookupCepMock.mockResolvedValue({
+      cep: '21220290',
+      logradouro: 'Rua Merces',
+      bairro: 'Vila da Penha',
+      codigoCidade: '3304557',
+      descricaoCidade: 'Rio de Janeiro',
+      estado: 'RJ',
+    });
   });
 
   afterEach(() => {
@@ -55,6 +66,9 @@ describe('MeiCatalogoClienteModal', () => {
     fireEvent.change(within(dialog).getByLabelText(/CPF ou CNPJ/i), {
       target: { value: '123' }
     });
+    fireEvent.change(within(dialog).getByLabelText(/^CEP/i), {
+      target: { value: '21220290' }
+    });
     fireEvent.click(within(dialog).getByRole('button', { name: /^Guardar$/i }));
 
     expect(await within(dialog).findByText(/11 dígitos|14 dígitos/i)).toBeTruthy();
@@ -62,7 +76,20 @@ describe('MeiCatalogoClienteModal', () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
-  it('criar com dados válidos chama API e onSaved(\'create\')', async () => {
+  const fillValidClienteForm = (dialog: HTMLElement) => {
+    fireEvent.change(within(dialog).getByLabelText(/Nome ou razão social/i), {
+      target: { value: 'Acme' }
+    });
+    fireEvent.change(within(dialog).getByLabelText(/CPF ou CNPJ/i), {
+      target: { value: '12.345.678/0001-99' }
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^CEP/i), {
+      target: { value: '21220-290' }
+    });
+    fireEvent.blur(within(dialog).getByLabelText(/^CEP/i));
+  };
+
+  it('criar com dados válidos chama API com metadata_json.endereco e onSaved(\'create\')', async () => {
     criarMock.mockResolvedValue({
       id: 'new-id',
       nome: 'Acme',
@@ -76,11 +103,9 @@ describe('MeiCatalogoClienteModal', () => {
     );
 
     const dialog = screen.getAllByRole('dialog')[0]!;
-    fireEvent.change(within(dialog).getByLabelText(/Nome ou razão social/i), {
-      target: { value: 'Acme' }
-    });
-    fireEvent.change(within(dialog).getByLabelText(/CPF ou CNPJ/i), {
-      target: { value: '12.345.678/0001-99' }
+    fillValidClienteForm(dialog);
+    await waitFor(() => {
+      expect(lookupCepMock).toHaveBeenCalledWith('21220290');
     });
     fireEvent.click(within(dialog).getByRole('button', { name: /^Guardar$/i }));
 
@@ -88,7 +113,13 @@ describe('MeiCatalogoClienteModal', () => {
       expect(criarMock).toHaveBeenCalledWith(
         expect.objectContaining({
           nome: 'Acme',
-          documentType: 'NFSE'
+          documentType: 'NFSE',
+          metadata_json: expect.objectContaining({
+            endereco: expect.objectContaining({
+              cep: '21220290',
+              codigoCidade: '3304557',
+            }),
+          }),
         })
       );
     });
@@ -97,6 +128,40 @@ describe('MeiCatalogoClienteModal', () => {
     await waitFor(() => {
       expect(onSaved).toHaveBeenCalledWith('create');
     });
+  });
+
+  it('criar CPF sem endereço não exige CEP e chama API', async () => {
+    criarMock.mockResolvedValue({
+      id: 'pf-id',
+      nome: 'Maria',
+      documento: '12345678901',
+    });
+    const onSaved = vi.fn();
+
+    render(
+      <MeiCatalogoClienteModal open editing={null} onClose={vi.fn()} onSaved={onSaved} />
+    );
+
+    const dialog = screen.getAllByRole('dialog')[0]!;
+    fireEvent.change(within(dialog).getByLabelText(/Nome ou razão social/i), {
+      target: { value: 'Maria Silva' },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/CPF ou CNPJ/i), {
+      target: { value: '123.456.789-01' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Guardar$/i }));
+
+    await waitFor(() => {
+      expect(criarMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nome: 'Maria Silva',
+          documentType: 'NFSE',
+        }),
+      );
+    });
+    const call = criarMock.mock.calls[0][0] as { metadata_json?: unknown };
+    expect(call.metadata_json).toBeUndefined();
+    expect(onSaved).toHaveBeenCalledWith('create');
   });
 
   it('erro de API exibe role=alert', async () => {
@@ -108,11 +173,9 @@ describe('MeiCatalogoClienteModal', () => {
     );
 
     const dialog = screen.getAllByRole('dialog')[0]!;
-    fireEvent.change(within(dialog).getByLabelText(/Nome ou razão social/i), {
-      target: { value: 'Acme' }
-    });
-    fireEvent.change(within(dialog).getByLabelText(/CPF ou CNPJ/i), {
-      target: { value: '12345678000199' }
+    fillValidClienteForm(dialog);
+    await waitFor(() => {
+      expect(lookupCepMock).toHaveBeenCalled();
     });
     fireEvent.click(within(dialog).getByRole('button', { name: /^Guardar$/i }));
 
@@ -143,11 +206,9 @@ describe('MeiCatalogoClienteModal', () => {
     );
 
     const dialog = screen.getAllByRole('dialog')[0]!;
-    fireEvent.change(within(dialog).getByLabelText(/Nome ou razão social/i), {
-      target: { value: 'Acme' }
-    });
-    fireEvent.change(within(dialog).getByLabelText(/CPF ou CNPJ/i), {
-      target: { value: '12.345.678/0001-99' }
+    fillValidClienteForm(dialog);
+    await waitFor(() => {
+      expect(lookupCepMock).toHaveBeenCalled();
     });
     fireEvent.click(within(dialog).getByRole('button', { name: /^Guardar$/i }));
 
@@ -156,7 +217,10 @@ describe('MeiCatalogoClienteModal', () => {
         'target-user-1',
         expect.objectContaining({
           nome: 'Acme',
-          documentType: 'NFSE'
+          documentType: 'NFSE',
+          metadata_json: expect.objectContaining({
+            endereco: expect.objectContaining({ codigoCidade: '3304557' }),
+          }),
         })
       );
     });
@@ -166,14 +230,25 @@ describe('MeiCatalogoClienteModal', () => {
     });
   });
 
-  it('edição chama PATCH com nome e email', async () => {
+  it('edição chama PATCH com nome, email e metadata_json.endereco', async () => {
     atualizarMock.mockResolvedValue({ id: 'u1', nome: 'Novo Nome' });
     const onSaved = vi.fn();
     const editing = {
       id: 'u1',
       nome: 'Antigo',
       documento: '12345678000199',
-      email: 'a@b.co'
+      email: 'a@b.co',
+      metadata_json: {
+        endereco: {
+          cep: '21220290',
+          logradouro: 'Rua Merces',
+          numero: '10',
+          bairro: 'Vila da Penha',
+          codigoCidade: '3304557',
+          descricaoCidade: 'Rio de Janeiro',
+          estado: 'RJ',
+        },
+      },
     };
 
     render(
@@ -194,7 +269,10 @@ describe('MeiCatalogoClienteModal', () => {
     await waitFor(() => {
       expect(atualizarMock).toHaveBeenCalledWith('u1', {
         nome: 'Novo Nome',
-        email: 'a@b.co'
+        email: 'a@b.co',
+        metadata_json: expect.objectContaining({
+          endereco: expect.objectContaining({ codigoCidade: '3304557' }),
+        }),
       });
     });
     expect(onSaved).toHaveBeenCalledWith('edit');
