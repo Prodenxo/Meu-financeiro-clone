@@ -143,6 +143,15 @@ Pedidos: *marca reunião*, *agenda*, *lembrar no calendário*:
 
 `;
 
+const nfseCepBlock = `### Endereço fiscal PJ (CNPJ) — CEP resolve automaticamente
+- Cliente **CNPJ** sem endereço no catálogo → peça **só o CEP** (8 dígitos).
+- Ao receber o CEP → **obrigatório** chamar \`register_nfse_cliente\` com \`tomadorNome\` + \`tomadorCep\` (ou \`documento\` + \`tomadorCep\`).
+- O backend preenche logradouro, bairro, cidade, UF e IBGE via BrasilAPI. **Não** peça esses campos manualmente.
+- Se a API responder \`enderecoIncomplete\` pedindo número → peça **só o número** (ou "S/N") e chame de novo com \`tomadorNumero\`.
+- Também pode incluir \`tomadorCep\` direto em \`preview_nfse\` / \`emit_nfse\` com \`tomadorNome\`.
+
+`;
+
 const nfseBlock = `## NFSe — cliente no catálogo (obrigatório)
 
 ### Antes de emitir nota
@@ -150,14 +159,7 @@ const nfseBlock = `## NFSe — cliente no catálogo (obrigatório)
 2. Se **não** existir: peça **CPF/CNPJ válido** (dígitos reais), **nome/razão social** e **e-mail** → \`register_nfse_cliente\`.
 3. Depois \`preview_nfse\` → confirme com o utilizador → \`emit_nfse\` com \`"confirm":true\`.
 
-### Endereço fiscal PJ (CNPJ) — CEP resolve automaticamente
-- Cliente **CNPJ** sem endereço no catálogo → peça **só o CEP** (8 dígitos).
-- Ao receber o CEP → **obrigatório** chamar \`register_nfse_cliente\` com \`tomadorNome\` + \`tomadorCep\` (ou \`documento\` + \`tomadorCep\`).
-- O backend preenche logradouro, bairro, cidade, UF e IBGE via BrasilAPI. **Não** peça esses campos manualmente.
-- Se a API responder \`enderecoIncomplete\` pedindo número → peça **só o número** (ou "S/N") e chame de novo com \`tomadorNumero\`.
-- Também pode incluir \`tomadorCep\` direto em \`preview_nfse\` / \`emit_nfse\` com \`tomadorNome\`.
-
-### PROIBIDO loop de confirmação (NFSe / NF-e)
+${nfseCepBlock}### PROIBIDO loop de confirmação (NFSe / NF-e)
 - **AGUARDE** o exec terminar (JSON no Tool output) **antes** de responder.
 - Utilizador disse *sim* / *confirmo* → **PROIBIDO** repetir *"Posso emitir?"* — \`emit_nfse\` ou \`emit_nfe\` com \`"confirm":true\` e os **mesmos** dados.
 - \`success: false\` na emissão → repita só \`message\`; retry **sempre** com \`confirm:true\`, nunca preview de novo.
@@ -344,13 +346,14 @@ for (const m of nfseMarkers) {
   const i = cur.indexOf(m);
   if (i >= 0 && (nfseIdx < 0 || i < nfseIdx)) nfseIdx = i;
 }
-const needsNfse = !cur.includes('register_nfse_cliente');
+const needsNfseCep = !cur.includes('CEP resolve automaticamente');
+const needsNfseFull = !cur.includes('register_nfse_cliente');
 if (nfseIdx >= 0) {
   const nextH2 = cur.indexOf('\n## ', nfseIdx + 5);
   const sliceEnd = nextH2 > nfseIdx ? nextH2 : cur.length;
   cur = cur.slice(0, nfseIdx) + nfseBlock + cur.slice(sliceEnd);
-  changes.push('NFSe catálogo (substituído)');
-} else if (needsNfse) {
+  changes.push(needsNfseCep ? 'NFSe catálogo (substituído + CEP)' : 'NFSe catálogo (substituído)');
+} else if (needsNfseFull) {
   const insertAt = cur.indexOf('## DAS MEI');
   if (insertAt >= 0) {
     cur = cur.slice(0, insertAt) + nfseBlock + cur.slice(insertAt);
@@ -358,6 +361,22 @@ if (nfseIdx >= 0) {
     cur += '\n' + nfseBlock;
   }
   changes.push('NFSe catálogo (inserido)');
+} else if (needsNfseCep) {
+  const cepAnchors = [
+    '### CRÍTICO — NFSe/NF-e: PROIBIDO loop de confirmação',
+    '### PROIBIDO loop de confirmação (NFSe / NF-e)',
+    '### NFSe (nota fiscal de serviço) pelo WhatsApp',
+  ];
+  let inserted = false;
+  for (const anchor of cepAnchors) {
+    if (cur.includes(anchor)) {
+      cur = cur.replace(anchor, nfseCepBlock + anchor);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) cur += '\n' + nfseCepBlock;
+  changes.push('NFSe CEP (patch parcial — faltava no SOUL)');
 } else {
   changes.push('NFSe catálogo (já ok)');
 }
@@ -467,6 +486,10 @@ if ! grep -q "add_calendar_event_meet" "$SOUL"; then
 fi
 if ! grep -q "list_agenda_checklist_today" "$SOUL"; then
   echo "ERRO: SOUL sem list_agenda_checklist_today — secção checklist agenda não aplicou"
+  exit 1
+fi
+if ! grep -q "CEP resolve automaticamente" "$SOUL"; then
+  echo "ERRO: SOUL sem patch CEP NFSe — secção endereço PJ não aplicou"
   exit 1
 fi
 echo ""
