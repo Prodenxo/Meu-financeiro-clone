@@ -5,8 +5,9 @@ import {
   matchContaByName,
   pickDefaultContaFinanceira,
   resolveContaIdFromPayload,
+  resolveExplicitContaFromPayload,
 } from './conta-financeira-default.js';
-import { computeContaSaldoAtual } from './conta-financeira-saldo.js';
+import { computeContaSaldoAtual, computeUnassignedSaldoDelta, formatGetSaldoMessage } from './conta-financeira-saldo.js';
 
 const CONTA_TIPOS = new Set(['corrente', 'poupanca', 'cartao_credito', 'dinheiro', 'outro']);
 
@@ -65,10 +66,13 @@ export const listContasWithSaldo = async (userId) => {
       ativo: c.ativo !== false,
     };
   });
-  const totalSaldo = rows.reduce((sum, r) => sum + r.saldoAtual, 0);
+  const totalSaldoContas = rows.reduce((sum, r) => sum + r.saldoAtual, 0);
+  const saldoSemConta = computeUnassignedSaldoDelta(lancamentos);
   return {
     contas: rows,
-    totalSaldo,
+    totalSaldo: totalSaldoContas + saldoSemConta,
+    totalSaldoContas,
+    saldoSemConta,
     defaultContaId: defaultConta?.id ?? null,
     defaultContaNome: defaultConta?.nome ?? null,
   };
@@ -76,23 +80,29 @@ export const listContasWithSaldo = async (userId) => {
 
 export const getSaldoResumo = async (userId, payload = {}) => {
   const summary = await listContasWithSaldo(userId);
-  const filterId = resolveContaIdFromPayload(
-    summary.contas.map((c) => ({ id: c.id, nome: c.nome, ativo: true })),
-    payload,
-  );
-  if (filterId) {
-    const one = summary.contas.find((c) => String(c.id) === String(filterId));
+  const contasForMatch = summary.contas.map((c) => ({
+    id: c.id,
+    nome: c.nome,
+    tipo: c.tipo,
+    ativo: true,
+  }));
+  const matched = resolveExplicitContaFromPayload(contasForMatch, payload);
+  if (matched?.id) {
+    const one = summary.contas.find((c) => String(c.id) === String(matched.id));
     if (!one) throw notFound('Carteira não encontrada');
     return {
       carteira: one,
       totalSaldo: one.saldoAtual,
       contas: [one],
+      filtered: true,
       defaultContaId: summary.defaultContaId,
       defaultContaNome: summary.defaultContaNome,
     };
   }
-  return summary;
+  return { ...summary, filtered: false };
 };
+
+export { formatGetSaldoMessage };
 
 const resolveContaRow = async (userId, payload = {}) => {
   const contas = await listContasFinanceiras(userId, { activeOnly: false });

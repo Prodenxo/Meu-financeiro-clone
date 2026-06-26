@@ -865,16 +865,26 @@ export const runOpenclawAction = async (input) => {
         : summary;
     const contas = filtered.contas ?? summary.contas;
     const totalSaldo = filtered.totalSaldo ?? summary.totalSaldo;
+    const saldoSemConta = filtered.saldoSemConta ?? summary.saldoSemConta ?? 0;
     const defaultNome = filtered.defaultContaNome ?? summary.defaultContaNome;
+    const saldoMessage =
+      action === 'get_saldo'
+        ? contasFinanceirasService.formatGetSaldoMessage(
+          { contas, totalSaldo, saldoSemConta },
+          { filtered: Boolean(filtered.filtered) },
+        )
+        : null;
     return {
       ok: true,
       message:
         action === 'get_saldo'
-          ? `Saldo total R$ ${totalSaldo.toFixed(2).replace('.', ',')} (${contas.length} carteira(s)).`
+          ? saldoMessage
           : `Carteiras activas (${contas.length}). Padrão: ${defaultNome || 'nenhuma'}. Saldo total R$ ${totalSaldo.toFixed(2).replace('.', ',')}.`,
       data: {
         contas,
         totalSaldo,
+        saldoSemConta,
+        filtered: Boolean(filtered.filtered),
         defaultContaId: filtered.defaultContaId ?? summary.defaultContaId,
         defaultContaNome: defaultNome,
         userId,
@@ -883,7 +893,8 @@ export const runOpenclawAction = async (input) => {
         agentInstructions:
           'Carteiras: create_conta, update_conta, delete_conta. '
           + 'Lançamentos: create_transaction, update_transaction, delete_transaction. '
-          + 'Saldo: get_saldo (opcional carteira/conta_id). '
+          + 'Saldo: get_saldo **sem** payload para saldo geral/todas as contas; com payload.carteira/conta_nome só para uma carteira (ex.: Itaú, Nubank). '
+          + 'Em pedido de saldo geral, repete o campo **message** com o detalhe de **cada** carteira — não cites só a padrão. '
           + 'Em create_transaction use payload.carteira ou conta_nome com o nome EXACTO de uma linha abaixo '
           + `(ex.: Nubank, Poupança). Com **2+ carteiras** e pedido sem destino → **pergunte** qual usar (não assuma padrão). `
           + 'Com **1 carteira** pode lançar sem perguntar. '

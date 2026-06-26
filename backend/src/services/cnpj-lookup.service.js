@@ -2,6 +2,7 @@ import { badRequest } from '../utils/errors.js';
 import { isValidCnpj } from '../utils/cpf-cnpj.js';
 import { env } from '../config/env.js';
 import { getPlugnotasRootUrl } from './plugnotas/root-url.js';
+import { resolveIbgeCodigoFromMunicipio } from './ibge-municipios-lookup.service.js';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
@@ -74,7 +75,10 @@ const ibgeFromCepLookupPayload = async (cep, brasilApiRaw) => {
   if (viaCep?.ibge != null && String(viaCep.ibge).trim()) {
     return padZeros(viaCep.ibge, 7);
   }
-  return null;
+
+  const cidade = brasilApiRaw?.city || viaCep?.localidade || null;
+  const uf = brasilApiRaw?.state || viaCep?.uf || null;
+  return resolveIbgeCodigoFromMunicipio(cidade, uf);
 };
 
 /** Preenche logradouro/cidade/UF/IBGE faltantes via CEP quando a Receita retorna endereço incompleto. */

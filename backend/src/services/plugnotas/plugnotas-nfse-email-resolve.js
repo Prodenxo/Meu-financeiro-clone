@@ -1,6 +1,7 @@
 import { createSupabaseClient } from '../../config/supabase.js';
 import { badRequest } from '../../utils/errors.js';
 import { lookupCepBrasilApi, lookupCepViaCep, lookupCnpjCascade } from '../cnpj-lookup.service.js';
+import { resolveIbgeCodigoFromMunicipio } from '../ibge-municipios-lookup.service.js';
 import { getEmitenteNfseSnapshot } from '../mei-certificate-store.js';
 import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
 import { consultarEmpresaPlugNotas } from './empresa.service.js';
@@ -13,6 +14,16 @@ const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 const padZeros = (value, length) => {
   const str = String(value || '').replace(/\D/g, '');
   return str.padStart(length, '0').slice(-length);
+};
+
+const resolveIbgeFromCepPayload = (cidade, uf, brasilIbge, viaIbge) => {
+  if (brasilIbge != null && String(brasilIbge).trim()) {
+    return padZeros(brasilIbge, 7);
+  }
+  if (viaIbge != null && String(viaIbge).trim()) {
+    return padZeros(viaIbge, 7);
+  }
+  return resolveIbgeCodigoFromMunicipio(cidade, uf);
 };
 
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -314,38 +325,68 @@ export const enderecoFromCepLookupNfse = async (cepInput, partialEndereco = null
   if (!cepRaw) {
     const viaOnly = await lookupCepViaCep(cep);
     if (!viaOnly) return partial;
+    const descricaoCidade = partial?.descricaoCidade || viaOnly.localidade || null;
+    const estado = partial?.estado || viaOnly.uf || null;
     return pruneEndereco({
       cep,
       logradouro: partial?.logradouro || viaOnly.logradouro || null,
       numero: partial?.numero || null,
       bairro: partial?.bairro || viaOnly.bairro || null,
-      codigoCidade: partial?.codigoCidade || (viaOnly.ibge ? padZeros(viaOnly.ibge, 7) : null),
-      descricaoCidade: partial?.descricaoCidade || viaOnly.localidade || null,
-      estado: partial?.estado || viaOnly.uf || null,
+      codigoCidade: partial?.codigoCidade || resolveIbgeFromCepPayload(
+        descricaoCidade,
+        estado,
+        null,
+        viaOnly.ibge,
+      ),
+      descricaoCidade,
+      estado,
       complemento: partial?.complemento || viaOnly.complemento || null,
     });
   }
 
-  let ibgeFromCep = null;
-  if (cepRaw.city_ibge_code != null && String(cepRaw.city_ibge_code).trim()) {
-    ibgeFromCep = padZeros(cepRaw.city_ibge_code, 7);
-  } else {
-    const viaCep = await lookupCepViaCep(cep);
-    if (viaCep?.ibge != null && String(viaCep.ibge).trim()) {
-      ibgeFromCep = padZeros(viaCep.ibge, 7);
-    }
-  }
+  const viaCep = await lookupCepViaCep(cep);
+  const descricaoCidade = partial?.descricaoCidade || cepRaw.city || viaCep?.localidade || null;
+  const estado = partial?.estado || cepRaw.state || viaCep?.uf || null;
+  const ibgeFromCep = resolveIbgeFromCepPayload(
+    descricaoCidade,
+    estado,
+    cepRaw.city_ibge_code,
+    viaCep?.ibge,
+  );
 
   return pruneEndereco({
     cep,
-    logradouro: partial?.logradouro || cepRaw.street || null,
+    logradouro: partial?.logradouro || cepRaw.street || viaCep?.logradouro || null,
     numero: partial?.numero || null,
-    bairro: partial?.bairro || cepRaw.neighborhood || null,
+    bairro: partial?.bairro || cepRaw.neighborhood || viaCep?.bairro || null,
     codigoCidade: partial?.codigoCidade || ibgeFromCep,
-    descricaoCidade: partial?.descricaoCidade || cepRaw.city || null,
-    estado: partial?.estado || cepRaw.state || null,
-    complemento: partial?.complemento || null,
+    descricaoCidade,
+    estado,
+    complemento: partial?.complemento || viaCep?.complemento || null,
   });
+};
+
+/**
+ * Completa metadata_json.endereco via CEP (BrasilAPI/ViaCEP + tabela IBGE local).
+ * @param {Record<string, unknown>|null|undefined} metadata
+ * @returns {Promise<Record<string, unknown>|null|undefined>}
+ */
+export const enrichCatalogClienteMetadataFromCep = async (metadata) => {
+  if (!isPlainObject(metadata)) return metadata;
+  const endereco = metadata.endereco;
+  if (!isPlainObject(endereco)) return metadata;
+
+  const cep = normalizeDoc(endereco.cep).slice(0, 8);
+  if (cep.length !== 8) return metadata;
+  if (normalizeDoc(endereco.codigoCidade).length === 7) return metadata;
+
+  const fromCep = await enderecoFromCepLookupNfse(cep, endereco);
+  if (!fromCep) return metadata;
+
+  return {
+    ...metadata,
+    endereco: mergeEnderecoLayers(endereco, fromCep),
+  };
 };
 
 const applyTomadorNumeroDefault = (endereco) => {

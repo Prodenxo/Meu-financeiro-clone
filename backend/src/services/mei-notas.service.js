@@ -35,6 +35,7 @@ import {
 } from './plugnotas/plugnotas-mei-nfse-emit-prep.js';
 import {
   assertNfsePrestadorEmailOrThrow,
+  enrichCatalogClienteMetadataFromCep,
   enrichNfseEmitPayloadEmails,
   normalizeTomadorEnderecoFromEmitPayload,
   resolvePrestadorEmitEmail,
@@ -2295,7 +2296,8 @@ export const criarCatalogoCliente = async (userId, body = {}) => {
     if (body.metadata_json === null) {
       row.metadata_json = null;
     } else {
-      const meta = sanitizeMetadata(body.metadata_json);
+      let meta = sanitizeMetadata(body.metadata_json);
+      meta = await enrichCatalogClienteMetadataFromCep(meta);
       row.metadata_json = Object.keys(meta).length ? meta : null;
     }
   }
@@ -2345,7 +2347,8 @@ export const atualizarCatalogoCliente = async (userId, id, body = {}) => {
     if (body.metadata_json === null) {
       updates.metadata_json = null;
     } else {
-      const meta = sanitizeMetadata(body.metadata_json);
+      let meta = sanitizeMetadata(body.metadata_json);
+      meta = await enrichCatalogClienteMetadataFromCep(meta);
       updates.metadata_json = Object.keys(meta).length ? meta : null;
     }
   }
