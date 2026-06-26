@@ -6,7 +6,17 @@ import {
   canonicalizeBrazilWhatsappPhone,
   normalizeWhatsappPhoneDigits,
 } from '../utils/whatsapp-phone.js';
+import { assertN8nPhoneNotLinkedToOtherUser } from './n8n-link-phone.service.js';
 import crypto from 'crypto';
+
+const assertValidBrazilWhatsappPhone = (phone) => {
+  const cleaned = canonicalizeBrazilWhatsappPhone(phone);
+  const national = cleaned.startsWith('55') ? cleaned.slice(2) : cleaned;
+  if (!national || national.length < 10) {
+    throw badRequest('Telefone inválido. Informe DDD + número (ex.: 21996185328).');
+  }
+  return cleaned;
+};
 
 const hashInviteToken = (rawToken) => crypto.createHash('sha256').update(String(rawToken).trim(), 'utf8').digest('hex');
 
@@ -473,9 +483,10 @@ export const updatePhone = async (accessToken, phone) => {
     throw badRequest('SUPABASE_SERVICE_ROLE_KEY não configurada');
   }
 
-  const cleanedPhone = canonicalizeBrazilWhatsappPhone(phone);
-  if (!cleanedPhone) throw badRequest('Telefone é obrigatório');
+  const cleanedPhone = assertValidBrazilWhatsappPhone(phone);
   const adminClient = createSupabaseClient({ useServiceRole: true });
+
+  await assertN8nPhoneNotLinkedToOtherUser(adminClient, user.id, cleanedPhone);
 
   // 1. Atualiza no Auth (Metadata) - FUNDAMENTAL: manter metadados existentes
   const { error: authError } = await adminClient.auth.admin.updateUserById(user.id, {
