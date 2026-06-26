@@ -1,4 +1,24 @@
 import { badRequest } from '../utils/errors.js';
+import { expandBrazilMobilePhoneVariants } from '../utils/whatsapp-phone.js';
+
+/**
+ * Tenta bater com o que está em `n8n_link.user_number` (pode estar com ou sem 55).
+ * @param {string} digits
+ * @returns {string[]}
+ */
+export const buildPhoneLookupCandidates = (digits) => {
+  const out = new Set();
+  for (const v of expandBrazilMobilePhoneVariants(digits)) {
+    out.add(v);
+    if (v.startsWith('55') && v.length > 11) {
+      out.add(v.slice(2));
+    }
+    if (!v.startsWith('55') && v.length >= 10 && v.length <= 11) {
+      out.add(`55${v}`);
+    }
+  }
+  return [...out];
+};
 
 /**
  * Vários registos com o mesmo `user_number` quebram `.maybeSingle()`.
@@ -54,4 +74,34 @@ export const assertN8nPhoneNotLinkedToOtherUser = async (admin, userId, userNumb
       { code: 'PHONE_ALREADY_LINKED', otherUserIds: otherIds },
     );
   }
+};
+
+/**
+ * Atribui o WhatsApp à conta actual e remove o mesmo número de outras contas.
+ * Usado quando o utilizador guarda o telefone no perfil (site/app).
+ * @param {import('@supabase/supabase-js').SupabaseClient} admin
+ * @param {string} userId
+ * @param {string} userNumber — formato canónico (ex.: 5521996185328)
+ */
+export const assignN8nPhoneToUser = async (admin, userId, userNumber) => {
+  const lookupCandidates = buildPhoneLookupCandidates(userNumber);
+
+  for (const num of lookupCandidates) {
+    const { error: deleteError } = await admin
+      .from('n8n_link')
+      .delete()
+      .eq('user_number', num)
+      .neq('user_id', userId);
+
+    if (deleteError) throw badRequest(deleteError.message);
+  }
+
+  const { error } = await admin
+    .from('n8n_link')
+    .upsert(
+      { user_id: userId, user_number: userNumber },
+      { onConflict: 'user_id' },
+    );
+
+  if (error) throw badRequest(error.message);
 };

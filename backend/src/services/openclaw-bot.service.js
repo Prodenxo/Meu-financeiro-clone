@@ -3,10 +3,14 @@ import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import {
-  expandBrazilMobilePhoneVariants,
   normalizeWhatsappPhoneDigits,
 } from '../utils/whatsapp-phone.js';
-import { pickUserIdFromN8nLinkRows } from './n8n-link-phone.service.js';
+import {
+  buildPhoneLookupCandidates,
+  pickUserIdFromN8nLinkRows,
+} from './n8n-link-phone.service.js';
+
+export { buildPhoneLookupCandidates } from './n8n-link-phone.service.js';
 import * as transactionsService from './transactions.service.js';
 import * as contasFinanceirasService from './contas-financeiras.service.js';
 import {
@@ -283,23 +287,6 @@ export const trySendDasWhatsappWebhook = async ({
 const buildNfseSendExecCommand = (destinationPhone, notaId) => {
   if (!destinationPhone || !notaId) return null;
   return `/home/node/.openclaw/workspace/mf-nfse-send.sh ${destinationPhone} ${notaId}`;
-};
-
-/**
- * Tenta bater com o que está em `n8n_link.user_number` (pode estar com ou sem 55).
- */
-export const buildPhoneLookupCandidates = (digits) => {
-  const out = new Set();
-  for (const v of expandBrazilMobilePhoneVariants(digits)) {
-    out.add(v);
-    if (v.startsWith('55') && v.length > 11) {
-      out.add(v.slice(2));
-    }
-    if (!v.startsWith('55') && v.length >= 10 && v.length <= 11) {
-      out.add(`55${v}`);
-    }
-  }
-  return [...out];
 };
 
 /**

@@ -6,7 +6,10 @@ import {
   canonicalizeBrazilWhatsappPhone,
   normalizeWhatsappPhoneDigits,
 } from '../utils/whatsapp-phone.js';
-import { assertN8nPhoneNotLinkedToOtherUser } from './n8n-link-phone.service.js';
+import {
+  assertN8nPhoneNotLinkedToOtherUser,
+  assignN8nPhoneToUser,
+} from './n8n-link-phone.service.js';
 import crypto from 'crypto';
 
 const assertValidBrazilWhatsappPhone = (phone) => {
@@ -283,14 +286,16 @@ export const signUp = async ({ email, password, phone, displayName, inviteToken 
   if (userId && cleanedPhone) {
     try {
       const adminClient = createSupabaseClientFn({ useServiceRole: true });
-      await adminClient
-        .from('n8n_link')
-        .upsert(
-          { user_id: userId, user_number: cleanedPhone },
-          { onConflict: 'user_id' }
+      await assertN8nPhoneNotLinkedToOtherUser(adminClient, userId, cleanedPhone);
+      await assignN8nPhoneToUser(adminClient, userId, cleanedPhone);
+    } catch (err) {
+      const code = err?.errors?.code;
+      if (code === 'PHONE_ALREADY_LINKED') {
+        throw badRequest(
+          'Este número de WhatsApp já está ligado a outra conta. Entre na conta certa ou peça ao suporte para desvincular.',
         );
-    } catch {
-      // não bloquear signup por falha de sincronização
+      }
+      console.warn('[AuthService] Falha ao sincronizar n8n_link no signup:', err);
     }
   }
 
@@ -486,8 +491,6 @@ export const updatePhone = async (accessToken, phone) => {
   const cleanedPhone = assertValidBrazilWhatsappPhone(phone);
   const adminClient = createSupabaseClient({ useServiceRole: true });
 
-  await assertN8nPhoneNotLinkedToOtherUser(adminClient, user.id, cleanedPhone);
-
   // 1. Atualiza no Auth (Metadata) - FUNDAMENTAL: manter metadados existentes
   const { error: authError } = await adminClient.auth.admin.updateUserById(user.id, {
     user_metadata: { 
@@ -503,13 +506,8 @@ export const updatePhone = async (accessToken, phone) => {
     .update({ phone: cleanedPhone })
     .eq('id', user.id);
 
-  // 3. Sincroniza com n8n_link
-  await adminClient
-    .from('n8n_link')
-    .upsert(
-      { user_id: user.id, user_number: cleanedPhone },
-      { onConflict: 'user_id' }
-    );
+  // 3. Sincroniza com n8n_link (liberta o número de outras contas)
+  await assignN8nPhoneToUser(adminClient, user.id, cleanedPhone);
 
   return cleanedPhone;
 };

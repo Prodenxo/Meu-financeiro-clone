@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpError } from '../src/utils/errors.js';
-import { pickUserIdFromN8nLinkRows } from '../src/services/n8n-link-phone.service.js';
+import {
+  assignN8nPhoneToUser,
+  pickUserIdFromN8nLinkRows,
+} from '../src/services/n8n-link-phone.service.js';
 
 test('pickUserIdFromN8nLinkRows devolve único user_id', () => {
   assert.equal(
@@ -47,4 +50,37 @@ test('pickUserIdFromN8nLinkRows rejeita vários user_id distintos', () => {
       return true;
     },
   );
+});
+
+test('assignN8nPhoneToUser remove o número de outras contas antes do upsert', async () => {
+  const calls = [];
+  const userId = 'fernando-id';
+  const admin = {
+    from(table) {
+      assert.equal(table, 'n8n_link');
+      return {
+        delete() {
+          return {
+            eq(_col, num) {
+              calls.push({ op: 'delete_eq', num });
+              return {
+                neq(_col2, excludedUserId) {
+                  calls.push({ op: 'delete_neq', excludedUserId });
+                  return Promise.resolve({ error: null });
+                },
+              };
+            },
+          };
+        },
+        upsert(payload, opts) {
+          calls.push({ op: 'upsert', payload, opts });
+          return Promise.resolve({ error: null });
+        },
+      };
+    },
+  };
+  await assignN8nPhoneToUser(admin, userId, '5521996185328');
+  assert.ok(calls.some((c) => c.op === 'upsert'));
+  assert.equal(calls.find((c) => c.op === 'upsert')?.payload.user_id, userId);
+  assert.ok(calls.some((c) => c.op === 'delete_neq'));
 });

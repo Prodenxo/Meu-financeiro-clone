@@ -7,7 +7,7 @@ import {
   generateStrongRandomPassword
 } from '../utils/passwordPolicy.js';
 import * as authService from './auth.service.js';
-import { assertN8nPhoneNotLinkedToOtherUser } from './n8n-link-phone.service.js';
+import { assignN8nPhoneToUser } from './n8n-link-phone.service.js';
 
 const ROLE_CREATE_ALLOWED = new Set(['superadmin', 'admin']);
 const ROLE_TARGET_ALLOWED = new Set(['admin', 'usuario', 'outsider']);
@@ -1558,15 +1558,7 @@ export const syncPhone = async (userId, phone) => {
   const cleanedPhone = cleanPhone(phone);
 
   const dbClient = createSupabaseClient({ useServiceRole: true });
-  await assertN8nPhoneNotLinkedToOtherUser(dbClient, userId, cleanedPhone);
+  await assignN8nPhoneToUser(dbClient, userId, cleanedPhone);
 
-  const { error } = await dbClient
-    .from('n8n_link')
-    .upsert(
-      { user_id: userId, user_number: cleanedPhone },
-      { onConflict: 'user_id' }
-    );
-
-  if (error) throw badRequest(error.message);
   return { success: true, phone: cleanedPhone };
 };
