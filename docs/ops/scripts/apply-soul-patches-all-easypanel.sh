@@ -143,6 +143,32 @@ Pedidos: *marca reunião*, *agenda*, *lembrar no calendário*:
 
 `;
 
+const nfseVsTransactionBlock = `## CRÍTICO — NOTA FISCAL ≠ LANÇAMENTO (create_transaction)
+
+**Gatilhos de NOTA FISCAL (documento fiscal MEI):** *emite nota*, *nota fiscal*, *NFSe*, *NFS-e*, *nota de serviço*, *nota para [cliente]*, *emitir nota para [empresa]*.
+
+Ex.: *"emite nota de 2 reais para CF Contabilidade"* → **é NFSe**, **não** é lançamento na carteira.
+
+### OBRIGATÓRIO (nota fiscal)
+1. **PROIBIDO** \`create_transaction\` — isso só regista entrada/saída na **carteira** (Itaú, Bradesco…), **não** emite documento na Receita/Plugnotas.
+2. **PROIBIDO** \`list_contas\` nem perguntar *"qual carteira?"* / Itaú vs Bradesco — carteira é **só** para lançamentos financeiros.
+3. Fluxo correto: \`get_nfse_setup_status\` → (se precisar) \`list_catalog_servicos\` → \`preview_nfse\` com \`tomadorNome\` + \`valor\` → após *sim* do utilizador → \`emit_nfse\` com \`"confirm":true\`.
+4. **PROIBIDO** dizer *"nota fiscal emitida"* se a action foi \`create_transaction\` — **mentira**. Só emitiu se \`emit_nfse\` / \`emit_nfe\` devolveu sucesso **sem** \`notEmitted: true\`.
+
+### Só use create_transaction quando
+- *recebi X*, *gastei X*, *lança*, *registra receita* **sem** pedir **nota fiscal**.
+- O utilizador quer movimento na **carteira**, não NFS-e/NF-e.
+
+| Pedido do utilizador | Action correta |
+|---|---|
+| *nota de 2 reais para CF Contabilidade* | \`preview_nfse\` / \`emit_nfse\` |
+| *recebi 2 reais de salário* | \`create_transaction\` |
+| *registra receita de 2 reais* (sem "nota") | \`create_transaction\` |
+
+---
+
+`;
+
 const nfseCepBlock = `### Endereço fiscal PJ (CNPJ) — CEP resolve automaticamente
 - Cliente **CNPJ** sem endereço no catálogo → peça **só o CEP** (8 dígitos).
 - Ao receber o CEP → **obrigatório** chamar \`register_nfse_cliente\` com \`tomadorNome\` + \`tomadorCep\` (ou \`documento\` + \`tomadorCep\`).
@@ -381,6 +407,35 @@ if (nfseIdx >= 0) {
   changes.push('NFSe catálogo (já ok)');
 }
 
+// Nota fiscal ≠ create_transaction (evita bot lançar na carteira quando pedem NFS-e)
+const nfseVsTxMarker = 'NOTA FISCAL ≠ LANÇAMENTO';
+if (!cur.includes(nfseVsTxMarker)) {
+  const txAnchors = [
+    '### Carteiras, saldo e lançamentos — NÃO confundir',
+    '### Português natural → lançamento',
+    '## CRÍTICO — lançamento: PROIBIDO confirmar sem API',
+  ];
+  let inserted = false;
+  for (const anchor of txAnchors) {
+    if (cur.includes(anchor)) {
+      cur = cur.replace(anchor, nfseVsTransactionBlock + anchor);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) {
+    const insertAt = cur.indexOf('### Mensagens de nota fiscal');
+    if (insertAt >= 0) {
+      cur = cur.slice(0, insertAt) + nfseVsTransactionBlock + cur.slice(insertAt);
+    } else {
+      cur += '\n' + nfseVsTransactionBlock;
+    }
+  }
+  changes.push('NFSe vs transação (patch crítico)');
+} else {
+  changes.push('NFSe vs transação (já ok)');
+}
+
 // DAS + saldo
 const dasMarkers = ['## DAS MEI — PDF, saldo', '## DAS MEI', '### DAS no WhatsApp'];
 let dasIdx = -1;
@@ -490,6 +545,10 @@ if ! grep -q "list_agenda_checklist_today" "$SOUL"; then
 fi
 if ! grep -q "CEP resolve automaticamente" "$SOUL"; then
   echo "ERRO: SOUL sem patch CEP NFSe — secção endereço PJ não aplicou"
+  exit 1
+fi
+if ! grep -q "NOTA FISCAL ≠ LANÇAMENTO" "$SOUL"; then
+  echo "ERRO: SOUL sem patch nota≠transação — bot pode usar create_transaction em vez de emit_nfse"
   exit 1
 fi
 echo ""

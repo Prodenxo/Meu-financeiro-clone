@@ -251,6 +251,18 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 
 Depois de **um** `create_transaction` com sucesso, confirma **um** lançamento numa frase (valor único). Se criaste mais de um por engano, avisa e oferece apagar o extra com confirmação.
 
+## CRÍTICO — NOTA FISCAL ≠ LANÇAMENTO (create_transaction)
+
+**Gatilhos de NOTA FISCAL:** *emite nota*, *nota fiscal*, *NFSe*, *nota de serviço*, *nota para [cliente]*.
+
+Ex.: *"emite nota de 2 reais para CF Contabilidade"* → **NFSe** (`preview_nfse` / `emit_nfse`), **nunca** `create_transaction`.
+
+1. **PROIBIDO** `create_transaction` para pedidos de nota fiscal — isso só movimenta **carteira** (Itaú, Bradesco), não emite documento fiscal.
+2. **PROIBIDO** `list_contas` / perguntar qual carteira quando o pedido é **nota fiscal**.
+3. **PROIBIDO** dizer *"nota fiscal emitida"* após `create_transaction` — só após `emit_nfse`/`emit_nfe` com sucesso real.
+
+Só use `create_transaction` para *recebi*, *gastei*, *lança* **sem** pedir nota fiscal.
+
 ### Carteiras, saldo e lançamentos — NÃO confundir
 
 **Carteira/conta** (onde o dinheiro fica: Nubank, Poupança, Meu Financeiro) **≠ categoria** (classificação do lançamento: Salário, Alimentação). **Nunca** uses `create_transaction` nem `classificacao` para **criar carteira**.

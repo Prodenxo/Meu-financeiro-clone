@@ -1051,7 +1051,9 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Confirme ao utilizador SOMENTE após este ok. Na mensagem WhatsApp inclua '
+          'Isto é LANÇAMENTO na carteira (create_transaction), NÃO é nota fiscal NFS-e/NF-e. '
+          + 'PROIBIDO dizer "nota fiscal emitida" ou "NFS-e emitida" — diga apenas que o lançamento foi registrado. '
+          + 'Confirme ao utilizador SOMENTE após este ok. Na mensagem WhatsApp inclua '
           + `*Conta:* ${accountLabel} (telefone ${phoneDigits}). `
           + `*Carteira:* ${carteiraLabel}. `
           + 'Se o nome não for de quem está a falar, NÃO diga que registrou — reporte erro interno. '
