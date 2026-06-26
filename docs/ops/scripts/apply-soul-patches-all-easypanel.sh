@@ -454,7 +454,7 @@ if ! grep -q "delete_calendar_event" "$SOUL"; then
   echo "ERRO: SOUL sem delete_calendar_event — secção excluir não aplicou"
   exit 1
 fi
-if (!grep -q "add_calendar_event_meet" "$SOUL"; then
+if ! grep -q "add_calendar_event_meet" "$SOUL"; then
   echo "ERRO: SOUL sem add_calendar_event_meet — secção Meet não aplicou"
   exit 1
 fi
