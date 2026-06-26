@@ -68,10 +68,29 @@ serve(async (req) => {
         )
       }
 
-      // Remove o "+" do início do telefone
-      const cleanedPhone = phone.startsWith('+') ? phone.substring(1) : phone
+      const cleanedPhone = String(phone).replace(/\D/g, '').replace(/^\+/, '')
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      if (!serviceRoleKey) {
+        return new Response(
+          JSON.stringify({ error: 'SUPABASE_SERVICE_ROLE_KEY não configurada' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
 
-      const { error } = await supabaseClient
+      const adminClient = createClient(supabaseUrl, serviceRoleKey)
+      const variants = new Set<string>([cleanedPhone])
+      if (cleanedPhone.startsWith('55') && cleanedPhone.length > 11) {
+        variants.add(cleanedPhone.slice(2))
+      }
+      if (!cleanedPhone.startsWith('55') && cleanedPhone.length >= 10) {
+        variants.add(`55${cleanedPhone}`)
+      }
+
+      for (const num of variants) {
+        await adminClient.from('n8n_link').delete().eq('user_number', num).neq('user_id', user.id)
+      }
+
+      const { error } = await adminClient
         .from('n8n_link')
         .upsert(
           { user_id: user.id, user_number: cleanedPhone },

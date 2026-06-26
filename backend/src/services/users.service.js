@@ -1056,12 +1056,7 @@ export const createUser = async (accessToken, input, deps = {}) => {
   if (linkError) throw badRequest(linkError.message);
 
   if (phone) {
-    await adminClient
-      .from('n8n_link')
-      .upsert(
-        { user_id: createdUser.user.id, user_number: phone },
-        { onConflict: 'user_id' }
-      );
+    await assignN8nPhoneToUser(adminClient, createdUser.user.id, phone);
   }
 
   return {
@@ -1328,12 +1323,7 @@ export const updateUser = async (accessToken, userId, input) => {
   }
 
   if (requestedPhone) {
-    await adminClient
-      .from('n8n_link')
-      .upsert(
-        { user_id: userId, user_number: requestedPhone },
-        { onConflict: 'user_id' }
-      );
+    await assignN8nPhoneToUser(adminClient, userId, requestedPhone);
   }
 
   if (requestedDisplayName) {

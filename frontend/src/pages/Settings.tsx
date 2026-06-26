@@ -100,7 +100,7 @@ export default function Settings() {
 
     try {
       await updatePhone(editPhone);
-      flashSuccess('Telefone atualizado com sucesso!');
+      flashSuccess('Telefone atualizado! Se o WhatsApp ainda mostrar outro nome, envie /new no chat.');
     } catch (err: unknown) {
       setError(err);
     } finally {
