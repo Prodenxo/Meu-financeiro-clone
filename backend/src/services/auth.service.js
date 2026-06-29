@@ -411,12 +411,13 @@ export const getSession = async (accessToken) => {
 };
 
 export const resetPasswordForEmail = async (email) => {
-  if (!email) throw badRequest('Email é obrigatório');
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) throw badRequest('Email é obrigatório');
   const supabase = createSupabaseClient();
   const baseUrl = env.FRONTEND_URL ? env.FRONTEND_URL.replace(/\/$/, '') : '';
   const redirectTo = baseUrl ? `${baseUrl}/reset-password` : undefined;
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo
+  const { error } = await supabase.auth.resetPasswordForEmail(normalized, {
+    redirectTo,
   });
   if (error) throw badRequest(error.message);
 };
