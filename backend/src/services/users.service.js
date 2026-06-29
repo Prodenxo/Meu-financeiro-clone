@@ -1390,6 +1390,33 @@ export const banUser = async (accessToken, userId, status = false) => {
   return { userId, status };
 };
 
+const USER_DATA_TABLES_BY_USER_ID = [
+  'lancamentos_id',
+  'categorias_id',
+  'n8n_link',
+  'google_tokens_id',
+  'role_x_user_x_empresa',
+  'contas_financeiras',
+  'user_mei_certificates',
+];
+
+/** Remove dados do utilizador nas tabelas da app (não remove auth.users). */
+export const purgeUserData = async (adminClient, userId) => {
+  if (!userId) throw badRequest('userId é obrigatório');
+
+  for (const table of USER_DATA_TABLES_BY_USER_ID) {
+    const { error } = await adminClient.from(table).delete().eq('user_id', userId);
+    if (error && error.code !== '42P01') {
+      throw badRequest(`Erro ao limpar ${table}: ${error.message}`);
+    }
+  }
+
+  const { error: profileError } = await adminClient.from('profiles').delete().eq('id', userId);
+  if (profileError && profileError.code !== '42P01') {
+    throw badRequest(`Erro ao limpar profiles: ${profileError.message}`);
+  }
+};
+
 export const deleteUser = async (accessToken, userId) => {
   if (!userId) throw badRequest('userId é obrigatório');
 
@@ -1409,42 +1436,42 @@ export const deleteUser = async (accessToken, userId) => {
     .maybeSingle();
 
   if (linkError) throw badRequest(linkError.message);
-  if (!linkData?.roles_id) throw badRequest('Vínculo de role não encontrado');
 
-  const { data: roleData, error: roleError } = await adminClient
-    .from('roles')
-    .select('roles')
-    .eq('id', linkData.roles_id)
-    .maybeSingle();
+  const isOrphanAccount = !linkData?.roles_id;
 
-  if (roleError) throw badRequest(roleError.message);
-  const targetRole = normalizeRoleValue(roleData?.roles) || 'usuario';
+  if (isOrphanAccount) {
+    if (requester.role !== 'superadmin') {
+      throw badRequest(
+        'Esta conta não tem vínculo com empresa (órfã). Apenas superadmin pode excluí-la do sistema.',
+        { code: 'USER_ORPHAN_DELETE_FORBIDDEN' },
+      );
+    }
+  } else {
+    const { data: roleData, error: roleError } = await adminClient
+      .from('roles')
+      .select('roles')
+      .eq('id', linkData.roles_id)
+      .maybeSingle();
 
-  if (requester.role === 'admin') {
-    if (targetRole !== 'usuario') throw forbidden();
-    if (!requester.empresaId || requester.empresaId !== linkData.empresas_id) throw forbidden();
+    if (roleError) throw badRequest(roleError.message);
+    const targetRole = normalizeRoleValue(roleData?.roles) || 'usuario';
+
+    if (requester.role === 'admin') {
+      if (targetRole !== 'usuario') throw forbidden();
+      if (!requester.empresaId || requester.empresaId !== linkData.empresas_id) throw forbidden();
+    }
+
+    if (requester.role === 'superadmin') {
+      if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
+    }
   }
 
-  if (requester.role === 'superadmin') {
-    if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
-  }
-
-  const deleteByUserId = async (table) => {
-    const { error } = await adminClient.from(table).delete().eq('user_id', userId);
-    if (error) throw badRequest(error.message);
-  };
-
-  await deleteByUserId('lancamentos_id');
-  await deleteByUserId('categorias_id');
-  await deleteByUserId('n8n_link');
-  await deleteByUserId('google_tokens_id');
-  await deleteByUserId('role_x_user_x_empresa');
-  await adminClient.from('profiles').delete().eq('id', userId);
+  await purgeUserData(adminClient, userId);
 
   const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId);
   if (deleteAuthError) throw badRequest(deleteAuthError.message);
 
-  return { userId };
+  return { userId, orphan: isOrphanAccount };
 };
 
 export const deleteEmpresa = async (accessToken, empresaId) => {

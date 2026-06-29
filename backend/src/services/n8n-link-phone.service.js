@@ -1,5 +1,6 @@
 import { badRequest } from '../utils/errors.js';
 import {
+  canonicalizeWhatsappPhone,
   expandWhatsappPhoneLookupVariants,
   isBrazilWhatsappDigits,
 } from '../utils/whatsapp-phone.js';
@@ -30,6 +31,85 @@ export const buildPhoneLookupCandidates = (digits) => {
  * @param {string} matchedNumber
  * @returns {string | null}
  */
+/**
+ * Agrega user_id encontrados em todas as variantes do telefone (55 vs sem 55, nono dígito).
+ * @returns {Map<string, string>} userId → user_number que bateu
+ */
+export const collectUserIdsFromN8nLinkCandidates = async (admin, lookupCandidates) => {
+  const matches = new Map();
+
+  for (const num of lookupCandidates) {
+    const { data: rows, error } = await admin
+      .from('n8n_link')
+      .select('user_id')
+      .eq('user_number', num)
+      .limit(20);
+
+    if (error) throw badRequest(error.message);
+
+    for (const row of rows || []) {
+      const userId = row?.user_id != null ? String(row.user_id).trim() : '';
+      if (userId && !matches.has(userId)) {
+        matches.set(userId, num);
+      }
+    }
+  }
+
+  return matches;
+};
+
+/**
+ * Várias contas com o mesmo WhatsApp (formatos diferentes) — prefere vínculo activo e histórico.
+ * @returns {string | null} userId preferido ou null se empate total
+ */
+export const pickPreferredUserIdFromPhoneMatches = async (admin, userIds) => {
+  if (!userIds?.length) return null;
+  if (userIds.length === 1) return userIds[0];
+
+  const scores = await Promise.all(
+    userIds.map(async (uid) => {
+      const { data: memberships } = await admin
+        .from('role_x_user_x_empresa')
+        .select('status')
+        .eq('user_id', uid)
+        .eq('status', true)
+        .limit(1);
+
+      const { count, error: countError } = await admin
+        .from('lancamentos_id')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', uid);
+
+      if (countError) throw badRequest(countError.message);
+
+      return {
+        uid,
+        hasActiveMembership: (memberships || []).length > 0,
+        txCount: count || 0,
+      };
+    }),
+  );
+
+  scores.sort((a, b) => {
+    if (a.hasActiveMembership !== b.hasActiveMembership) {
+      return a.hasActiveMembership ? -1 : 1;
+    }
+    return b.txCount - a.txCount;
+  });
+
+  const best = scores[0];
+  const second = scores[1];
+  if (
+    second
+    && best.hasActiveMembership === second.hasActiveMembership
+    && best.txCount === second.txCount
+  ) {
+    return null;
+  }
+
+  return best.uid;
+};
+
 export const pickUserIdFromN8nLinkRows = (rows, matchedNumber) => {
   const userIds = [
     ...new Set(
@@ -88,7 +168,10 @@ export const assertN8nPhoneNotLinkedToOtherUser = async (admin, userId, userNumb
  * @param {string} userNumber — formato canónico (ex.: 5521996185328)
  */
 export const assignN8nPhoneToUser = async (admin, userId, userNumber) => {
-  const lookupCandidates = buildPhoneLookupCandidates(userNumber);
+  const canonical = canonicalizeWhatsappPhone(userNumber);
+  if (!canonical) throw badRequest('Telefone inválido');
+
+  const lookupCandidates = buildPhoneLookupCandidates(canonical);
 
   for (const num of lookupCandidates) {
     const { error: deleteError } = await admin
@@ -103,7 +186,7 @@ export const assignN8nPhoneToUser = async (admin, userId, userNumber) => {
   const { error } = await admin
     .from('n8n_link')
     .upsert(
-      { user_id: userId, user_number: userNumber },
+      { user_id: userId, user_number: canonical },
       { onConflict: 'user_id' },
     );
 

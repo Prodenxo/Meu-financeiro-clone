@@ -8,6 +8,8 @@ import {
 } from '../utils/whatsapp-phone.js';
 import {
   buildPhoneLookupCandidates,
+  collectUserIdsFromN8nLinkCandidates,
+  pickPreferredUserIdFromPhoneMatches,
   pickUserIdFromN8nLinkRows,
 } from './n8n-link-phone.service.js';
 
@@ -308,28 +310,49 @@ export const resolveUserIdByPhoneDetailed = async (rawPhone) => {
   }
   const admin = createSupabaseClient({ useServiceRole: true });
   const lookupCandidates = buildPhoneLookupCandidates(phoneDigits);
-  for (const num of lookupCandidates) {
-    const { data: rows, error } = await admin
-      .from('n8n_link')
-      .select('user_id')
-      .eq('user_number', num)
-      .limit(20);
-    if (error) throw badRequest(error.message);
-    const userId = pickUserIdFromN8nLinkRows(rows, num);
-    if (userId) {
-      return {
-        userId,
-        phoneDigits,
-        matchedUserNumber: num,
-        lookupCandidates,
-      };
-    }
+  const matches = await collectUserIdsFromN8nLinkCandidates(admin, lookupCandidates);
+  const userIds = [...matches.keys()];
+
+  if (userIds.length === 0) {
+    return {
+      userId: null,
+      phoneDigits,
+      matchedUserNumber: null,
+      lookupCandidates,
+    };
   }
+
+  if (userIds.length === 1) {
+    const userId = userIds[0];
+    return {
+      userId,
+      phoneDigits,
+      matchedUserNumber: matches.get(userId) || null,
+      lookupCandidates,
+    };
+  }
+
+  const preferredUserId = await pickPreferredUserIdFromPhoneMatches(admin, userIds);
+  if (!preferredUserId) {
+    const sampleNumber = matches.get(userIds[0]) || phoneDigits;
+    const rows = userIds.map((id) => ({ user_id: id }));
+    pickUserIdFromN8nLinkRows(rows, sampleNumber);
+  }
+
+  if (userIds.length > 1) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[OpenClaw] WhatsApp em várias contas; usando conta preferida',
+      JSON.stringify({ phoneDigits, userIds, preferredUserId }),
+    );
+  }
+
   return {
-    userId: null,
+    userId: preferredUserId,
     phoneDigits,
-    matchedUserNumber: null,
+    matchedUserNumber: matches.get(preferredUserId) || null,
     lookupCandidates,
+    ambiguousResolvedFrom: userIds,
   };
 };
 
