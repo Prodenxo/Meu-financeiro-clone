@@ -10,6 +10,7 @@ import {
 import {
   assertN8nPhoneNotLinkedToOtherUser,
   assignN8nPhoneToUser,
+  buildPhoneLookupCandidates,
 } from './n8n-link-phone.service.js';
 import crypto from 'crypto';
 import {
@@ -29,6 +30,16 @@ const assertValidWhatsappPhone = (phone) => {
     if (!national || national.length < 10) {
       throw badRequest('Telefone inválido. Informe DDD + número (ex.: 21996185328).');
     }
+    if (national.length === 10) {
+      throw badRequest(
+        'Use número de celular com WhatsApp (9 dígitos após o DDD), ex.: 21996185328.',
+      );
+    }
+    if (national.length === 11 && national[2] !== '9') {
+      throw badRequest(
+        'Informe um celular válido com 9 após o DDD (ex.: 21996185328).',
+      );
+    }
     return cleaned;
   }
 
@@ -37,6 +48,55 @@ const assertValidWhatsappPhone = (phone) => {
   }
 
   return canonicalizeWhatsappPhone(digits);
+};
+
+const phoneLookupVariantSet = (cleanedPhone) => {
+  const variants = new Set(buildPhoneLookupCandidates(cleanedPhone));
+  variants.add(cleanedPhone);
+  return variants;
+};
+
+/** Supabase bloqueia telefone duplicado em `user_metadata` — liberta outras contas antes de gravar. */
+const releaseAuthPhoneFromOtherUsers = async (adminClient, cleanedPhone, userId) => {
+  const variants = phoneLookupVariantSet(cleanedPhone);
+  let page = 1;
+  const perPage = 1000;
+
+  while (true) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
+    if (error) throw badRequest(error.message);
+
+    const users = data?.users || [];
+    for (const other of users) {
+      if (other.id === userId) continue;
+      const metaPhone = canonicalizeWhatsappPhone(other.user_metadata?.phone || '');
+      if (!metaPhone || !variants.has(metaPhone)) continue;
+
+      const { error: clearError } = await adminClient.auth.admin.updateUserById(other.id, {
+        user_metadata: { ...other.user_metadata, phone: null },
+      });
+      if (clearError) {
+        throw badRequest(
+          'Este número de WhatsApp já está ligado a outra conta. Peça ao suporte para desvincular.',
+          { code: 'PHONE_ALREADY_LINKED' },
+        );
+      }
+    }
+
+    if (users.length < perPage) break;
+    page += 1;
+  }
+};
+
+const mapAuthPhoneUpdateError = (authError) => {
+  const msg = String(authError?.message || '').trim();
+  if (!msg || msg === 'Error updating user') {
+    throw badRequest(
+      'Não foi possível salvar este telefone. Ele pode já estar em outra conta ou ser inválido.',
+      { code: 'PHONE_UPDATE_FAILED' },
+    );
+  }
+  throw badRequest(msg);
 };
 
 const hashInviteToken = (rawToken) => crypto.createHash('sha256').update(String(rawToken).trim(), 'utf8').digest('hex');
@@ -512,22 +572,24 @@ export const updatePhone = async (accessToken, phone) => {
   const cleanedPhone = assertValidWhatsappPhone(phone);
   const adminClient = createSupabaseClient({ useServiceRole: true });
 
-  // 1. Atualiza no Auth (Metadata) - FUNDAMENTAL: manter metadados existentes
-  const { error: authError } = await adminClient.auth.admin.updateUserById(user.id, {
-    user_metadata: { 
-      ...user.user_metadata, 
-      phone: cleanedPhone 
-    }
-  });
-  if (authError) throw badRequest(authError.message);
+  await releaseAuthPhoneFromOtherUsers(adminClient, cleanedPhone, user.id);
 
-  // 2. Sincroniza com a tabela profiles (opcional mas recomendado para redundância)
-  await adminClient
+  const { error: authError } = await adminClient.auth.admin.updateUserById(user.id, {
+    user_metadata: {
+      ...user.user_metadata,
+      phone: cleanedPhone,
+    },
+  });
+  if (authError) mapAuthPhoneUpdateError(authError);
+
+  const { error: profileError } = await adminClient
     .from('profiles')
     .update({ phone: cleanedPhone })
     .eq('id', user.id);
+  if (profileError && profileError.code !== '42703') {
+    console.warn('[AuthService] profiles.phone não atualizado:', profileError.message);
+  }
 
-  // 3. Sincroniza com n8n_link (liberta o número de outras contas)
   await assignN8nPhoneToUser(adminClient, user.id, cleanedPhone);
 
   return cleanedPhone;
