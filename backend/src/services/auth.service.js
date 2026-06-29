@@ -12,6 +12,10 @@ import {
   assignN8nPhoneToUser,
 } from './n8n-link-phone.service.js';
 import crypto from 'crypto';
+import {
+  sendPasswordResetEmail,
+  sendPasswordResetViaSupabase,
+} from './password-reset-email.service.js';
 
 const assertValidWhatsappPhone = (phone) => {
   const digits = normalizeWhatsappPhoneDigits(phone);
@@ -413,13 +417,15 @@ export const getSession = async (accessToken) => {
 export const resetPasswordForEmail = async (email) => {
   const normalized = String(email || '').trim().toLowerCase();
   if (!normalized) throw badRequest('Email é obrigatório');
-  const supabase = createSupabaseClient();
   const baseUrl = env.FRONTEND_URL ? env.FRONTEND_URL.replace(/\/$/, '') : '';
   const redirectTo = baseUrl ? `${baseUrl}/reset-password` : undefined;
-  const { error } = await supabase.auth.resetPasswordForEmail(normalized, {
-    redirectTo,
-  });
-  if (error) throw badRequest(error.message);
+
+  if (env.RESEND_API_KEY && env.RESEND_FROM_EMAIL) {
+    await sendPasswordResetEmail(normalized, redirectTo);
+    return;
+  }
+
+  await sendPasswordResetViaSupabase(normalized, redirectTo);
 };
 
 export const processRecoveryHash = async ({ access_token, refresh_token, type }) => {

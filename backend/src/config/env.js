@@ -36,7 +36,7 @@ const DEFAULT_DEV_CORS_ORIGINS = [
   "http://localhost:3002",
 ];
 const DEFAULT_PROD_CORS_ORIGIN =
-  process.env.FRONTEND_URL || "https://meu-financeiro-frontend.vercel.app";
+  process.env.FRONTEND_URL || "https://meiinfinito.com.br";
 const DEFAULT_CORS_ORIGINS =
   process.env.NODE_ENV === "development"
     ? DEFAULT_DEV_CORS_ORIGINS
@@ -72,8 +72,10 @@ export const env = {
   /** Garante tabela calendar_checklist_completions no arranque (default true). */
   CALENDAR_CHECKLIST_SCHEMA_ENSURE:
     process.env.CALENDAR_CHECKLIST_SCHEMA_ENSURE || "",
-  FRONTEND_URL:
-    process.env.FRONTEND_URL || "https://meu-financeiro-frontend.vercel.app",
+  FRONTEND_URL: process.env.FRONTEND_URL || "https://meiinfinito.com.br",
+  /** Resend — envio de recuperação de senha (recomendado para Hotmail/Outlook). */
+  RESEND_API_KEY: normalizeEnvSecret(process.env.RESEND_API_KEY || ""),
+  RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL || "",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "",
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || "",
   GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI || "",
