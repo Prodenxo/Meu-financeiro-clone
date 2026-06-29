@@ -1,5 +1,8 @@
 import { badRequest } from '../utils/errors.js';
-import { expandBrazilMobilePhoneVariants } from '../utils/whatsapp-phone.js';
+import {
+  expandWhatsappPhoneLookupVariants,
+  isBrazilWhatsappDigits,
+} from '../utils/whatsapp-phone.js';
 
 /**
  * Tenta bater com o que está em `n8n_link.user_number` (pode estar com ou sem 55).
@@ -8,8 +11,9 @@ import { expandBrazilMobilePhoneVariants } from '../utils/whatsapp-phone.js';
  */
 export const buildPhoneLookupCandidates = (digits) => {
   const out = new Set();
-  for (const v of expandBrazilMobilePhoneVariants(digits)) {
+  for (const v of expandWhatsappPhoneLookupVariants(digits)) {
     out.add(v);
+    if (!isBrazilWhatsappDigits(v)) continue;
     if (v.startsWith('55') && v.length > 11) {
       out.add(v.slice(2));
     }

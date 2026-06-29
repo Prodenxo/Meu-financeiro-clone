@@ -4,6 +4,7 @@ import { badRequest, forbidden, unauthorized, serviceUnavailable } from '../util
 import { assertStrongPassword } from '../utils/passwordPolicy.js';
 import {
   canonicalizeBrazilWhatsappPhone,
+  canonicalizeWhatsappPhone,
   normalizeWhatsappPhoneDigits,
 } from '../utils/whatsapp-phone.js';
 import {
@@ -12,13 +13,26 @@ import {
 } from './n8n-link-phone.service.js';
 import crypto from 'crypto';
 
-const assertValidBrazilWhatsappPhone = (phone) => {
-  const cleaned = canonicalizeBrazilWhatsappPhone(phone);
-  const national = cleaned.startsWith('55') ? cleaned.slice(2) : cleaned;
-  if (!national || national.length < 10) {
-    throw badRequest('Telefone inválido. Informe DDD + número (ex.: 21996185328).');
+const assertValidWhatsappPhone = (phone) => {
+  const digits = normalizeWhatsappPhoneDigits(phone);
+  if (!digits) {
+    throw badRequest('Telefone é obrigatório');
   }
-  return cleaned;
+
+  if (digits.startsWith('55')) {
+    const cleaned = canonicalizeBrazilWhatsappPhone(digits);
+    const national = cleaned.slice(2);
+    if (!national || national.length < 10) {
+      throw badRequest('Telefone inválido. Informe DDD + número (ex.: 21996185328).');
+    }
+    return cleaned;
+  }
+
+  if (digits.length < 10 || digits.length > 15) {
+    throw badRequest('Telefone internacional inválido.');
+  }
+
+  return canonicalizeWhatsappPhone(digits);
 };
 
 const hashInviteToken = (rawToken) => crypto.createHash('sha256').update(String(rawToken).trim(), 'utf8').digest('hex');
@@ -195,7 +209,7 @@ export const signUp = async ({ email, password, phone, displayName, inviteToken 
   assertStrongPassword(password);
 
   const createSupabaseClientFn = deps.createSupabaseClientFn || createSupabaseClient;
-  const cleanedPhone = phone ? canonicalizeBrazilWhatsappPhone(phone) : '';
+  const cleanedPhone = phone ? canonicalizeWhatsappPhone(phone) : '';
   const supabase = createSupabaseClientFn({ useServiceRole: !!env.SUPABASE_SERVICE_ROLE_KEY });
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -488,7 +502,7 @@ export const updatePhone = async (accessToken, phone) => {
     throw badRequest('SUPABASE_SERVICE_ROLE_KEY não configurada');
   }
 
-  const cleanedPhone = assertValidBrazilWhatsappPhone(phone);
+  const cleanedPhone = assertValidWhatsappPhone(phone);
   const adminClient = createSupabaseClient({ useServiceRole: true });
 
   // 1. Atualiza no Auth (Metadata) - FUNDAMENTAL: manter metadados existentes

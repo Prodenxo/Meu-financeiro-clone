@@ -59,6 +59,45 @@ export const expandBrazilMobilePhoneVariants = (digits) => {
 };
 
 /**
+ * Brasil: DDI 55 ou número nacional com 10–11 dígitos (DDD + assinante).
+ * @param {string} digits
+ */
+export const isBrazilWhatsappDigits = (digits) => {
+  const d = normalizeWhatsappPhoneDigits(digits);
+  if (!d) return false;
+  if (d.startsWith('55')) return true;
+  return d.length >= 10 && d.length <= 11;
+};
+
+/**
+ * Variantes para lookup `n8n_link`: regras BR (nono dígito) ou match exacto internacional.
+ * @param {string} digits
+ * @returns {string[]}
+ */
+export const expandWhatsappPhoneLookupVariants = (digits) => {
+  const d = normalizeWhatsappPhoneDigits(digits);
+  if (!d) return [];
+  if (isBrazilWhatsappDigits(d)) {
+    return expandBrazilMobilePhoneVariants(d);
+  }
+  return [d];
+};
+
+/**
+ * Formato canónico para gravar em perfil / `n8n_link`.
+ * @param {string} digits
+ * @returns {string}
+ */
+export const canonicalizeWhatsappPhone = (digits) => {
+  const d = normalizeWhatsappPhoneDigits(digits);
+  if (!d) return '';
+  if (isBrazilWhatsappDigits(d)) {
+    return canonicalizeBrazilWhatsappPhone(d);
+  }
+  return d;
+};
+
+/**
  * Formato canónico para gravar em `n8n_link` (prefere 55 + 11 dígitos nacionais).
  * @param {string} digits
  * @returns {string}

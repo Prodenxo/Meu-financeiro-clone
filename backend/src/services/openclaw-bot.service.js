@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import {
   normalizeWhatsappPhoneDigits,
+  isBrazilWhatsappDigits,
 } from '../utils/whatsapp-phone.js';
 import {
   buildPhoneLookupCandidates,
@@ -212,10 +213,14 @@ export const resolveDasCompetenciaFromPayload = (payload = {}, refDate = new Dat
   return { ...venc, resolvedBy: 'vencimento_dia_20' };
 };
 
-/** Telefone destino WhatsApp (55 + dígitos) a partir do lookup OpenClaw. */
+/** Telefone destino WhatsApp a partir do lookup OpenClaw / `n8n_link`. */
 export const resolveOpenclawWhatsappPhone = (phoneDigits, matchedUserNumber) => {
-  const raw = String(matchedUserNumber || phoneDigits || '').replace(/\D/g, '');
+  const matched = normalizeWhatsappPhoneDigits(matchedUserNumber || '');
+  if (matched) return matched;
+
+  const raw = normalizeWhatsappPhoneDigits(phoneDigits || '');
   if (!raw) return '';
+  if (!isBrazilWhatsappDigits(raw)) return raw;
   if (raw.startsWith('55')) return raw;
   return `55${raw}`;
 };
