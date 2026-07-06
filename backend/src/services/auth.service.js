@@ -27,18 +27,8 @@ const assertValidWhatsappPhone = (phone) => {
   if (digits.startsWith('55')) {
     const cleaned = canonicalizeBrazilWhatsappPhone(digits);
     const national = cleaned.slice(2);
-    if (!national || national.length < 10) {
-      throw badRequest('Telefone inválido. Informe DDD + número (ex.: 21996185328).');
-    }
-    if (national.length === 10) {
-      throw badRequest(
-        'Use número de celular com WhatsApp (9 dígitos após o DDD), ex.: 21996185328.',
-      );
-    }
-    if (national.length === 11 && national[2] !== '9') {
-      throw badRequest(
-        'Informe um celular válido com 9 após o DDD (ex.: 21996185328).',
-      );
+    if (!national || national.length < 10 || national.length > 11) {
+      throw badRequest('Telefone inválido. Informe DDD + número (ex.: 21996185328 ou 6696851098).');
     }
     return cleaned;
   }

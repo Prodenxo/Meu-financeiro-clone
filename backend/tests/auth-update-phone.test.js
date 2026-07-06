@@ -12,14 +12,8 @@ const validateBrWhatsappPhone = (phone) => {
 
   const cleaned = canonicalizeBrazilWhatsappPhone(digits);
   const national = cleaned.slice(2);
-  if (!national || national.length < 10) {
-    return { ok: false, reason: 'short' };
-  }
-  if (national.length === 10) {
-    return { ok: false, reason: 'landline' };
-  }
-  if (national.length === 11 && national[2] !== '9') {
-    return { ok: false, reason: 'no_ninth_digit' };
+  if (!national || national.length < 10 || national.length > 11) {
+    return { ok: false, reason: 'invalid_length' };
   }
   return { ok: true, cleaned };
 };
@@ -30,14 +24,14 @@ test('celular BR válido com nono dígito', () => {
   assert.equal(result.cleaned, '5521996185328');
 });
 
-test('rejeita número fake 11111-1111 (sem 9 após DDD)', () => {
-  const result = validateBrWhatsappPhone('5521111111111');
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'no_ninth_digit');
+test('aceita celular BR com 8 dígitos após o DDD (sem nono dígito)', () => {
+  const result = validateBrWhatsappPhone('556696851098');
+  assert.equal(result.ok, true);
+  assert.equal(result.cleaned, '5566996851098');
 });
 
-test('rejeita fixo de 10 dígitos', () => {
-  const result = validateBrWhatsappPhone('552133334444');
+test('rejeita número curto demais', () => {
+  const result = validateBrWhatsappPhone('5521996185');
   assert.equal(result.ok, false);
-  assert.equal(result.reason, 'landline');
+  assert.equal(result.reason, 'invalid_length');
 });

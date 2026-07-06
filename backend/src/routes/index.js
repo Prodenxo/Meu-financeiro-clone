@@ -14,6 +14,7 @@ import cronRoutes from './cron.routes.js';
 import openclawRoutes from './openclaw.routes.js';
 import zapiRoutes from './zapi.routes.js';
 import internalAccessRequestsRoutes from './internal-access-requests.routes.js';
+import moedasGlobaisRoutes from './moedas-globais.routes.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -32,4 +33,5 @@ router.use('/cron', cronRoutes);
 router.use('/bot', openclawRoutes);
 router.use('/webhooks/zapi', zapiRoutes);
 router.use('/internal/access-requests', internalAccessRequestsRoutes);
+router.use('/moedas-globais', moedasGlobaisRoutes);
 export default router;
