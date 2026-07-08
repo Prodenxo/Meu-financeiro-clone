@@ -131,6 +131,7 @@ test('syncPlugnotasNfseRpsBeforeEmit faz PATCH quando contador PlugNotas está a
     if (String(url).includes('/empresa/12345678000199') && options.method === 'GET') {
       return new Response(JSON.stringify({
         cpfCnpj: '12345678000199',
+        certificado: 'cert-abc-12345',
         nfse: { ativo: true, config: { rps: { numeracao: [{ serie: '1', numero: 5 }], lote: 1 } } }
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -151,6 +152,7 @@ test('syncPlugnotasNfseRpsBeforeEmit faz PATCH quando contador PlugNotas está a
     assert.equal(body.nfse.config.rps.numero, 18);
     assert.equal(body.nfse.config.rps.serie, '1');
     assert.equal('numeracao' in body.nfse.config.rps, false);
+    assert.equal(body.certificado, 'cert-abc-12345');
   } finally {
     global.fetch = originalFetch;
   }
@@ -173,6 +175,7 @@ test('syncPlugnotasNfseRpsBeforeEmit não reenvia credenciais prefeitura no PATC
 
   const empresaComPrefeitura = {
     cpfCnpj: '12345678000199',
+    certificado: 'cert-prefeitura-99',
     nfse: {
       ativo: true,
       config: {
@@ -194,6 +197,47 @@ test('syncPlugnotasNfseRpsBeforeEmit não reenvia credenciais prefeitura no PATC
     const body = JSON.parse(patchCall.options.body);
     assert.equal(body.nfse.config.rps.numero, 115);
     assert.equal(body.nfse.config.prefeitura, undefined);
+    assert.equal(body.certificado, 'cert-prefeitura-99');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('syncPlugnotasNfseRpsBeforeEmit resolve certificado via listagem quando GET empresa não traz', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    const u = String(url);
+    if (u.includes('/empresa/12345678000199') && (!options.method || options.method === 'GET')) {
+      return new Response(JSON.stringify({
+        cpfCnpj: '12345678000199',
+        nfse: { ativo: true, config: { rps: { serie: '1', numero: 5, lote: 1 } } }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (u.includes('/certificado?cpfCnpj=')) {
+      return new Response(JSON.stringify([{ id: 'cert-from-list-xyz', cpfCnpj: '12345678000199' }]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    if (u.includes('/empresa/12345678000199') && options.method === 'PATCH') {
+      return new Response(JSON.stringify({ message: 'ok' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response(JSON.stringify({ message: 'unexpected' }), { status: 500 });
+  };
+
+  try {
+    await syncPlugnotasNfseRpsBeforeEmit('12.345.678/0001-99', { serie: '1', numero: 20, lote: 1 });
+    const patchCall = calls.find((c) => c.options.method === 'PATCH');
+    assert.ok(patchCall);
+    const body = JSON.parse(patchCall.options.body);
+    assert.equal(body.certificado, 'cert-from-list-xyz');
+    assert.equal(body.nfse.config.rps.numero, 20);
   } finally {
     global.fetch = originalFetch;
   }

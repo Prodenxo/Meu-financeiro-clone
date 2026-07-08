@@ -1,5 +1,9 @@
 import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
-import { atualizarEmpresaPlugNotas, consultarEmpresaPlugNotas } from './empresa.service.js';
+import {
+  atualizarEmpresaPlugNotas,
+  consultarEmpresaPlugNotas,
+  resolverCertificadoIdPorCnpj
+} from './empresa.service.js';
 import { consultarNfsePorPeriodo } from './nfse.service.js';
 import {
   cloneEmpresaPlugnotasRpsInicialPost,
@@ -389,6 +393,37 @@ const buildMinimalNfseConfigForRpsPatch = (existingConfig, configRps) => {
   };
 };
 
+/**
+ * ID do certificado no GET empresa (quando presente) ou via listagem PlugNotas.
+ * PATCH /empresa exige `certificado` em várias contas; o GET empresa geralmente não devolve o campo.
+ * @param {string} cnpj
+ * @param {unknown} empresaJson
+ * @returns {Promise<string|null>}
+ */
+const resolveCertificadoIdForRpsPatch = async (cnpj, empresaJson) => {
+  const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
+  const fromEmpresa = [
+    typeof empresa?.certificado === 'string' ? empresa.certificado : null,
+    empresa?.certificado?.id,
+    empresa?.certificado?._id,
+    empresa?.certificadoId,
+    empresa?.idCertificado,
+  ]
+    .map((v) => String(v ?? '').trim())
+    .find((v) => v.length >= 8);
+  if (fromEmpresa) return fromEmpresa;
+
+  try {
+    return await resolverCertificadoIdPorCnpj(cnpj);
+  } catch (error) {
+    console.warn(
+      '[plugnotas-rps] falha ao resolver certificado para PATCH de RPS',
+      error instanceof Error ? error.message : error,
+    );
+    return null;
+  }
+};
+
 const patchPlugnotasEmpresaRpsNextNumero = async (cnpj, empresaJson, { serie, lote, numero }) => {
   const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
   const nfseAtivo = empresa?.nfse?.ativo !== false;
@@ -397,14 +432,20 @@ const patchPlugnotasEmpresaRpsNextNumero = async (cnpj, empresaJson, { serie, lo
     : { producao: true };
   const { rootRps, configRps } = buildPlugnotasEmpresaRpsBlocks({ serie, lote, numero });
 
-  await atualizarEmpresaPlugNotas({
+  const certificadoId = await resolveCertificadoIdForRpsPatch(cnpj, empresaJson);
+  const patchPayload = {
     cpfCnpj: cnpj,
     rps: rootRps,
     nfse: {
       ativo: nfseAtivo,
       config: buildMinimalNfseConfigForRpsPatch(existingConfig, configRps),
-    }
-  });
+    },
+  };
+  if (certificadoId) {
+    patchPayload.certificado = certificadoId;
+  }
+
+  await atualizarEmpresaPlugNotas(patchPayload);
 };
 
 /**

@@ -235,6 +235,8 @@ export async function applyAllocatedNfseRpsToEmitPayload(
 
   emitPayload.rps = { lote, numeracao: [{ serie, numero }] };
   const empresaForSync = allocation?.empresaJson ?? empresaJson;
-  await syncPlugnotasNfseRpsBeforeEmit(cnpj, { serie, lote, numero }, empresaForSync, { strict: true });
+  // Numero já vai no payload de emissão; sync na empresa é best-effort.
+  // Não bloquear emissão se o PATCH falhar (ex.: validação transitória de certificado).
+  await syncPlugnotasNfseRpsBeforeEmit(cnpj, { serie, lote, numero }, empresaForSync, { strict: false });
   return readRpsFromNfseEmitPayload(emitPayload);
 }
