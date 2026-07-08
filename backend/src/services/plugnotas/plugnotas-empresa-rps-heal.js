@@ -58,7 +58,31 @@ const parseDpsIdNumero = (dpsId) => {
 };
 
 /**
+ * Campos explícitos de DPS na listagem/detalhe NFS-e Nacional (≠ número da NFS-e).
+ * @param {unknown} candidate
+ * @returns {number[]}
+ */
+const readExplicitDpsNumeros = (candidate) => {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return [];
+  const c = candidate;
+  const values = [
+    c?.dps?.numero,
+    c?.numeroDps,
+    c?.numeroDPS,
+    c?.numero_dps,
+    c?.numeroDpsNacional,
+    parseDpsIdNumero(c?.dps?.id),
+    parseDpsIdNumero(c?.idDps),
+    parseDpsIdNumero(c?.id_dps),
+  ];
+  return values
+    .map((v) => parsePositiveInt(v, NaN))
+    .filter((n) => Number.isFinite(n) && n >= 1);
+};
+
+/**
  * Lê o maior número RPS/DPS numa resposta PlugNotas (array ou objeto, `rps` flat ou `dps`).
+ * Não usa `numero` solto — na NFS-e Nacional costuma ser o número da NFS-e, não do DPS.
  * @param {unknown} body
  * @returns {number|null}
  */
@@ -69,13 +93,24 @@ export function readRpsNumeroFromNfsePlugnotasBody(body) {
   let max = 0;
   for (const candidate of candidates) {
     const fromRps = readRpsFromNfseEmitPayload(candidate)?.numero;
-    const fromDps = parsePositiveInt(candidate?.dps?.numero);
-    const fromDpsId = parseDpsIdNumero(candidate?.dps?.id);
-    for (const n of [fromRps, fromDps, fromDpsId]) {
+    const explicitDps = readExplicitDpsNumeros(candidate);
+    for (const n of [fromRps, ...explicitDps]) {
       if (Number.isFinite(n) && n >= 1 && n > max) max = n;
     }
   }
   return max > 0 ? max : null;
+}
+
+/**
+ * Maior DPS num item da consulta por período (listagem PlugNotas).
+ * @param {unknown} nota
+ * @returns {number|null}
+ */
+export function readDpsNumeroFromNfsePeriodoNota(nota) {
+  const fromBody = readRpsNumeroFromNfsePlugnotasBody(nota);
+  if (fromBody) return fromBody;
+  const explicit = readExplicitDpsNumeros(nota);
+  return explicit.length ? Math.max(...explicit) : null;
 }
 
 export const isNfseE0014DuplicateRpsMessage = (text) => {
@@ -216,11 +251,8 @@ export async function queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjInput, opts = {}
 
     const notas = collectPeriodoNotas(body);
     for (const nota of notas) {
-      const numero = readRpsNumeroFromNfsePlugnotasBody(nota)
-        ?? parsePositiveInt(nota?.numero)
-        ?? parseDpsIdNumero(nota?.dps?.id)
-        ?? parseDpsIdNumero(nota?.id);
-      if (numero > maxKnown) maxKnown = numero;
+      const numero = readDpsNumeroFromNfsePeriodoNota(nota);
+      if (numero && numero > maxKnown) maxKnown = numero;
     }
 
     const nextHash = body?.hashProximaPagina;

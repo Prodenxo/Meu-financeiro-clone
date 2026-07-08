@@ -15,6 +15,7 @@ import {
   readRpsFromNfseEmitPayload,
   readRpsNumeroFromNfseHistoryRow,
   readRpsNumeroFromNfsePlugnotasBody,
+  readDpsNumeroFromNfsePeriodoNota,
   resolveAndApplySafeNfseRpsBeforeEmit,
   resolveNextNfseRpsAfterFailure,
   resolveNextNfseRpsFromSources,
@@ -65,6 +66,19 @@ test('readRpsNumeroFromNfsePlugnotasBody lê resposta em array com rps flat e dp
     }
   }];
   assert.equal(readRpsNumeroFromNfsePlugnotasBody(postmanBody), 45);
+});
+
+test('readDpsNumeroFromNfsePeriodoNota usa numeroDps, não numero da NFS-e (187 vs 277)', () => {
+  const listItem = {
+    numero: 187,
+    numeroNfse: '187',
+    numeroDps: 277,
+    serieDps: 1,
+  };
+  assert.equal(readDpsNumeroFromNfsePeriodoNota(listItem), 277);
+  assert.equal(readRpsNumeroFromNfsePlugnotasBody(listItem), 277);
+  assert.notEqual(readDpsNumeroFromNfsePeriodoNota({ numero: 187 }), 187);
+  assert.equal(readDpsNumeroFromNfsePeriodoNota({ numero: 187 }), null);
 });
 
 test('readRpsNumeroFromNfseHistoryRow lê número da resposta PlugNotas em array', () => {
@@ -222,7 +236,7 @@ test('applyPlugnotasNfseEmitRpsFromEmpresaConfig avança número com localMaxRps
 
   global.fetch = async (url, options = {}) => {
     if (String(url).includes('/nfse/consultar/periodo')) {
-      return new Response(JSON.stringify({ notas: [{ numero: 88 }] }), {
+      return new Response(JSON.stringify({ notas: [{ numero: 187, numeroDps: 88 }] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
@@ -455,12 +469,12 @@ test('queryMaxRpsNumeroFromPlugnotasPeriodo pagina até hashProximaPagina null',
     if (page === 1) {
       return new Response(JSON.stringify({
         hashProximaPagina: 'next-page',
-        notas: [{ numero: 55 }, { numero: 88 }]
+        notas: [{ numeroDps: 55 }, { numero: 187, numeroDps: 88 }]
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     return new Response(JSON.stringify({
       hashProximaPagina: null,
-      notas: [{ numero: 12 }]
+      notas: [{ numeroDps: 12 }]
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
 

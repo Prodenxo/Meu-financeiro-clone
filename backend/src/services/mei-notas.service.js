@@ -1124,8 +1124,8 @@ const parsePositiveIntLocal = (value, fallback = NaN) => {
 const NFSE_EMIT_TERMINAL_POLL_MAX_MS = 8000;
 const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 28000;
 const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 1000;
-const NFSE_EMIT_E0014_RETRY_MAX = 2;
-const NFSE_PERIODO_FAST_PAGES = 6;
+const NFSE_EMIT_E0014_RETRY_MAX = 6;
+const NFSE_PERIODO_FAST_PAGES = 12;
 const NFSE_PROCESSING_FOLLOWUP_MS = 95000;
 /** Tempo mínimo na lista principal antes de arquivar E0014 automaticamente. */
 const NFSE_E0014_VISIBLE_BEFORE_ARCHIVE_MS = 20000;
