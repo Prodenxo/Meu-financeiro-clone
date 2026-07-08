@@ -70,15 +70,26 @@ test('readRpsNumeroFromNfsePlugnotasBody lê resposta em array com rps flat e dp
 
 test('readDpsNumeroFromNfsePeriodoNota usa numeroDps, não numero da NFS-e (187 vs 277)', () => {
   const listItem = {
-    numero: 187,
+    numero: 277,
     numeroNfse: '187',
     numeroDps: 277,
-    serieDps: 1,
+    idDPS: 'DPS330455726580558300017300001000000000000277',
+    serie: '1',
   };
   assert.equal(readDpsNumeroFromNfsePeriodoNota(listItem), 277);
   assert.equal(readRpsNumeroFromNfsePlugnotasBody(listItem), 277);
-  assert.notEqual(readDpsNumeroFromNfsePeriodoNota({ numero: 187 }), 187);
+  assert.equal(readDpsNumeroFromNfsePeriodoNota({ numero: 187, numeroNfse: '187' }), 187);
   assert.equal(readDpsNumeroFromNfsePeriodoNota({ numero: 187 }), null);
+});
+
+test('readDpsNumeroFromNfsePeriodoNota lê listagem real PlugNotas período', () => {
+  const periodoItem = {
+    id: '6a4bb744d1a32e2f56b75b87',
+    numeroNfse: '187',
+    numero: 277,
+    idDPS: 'DPS330455726580558300017300001000000000000277',
+  };
+  assert.equal(readDpsNumeroFromNfsePeriodoNota(periodoItem), 277);
 });
 
 test('readRpsNumeroFromNfseHistoryRow lê número da resposta PlugNotas em array', () => {
@@ -469,7 +480,7 @@ test('queryMaxRpsNumeroFromPlugnotasPeriodo pagina até hashProximaPagina null',
     if (page === 1) {
       return new Response(JSON.stringify({
         hashProximaPagina: 'next-page',
-        notas: [{ numeroDps: 55 }, { numero: 187, numeroDps: 88 }]
+        notas: [{ numero: 55, numeroNfse: '50' }, { numero: 88, numeroNfse: '70' }]
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     return new Response(JSON.stringify({

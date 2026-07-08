@@ -71,7 +71,11 @@ const readExplicitDpsNumeros = (candidate) => {
     c?.numeroDPS,
     c?.numero_dps,
     c?.numeroDpsNacional,
+    c?.idDPS,
+    c?.idDps,
+    c?.id_dps,
     parseDpsIdNumero(c?.dps?.id),
+    parseDpsIdNumero(c?.idDPS),
     parseDpsIdNumero(c?.idDps),
     parseDpsIdNumero(c?.id_dps),
   ];
@@ -103,14 +107,26 @@ export function readRpsNumeroFromNfsePlugnotasBody(body) {
 
 /**
  * Maior DPS num item da consulta por período (listagem PlugNotas).
+ * Na listagem `/nfse/consultar/periodo`, `numero` = DPS e `numeroNfse` = NFS-e.
  * @param {unknown} nota
  * @returns {number|null}
  */
 export function readDpsNumeroFromNfsePeriodoNota(nota) {
+  if (!nota || typeof nota !== 'object' || Array.isArray(nota)) return null;
+
   const fromBody = readRpsNumeroFromNfsePlugnotasBody(nota);
   if (fromBody) return fromBody;
+
   const explicit = readExplicitDpsNumeros(nota);
-  return explicit.length ? Math.max(...explicit) : null;
+  if (explicit.length) return Math.max(...explicit);
+
+  // Listagem período PlugNotas: numero = DPS quando numeroNfse está presente
+  if (nota.numeroNfse != null && String(nota.numeroNfse).trim() !== '') {
+    const dpsFromNumero = parsePositiveInt(nota.numero);
+    if (Number.isFinite(dpsFromNumero)) return dpsFromNumero;
+  }
+
+  return null;
 }
 
 export const isNfseE0014DuplicateRpsMessage = (text) => {
@@ -207,7 +223,7 @@ const normalizeRejectedStatusToken = (value) => {
 };
 
 const PLUGNOTAS_NFSE_PERIODO_MAX_PAGES = 40;
-const PLUGNOTAS_NFSE_PERIODO_FAST_PAGES = 5;
+const PLUGNOTAS_NFSE_PERIODO_FAST_PAGES = 12;
 
 /**
  * Maior número RPS/DPS já enviado ao PlugNotas para o CNPJ (todas as situações).
@@ -226,19 +242,14 @@ export async function queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjInput, opts = {}
 
   let hashProximaPagina;
   let maxKnown = 0;
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - 365);
-  const dataInicial = start.toISOString().slice(0, 10);
-  const dataFinal = end.toISOString().slice(0, 10);
 
   for (let page = 0; page < maxPages; page += 1) {
     let body;
     try {
+      // Sem datas: PlugNotas retorna todo o histórico paginado (25/página).
+      // Com intervalo > 31 dias a API retorna 400 e o heal de RPS falha silenciosamente.
       body = await consultarNfsePorPeriodo({
         cpfCnpj: cnpj,
-        dataInicial,
-        dataFinal,
         ...(hashProximaPagina ? { hashProximaPagina } : {})
       });
     } catch (error) {
