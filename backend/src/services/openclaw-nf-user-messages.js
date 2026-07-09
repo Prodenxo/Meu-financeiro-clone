@@ -86,10 +86,16 @@ export const BOT_NF_PREVIEW_LOOP_GUARD =
 
 /** Após falha na emissão (não voltar ao preview). */
 export const BOT_NF_EMIT_FAILED_INSTRUCTION =
-  'Emissão falhou. Repita APENAS message ao utilizador (motivo em português curto). '
-  + 'Se pedir para tentar de novo: emit_nfse com confirm:true e os MESMOS dados — '
-  + 'PROIBIDO chamar emit_nfse sem confirm:true após falha ou confirmação. '
-  + 'AGUARDE o exec terminar antes de responder.';
+  'Emissão falhou ou o exec ainda está a correr — PlugNotas pode demorar até 2–3 minutos. '
+  + 'PROIBIDO chamar emit_nfse de novo em paralelo ou por timeout / "No session found". '
+  + 'Primeiro use list_nfse_notas (limit 5) para ver se a nota já foi criada; se existir, informe o utilizador. '
+  + 'Só repita emit_nfse se o utilizador pedir explicitamente *tentar de novo* e não houver nota igual recente. '
+  + 'Repita APENAS message ao utilizador (motivo em português curto).';
+
+/** Uma chamada emit_nfse por pedido — exec lento no OpenClaw. */
+export const BOT_NF_EMIT_SLOW_EXEC_INSTRUCTION =
+  'emit_nfse pode demorar até 2–3 minutos. Faça UMA chamada e aguarde o exec terminar. '
+  + 'PROIBIDO emitir de novo no mesmo turno. Se o exec parecer travado, use list_nfse_notas antes de qualquer retry.';
 
 /**
  * Mensagem amigável para erros técnicos de emissão NFS-e (WhatsApp).

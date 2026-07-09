@@ -397,6 +397,9 @@ Exemplo (após escolha do serviço na lista e confirmação do utilizador):
 ```
 
 - **Uma conversa = uma nota** por pedido (não dupliques emissão).
+- **`emit_nfse` demora 2–3 minutos** (PlugNotas). Faça **UMA** chamada por pedido e aguarde o exec terminar.
+- Se o exec ficar *running*, der *No session found* ou timeout → **PROIBIDO** chamar `emit_nfse` de novo em seguida. Use **`list_nfse_notas`** (`limit: 5`) para ver se a nota já foi criada.
+- Só repita `emit_nfse` se o utilizador pedir *tentar de novo* **e** `list_nfse_notas` **não** mostrar nota recente com o mesmo tomador e valor.
 - **`consult_nfse`** com `payload.id` para atualizar status na Plugnotas após emitir.
 - **PDF no WhatsApp** (igual ao DAS): só quando status **`concluido`** (ou autorizado). **PROIBIDO** colar `[[MEDIA:]]` ou só dizer "segue o PDF".
 - **Envio automático (produção):** se `emit_nfse` responder com `autoWhatsappEnabled: true` e mensagem de envio automático, **não** precisas fazer loop `consult` + `mf-nfse-send.sh` — o backend envia o PDF via Z-API quando a nota concluir. Informa o utilizador: *"Envio o PDF assim que a nota for autorizada."*

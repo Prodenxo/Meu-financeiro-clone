@@ -48,6 +48,11 @@ import {
 import {
   resolveClienteIndiceFromPayload,
 } from './openclaw-nfse-intent-guard.js';
+import {
+  buildOpenclawNfseEmitFingerprint,
+  findRecentDuplicateOpenclawNfse,
+  withOpenclawNfseEmitInflight,
+} from './openclaw-nfse-emit-dedup.js';
 import { isValidCpfOrCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
 
 const normalizeDoc = (value) => normalizeDocDigits(value);
@@ -1340,16 +1345,43 @@ export const emitOpenclawNfse = async (userId, payload = {}) => {
     };
   }
 
-  const created = await emitirNota(userId, input);
-  const preview = {
-    documentType: 'NFSE',
-    tomadorRazaoSocial: input.tomadorRazaoSocial,
-    tomadorCpfCnpj: input.tomadorCpfCnpj,
-    valorServico: input.servico.valorServico,
-    discriminacao: input.servico.discriminacao,
-    codigoServico: input.servico.codigo,
-  };
-  return { nota: created, preview, requiresConfirm: false, notEmitted: false };
+  const fingerprint = buildOpenclawNfseEmitFingerprint(userId, input);
+
+  return withOpenclawNfseEmitInflight(fingerprint, async () => {
+    const duplicate = await findRecentDuplicateOpenclawNfse({
+      userId,
+      input,
+      listarNotas,
+    });
+    if (duplicate) {
+      const preview = {
+        documentType: 'NFSE',
+        tomadorRazaoSocial: input.tomadorRazaoSocial,
+        tomadorCpfCnpj: input.tomadorCpfCnpj,
+        valorServico: input.servico.valorServico,
+        discriminacao: input.servico.discriminacao,
+        codigoServico: input.servico.codigo,
+      };
+      return {
+        nota: duplicate,
+        preview,
+        requiresConfirm: false,
+        notEmitted: false,
+        duplicatePrevented: true,
+      };
+    }
+
+    const created = await emitirNota(userId, input);
+    const preview = {
+      documentType: 'NFSE',
+      tomadorRazaoSocial: input.tomadorRazaoSocial,
+      tomadorCpfCnpj: input.tomadorCpfCnpj,
+      valorServico: input.servico.valorServico,
+      discriminacao: input.servico.discriminacao,
+      codigoServico: input.servico.codigo,
+    };
+    return { nota: created, preview, requiresConfirm: false, notEmitted: false };
+  });
 };
 
 export const listOpenclawNfseNotas = async (userId, { limit = 10 } = {}) => {

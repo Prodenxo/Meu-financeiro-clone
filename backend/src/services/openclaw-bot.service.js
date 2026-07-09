@@ -67,9 +67,11 @@ import {
 } from './openclaw-nfe.service.js';
 import {
   BOT_NF_CONFIRM_INSTRUCTION,
+  BOT_NF_EMIT_SLOW_EXEC_INSTRUCTION,
   BOT_NF_PREVIEW_LOOP_GUARD,
   buildNfConfirmRequestUserMessage,
   buildNfEmittedUserMessage,
+  formatValorBr,
 } from './openclaw-nf-user-messages.js';
 import {
   isNfseEmitIntentFromUserText,
@@ -343,9 +345,14 @@ const buildOpenclawEmitNfseActionResponse = async ({
   const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
   const pdfReady = isNfsePdfReadyStatus(status);
   const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
+  const duplicatePrevented = Boolean(result.duplicatePrevented);
+  let priorDelivery = null;
+  if (duplicatePrevented && nota?.id) {
+    priorDelivery = await getOpenclawNfseWhatsappDeliveryState(userId, nota.id);
+  }
   let autoWhatsapp = null;
 
-  if (autoEnabled && destinationPhone && nota?.id) {
+  if (autoEnabled && destinationPhone && nota?.id && !(duplicatePrevented && priorDelivery?.alreadySent)) {
     await registerOpenclawNfseWhatsappDelivery(userId, nota.id, destinationPhone);
     if (pdfReady) {
       autoWhatsapp = await deliverOpenclawNfseWhatsappPdf(
@@ -356,7 +363,8 @@ const buildOpenclawEmitNfseActionResponse = async ({
     }
   }
 
-  const autoSent = autoWhatsapp?.whatsappStatus === 'sent';
+  const autoSent = autoWhatsapp?.whatsappStatus === 'sent'
+    || (duplicatePrevented && priorDelivery?.alreadySent);
   const autoFailed = ['failed', 'skipped_no_whatsapp'].includes(
     autoWhatsapp?.whatsappStatus || '',
   );
@@ -369,15 +377,28 @@ const buildOpenclawEmitNfseActionResponse = async ({
       ? buildNfseSendExecCommand(destinationPhone, nota.id)
       : null;
 
-  const userMessage = buildNfEmittedUserMessage(result.preview, {
-    status,
-    pdfSent: autoSent,
-    pdfPending: autoEnabled && !pdfReady,
-  });
+  const userMessage = duplicatePrevented
+    ? (
+      `*Nota já em emissão* — encontrei uma NFS-e recente com os mesmos dados `
+      + `(*${result.preview?.tomadorRazaoSocial || 'tomador'}*, `
+      + `*${formatValorBr(result.preview?.valorServico)}*). `
+      + (pdfReady
+        ? 'Ela já foi autorizada; o PDF segue o envio automático.'
+        : 'Aguarde a autorização; não criei outra nota duplicada.')
+    )
+    : buildNfEmittedUserMessage(result.preview, {
+      status,
+      pdfSent: autoSent,
+      pdfPending: autoEnabled && !pdfReady,
+    });
 
   let agentInstructions =
-    'Repita APENAS o campo message ao utilizador. PROIBIDO mencionar payload, confirm:true ou ações técnicas. '
+    `${BOT_NF_EMIT_SLOW_EXEC_INSTRUCTION} `
+    + 'Repita APENAS o campo message ao utilizador. PROIBIDO mencionar payload, confirm:true ou ações técnicas. '
     + 'PROIBIDO chamar emit_nfse de novo neste turno.';
+  if (duplicatePrevented) {
+    agentInstructions += ' Duplicata evitada — não emitir de novo nem pedir confirmação.';
+  }
   if (redirectedFromCreateTransaction) {
     agentInstructions += ' Pedido era NFSe — não mencione carteira nem create_transaction.';
   }
@@ -411,6 +432,7 @@ const buildOpenclawEmitNfseActionResponse = async ({
         : null,
       pdfWhatsappAlreadySent: autoSent,
       doNotRunNfseSendScript: autoSent || (autoEnabled && !autoFailed),
+      duplicatePrevented,
       redirectedFromCreateTransaction,
       userId,
       actorContext,
