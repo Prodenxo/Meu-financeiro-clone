@@ -70,7 +70,10 @@ import {
   buildNfConfirmRequestUserMessage,
   buildNfEmittedUserMessage,
 } from './openclaw-nf-user-messages.js';
-import { formatCnpjDisplay } from '../utils/cpf-cnpj.js';
+import {
+  isNfseEmitIntentPayload,
+  mapMisroutedTransactionToNfsePayload,
+} from './openclaw-nfse-intent-guard.js';
 import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
 import {
   deliverOpenclawNfseWhatsappPdf,
@@ -294,6 +297,122 @@ export const trySendDasWhatsappWebhook = async ({
 const buildNfseSendExecCommand = (destinationPhone, notaId) => {
   if (!destinationPhone || !notaId) return null;
   return `/home/node/.openclaw/workspace/mf-nfse-send.sh ${destinationPhone} ${notaId}`;
+};
+
+/**
+ * Resposta padrão da action emit_nfse (reutilizada no redirect de create_transaction).
+ * @param {object} params
+ */
+const buildOpenclawEmitNfseActionResponse = async ({
+  result,
+  userId,
+  phoneDigits,
+  matchedUserNumber,
+  actorContext,
+  linkDebug,
+  redirectedFromCreateTransaction = false,
+}) => {
+  if (result.requiresConfirm) {
+    return {
+      ok: true,
+      message: buildNfConfirmRequestUserMessage(result.preview),
+      data: {
+        preview: result.preview,
+        requiresConfirm: true,
+        notEmitted: true,
+        userId,
+        actorContext,
+        ...linkDebug,
+        redirectedFromCreateTransaction,
+        agentInstructions:
+          `${BOT_NF_CONFIRM_INSTRUCTION} ${BOT_NF_PREVIEW_LOOP_GUARD} `
+          + 'Repita APENAS o campo message ao utilizador. '
+          + (redirectedFromCreateTransaction
+            ? 'NÃO pergunte carteira — isto é NFSe, não lançamento financeiro.'
+            : ''),
+      },
+    };
+  }
+
+  const nota = result.nota;
+  const status = nota?.status || 'processando';
+  const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+  const pdfReady = isNfsePdfReadyStatus(status);
+  const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
+  let autoWhatsapp = null;
+
+  if (autoEnabled && destinationPhone && nota?.id) {
+    await registerOpenclawNfseWhatsappDelivery(userId, nota.id, destinationPhone);
+    if (pdfReady) {
+      autoWhatsapp = await deliverOpenclawNfseWhatsappPdf(
+        userId,
+        nota.id,
+        destinationPhone,
+      );
+    }
+  }
+
+  const autoSent = autoWhatsapp?.whatsappStatus === 'sent';
+  const autoFailed = ['failed', 'skipped_no_whatsapp'].includes(
+    autoWhatsapp?.whatsappStatus || '',
+  );
+  if (autoEnabled && nota?.id && !autoSent) {
+    scheduleOpenclawNfseWhatsappDeliveryRetries(userId, nota.id);
+  }
+  const useOpenclawScriptFallback = !autoSent && (!autoEnabled || autoFailed);
+  const execCommand =
+    useOpenclawScriptFallback && pdfReady && destinationPhone && nota?.id
+      ? buildNfseSendExecCommand(destinationPhone, nota.id)
+      : null;
+
+  const userMessage = buildNfEmittedUserMessage(result.preview, {
+    status,
+    pdfSent: autoSent,
+    pdfPending: autoEnabled && !pdfReady,
+  });
+
+  let agentInstructions =
+    'Repita APENAS o campo message ao utilizador. PROIBIDO mencionar payload, confirm:true ou ações técnicas.';
+  if (redirectedFromCreateTransaction) {
+    agentInstructions += ' Pedido era NFSe — não mencione carteira nem create_transaction.';
+  }
+  if (autoSent) {
+    agentInstructions += ' PDF já enviado no WhatsApp — não peça confirmação nem script.';
+  } else if (autoEnabled) {
+    agentInstructions += ' O PDF será enviado automaticamente — não peça mf-nfse-send.sh ao utilizador.';
+  } else if (execCommand) {
+    agentInstructions += ' Envio manual pendente — usa execCommand internamente se necessário.';
+  }
+
+  return {
+    ok: true,
+    message: userMessage,
+    data: {
+      nota: {
+        id: nota?.id,
+        status: nota?.status,
+        plugnotas_id: nota?.plugnotas_id,
+        id_integracao: nota?.id_integracao,
+        pdf_url: nota?.pdf_url,
+        pdfReady,
+      },
+      execCommand,
+      autoWhatsappEnabled: autoEnabled,
+      autoWhatsapp: autoWhatsapp
+        ? {
+          status: autoWhatsapp.whatsappStatus,
+          error: autoWhatsapp.whatsappError ?? null,
+        }
+        : null,
+      pdfWhatsappAlreadySent: autoSent,
+      doNotRunNfseSendScript: autoSent || (autoEnabled && !autoFailed),
+      redirectedFromCreateTransaction,
+      userId,
+      actorContext,
+      ...linkDebug,
+      agentInstructions,
+    },
+  };
 };
 
 /**
@@ -661,6 +780,17 @@ export const runOpenclawAction = async (input) => {
     emit_nfe: 'emit_nfe',
     emitir_nfe: 'emit_nfe',
     nota_produto: 'emit_nfe',
+    preview_nfse: 'preview_nfse',
+    resumo_nfse: 'preview_nfse',
+    simular_nfse: 'preview_nfse',
+    emit_nfse: 'emit_nfse',
+    emitir_nfse: 'emit_nfse',
+    emitir_nota: 'emit_nfse',
+    emitir_nota_fiscal: 'emit_nfse',
+    nota_servico: 'emit_nfse',
+    nota_fiscal_servico: 'emit_nfse',
+    listar_clientes_nfse: 'list_nfse_clientes',
+    listar_servicos_nfse: 'list_catalog_servicos',
     minha_agenda: 'list_calendar_events',
     compromissos_agenda: 'list_calendar_events',
     agenda_compromissos: 'list_calendar_events',
@@ -925,6 +1055,7 @@ export const runOpenclawAction = async (input) => {
           + 'Em pedido de saldo geral, repete o campo **message** com o detalhe de **cada** carteira — não cites só a padrão. '
           + 'Em create_transaction use payload.carteira ou conta_nome com o nome EXACTO de uma linha abaixo '
           + `(ex.: Nubank, Poupança). Com **2+ carteiras** e pedido sem destino → **pergunte** qual usar (não assuma padrão). `
+          + '**NOTA FISCAL / NFSe:** NÃO use list_contas nem create_transaction — use list_nfse_clientes, list_catalog_servicos e emit_nfse. '
           + 'Com **1 carteira** pode lançar sem perguntar. '
           + 'Gastos/receitas já realizados: status **pago** (saída) ou **recebido** (entrada) — nunca **pendente**. '
           + 'Se o utilizador mencionar banco/carteira no pedido, OBRIGATÓRIO incluir carteira no JSON — '
@@ -1005,6 +1136,24 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'create_transaction') {
+    if (isNfseEmitIntentPayload(payload)) {
+      try {
+        const nfsePayload = mapMisroutedTransactionToNfsePayload(payload);
+        const result = await emitOpenclawNfse(userId, nfsePayload);
+        return buildOpenclawEmitNfseActionResponse({
+          result,
+          userId,
+          phoneDigits,
+          matchedUserNumber,
+          actorContext,
+          linkDebug,
+          redirectedFromCreateTransaction: true,
+        });
+      } catch (err) {
+        rethrowNfseErrorForBot(err);
+      }
+    }
+
     const account = await fetchOpenclawAccountSummary(userId);
     const allCategories = await categoriesService.listCategories(userId);
     const contas = await transactionsService.listActiveContasFinanceiras(userId);
@@ -1023,7 +1172,8 @@ export const runOpenclawAction = async (input) => {
         return {
           ok: false,
           message:
-            `Várias carteiras activas (${lista}). Pergunte em qual lançar antes de registar.`,
+            `Várias carteiras activas (${lista}). Para **lançamento financeiro**, pergunte em qual **carteira/banco** registrar (ex.: Nubank, Poupança). `
+            + 'Isto NÃO é emissão de nota fiscal.',
           data: {
             userId,
             account,
@@ -1033,6 +1183,7 @@ export const runOpenclawAction = async (input) => {
             agentInstructions:
               `${err.errors.botHint || ''} Chame list_contas, mostre a lista numerada e aguarde a resposta. `
               + 'Depois repita create_transaction com payload.carteira. '
+              + 'Se o pedido for NOTA FISCAL / NFSe, use emit_nfse (clienteIndice + servicoIndice + valor) — sem carteira. '
               + 'Status: pago (saída) ou recebido (entrada) — nunca pendente para gastos já feitos.',
           },
         };
@@ -1829,7 +1980,15 @@ export const runOpenclawAction = async (input) => {
     return {
       ok: true,
       message: `${clientes.length} cliente(s) no catálogo NFSe.${docHint}`,
-      data: { clientes, userId, actorContext, ...linkDebug },
+      data: {
+        clientes,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Mostre clientes numerados (1, 2, 3…). Para emitir NFSe: emit_nfse com clienteIndice, servicoIndice e valor. '
+          + 'PROIBIDO create_transaction, list_contas ou perguntar carteira (Nubank, Poupança).',
+      },
     };
   }
 
@@ -1905,8 +2064,9 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Mostre APENAS message (lista numerada). Espere o utilizador escolher serviço antes de preview_nfse. '
-          + 'PROIBIDO inventar descricao genérica.',
+          'Mostre APENAS message (lista numerada de SERVIÇOS da nota fiscal). Espere escolha do serviço (1, 2, 3…). '
+          + 'Depois emit_nfse com servicoIndice + clienteIndice + valor. '
+          + 'PROIBIDO inventar descricao genérica, create_transaction ou perguntar carteira.',
       },
     };
   }
@@ -2101,98 +2261,14 @@ export const runOpenclawAction = async (input) => {
   if (action === 'emit_nfse') {
     try {
       const result = await emitOpenclawNfse(userId, payload);
-      if (result.requiresConfirm) {
-        return {
-          ok: true,
-          message: buildNfConfirmRequestUserMessage(result.preview),
-          data: {
-            preview: result.preview,
-            requiresConfirm: true,
-            notEmitted: true,
-            userId,
-            actorContext,
-            ...linkDebug,
-            agentInstructions:
-              `${BOT_NF_CONFIRM_INSTRUCTION} ${BOT_NF_PREVIEW_LOOP_GUARD} `
-              + 'Repita APENAS o campo message ao utilizador.',
-          },
-        };
-      }
-      const nota = result.nota;
-      const status = nota?.status || 'processando';
-      const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
-      const pdfReady = isNfsePdfReadyStatus(status);
-      const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
-      let autoWhatsapp = null;
-
-      if (autoEnabled && destinationPhone && nota?.id) {
-        await registerOpenclawNfseWhatsappDelivery(userId, nota.id, destinationPhone);
-        if (pdfReady) {
-          autoWhatsapp = await deliverOpenclawNfseWhatsappPdf(
-            userId,
-            nota.id,
-            destinationPhone,
-          );
-        }
-      }
-
-      const autoSent = autoWhatsapp?.whatsappStatus === 'sent';
-      const autoFailed = ['failed', 'skipped_no_whatsapp'].includes(
-        autoWhatsapp?.whatsappStatus || '',
-      );
-      if (autoEnabled && nota?.id && !autoSent) {
-        scheduleOpenclawNfseWhatsappDeliveryRetries(userId, nota.id);
-      }
-      const useOpenclawScriptFallback = !autoSent && (!autoEnabled || autoFailed);
-      const execCommand =
-        useOpenclawScriptFallback && pdfReady && destinationPhone && nota?.id
-          ? buildNfseSendExecCommand(destinationPhone, nota.id)
-          : null;
-
-      const userMessage = buildNfEmittedUserMessage(result.preview, {
-        status,
-        pdfSent: autoSent,
-        pdfPending: autoEnabled && !pdfReady,
+      return buildOpenclawEmitNfseActionResponse({
+        result,
+        userId,
+        phoneDigits,
+        matchedUserNumber,
+        actorContext,
+        linkDebug,
       });
-
-      let agentInstructions =
-        'Repita APENAS o campo message ao utilizador. PROIBIDO mencionar payload, confirm:true ou ações técnicas.';
-      if (autoSent) {
-        agentInstructions += ' PDF já enviado no WhatsApp — não peça confirmação nem script.';
-      } else if (autoEnabled) {
-        agentInstructions += ' O PDF será enviado automaticamente — não peça mf-nfse-send.sh ao utilizador.';
-      } else if (execCommand) {
-        agentInstructions += ' Envio manual pendente — usa execCommand internamente se necessário.';
-      }
-
-      return {
-        ok: true,
-        message: userMessage,
-        data: {
-          nota: {
-            id: nota?.id,
-            status: nota?.status,
-            plugnotas_id: nota?.plugnotas_id,
-            id_integracao: nota?.id_integracao,
-            pdf_url: nota?.pdf_url,
-            pdfReady,
-          },
-          execCommand,
-          autoWhatsappEnabled: autoEnabled,
-          autoWhatsapp: autoWhatsapp
-            ? {
-              status: autoWhatsapp.whatsappStatus,
-              error: autoWhatsapp.whatsappError ?? null,
-            }
-            : null,
-          pdfWhatsappAlreadySent: autoSent,
-          doNotRunNfseSendScript: autoSent || (autoEnabled && !autoFailed),
-          userId,
-          actorContext,
-          ...linkDebug,
-          agentInstructions,
-        },
-      };
     } catch (err) {
       rethrowNfseErrorForBot(err);
     }

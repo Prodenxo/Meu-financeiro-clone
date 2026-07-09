@@ -6,6 +6,7 @@ import {
   isNfsePdfReadyStatus,
   normalizeCatalogDiscriminacao,
   parseValorReais,
+  pickClienteCatalogoByIndexResult,
   pickClienteCatalogoByNomeResult,
   pickProdutoCatalogoByCodigoCnaeResult,
   pickProdutoCatalogoByCodigoResult,
@@ -37,6 +38,16 @@ test('isNfsePdfReadyStatus', () => {
   assert.equal(isNfsePdfReadyStatus('concluido'), true);
   assert.equal(isNfsePdfReadyStatus('processando'), false);
   assert.equal(isNfsePdfReadyStatus('autorizado'), true);
+});
+
+test('pickClienteCatalogoByIndexResult — cliente #2 Taure', () => {
+  const rows = [
+    { id: '1', nome: 'CF Contabilidade', documento: '12345678000195' },
+    { id: '2', nome: 'Taure', documento: '16510404000165' },
+  ];
+  const r = pickClienteCatalogoByIndexResult(rows, 2);
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.cliente.nome, 'Taure');
 });
 
 test('pickClienteCatalogoByNomeResult — match exato', () => {

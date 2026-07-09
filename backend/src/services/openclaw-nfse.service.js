@@ -45,7 +45,9 @@ import {
   BOT_NF_EMIT_FAILED_INSTRUCTION,
   formatNfseEmitErrorForUser,
 } from './openclaw-nf-user-messages.js';
-import { lookupCnpjBrasilApi } from './cnpj-lookup.service.js';
+import {
+  resolveClienteIndiceFromPayload,
+} from './openclaw-nfse-intent-guard.js';
 import { isValidCpfOrCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
 
 const normalizeDoc = (value) => normalizeDocDigits(value);
@@ -592,6 +594,20 @@ const pickTomadorNomeFromPayload = (payload) =>
   );
 
 /**
+ * Escolhe cliente do catálogo pelo número da lista (1, 2, 3…).
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {unknown} indexRaw
+ */
+export const pickClienteCatalogoByIndexResult = (rows, indexRaw) => {
+  const index = Number(indexRaw);
+  if (!Number.isInteger(index) || index < 1) return { kind: 'missing' };
+  const list = Array.isArray(rows) ? rows : [];
+  const cliente = list[index - 1];
+  if (!cliente) return { kind: 'not_found', index };
+  return { kind: 'ok', cliente };
+};
+
+/**
  * Escolhe um cliente do catálogo a partir do resultado de busca por nome.
  * @param {Array<Record<string, unknown>>} rows
  * @param {string} nome
@@ -682,10 +698,31 @@ const resolveTomador = async (userId, payload) => {
 
   let catalogo = null;
 
+  const clienteIndice = resolveClienteIndiceFromPayload(payload);
+  if (clienteIndice) {
+    const all = await listarCatalogoClientes(userId, { limit: 50, ...NFSE_CATALOG_CLIENTES_OPTS });
+    const byIndex = pickClienteCatalogoByIndexResult(all, clienteIndice);
+    if (byIndex.kind === 'ok') {
+      catalogo = byIndex.cliente;
+      tomadorDoc = normalizeDoc(catalogo?.documento || '');
+      assertTomadorDocumentoValido(tomadorDoc);
+    } else if (byIndex.kind === 'not_found') {
+      throw badRequest(`Cliente #${clienteIndice} não encontrado no catálogo NFSe.`, {
+        code: 'NFSE_CLIENTE_INDEX_NOT_FOUND',
+        clienteIndice,
+        botHint:
+          'Chame list_nfse_clientes, mostre a lista numerada e use clienteIndice (1, 2, 3…) em emit_nfse. '
+          + 'Não use create_transaction nem pergunte carteira.',
+      });
+    }
+  }
+
   if (tomadorDoc) {
     assertTomadorDocumentoValido(tomadorDoc);
-    catalogo = await findClienteCatalogoByDocumento(userId, tomadorDoc);
-  } else {
+    if (!catalogo) {
+      catalogo = await findClienteCatalogoByDocumento(userId, tomadorDoc);
+    }
+  } else if (!catalogo) {
     const tomadorNome = pickTomadorNomeFromPayload(payload);
     if (!tomadorNome) {
       throw badRequest('Informe o cliente (nome ou CPF/CNPJ).', {

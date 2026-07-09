@@ -183,7 +183,7 @@ export const formatNfseCatalogChoiceMessage = (produtos = [], options = {}) => {
     return 'Você ainda não tem serviços cadastrados. Cadastre na app (MEI → Notas) e peça a nota de novo.';
   }
   const intro = String(options.prefix || '').trim()
-    || 'Qual serviço você quer na nota? Responda com o número ou o nome exato:';
+    || 'Qual **serviço da nota fiscal** você quer? (Não é carteira/banco.) Responda com o número ou o nome exato:';
   const lines = list.map((p, i) => `${i + 1}. ${String(p.discriminacao || '—').trim()}`);
   return `${intro}\n${lines.join('\n')}`;
 };
