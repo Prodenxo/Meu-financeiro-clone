@@ -110,8 +110,8 @@ export const relayZapiInbound = async (normalized) => {
     ? ` EMITIR_AGORA=sim: chame SOMENTE emit_nfse com payload ${JSON.stringify(emitPayload)}. `
       + 'PROIBIDO list_nfse_clientes, list_catalog_servicos e PROIBIDO repetir a lista — o utilizador JÁ escolheu cliente, serviço e valor.'
     : nfseIntent
-      ? ' PEDIDO_NFSE=sim: se ainda faltar cliente/serviço/valor use list_nfse_clientes + list_catalog_servicos; '
-        + 'se o utilizador JÁ disse cliente + serviço + valor use SOMENTE emit_nfse. '
+      ? ' PEDIDO_NFSE=sim: para listar use UMA chamada list_nfse_emit_catalog (clientes + serviços NFS-e reais da app). '
+        + 'PROIBIDO inventar clientes/serviços. Se faltar cliente/serviço/valor na emissão, liste; se JÁ disse os três, use SOMENTE emit_nfse. '
         + 'PROIBIDO create_transaction, list_contas e PROIBIDO perguntar carteira (Nubank, Poupança, Banco do Brasil).'
       : '';
 

@@ -47,6 +47,7 @@ import {
 } from './openclaw-nf-user-messages.js';
 import {
   resolveClienteIndiceFromPayload,
+  NFSE_NO_CARTEIRA_FOOTER,
 } from './openclaw-nfse-intent-guard.js';
 import {
   buildOpenclawNfseEmitFingerprint,
@@ -1523,6 +1524,30 @@ export const formatOpenclawNfseClientesMessage = (clientes) => {
   });
   return `${list.length} cliente(s) para nota fiscal de serviço:\n${lines.join('\n')}`;
 };
+
+/**
+ * Catálogo completo para emissão NFSe (clientes + serviços) numa mensagem.
+ */
+export const formatOpenclawNfseEmitCatalogMessage = (clientes, produtos) => {
+  const clientesList = Array.isArray(clientes) ? clientes : [];
+  const produtosList = Array.isArray(produtos) ? produtos : [];
+  const parts = [formatOpenclawNfseClientesMessage(clientesList)];
+  if (clientesList.length === 1) {
+    parts.push('_Único cliente NFS-e cadastrado — na emissão use clienteIndice 1._');
+  }
+  parts.push('');
+  parts.push(formatOpenclawNfseProdutosMessage(produtosList));
+  if (produtosList.length === 1) {
+    parts.push('_Único serviço NFS-e cadastrado — na emissão use servicoIndice 1._');
+  }
+  parts.push(NFSE_NO_CARTEIRA_FOOTER);
+  return parts.join('\n');
+};
+
+export const NFSE_CATALOG_NO_HALLUCINATION_INSTRUCTION =
+  'Repita APENAS o campo message da API. PROIBIDO inventar clientes, serviços, CPF/CNPJ ou alíquotas. '
+  + 'PROIBIDO usar nomes de exemplo do SOUL (CF Contabilidade, Taure, 12.345.678/0001-95). '
+  + 'Se não executou mf-curl.sh neste turno, não liste nada — chame a API primeiro.';
 
 export const listOpenclawNfseProdutos = async (userId, { q = '', limit = 20, documentType } = {}) =>
   listarCatalogoProdutos(userId, { q, limit, ...(documentType ? { documentType } : {}) });

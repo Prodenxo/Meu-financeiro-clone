@@ -47,9 +47,11 @@ import {
   isNfsePdfReadyStatus,
   formatOpenclawNfseProdutosMessage,
   formatOpenclawNfseClientesMessage,
+  formatOpenclawNfseEmitCatalogMessage,
   listOpenclawNfseClientes,
   listOpenclawNfseNotas,
   listOpenclawNfseProdutos,
+  NFSE_CATALOG_NO_HALLUCINATION_INSTRUCTION,
   previewOpenclawNfseEmit,
   registerOpenclawNfseCliente,
   registerOpenclawNfseProduto,
@@ -873,6 +875,10 @@ export const runOpenclawAction = async (input) => {
     nota_fiscal_servico: 'emit_nfse',
     listar_clientes_nfse: 'list_nfse_clientes',
     listar_servicos_nfse: 'list_catalog_servicos',
+    list_nfse_emit_catalog: 'list_nfse_emit_catalog',
+    nfse_emit_catalog: 'list_nfse_emit_catalog',
+    listar_catalogo_nfse: 'list_nfse_emit_catalog',
+    catalogo_nfse: 'list_nfse_emit_catalog',
     minha_agenda: 'list_calendar_events',
     compromissos_agenda: 'list_calendar_events',
     agenda_compromissos: 'list_calendar_events',
@@ -2068,6 +2074,28 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'list_nfse_emit_catalog') {
+    const limit = payload?.limit;
+    const [clientes, produtos] = await Promise.all([
+      listOpenclawNfseClientes(userId, { q: '', limit }),
+      listOpenclawNfseProdutos(userId, { q: '', limit, documentType: 'NFSE' }),
+    ]);
+    return {
+      ok: true,
+      message: formatOpenclawNfseEmitCatalogMessage(clientes, produtos),
+      data: {
+        clientes,
+        produtos,
+        documentType: 'NFSE',
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          `${NFSE_CATALOG_NO_HALLUCINATION_INSTRUCTION} ${NFSE_EMIT_NOW_AGENT_HINT}`,
+      },
+    };
+  }
+
   if (action === 'list_nfse_clientes') {
     const redirected = await tryRedirectListActionToEmitNfse({
       payload,
@@ -2097,7 +2125,8 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Repita APENAS o campo message ao utilizador — já inclui lista numerada. '
+          `${NFSE_CATALOG_NO_HALLUCINATION_INSTRUCTION} `
+          + 'Repita APENAS o campo message ao utilizador — já inclui lista numerada. '
           + 'PROIBIDO acrescentar pergunta sobre carteira/banco (Nubank, Poupança). '
           + `${NFSE_EMIT_NOW_AGENT_HINT} Para emitir: emit_nfse com clienteIndice, servicoIndice e valor.`,
       },
@@ -2186,7 +2215,8 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Repita APENAS message (lista numerada de SERVIÇOS). '
+          `${NFSE_CATALOG_NO_HALLUCINATION_INSTRUCTION} `
+          + 'Repita APENAS message (lista numerada de SERVIÇOS). '
           + 'PROIBIDO perguntar carteira/banco. '
           + `${NFSE_EMIT_NOW_AGENT_HINT} Emitir: emit_nfse com clienteIndice + servicoIndice + valor.`,
       },

@@ -273,10 +273,14 @@ Quando o utilizador disser *"cliente 3, serviço 1, 5 reais"* ou *"emite para o 
 2. Chame **`emit_nfse` IMEDIATAMENTE** com `clienteIndice`, `servicoIndice`, `valor` e `confirm:true` no JSON interno.
 3. Uma mensagem só: *"Emitindo a nota, pode levar até 2 minutos."* — depois aguarde o exec.
 
+**PROIBIDO inventar clientes ou serviços** — nomes, CPF/CNPJ e códigos vêm **só** do `message` da API após `mf-curl.sh`. Exemplos no SOUL (CF Contabilidade, Taure) são fictícios.
+
+Para listar catálogo real: **uma** chamada `list_nfse_emit_catalog` (clientes + serviços NFS-e). Repita **só** o `message` — sem acrescentar itens.
+
 Quando o utilizador **ainda não** escolheu cliente/serviço/valor:
 
-1. **`list_nfse_clientes`** → lista numerada (1, 2, 3…).
-2. **`list_catalog_servicos`** → lista numerada de serviços.
+1. **`list_nfse_emit_catalog`** → clientes + serviços NFS-e (filtro `document_type=NFSE` — não mistura NF-e).
+2. Alternativa: `list_nfse_clientes` + `list_catalog_servicos` (mesmos dados, duas chamadas).
 3. **`emit_nfse`** com **`clienteIndice`**, **`servicoIndice`** e **`valor`** — **sem** `carteira`, **sem** `create_transaction`.
 
 ```bash
