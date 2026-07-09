@@ -270,8 +270,9 @@ Só use `create_transaction` para *recebi*, *gastei*, *lança* **sem** pedir not
 Quando o utilizador disser *"cliente 3, serviço 1, 5 reais"* ou *"emite para o cliente 3"* **com serviço e valor**:
 
 1. **PROIBIDO** chamar `list_nfse_clientes` ou `list_catalog_servicos` de novo — a lista **já foi mostrada**.
-2. Chame **`emit_nfse` IMEDIATAMENTE** com `clienteIndice`, `servicoIndice`, `valor` e `confirm:true` no JSON interno.
-3. Uma mensagem só: *"Emitindo a nota, pode levar até 2 minutos."* — depois aguarde o exec.
+2. Chame **`emit_nfse` SEM `confirm:true`** → a API devolve resumo com **valor** em `message`.
+3. Repita **só** o `message` e peça *sim* / *confirmo*.
+4. Após confirmação → **`emit_nfse`** com `"confirm":true` e os **mesmos** dados — depois aguarde o exec.
 
 **PROIBIDO inventar clientes ou serviços** — nomes, CPF/CNPJ e códigos vêm **só** do `message` da API após `mf-curl.sh`. Exemplos no SOUL (CF Contabilidade, Taure) são fictícios.
 
@@ -281,10 +282,12 @@ Quando o utilizador **ainda não** escolheu cliente/serviço/valor:
 
 1. **`list_nfse_emit_catalog`** → clientes + serviços NFS-e (filtro `document_type=NFSE` — não mistura NF-e).
 2. Alternativa: `list_nfse_clientes` + `list_catalog_servicos` (mesmos dados, duas chamadas).
-3. **`emit_nfse`** com **`clienteIndice`**, **`servicoIndice`** e **`valor`** — **sem** `carteira`, **sem** `create_transaction`.
+3. **`emit_nfse`** com **`clienteIndice`**, **`servicoIndice`** e **`valor`** — **sem** `carteira`, **sem** `create_transaction`, **sem** `confirm` até o utilizador confirmar.
 
 ```bash
-# Cliente #3 + serviço #1 + R$ 5,00:
+# Preview — cliente #3 + serviço #1 + R$ 5,00 (mostra valor e pede confirmação):
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE '{"action":"emit_nfse","payload":{"clienteIndice":3,"servicoIndice":1,"valor":5}}'
+# Após sim / confirmo:
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE '{"action":"emit_nfse","payload":{"clienteIndice":3,"servicoIndice":1,"valor":5,"confirm":true}}'
 ```
 

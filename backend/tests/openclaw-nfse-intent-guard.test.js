@@ -108,6 +108,5 @@ test('isCompleteNfseEmitOrderFromUserText — emite cliente 3 serviço 1', () =>
     clienteIndice: 3,
     servicoIndice: 1,
     valor: 5,
-    confirm: true,
   });
 });

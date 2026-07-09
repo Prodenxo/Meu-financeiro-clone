@@ -85,7 +85,7 @@ import {
   buildOpenclawNfseEmitPayloadFromSources,
   isCompleteNfseEmitOrderFromUserText,
   mapMisroutedTransactionToNfsePayload,
-  NFSE_EMIT_NOW_AGENT_HINT,
+  NFSE_PREVIEW_AGENT_HINT,
   NFSE_NO_CARTEIRA_FOOTER,
 } from './openclaw-nfse-intent-guard.js';
 import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
@@ -345,6 +345,9 @@ const buildOpenclawEmitNfseActionResponse = async ({
           + 'Repita APENAS o campo message ao utilizador. '
           + (redirectedFromCreateTransaction
             ? 'NÃO pergunte carteira — isto é NFSe, não lançamento financeiro.'
+            : '')
+          + (redirectedFromListAction
+            ? ' Pedido completo — mostrou preview; aguarde sim do utilizador antes de confirm:true.'
             : ''),
       },
     };
@@ -426,7 +429,7 @@ const buildOpenclawEmitNfseActionResponse = async ({
     agentInstructions += ' Pedido era NFSe — não mencione carteira nem create_transaction.';
   }
   if (redirectedFromListAction) {
-    agentInstructions += ' Pedido completo — lista ignorada; nota em emissão. Não listar clientes de novo.';
+    agentInstructions += ' Pedido completo — mostrou preview; aguarde sim do utilizador antes de confirm:true.';
   }
   if (autoSent) {
     agentInstructions += ' PDF já enviado no WhatsApp — não peça confirmação nem script.';
@@ -2091,7 +2094,7 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          `${NFSE_CATALOG_NO_HALLUCINATION_INSTRUCTION} ${NFSE_EMIT_NOW_AGENT_HINT}`,
+          `${NFSE_CATALOG_NO_HALLUCINATION_INSTRUCTION} ${NFSE_PREVIEW_AGENT_HINT}`,
       },
     };
   }
@@ -2128,7 +2131,7 @@ export const runOpenclawAction = async (input) => {
           `${NFSE_CATALOG_NO_HALLUCINATION_INSTRUCTION} `
           + 'Repita APENAS o campo message ao utilizador — já inclui lista numerada. '
           + 'PROIBIDO acrescentar pergunta sobre carteira/banco (Nubank, Poupança). '
-          + `${NFSE_EMIT_NOW_AGENT_HINT} Para emitir: emit_nfse com clienteIndice, servicoIndice e valor.`,
+          + `${NFSE_PREVIEW_AGENT_HINT} Para emitir: emit_nfse com clienteIndice, servicoIndice e valor.`,
       },
     };
   }
@@ -2218,7 +2221,7 @@ export const runOpenclawAction = async (input) => {
           `${NFSE_CATALOG_NO_HALLUCINATION_INSTRUCTION} `
           + 'Repita APENAS message (lista numerada de SERVIÇOS). '
           + 'PROIBIDO perguntar carteira/banco. '
-          + `${NFSE_EMIT_NOW_AGENT_HINT} Emitir: emit_nfse com clienteIndice + servicoIndice + valor.`,
+          + `${NFSE_PREVIEW_AGENT_HINT} Emitir: emit_nfse com clienteIndice + servicoIndice + valor.`,
       },
     };
   }

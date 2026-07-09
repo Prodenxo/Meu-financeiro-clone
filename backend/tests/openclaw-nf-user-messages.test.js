@@ -66,17 +66,21 @@ test('isNfEmitConfirmed aceita linguagem natural', () => {
   assert.equal(isNfEmitConfirmed({ confirm: 'talvez' }), false);
 });
 
-test('isNfEmitConfirmed — pedido completo WhatsApp emite direto', () => {
+test('isNfEmitConfirmed — pedido completo exige preview antes de emitir', () => {
   assert.equal(
     isNfEmitConfirmed({ clienteIndice: 1, servicoIndice: 1, valor: 3 }),
-    true,
+    false,
   );
   assert.equal(
     isNfEmitConfirmed({ cliente: 1, servico: 1, valor: 3 }),
-    true,
+    false,
   );
   assert.equal(
     isNfEmitConfirmed({ clienteIndice: 1, servicoIndice: 1, valor: 5, confirm: false }),
+    false,
+  );
+  assert.equal(
+    isNfEmitConfirmed({ clienteIndice: 1, servicoIndice: 1, valor: 5, confirm: true }),
     true,
   );
 });

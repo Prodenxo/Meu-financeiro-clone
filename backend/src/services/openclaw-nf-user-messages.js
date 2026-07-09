@@ -181,30 +181,24 @@ const CONFIRM_WORDS = new Set([
   'pode emitir',
 ]);
 
-/** Aceita confirm:true ou pedido completo (cliente + serviço + valor) no WhatsApp. */
+/** Só emite com confirm explícito — pedido completo vai para preview primeiro. */
 export const isNfEmitConfirmed = (payload = {}) => {
   if (payload?.confirm === true || payload?.confirmar === true) return true;
   if (payload?.confirm === 1 || payload?.confirmar === 1) return true;
 
-  const rawConfirm = payload?.confirm ?? payload?.confirmar;
-  if (rawConfirm === false || rawConfirm === 'false' || rawConfirm === 0) {
-    return isCompleteNfseWhatsAppEmitOrder(payload);
-  }
+  if (payload?.confirm === false || payload?.confirmar === false) return false;
+  if (payload?.confirm === 0 || payload?.confirmar === 0) return false;
 
-  const raw = String(rawConfirm ?? '').trim().toLowerCase();
-  if (!raw) {
-    // segue para pedido completo
-  } else if (raw === 'true' || raw === '1') {
-    return true;
-  } else if (CONFIRM_WORDS.has(raw)) {
-    return true;
-  }
+  const raw = String(payload?.confirm ?? payload?.confirmar ?? '').trim().toLowerCase();
+  if (!raw) return false;
+  if (raw === 'true' || raw === '1') return true;
+  if (CONFIRM_WORDS.has(raw)) return true;
 
-  return isCompleteNfseWhatsAppEmitOrder(payload);
+  return false;
 };
 
 /**
- * Pedido explícito: cliente (número ou nome) + serviço + valor → emite sem preview extra.
+ * Pedido explícito: cliente (número ou nome) + serviço + valor → preview antes de emitir.
  * @param {Record<string, unknown>} [payload]
  */
 export const isCompleteNfseWhatsAppEmitOrder = (payload = {}) => {

@@ -317,7 +317,7 @@ export const buildEmitNfsePayloadFromUserText = (text) => {
   const { clienteIndice, servicoIndice } = extractNfseIndicesFromText(text);
   const valor = parseValorFromPortugueseText(text);
   if (!clienteIndice || !servicoIndice || valor == null) return null;
-  return { clienteIndice, servicoIndice, valor, confirm: true };
+  return { clienteIndice, servicoIndice, valor };
 };
 
 /**
@@ -336,6 +336,8 @@ export const buildOpenclawNfseEmitPayloadFromSources = (payload = {}) => {
   return merged;
 };
 
-export const NFSE_EMIT_NOW_AGENT_HINT =
-  'O utilizador JÁ escolheu cliente + serviço + valor. Chame SOMENTE emit_nfse com esses dados. '
+export const NFSE_PREVIEW_AGENT_HINT =
+  'Pedido com cliente + serviço + valor: chame emit_nfse SEM confirm:true (só preview). '
+  + 'Repita APENAS o campo message e peça *sim* / *confirmo*. '
+  + 'Só após o utilizador confirmar, chame emit_nfse com confirm:true e os MESMOS dados. '
   + 'PROIBIDO list_nfse_clientes, list_catalog_servicos ou repetir a lista.';

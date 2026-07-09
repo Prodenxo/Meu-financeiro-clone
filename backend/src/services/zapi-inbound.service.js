@@ -105,13 +105,15 @@ export const relayZapiInbound = async (normalized) => {
 
   const nfseIntent = isNfseEmitIntentFromUserText(normalized.text);
   const emitNow = isCompleteNfseEmitOrderFromUserText(normalized.text);
-  const emitPayload = emitNow ? buildEmitNfsePayloadFromUserText(normalized.text) : null;
-  const nfseHint = emitNow && emitPayload
-    ? ` EMITIR_AGORA=sim: chame SOMENTE emit_nfse com payload ${JSON.stringify(emitPayload)}. `
-      + 'PROIBIDO list_nfse_clientes, list_catalog_servicos e PROIBIDO repetir a lista — o utilizador JÁ escolheu cliente, serviço e valor.'
+  const previewPayload = emitNow ? buildEmitNfsePayloadFromUserText(normalized.text) : null;
+  const nfseHint = emitNow && previewPayload
+    ? ` PREVIEW_NFSE=sim: chame emit_nfse com payload ${JSON.stringify(previewPayload)} SEM confirm:true. `
+      + 'Repita APENAS o campo message (resumo com valor) e peça sim/confirmo. '
+      + 'Só após o utilizador confirmar, repita emit_nfse com confirm:true e os MESMOS dados. '
+      + 'PROIBIDO listar clientes/serviços de novo.'
     : nfseIntent
       ? ' PEDIDO_NFSE=sim: para listar use UMA chamada list_nfse_emit_catalog (clientes + serviços NFS-e reais da app). '
-        + 'PROIBIDO inventar clientes/serviços. Se faltar cliente/serviço/valor na emissão, liste; se JÁ disse os três, use SOMENTE emit_nfse. '
+        + 'PROIBIDO inventar clientes/serviços. Pedido com cliente+serviço+valor → preview (emit_nfse sem confirm) antes de emitir. '
         + 'PROIBIDO create_transaction, list_contas e PROIBIDO perguntar carteira (Nubank, Poupança, Banco do Brasil).'
       : '';
 
@@ -129,7 +131,7 @@ export const relayZapiInbound = async (normalized) => {
     receivedAt: new Date().toISOString(),
     nfseIntent,
     nfseEmitNow: emitNow,
-    nfseEmitPayload: emitPayload,
+    nfsePreviewPayload: previewPayload,
     agentHint:
       `REMETENTE_WHATSAPP=${normalized.phone}. O 1º argumento de mf-curl.sh DEVE ser exatamente ${normalized.phone}. `
       + 'Nunca uses número de outro chat nem exemplos do SOUL.'
