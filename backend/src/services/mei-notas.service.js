@@ -1872,6 +1872,31 @@ export const emitirNota = async (userId, input) => {
         };
       }
     }
+
+    /** Registro antecipado — lista mostra "processando" antes da PlugNotas responder (app + WhatsApp). */
+    let pendingNfseRow = null;
+    if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
+      phase = 'insert_record';
+      const prestadorDigits = prestadorDoc
+        || normalizeDoc(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || '');
+      const tomadorDigits = tomadorDoc
+        || normalizeDoc(payload?.tomador?.cpfCnpj || payload?.destinatario?.cpfCnpj || '');
+      pendingNfseRow = await insertRecord(userId, {
+        id_integracao: payload.idIntegracao,
+        status: 'processando',
+        document_type: documentType,
+        provider: PROVIDER_PLUGNOTAS,
+        cnpj_prestador: prestadorDigits,
+        cnpj_tomador: tomadorDigits,
+        payload_json: emitPayload,
+        metadata_json: prune({
+          ...(Object.keys(metadata).length ? metadata : {}),
+          emitPhase: 'awaiting_plugnotas',
+        }) || { emitPhase: 'awaiting_plugnotas' },
+      });
+      phase = 'plugnotas_emit';
+    }
+
     let response;
     try {
       if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
@@ -1888,6 +1913,27 @@ export const emitirNota = async (userId, input) => {
         response = await adapter.emitir(emitPayload);
       }
     } catch (emitError) {
+      if (pendingNfseRow?.id) {
+        try {
+          const errMsg = emitError instanceof Error ? emitError.message : String(emitError);
+          const priorMeta = pendingNfseRow.metadata_json && typeof pendingNfseRow.metadata_json === 'object'
+            ? pendingNfseRow.metadata_json
+            : {};
+          await updateRecord(userId, pendingNfseRow.id, {
+            status: 'rejeitado',
+            response_json: { error: errMsg },
+            metadata_json: {
+              ...priorMeta,
+              emitPhase: 'plugnotas_error',
+            },
+          });
+        } catch (markErr) {
+          console.warn(
+            '[mei-notas] falha ao marcar nota pendente após erro Plugnotas',
+            markErr instanceof Error ? markErr.message : markErr,
+          );
+        }
+      }
       if (documentType === DOCUMENT_TYPE_NFSE) {
         rethrowIfPlugnotasEmpresaNaoCadastrada(emitError);
       }
@@ -1941,7 +1987,7 @@ export const emitirNota = async (userId, input) => {
       if (!isNfseE0014FromPlugnotasResponse(response)) return null;
       return { nfseRejectionCode: 'E0014' };
     })();
-    const created = await insertRecord(userId, {
+    const recordPayload = {
       plugnotas_id: plugnotasId,
       protocol,
       id_integracao: idIntegracao,
@@ -1957,8 +2003,12 @@ export const emitirNota = async (userId, input) => {
       metadata_json: prune({
         ...(Object.keys(metadata).length ? metadata : {}),
         ...(rejectionMeta ?? {}),
-      }) || null
-    });
+        emitPhase: 'completed',
+      }) || null,
+    };
+    const created = pendingNfseRow?.id
+      ? await updateRecord(userId, pendingNfseRow.id, recordPayload)
+      : await insertRecord(userId, recordPayload);
 
     try {
       await upsertClienteCatalogo(userId, emitPayload, { documentType });
