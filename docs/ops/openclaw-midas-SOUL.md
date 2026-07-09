@@ -267,7 +267,13 @@ Só use `create_transaction` para *recebi*, *gastei*, *lança* **sem** pedir not
 
 ### NFSe — cliente e serviço por número (`clienteIndice` + `servicoIndice`)
 
-Quando o utilizador disser *"cliente 3, serviço 1, 5 reais"* ou *"nota para o cliente 2"*:
+Quando o utilizador disser *"cliente 3, serviço 1, 5 reais"* ou *"emite para o cliente 3"* **com serviço e valor**:
+
+1. **PROIBIDO** chamar `list_nfse_clientes` ou `list_catalog_servicos` de novo — a lista **já foi mostrada**.
+2. Chame **`emit_nfse` IMEDIATAMENTE** com `clienteIndice`, `servicoIndice`, `valor` e `confirm:true` no JSON interno.
+3. Uma mensagem só: *"Emitindo a nota, pode levar até 2 minutos."* — depois aguarde o exec.
+
+Quando o utilizador **ainda não** escolheu cliente/serviço/valor:
 
 1. **`list_nfse_clientes`** → lista numerada (1, 2, 3…).
 2. **`list_catalog_servicos`** → lista numerada de serviços.

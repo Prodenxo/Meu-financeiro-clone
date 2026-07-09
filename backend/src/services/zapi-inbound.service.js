@@ -1,6 +1,10 @@
 import { env } from '../config/env.js';
 import { extractZapiInboundText } from './zapi-inbound-text.service.js';
-import { isNfseEmitIntentFromUserText } from './openclaw-nfse-intent-guard.js';
+import {
+  buildEmitNfsePayloadFromUserText,
+  isCompleteNfseEmitOrderFromUserText,
+  isNfseEmitIntentFromUserText,
+} from './openclaw-nfse-intent-guard.js';
 
 /**
  * Extrai telefone e texto do callback Z-API "Ao receber" (ReceivedCallback).
@@ -100,10 +104,16 @@ export const relayZapiInbound = async (normalized) => {
   );
 
   const nfseIntent = isNfseEmitIntentFromUserText(normalized.text);
-  const nfseHint = nfseIntent
-    ? ' PEDIDO_NFSE=sim: use list_nfse_clientes + list_catalog_servicos + emit_nfse (clienteIndice, servicoIndice, valor). '
-      + 'PROIBIDO create_transaction, list_contas e PROIBIDO perguntar carteira (Nubank, Poupança, Banco do Brasil).'
-    : '';
+  const emitNow = isCompleteNfseEmitOrderFromUserText(normalized.text);
+  const emitPayload = emitNow ? buildEmitNfsePayloadFromUserText(normalized.text) : null;
+  const nfseHint = emitNow && emitPayload
+    ? ` EMITIR_AGORA=sim: chame SOMENTE emit_nfse com payload ${JSON.stringify(emitPayload)}. `
+      + 'PROIBIDO list_nfse_clientes, list_catalog_servicos e PROIBIDO repetir a lista — o utilizador JÁ escolheu cliente, serviço e valor.'
+    : nfseIntent
+      ? ' PEDIDO_NFSE=sim: se ainda faltar cliente/serviço/valor use list_nfse_clientes + list_catalog_servicos; '
+        + 'se o utilizador JÁ disse cliente + serviço + valor use SOMENTE emit_nfse. '
+        + 'PROIBIDO create_transaction, list_contas e PROIBIDO perguntar carteira (Nubank, Poupança, Banco do Brasil).'
+      : '';
 
   const payload = {
     source: 'zapi',
@@ -118,6 +128,8 @@ export const relayZapiInbound = async (normalized) => {
     instanceId: normalized.instanceId,
     receivedAt: new Date().toISOString(),
     nfseIntent,
+    nfseEmitNow: emitNow,
+    nfseEmitPayload: emitPayload,
     agentHint:
       `REMETENTE_WHATSAPP=${normalized.phone}. O 1º argumento de mf-curl.sh DEVE ser exatamente ${normalized.phone}. `
       + 'Nunca uses número de outro chat nem exemplos do SOUL.'

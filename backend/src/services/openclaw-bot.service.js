@@ -74,11 +74,16 @@ import {
   buildNfEmittedUserMessage,
   formatOpenclawNfseNotasListMessage,
   formatValorBr,
+  isCompleteNfseWhatsAppEmitOrder,
 } from './openclaw-nf-user-messages.js';
 import {
   isNfseEmitIntentFromUserText,
   isNfseEmitIntentPayload,
+  buildEmitNfsePayloadFromUserText,
+  buildOpenclawNfseEmitPayloadFromSources,
+  isCompleteNfseEmitOrderFromUserText,
   mapMisroutedTransactionToNfsePayload,
+  NFSE_EMIT_NOW_AGENT_HINT,
   NFSE_NO_CARTEIRA_FOOTER,
 } from './openclaw-nfse-intent-guard.js';
 import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
@@ -319,6 +324,7 @@ const buildOpenclawEmitNfseActionResponse = async ({
   actorContext,
   linkDebug,
   redirectedFromCreateTransaction = false,
+  redirectedFromListAction = false,
 }) => {
   if (result.requiresConfirm) {
     return {
@@ -417,6 +423,9 @@ const buildOpenclawEmitNfseActionResponse = async ({
   if (redirectedFromCreateTransaction) {
     agentInstructions += ' Pedido era NFSe — não mencione carteira nem create_transaction.';
   }
+  if (redirectedFromListAction) {
+    agentInstructions += ' Pedido completo — lista ignorada; nota em emissão. Não listar clientes de novo.';
+  }
   if (autoSent) {
     agentInstructions += ' PDF já enviado no WhatsApp — não peça confirmação nem script.';
   } else if (autoEnabled) {
@@ -450,12 +459,42 @@ const buildOpenclawEmitNfseActionResponse = async ({
       duplicatePrevented,
       recoveredAfterTimeout,
       redirectedFromCreateTransaction,
+      redirectedFromListAction,
       userId,
       actorContext,
       ...linkDebug,
       agentInstructions,
     },
   };
+};
+
+/**
+ * Se o pedido já tem cliente + serviço + valor, emite em vez de listar de novo.
+ */
+const tryRedirectListActionToEmitNfse = async ({
+  payload,
+  userId,
+  phoneDigits,
+  matchedUserNumber,
+  actorContext,
+  linkDebug,
+}) => {
+  const emitPayload = buildOpenclawNfseEmitPayloadFromSources(payload);
+  if (!isCompleteNfseWhatsAppEmitOrder(emitPayload)) return null;
+  try {
+    const result = await emitOpenclawNfse(userId, emitPayload);
+    return buildOpenclawEmitNfseActionResponse({
+      result,
+      userId,
+      phoneDigits,
+      matchedUserNumber,
+      actorContext,
+      linkDebug,
+      redirectedFromListAction: true,
+    });
+  } catch (err) {
+    rethrowNfseErrorForBot(err);
+  }
 };
 
 /**
@@ -2030,6 +2069,16 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'list_nfse_clientes') {
+    const redirected = await tryRedirectListActionToEmitNfse({
+      payload,
+      userId,
+      phoneDigits,
+      matchedUserNumber,
+      actorContext,
+      linkDebug,
+    });
+    if (redirected) return redirected;
+
     const q = String(
       payload?.q ?? payload?.nome ?? payload?.busca ?? payload?.documento ?? '',
     ).trim();
@@ -2050,7 +2099,7 @@ export const runOpenclawAction = async (input) => {
         agentInstructions:
           'Repita APENAS o campo message ao utilizador — já inclui lista numerada. '
           + 'PROIBIDO acrescentar pergunta sobre carteira/banco (Nubank, Poupança). '
-          + 'Para emitir: emit_nfse com clienteIndice, servicoIndice e valor.',
+          + `${NFSE_EMIT_NOW_AGENT_HINT} Para emitir: emit_nfse com clienteIndice, servicoIndice e valor.`,
       },
     };
   }
@@ -2112,6 +2161,16 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'list_catalog_servicos') {
+    const redirected = await tryRedirectListActionToEmitNfse({
+      payload,
+      userId,
+      phoneDigits,
+      matchedUserNumber,
+      actorContext,
+      linkDebug,
+    });
+    if (redirected) return redirected;
+
     const q = String(
       payload?.q ?? payload?.nome ?? payload?.busca ?? payload?.servico ?? '',
     ).trim();
@@ -2129,7 +2188,7 @@ export const runOpenclawAction = async (input) => {
         agentInstructions:
           'Repita APENAS message (lista numerada de SERVIÇOS). '
           + 'PROIBIDO perguntar carteira/banco. '
-          + 'Emitir: emit_nfse com clienteIndice + servicoIndice + valor.',
+          + `${NFSE_EMIT_NOW_AGENT_HINT} Emitir: emit_nfse com clienteIndice + servicoIndice + valor.`,
       },
     };
   }

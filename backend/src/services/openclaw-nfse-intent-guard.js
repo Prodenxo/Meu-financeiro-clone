@@ -239,3 +239,103 @@ export const mapMisroutedTransactionToNfsePayload = (payload = {}) => {
 export const NFSE_MISROUTED_TRANSACTION_HINT =
   'Pedido de NOTA FISCAL de serviço (NFSe). Use emit_nfse com clienteIndice, servicoIndice e valor. '
   + 'PROIBIDO create_transaction, list_contas ou perguntar carteira (Nubank, Poupança).';
+
+const PT_NUMBER_WORDS = {
+  um: 1,
+  uma: 1,
+  dois: 2,
+  duas: 2,
+  tres: 3,
+  três: 3,
+  quatro: 4,
+  cinco: 5,
+  seis: 6,
+  sete: 7,
+  oito: 8,
+  nove: 9,
+  dez: 10,
+  onze: 11,
+  doze: 12,
+  quinze: 15,
+  vinte: 20,
+  trinta: 30,
+  quarenta: 40,
+  cinquenta: 50,
+  cem: 100,
+};
+
+const normalizePtWord = (value) => String(value || '')
+  .trim()
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/\p{M}/gu, '');
+
+/**
+ * Extrai valor em reais de texto pt-BR (dígitos ou "cinco reais").
+ * @param {string} text
+ */
+export const parseValorFromPortugueseText = (text) => {
+  const s = String(text || '');
+  const digitMatch = s.match(/\bvalor\s*(?:de\s*)?r?\$?\s*(\d+(?:[.,]\d{1,2})?)/i)
+    || s.match(/\b(\d+(?:[.,]\d{1,2})?)\s*reais?\b/i)
+    || s.match(/\br\$\s*(\d+(?:[.,]\d{1,2})?)/i);
+  if (digitMatch) {
+    const raw = digitMatch[1].replace(/\./g, '').replace(',', '.');
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  const wordMatch = s.match(/\bvalor\s*(?:de\s*)?([a-záéíóúãõ]+)\s*reais?\b/i)
+    || s.match(/\b([a-záéíóúãõ]+)\s*reais?\b/i);
+  if (wordMatch) {
+    const mapped = PT_NUMBER_WORDS[normalizePtWord(wordMatch[1])];
+    return mapped > 0 ? mapped : null;
+  }
+  return null;
+};
+
+/**
+ * Pedido completo em linguagem natural: cliente N + serviço M + valor.
+ * @param {string} text
+ */
+export const isCompleteNfseEmitOrderFromUserText = (text) => {
+  const s = String(text || '').trim();
+  if (!s) return false;
+  const { clienteIndice, servicoIndice } = extractNfseIndicesFromText(s);
+  if (!clienteIndice || !servicoIndice) return false;
+  const valor = parseValorFromPortugueseText(s);
+  if (valor == null || valor <= 0) return false;
+  return /\b(emite|emitir|emiss|quero|manda|fazer|tirar|nota)\b/i.test(s) || /\bvalor\b/i.test(s);
+};
+
+/**
+ * Monta payload emit_nfse a partir do texto do utilizador.
+ * @param {string} text
+ */
+export const buildEmitNfsePayloadFromUserText = (text) => {
+  if (!isCompleteNfseEmitOrderFromUserText(text)) return null;
+  const { clienteIndice, servicoIndice } = extractNfseIndicesFromText(text);
+  const valor = parseValorFromPortugueseText(text);
+  if (!clienteIndice || !servicoIndice || valor == null) return null;
+  return { clienteIndice, servicoIndice, valor, confirm: true };
+};
+
+/**
+ * Une payload do mf-curl com texto do utilizador (userText/texto/pedido).
+ * @param {Record<string, unknown>} [payload]
+ */
+export const buildOpenclawNfseEmitPayloadFromSources = (payload = {}) => {
+  const userText = String(
+    payload?.userText ?? payload?.texto ?? payload?.pedido ?? payload?.contexto ?? '',
+  ).trim();
+  let merged = enrichNfsePayloadFromFreeText(payload);
+  if (userText) {
+    const fromText = buildEmitNfsePayloadFromUserText(userText);
+    if (fromText) merged = { ...merged, ...fromText };
+  }
+  return merged;
+};
+
+export const NFSE_EMIT_NOW_AGENT_HINT =
+  'O utilizador JÁ escolheu cliente + serviço + valor. Chame SOMENTE emit_nfse com esses dados. '
+  + 'PROIBIDO list_nfse_clientes, list_catalog_servicos ou repetir a lista.';

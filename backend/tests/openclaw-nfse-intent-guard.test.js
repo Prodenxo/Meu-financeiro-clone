@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildEmitNfsePayloadFromUserText,
   enrichNfsePayloadFromFreeText,
+  isCompleteNfseEmitOrderFromUserText,
   isNfseEmitIntentFromUserText,
   isNfseEmitIntentPayload,
   mapMisroutedTransactionToNfsePayload,
+  parseValorFromPortugueseText,
   resolveClienteIndiceFromPayload,
   resolveServicoIndiceFromPayload,
 } from '../src/services/openclaw-nfse-intent-guard.js';
@@ -91,4 +94,20 @@ test('pickClienteCatalogoByIndexResult — lista numerada', () => {
   const r = pickClienteCatalogoByIndexResult(rows, 2);
   assert.equal(r.kind, 'ok');
   assert.equal(r.cliente.nome, 'Taure');
+});
+
+test('parseValorFromPortugueseText — cinco reais', () => {
+  assert.equal(parseValorFromPortugueseText('no valor de cinco reais'), 5);
+  assert.equal(parseValorFromPortugueseText('valor de 5 reais'), 5);
+});
+
+test('isCompleteNfseEmitOrderFromUserText — emite cliente 3 serviço 1', () => {
+  const text = 'Emite para o cliente 3 o serviço 1, no valor de cinco reais.';
+  assert.equal(isCompleteNfseEmitOrderFromUserText(text), true);
+  assert.deepEqual(buildEmitNfsePayloadFromUserText(text), {
+    clienteIndice: 3,
+    servicoIndice: 1,
+    valor: 5,
+    confirm: true,
+  });
 });
