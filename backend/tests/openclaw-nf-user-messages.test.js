@@ -65,6 +65,17 @@ test('isNfEmitConfirmed aceita linguagem natural', () => {
   assert.equal(isNfEmitConfirmed({ confirm: 'talvez' }), false);
 });
 
+test('isNfEmitConfirmed — pedido completo WhatsApp emite direto', () => {
+  assert.equal(
+    isNfEmitConfirmed({ clienteIndice: 1, servicoIndice: 1, valor: 3 }),
+    true,
+  );
+  assert.equal(
+    isNfEmitConfirmed({ cliente: 1, servico: 1, valor: 3 }),
+    true,
+  );
+});
+
 test('formatNfseEmitErrorForUser traduz timeout PlugNotas', () => {
   const msg = formatNfseEmitErrorForUser(
     'Não foi possível alinhar a numeração na PlugNotas: This operation was aborted',

@@ -124,13 +124,51 @@ const CONFIRM_WORDS = new Set([
   'pode emitir',
 ]);
 
-/** Aceita confirm:true ou texto de confirmação do utilizador no campo confirm/confirmar. */
+/** Aceita confirm:true ou pedido completo (cliente + serviço + valor) no WhatsApp. */
 export const isNfEmitConfirmed = (payload = {}) => {
   if (payload?.confirm === true || payload?.confirmar === true) return true;
+  if (payload?.confirm === 1 || payload?.confirmar === 1) return true;
+
   const raw = String(payload?.confirm ?? payload?.confirmar ?? '').trim().toLowerCase();
-  if (!raw) return false;
-  if (raw === 'true') return true;
-  return CONFIRM_WORDS.has(raw);
+  if (!raw) {
+    // segue para pedido completo
+  } else if (raw === 'true' || raw === '1') {
+    return true;
+  } else if (CONFIRM_WORDS.has(raw)) {
+    return true;
+  }
+
+  return isCompleteNfseWhatsAppEmitOrder(payload);
+};
+
+/**
+ * Pedido explícito: cliente (número ou nome) + serviço + valor → emite sem preview extra.
+ * @param {Record<string, unknown>} [payload]
+ */
+export const isCompleteNfseWhatsAppEmitOrder = (payload = {}) => {
+  const valorRaw = payload?.valor ?? payload?.valorServico ?? payload?.valorReais;
+  const valor = Number(typeof valorRaw === 'string' ? valorRaw.replace(',', '.') : valorRaw);
+  if (!Number.isFinite(valor) || valor <= 0) return false;
+
+  const hasServico = Boolean(
+    payload?.servicoIndice
+    || payload?.servicoNumero
+    || payload?.servico
+    || payload?.codigoServico
+    || payload?.codigo,
+  );
+  if (!hasServico) return false;
+
+  const hasCliente = Boolean(
+    payload?.clienteIndice
+    || payload?.tomadorIndice
+    || payload?.clienteNumero
+    || (typeof payload?.cliente === 'number' && payload.cliente >= 1)
+    || (typeof payload?.cliente === 'string' && /^\d{1,2}$/.test(payload.cliente.trim()))
+    || String(payload?.tomadorNome || payload?.tomadorRazaoSocial || '').trim()
+    || payload?.tomadorCpfCnpj,
+  );
+  return hasCliente;
 };
 
 const VAGUE_NF_ITEM_REGEX = [

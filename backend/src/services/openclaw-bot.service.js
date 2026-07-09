@@ -78,6 +78,7 @@ import {
   NFSE_NO_CARTEIRA_FOOTER,
 } from './openclaw-nfse-intent-guard.js';
 import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
+import { formatCnpjDisplay } from '../utils/cpf-cnpj.js';
 import {
   deliverOpenclawNfseWhatsappPdf,
   getOpenclawNfseWhatsappDeliveryState,
@@ -375,7 +376,8 @@ const buildOpenclawEmitNfseActionResponse = async ({
   });
 
   let agentInstructions =
-    'Repita APENAS o campo message ao utilizador. PROIBIDO mencionar payload, confirm:true ou ações técnicas.';
+    'Repita APENAS o campo message ao utilizador. PROIBIDO mencionar payload, confirm:true ou ações técnicas. '
+    + 'PROIBIDO chamar emit_nfse de novo neste turno.';
   if (redirectedFromCreateTransaction) {
     agentInstructions += ' Pedido era NFSe — não mencione carteira nem create_transaction.';
   }
