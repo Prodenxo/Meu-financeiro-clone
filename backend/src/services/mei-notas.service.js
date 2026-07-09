@@ -1123,6 +1123,7 @@ const parsePositiveIntLocal = (value, fallback = NaN) => {
 
 const NFSE_EMIT_TERMINAL_POLL_MAX_MS = 8000;
 const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 28000;
+const NFSE_EMIT_OPENCLAW_WHATSAPP_POLL_MAX_MS = 120000;
 const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 1000;
 const NFSE_EMIT_E0014_RETRY_MAX = 6;
 const NFSE_PERIODO_FAST_PAGES = 12;
@@ -1372,6 +1373,9 @@ const emitNfseWithAutoRpsRecovery = async (
     || parsePositiveIntLocal(await queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse), 0);
 
   const empresaJsonCache = prep.empresaJson ?? null;
+  const pollMaxMs = prep.openclawWhatsapp === true
+    ? NFSE_EMIT_OPENCLAW_WHATSAPP_POLL_MAX_MS
+    : NFSE_EMIT_PROCESSING_POLL_MAX_MS;
   let emitPayload = { ...basePayload };
   let response;
 
@@ -1411,7 +1415,7 @@ const emitNfseWithAutoRpsRecovery = async (
         initialResponse: response,
         idIntegracao: integracaoPoll,
         cnpjPrestador: cnpjPrestadorNfse,
-        maxWaitMs: NFSE_EMIT_PROCESSING_POLL_MAX_MS,
+        maxWaitMs: pollMaxMs,
         intervalMs: NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS,
       });
       status = extractPlugNotasStatus(response);
@@ -1852,12 +1856,19 @@ export const emitirNota = async (userId, input) => {
         await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestadorNfse, empresaJsonCache);
         const [initialLocalMax, authoritativeMax] = await Promise.all([
           queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse),
-          queryAuthoritativeNfseRpsMaxUsed(cnpjPrestadorNfse, 0),
+          queryAuthoritativeNfseRpsMaxUsed(cnpjPrestadorNfse, 0).catch((err) => {
+            console.warn(
+              '[plugnotas-rps] authoritative max indisponível — usa só histórico local',
+              err instanceof Error ? err.message : err,
+            );
+            return 0;
+          }),
         ]);
         nfseEmitPrep = {
           empresaJson: empresaJsonCache,
           initialLocalMax: Math.max(initialLocalMax ?? 0, authoritativeMax),
           periodoMax: authoritativeMax,
+          openclawWhatsapp: metadata?.source === 'openclaw_whatsapp',
         };
       }
     }

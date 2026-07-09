@@ -68,9 +68,11 @@ import {
 import {
   BOT_NF_CONFIRM_INSTRUCTION,
   BOT_NF_EMIT_SLOW_EXEC_INSTRUCTION,
+  BOT_NF_LIST_NOTAS_INSTRUCTION,
   BOT_NF_PREVIEW_LOOP_GUARD,
   buildNfConfirmRequestUserMessage,
   buildNfEmittedUserMessage,
+  formatOpenclawNfseNotasListMessage,
   formatValorBr,
 } from './openclaw-nf-user-messages.js';
 import {
@@ -346,6 +348,7 @@ const buildOpenclawEmitNfseActionResponse = async ({
   const pdfReady = isNfsePdfReadyStatus(status);
   const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
   const duplicatePrevented = Boolean(result.duplicatePrevented);
+  const recoveredAfterTimeout = Boolean(result.recoveredAfterTimeout);
   let priorDelivery = null;
   if (duplicatePrevented && nota?.id) {
     priorDelivery = await getOpenclawNfseWhatsappDeliveryState(userId, nota.id);
@@ -386,11 +389,20 @@ const buildOpenclawEmitNfseActionResponse = async ({
         ? 'Ela já foi autorizada; o PDF segue o envio automático.'
         : 'Aguarde a autorização; não criei outra nota duplicada.')
     )
-    : buildNfEmittedUserMessage(result.preview, {
-      status,
-      pdfSent: autoSent,
-      pdfPending: autoEnabled && !pdfReady,
-    });
+    : recoveredAfterTimeout
+      ? buildNfEmittedUserMessage(result.preview, {
+        status: pdfReady ? 'concluido' : status,
+        pdfSent: autoSent,
+        pdfPending: autoEnabled && !pdfReady,
+      }).replace(
+        'Nota fiscal enviada para emissão.',
+        '*Nota emitida com sucesso.* A PlugNotas demorou, mas a nota foi criada.',
+      )
+      : buildNfEmittedUserMessage(result.preview, {
+        status,
+        pdfSent: autoSent,
+        pdfPending: autoEnabled && !pdfReady,
+      });
 
   let agentInstructions =
     `${BOT_NF_EMIT_SLOW_EXEC_INSTRUCTION} `
@@ -398,6 +410,9 @@ const buildOpenclawEmitNfseActionResponse = async ({
     + 'PROIBIDO chamar emit_nfse de novo neste turno.';
   if (duplicatePrevented) {
     agentInstructions += ' Duplicata evitada — não emitir de novo nem pedir confirmação.';
+  }
+  if (recoveredAfterTimeout) {
+    agentInstructions += ' Nota recuperada após timeout — não chame emit_nfse de novo.';
   }
   if (redirectedFromCreateTransaction) {
     agentInstructions += ' Pedido era NFSe — não mencione carteira nem create_transaction.';
@@ -433,6 +448,7 @@ const buildOpenclawEmitNfseActionResponse = async ({
       pdfWhatsappAlreadySent: autoSent,
       doNotRunNfseSendScript: autoSent || (autoEnabled && !autoFailed),
       duplicatePrevented,
+      recoveredAfterTimeout,
       redirectedFromCreateTransaction,
       userId,
       actorContext,
@@ -2324,10 +2340,35 @@ export const runOpenclawAction = async (input) => {
   if (action === 'list_nfse_notas') {
     const limit = payload?.limit;
     const notas = await listOpenclawNfseNotas(userId, { limit });
+    const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+    const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
+    let pdfSent = false;
+
+    if (autoEnabled && destinationPhone && notas[0]?.id && isNfsePdfReadyStatus(notas[0].status)) {
+      const prior = await getOpenclawNfseWhatsappDeliveryState(userId, notas[0].id);
+      if (!prior.alreadySent) {
+        await registerOpenclawNfseWhatsappDelivery(userId, notas[0].id, destinationPhone);
+        const delivered = await deliverOpenclawNfseWhatsappPdf(userId, notas[0].id, destinationPhone);
+        pdfSent = delivered?.whatsappStatus === 'sent';
+        if (!pdfSent) {
+          scheduleOpenclawNfseWhatsappDeliveryRetries(userId, notas[0].id);
+        }
+      } else {
+        pdfSent = true;
+      }
+    }
+
     return {
       ok: true,
-      message: `${notas.length} nota(s) NFSe recente(s).`,
-      data: { notas, userId, actorContext, ...linkDebug },
+      message: formatOpenclawNfseNotasListMessage(notas, { pdfSent }),
+      data: {
+        notas,
+        pdfWhatsappSentOnList: pdfSent,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions: BOT_NF_LIST_NOTAS_INSTRUCTION,
+      },
     };
   }
 

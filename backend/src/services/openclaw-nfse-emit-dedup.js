@@ -117,3 +117,39 @@ export const withOpenclawNfseEmitInflight = async (fingerprint, fn) => {
 };
 
 export const OPENCLAW_NFSE_DEDUP_WINDOW_MS = DEFAULT_DEDUP_WINDOW_MS;
+
+const RECOVERABLE_EMIT_ERROR_RE = /alinhar a numeração|operation was aborted|aborted|timeout|ETIMEDOUT|demorou a responder/i;
+
+/**
+ * Erros em que a nota pode ter sido criada na PlugNotas mesmo com falha/timeout na API.
+ * @param {unknown} err
+ */
+export const isRecoverableOpenclawNfseEmitError = (err) => {
+  const rawMsg = String(err instanceof Error ? err.message : err || '');
+  const code = err?.errors?.code || err?.code;
+  return RECOVERABLE_EMIT_ERROR_RE.test(rawMsg) || code === 'NFSE_RPS_SYNC';
+};
+
+/**
+ * Após timeout/RPS, tenta localizar nota recém-criada no banco.
+ * @param {object} params
+ */
+export const tryRecoverOpenclawNfseEmitAfterError = async ({
+  userId,
+  input,
+  listarNotas,
+  err,
+  waitMs = 2500,
+  windowMs = 3 * 60 * 1000,
+}) => {
+  if (!isRecoverableOpenclawNfseEmitError(err)) return null;
+  if (waitMs > 0) {
+    await new Promise((resolve) => { setTimeout(resolve, waitMs); });
+  }
+  return findRecentDuplicateOpenclawNfse({
+    userId,
+    input,
+    listarNotas,
+    windowMs,
+  });
+};

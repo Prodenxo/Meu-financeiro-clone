@@ -72,7 +72,58 @@ export const buildNfEmittedUserMessage = (preview = {}, opts = {}) => {
   return lines.join('\n');
 };
 
-/** Instrução só para o agente (não mostrar ao utilizador). */
+const formatNfseStatusLabel = (status) => {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized.includes('concluid') || normalized.includes('autoriz')) return 'autorizada';
+  if (normalized.includes('process')) return 'em processamento';
+  if (normalized.includes('rejeit')) return 'rejeitada';
+  if (normalized.includes('cancel')) return 'cancelada';
+  return normalized || 'processando';
+};
+
+/**
+ * Resumo humano de notas recentes — sem UUIDs técnicos.
+ * @param {Array<{ status?: string, valorServico?: number | null }>} notas
+ * @param {{ pdfSent?: boolean }} [opts]
+ */
+export const formatOpenclawNfseNotasListMessage = (notas = [], opts = {}) => {
+  const list = Array.isArray(notas) ? notas : [];
+  if (!list.length) {
+    return 'Não encontrei notas NFS-e recentes. Se acabou de pedir emissão, aguarde cerca de 1 minuto.';
+  }
+
+  const latest = list[0];
+  const statusLabel = formatNfseStatusLabel(latest.status);
+  const valor = latest.valorServico != null ? formatValorBr(latest.valorServico) : null;
+  const lines = [
+    '*Última nota NFS-e:*',
+    `• Situação: *${statusLabel}*`,
+  ];
+  if (valor) lines.push(`• Valor: *${valor}*`);
+
+  if (statusLabel === 'autorizada') {
+    lines.push(
+      opts.pdfSent
+        ? '• PDF enviado neste WhatsApp.'
+        : '• O PDF será enviado neste chat em instantes.',
+    );
+  } else if (statusLabel === 'em processamento') {
+    lines.push('• Ainda em processamento na Prefeitura — o PDF chega quando autorizar.');
+  }
+
+  if (list.length > 1) {
+    lines.push(
+      '',
+      `_${list.length} notas recentes no total. Detalhes no app Meu Financeiro → MEI → Notas._`,
+    );
+  }
+  return lines.join('\n');
+};
+
+/** Instrução só para o agente ao listar notas. */
+export const BOT_NF_LIST_NOTAS_INSTRUCTION =
+  'Repita APENAS o campo message. PROIBIDO listar UUID, ID técnico ou JSON. '
+  + 'Se a nota estiver autorizada e o PDF ainda não foi enviado, informe que o PDF chega em instantes.';
 export const BOT_NF_CONFIRM_INSTRUCTION =
   'INSTRUÇÃO INTERNA: se o utilizador responder sim/confirmo/pode emitir/ok, chame emit_nfse ou emit_nfe '
   + 'com os MESMOS dados do preview e "confirm":true no JSON do mf-curl. '
@@ -135,7 +186,12 @@ export const isNfEmitConfirmed = (payload = {}) => {
   if (payload?.confirm === true || payload?.confirmar === true) return true;
   if (payload?.confirm === 1 || payload?.confirmar === 1) return true;
 
-  const raw = String(payload?.confirm ?? payload?.confirmar ?? '').trim().toLowerCase();
+  const rawConfirm = payload?.confirm ?? payload?.confirmar;
+  if (rawConfirm === false || rawConfirm === 'false' || rawConfirm === 0) {
+    return isCompleteNfseWhatsAppEmitOrder(payload);
+  }
+
+  const raw = String(rawConfirm ?? '').trim().toLowerCase();
   if (!raw) {
     // segue para pedido completo
   } else if (raw === 'true' || raw === '1') {

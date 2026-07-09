@@ -5,6 +5,7 @@ import {
   extractCodigoFromNfsePayloadJson,
   extractValorFromNfsePayloadJson,
   findRecentDuplicateOpenclawNfse,
+  isRecoverableOpenclawNfseEmitError,
   withOpenclawNfseEmitInflight,
 } from '../src/services/openclaw-nfse-emit-dedup.js';
 
@@ -97,4 +98,12 @@ test('extractCodigoFromNfsePayloadJson', () => {
     extractCodigoFromNfsePayloadJson({ servico: [{ codigo: '14.01.01' }] }),
     '140101',
   );
+});
+
+test('isRecoverableOpenclawNfseEmitError — timeout PlugNotas', () => {
+  assert.equal(
+    isRecoverableOpenclawNfseEmitError(new Error('Não foi possível alinhar a numeração: aborted')),
+    true,
+  );
+  assert.equal(isRecoverableOpenclawNfseEmitError(new Error('valor inválido')), false);
 });

@@ -5,6 +5,7 @@ import {
   buildNfEmittedUserMessage,
   formatNfseCatalogChoiceMessage,
   formatNfseEmitErrorForUser,
+  formatOpenclawNfseNotasListMessage,
   formatValorBr,
   isNfEmitConfirmed,
   isVagueNfItemLabel,
@@ -74,6 +75,19 @@ test('isNfEmitConfirmed — pedido completo WhatsApp emite direto', () => {
     isNfEmitConfirmed({ cliente: 1, servico: 1, valor: 3 }),
     true,
   );
+  assert.equal(
+    isNfEmitConfirmed({ clienteIndice: 1, servicoIndice: 1, valor: 5, confirm: false }),
+    true,
+  );
+});
+
+test('formatOpenclawNfseNotasListMessage — sem UUIDs', () => {
+  const msg = formatOpenclawNfseNotasListMessage([
+    { status: 'concluido', valorServico: 5 },
+  ], { pdfSent: true });
+  assert.match(msg, /autorizada/i);
+  assert.match(msg, /R\$\s*5,00/);
+  assert.doesNotMatch(msg, /[0-9a-f]{8}-[0-9a-f]{4}/i);
 });
 
 test('formatNfseEmitErrorForUser traduz timeout PlugNotas', () => {

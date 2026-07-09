@@ -50,7 +50,9 @@ import {
 } from './openclaw-nfse-intent-guard.js';
 import {
   buildOpenclawNfseEmitFingerprint,
+  extractValorFromNfsePayloadJson,
   findRecentDuplicateOpenclawNfse,
+  tryRecoverOpenclawNfseEmitAfterError,
   withOpenclawNfseEmitInflight,
 } from './openclaw-nfse-emit-dedup.js';
 import { isValidCpfOrCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
@@ -1371,16 +1373,41 @@ export const emitOpenclawNfse = async (userId, payload = {}) => {
       };
     }
 
-    const created = await emitirNota(userId, input);
-    const preview = {
-      documentType: 'NFSE',
-      tomadorRazaoSocial: input.tomadorRazaoSocial,
-      tomadorCpfCnpj: input.tomadorCpfCnpj,
-      valorServico: input.servico.valorServico,
-      discriminacao: input.servico.discriminacao,
-      codigoServico: input.servico.codigo,
-    };
-    return { nota: created, preview, requiresConfirm: false, notEmitted: false };
+    try {
+      const created = await emitirNota(userId, input);
+      const preview = {
+        documentType: 'NFSE',
+        tomadorRazaoSocial: input.tomadorRazaoSocial,
+        tomadorCpfCnpj: input.tomadorCpfCnpj,
+        valorServico: input.servico.valorServico,
+        discriminacao: input.servico.discriminacao,
+        codigoServico: input.servico.codigo,
+      };
+      return { nota: created, preview, requiresConfirm: false, notEmitted: false };
+    } catch (err) {
+      const recovered = await tryRecoverOpenclawNfseEmitAfterError({
+        userId,
+        input,
+        listarNotas,
+        err,
+      });
+      if (!recovered) throw err;
+      const preview = {
+        documentType: 'NFSE',
+        tomadorRazaoSocial: input.tomadorRazaoSocial,
+        tomadorCpfCnpj: input.tomadorCpfCnpj,
+        valorServico: input.servico.valorServico,
+        discriminacao: input.servico.discriminacao,
+        codigoServico: input.servico.codigo,
+      };
+      return {
+        nota: recovered,
+        preview,
+        requiresConfirm: false,
+        notEmitted: false,
+        recoveredAfterTimeout: true,
+      };
+    }
   });
 };
 
@@ -1392,6 +1419,7 @@ export const listOpenclawNfseNotas = async (userId, { limit = 10 } = {}) => {
     status: r.status,
     plugnotas_id: r.plugnotas_id,
     cnpj_tomador: r.cnpj_tomador,
+    valorServico: extractValorFromNfsePayloadJson(r.payload_json),
     created_at: r.created_at,
     pdf_url: r.pdf_url,
     xml_url: r.xml_url,
