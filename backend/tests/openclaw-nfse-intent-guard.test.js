@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  enrichNfsePayloadFromFreeText,
+  isNfseEmitIntentFromUserText,
   isNfseEmitIntentPayload,
   mapMisroutedTransactionToNfsePayload,
   resolveClienteIndiceFromPayload,
@@ -30,6 +32,41 @@ test('isNfseEmitIntentPayload — cliente + serviço numerados (WhatsApp)', () =
   );
   assert.equal(
     isNfseEmitIntentPayload({ tomadorNome: 'Taure', servicoIndice: 1, valor: 2 }),
+    true,
+  );
+});
+
+test('isNfseEmitIntentFromUserText — lista clientes NFSe', () => {
+  assert.equal(
+    isNfseEmitIntentFromUserText(
+      'Liste para mim todos os meus clientes de emissão de nota fiscal de serviço e todos os serviços',
+    ),
+    true,
+  );
+});
+
+test('isNfseEmitIntentFromUserText — cliente 3 serviço 1', () => {
+  assert.equal(
+    isNfseEmitIntentFromUserText('emiti uma nota para o cliente 3, serviço 1, no valor de 5 reais'),
+    true,
+  );
+});
+
+test('enrichNfsePayloadFromFreeText — obs com cliente/serviço', () => {
+  const enriched = enrichNfsePayloadFromFreeText({
+    tipo: 'entrada',
+    valor: 5,
+    classificacao: 'manutenção',
+    obs: 'cliente 3 serviço 1',
+  });
+  assert.equal(enriched.clienteIndice, 3);
+  assert.equal(enriched.servicoIndice, 1);
+  assert.equal(
+    isNfseEmitIntentPayload({
+      tipo: 'entrada',
+      valor: 5,
+      obs: 'cliente 3 serviço 1',
+    }),
     true,
   );
 });

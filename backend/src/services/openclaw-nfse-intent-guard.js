@@ -12,6 +12,75 @@ const parsePositiveInt = (value) => {
 };
 
 const NFSE_KEYWORD_RE = /\b(nfse|nfs-e|nota fiscal|nota de servi[cç]o|emitir nota|emite nota|emiss[aã]o de nota|presta[cç][aã]o de servi)/i;
+const CLIENTE_NUM_RE = /\bcliente\s*#?\s*(\d{1,2})\b/i;
+const SERVICO_NUM_RE = /\bservi[cç]o\s*#?\s*(\d{1,2})\b/i;
+
+export const NFSE_NO_CARTEIRA_FOOTER =
+  '\n\nPara emitir a nota: diga cliente (número) + serviço (número) + valor. '
+  + 'Não precisa informar carteira/banco (Nubank, Poupança).';
+
+/**
+ * Extrai índices "cliente 3" / "serviço 1" de texto livre (áudio, obs, classificação).
+ * @param {string} text
+ */
+export const extractNfseIndicesFromText = (text) => {
+  const s = String(text || '');
+  const clienteMatch = CLIENTE_NUM_RE.exec(s);
+  const servicoMatch = SERVICO_NUM_RE.exec(s);
+  return {
+    clienteIndice: clienteMatch ? parsePositiveInt(clienteMatch[1]) : null,
+    servicoIndice: servicoMatch ? parsePositiveInt(servicoMatch[1]) : null,
+  };
+};
+
+const collectPayloadTextBlob = (payload = {}) => [
+  payload.texto,
+  payload.pedido,
+  payload.descricao,
+  payload.observacao,
+  payload.obs,
+  payload.classificacao,
+  payload.categoria,
+]
+  .filter(Boolean)
+  .join(' ');
+
+/**
+ * Texto do utilizador (WhatsApp) indica NFSe — injeta hint no relay OpenClaw.
+ * @param {string} text
+ */
+export const isNfseEmitIntentFromUserText = (text) => {
+  const s = String(text || '').trim();
+  if (!s) return false;
+  if (NFSE_KEYWORD_RE.test(s)) return true;
+  if (/\b(liste|lista|mostre|me\s+(diga|fale)|quais)\b.*\b(clientes?|servi[cç]os?)\b/i.test(s)
+    && /\b(nfse|nfs-e|nota fiscal|nota de servi)/i.test(s)) {
+    return true;
+  }
+  const { clienteIndice, servicoIndice } = extractNfseIndicesFromText(s);
+  if (clienteIndice && servicoIndice) return true;
+  if (clienteIndice && /\b(emite|emitir|emiss[aã]o|nota)\b/i.test(s)) return true;
+  if (/\bmanuten|repara|pintura\b/i.test(s) && clienteIndice) return true;
+  return false;
+};
+
+/**
+ * Completa payload NFSe a partir de obs/classificação ("cliente 3 serviço 1").
+ * @param {Record<string, unknown>} [payload]
+ */
+export const enrichNfsePayloadFromFreeText = (payload = {}) => {
+  const next = { ...payload };
+  const blob = collectPayloadTextBlob(payload);
+  const fromText = extractNfseIndicesFromText(blob);
+
+  if (fromText.clienteIndice && !resolveClienteIndiceFromPayload(next)) {
+    next.clienteIndice = fromText.clienteIndice;
+  }
+  if (fromText.servicoIndice && !resolveServicoIndiceFromPayload(next)) {
+    next.servicoIndice = fromText.servicoIndice;
+  }
+  return next;
+};
 
 const NFSE_PAYLOAD_KEYS = [
   'tomadorNome',
@@ -88,22 +157,31 @@ export const isNfseEmitIntentPayload = (payload = {}) => {
     return true;
   }
 
+  const enriched = enrichNfsePayloadFromFreeText(payload);
+  if (
+    resolveClienteIndiceFromPayload(enriched)
+    && resolveServicoIndiceFromPayload(enriched)
+  ) {
+    return true;
+  }
+  if (
+    resolveClienteIndiceFromPayload(enriched)
+    && (payload.valor != null || payload.valorServico != null)
+  ) {
+    return true;
+  }
+
   if (resolveServicoIndiceFromPayload(payload) && resolveClienteIndiceFromPayload(payload) == null) {
     const nome = firstNonEmpty(payload.tomadorNome, payload.tomadorRazaoSocial);
     if (nome && !/^\d+$/.test(nome)) return true;
   }
 
-  const texto = [
-    payload.texto,
-    payload.pedido,
-    payload.descricao,
-    payload.observacao,
-    payload.classificacao,
-    payload.categoria,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const texto = collectPayloadTextBlob(payload);
   if (NFSE_KEYWORD_RE.test(texto)) return true;
+
+  const fromText = extractNfseIndicesFromText(texto);
+  if (fromText.clienteIndice && fromText.servicoIndice) return true;
+  if (fromText.clienteIndice && (payload.valor != null || payload.valorServico != null)) return true;
 
   const classificacao = String(payload.classificacao || payload.categoria || '').toLowerCase();
   if (
@@ -122,14 +200,15 @@ export const isNfseEmitIntentPayload = (payload = {}) => {
  * @param {Record<string, unknown>} [payload]
  */
 export const mapMisroutedTransactionToNfsePayload = (payload = {}) => {
-  const next = { ...payload };
+  const enriched = enrichNfsePayloadFromFreeText(payload);
+  const next = { ...enriched };
 
-  const clienteIndice = resolveClienteIndiceFromPayload(payload);
+  const clienteIndice = resolveClienteIndiceFromPayload(enriched);
   if (clienteIndice) {
     next.clienteIndice = clienteIndice;
   }
 
-  const servicoIndice = resolveServicoIndiceFromPayload(payload);
+  const servicoIndice = resolveServicoIndiceFromPayload(enriched);
   if (servicoIndice) {
     next.servicoIndice = servicoIndice;
   }

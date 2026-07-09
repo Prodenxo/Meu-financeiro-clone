@@ -1450,6 +1450,20 @@ export const fetchOpenclawNfsePdfBase64 = async (userId, { id, sync = true } = {
 export const listOpenclawNfseClientes = async (userId, { q = '', limit = 20 } = {}) =>
   listarCatalogoClientes(userId, { q, limit, documentType: 'NFSE' });
 
+export const formatOpenclawNfseClientesMessage = (clientes) => {
+  const list = Array.isArray(clientes) ? clientes : [];
+  if (!list.length) {
+    return 'Nenhum cliente no catálogo NFSe. Cadastre na app (MEI → Notas → Clientes).';
+  }
+  const lines = list.map((c, i) => {
+    const nome = String(c.nome || '—').trim();
+    const doc = String(c.documento || '').replace(/\D/g, '');
+    const docLabel = doc.length === 14 ? `CNPJ ${doc}` : doc.length === 11 ? `CPF ${doc}` : 'sem documento';
+    return `${i + 1}. ${nome} (${docLabel})`;
+  });
+  return `${list.length} cliente(s) para nota fiscal de serviço:\n${lines.join('\n')}`;
+};
+
 export const listOpenclawNfseProdutos = async (userId, { q = '', limit = 20, documentType } = {}) =>
   listarCatalogoProdutos(userId, { q, limit, ...(documentType ? { documentType } : {}) });
 

@@ -1,7 +1,9 @@
 import { badRequest, forbidden } from '../utils/errors.js';
 import { isValidCpfOrCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
 import { getDocumentosAtivosMirror } from './mei-certificate-store.js';
-import { lookupCnpjBrasilApi } from './cnpj-lookup.service.js';
+import {
+  NFSE_NO_CARTEIRA_FOOTER,
+} from './openclaw-nfse-intent-guard.js';
 import {
   criarCatalogoCliente,
   criarCatalogoProduto,
@@ -186,7 +188,7 @@ export const formatOpenclawCatalogServicosMessage = (produtos) => {
     const ali = p.aliquota != null ? `ISS ${p.aliquota}%` : '';
     return `${i + 1}. ${nome} (${codigo}, ${cnae}${ali ? `, ${ali}` : ''})`;
   });
-  return `${list.length} serviço(s) NFS-e no catálogo:\n${lines.join('\n')}`;
+  return `${list.length} serviço(s) NFS-e no catálogo:\n${lines.join('\n')}${NFSE_NO_CARTEIRA_FOOTER}`;
 };
 
 /**

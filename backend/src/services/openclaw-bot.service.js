@@ -46,6 +46,7 @@ import {
   syncOpenclawNfseEmitente,
   isNfsePdfReadyStatus,
   formatOpenclawNfseProdutosMessage,
+  formatOpenclawNfseClientesMessage,
   listOpenclawNfseClientes,
   listOpenclawNfseNotas,
   listOpenclawNfseProdutos,
@@ -71,8 +72,10 @@ import {
   buildNfEmittedUserMessage,
 } from './openclaw-nf-user-messages.js';
 import {
+  isNfseEmitIntentFromUserText,
   isNfseEmitIntentPayload,
   mapMisroutedTransactionToNfsePayload,
+  NFSE_NO_CARTEIRA_FOOTER,
 } from './openclaw-nfse-intent-guard.js';
 import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
 import {
@@ -1015,6 +1018,24 @@ export const runOpenclawAction = async (input) => {
   }
 
   if (action === 'list_contas' || action === 'get_saldo') {
+    if (isNfseEmitIntentFromUserText(payload?.userText || payload?.texto || payload?.contexto)) {
+      return {
+        ok: false,
+        message:
+          'Pedido de NOTA FISCAL de serviço — não use carteiras. '
+          + 'Chame list_nfse_clientes e list_catalog_servicos, depois emit_nfse.',
+        data: {
+          userId,
+          actorContext,
+          ...linkDebug,
+          code: 'NFSE_USE_EMIT_NOT_LIST_CONTAS',
+          agentInstructions:
+            'PROIBIDO list_contas e PROIBIDO perguntar Nubank/Poupança/Banco do Brasil. '
+            + 'Use emit_nfse com clienteIndice, servicoIndice e valor.',
+        },
+      };
+    }
+
     const summary = await contasFinanceirasService.listContasWithSaldo(userId);
     const filterPayload = action === 'get_saldo' ? payload : {};
     const filtered =
@@ -1974,20 +1995,22 @@ export const runOpenclawAction = async (input) => {
     ).trim();
     const limit = payload?.limit;
     const clientes = await listOpenclawNfseClientes(userId, { q, limit });
+    const clientesMessage = `${formatOpenclawNfseClientesMessage(clientes)}${NFSE_NO_CARTEIRA_FOOTER}`;
     const docHint = q
       ? ' Se não aparecer o cliente certo, cadastre com register_nfse_cliente antes de emit_nfse.'
       : '';
     return {
       ok: true,
-      message: `${clientes.length} cliente(s) no catálogo NFSe.${docHint}`,
+      message: `${clientesMessage}${docHint}`,
       data: {
         clientes,
         userId,
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Mostre clientes numerados (1, 2, 3…). Para emitir NFSe: emit_nfse com clienteIndice, servicoIndice e valor. '
-          + 'PROIBIDO create_transaction, list_contas ou perguntar carteira (Nubank, Poupança).',
+          'Repita APENAS o campo message ao utilizador — já inclui lista numerada. '
+          + 'PROIBIDO acrescentar pergunta sobre carteira/banco (Nubank, Poupança). '
+          + 'Para emitir: emit_nfse com clienteIndice, servicoIndice e valor.',
       },
     };
   }
@@ -2064,9 +2087,9 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Mostre APENAS message (lista numerada de SERVIÇOS da nota fiscal). Espere escolha do serviço (1, 2, 3…). '
-          + 'Depois emit_nfse com servicoIndice + clienteIndice + valor. '
-          + 'PROIBIDO inventar descricao genérica, create_transaction ou perguntar carteira.',
+          'Repita APENAS message (lista numerada de SERVIÇOS). '
+          + 'PROIBIDO perguntar carteira/banco. '
+          + 'Emitir: emit_nfse com clienteIndice + servicoIndice + valor.',
       },
     };
   }

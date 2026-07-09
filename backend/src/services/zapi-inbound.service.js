@@ -1,5 +1,6 @@
 import { env } from '../config/env.js';
 import { extractZapiInboundText } from './zapi-inbound-text.service.js';
+import { isNfseEmitIntentFromUserText } from './openclaw-nfse-intent-guard.js';
 
 /**
  * Extrai telefone e texto do callback Z-API "Ao receber" (ReceivedCallback).
@@ -98,6 +99,12 @@ export const relayZapiInbound = async (normalized) => {
     60_000,
   );
 
+  const nfseIntent = isNfseEmitIntentFromUserText(normalized.text);
+  const nfseHint = nfseIntent
+    ? ' PEDIDO_NFSE=sim: use list_nfse_clientes + list_catalog_servicos + emit_nfse (clienteIndice, servicoIndice, valor). '
+      + 'PROIBIDO create_transaction, list_contas e PROIBIDO perguntar carteira (Nubank, Poupança, Banco do Brasil).'
+    : '';
+
   const payload = {
     source: 'zapi',
     phone: normalized.phone,
@@ -110,9 +117,11 @@ export const relayZapiInbound = async (normalized) => {
     messageId: normalized.messageId,
     instanceId: normalized.instanceId,
     receivedAt: new Date().toISOString(),
+    nfseIntent,
     agentHint:
       `REMETENTE_WHATSAPP=${normalized.phone}. O 1º argumento de mf-curl.sh DEVE ser exatamente ${normalized.phone}. `
-      + 'Nunca uses número de outro chat nem exemplos do SOUL.',
+      + 'Nunca uses número de outro chat nem exemplos do SOUL.'
+      + nfseHint,
   };
 
   /** @type {Record<string, string>} */

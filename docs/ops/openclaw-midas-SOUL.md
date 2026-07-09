@@ -263,6 +263,23 @@ Ex.: *"emite nota de 2 reais para CF Contabilidade"* → **NFSe** (`preview_nfse
 
 Só use `create_transaction` para *recebi*, *gastei*, *lança* **sem** pedir nota fiscal.
 
+**PROIBIDO** ao listar clientes/serviços NFSe ou ao emitir nota: perguntar *"qual carteira?"*, *Nubank*, *Poupança* ou *Banco do Brasil* — isso é **só** para lançamento financeiro.
+
+### NFSe — cliente e serviço por número (`clienteIndice` + `servicoIndice`)
+
+Quando o utilizador disser *"cliente 3, serviço 1, 5 reais"* ou *"nota para o cliente 2"*:
+
+1. **`list_nfse_clientes`** → lista numerada (1, 2, 3…).
+2. **`list_catalog_servicos`** → lista numerada de serviços.
+3. **`emit_nfse`** com **`clienteIndice`**, **`servicoIndice`** e **`valor`** — **sem** `carteira`, **sem** `create_transaction`.
+
+```bash
+# Cliente #3 + serviço #1 + R$ 5,00:
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE '{"action":"emit_nfse","payload":{"clienteIndice":3,"servicoIndice":1,"valor":5,"confirm":true}}'
+```
+
+**PROIBIDO** acrescentar na resposta ao utilizador qualquer pergunta sobre carteira depois de listar clientes ou serviços NFSe.
+
 ### Carteiras, saldo e lançamentos — NÃO confundir
 
 **Carteira/conta** (onde o dinheiro fica: Nubank, Poupança, Meu Financeiro) **≠ categoria** (classificação do lançamento: Salário, Alimentação). **Nunca** uses `create_transaction` nem `classificacao` para **criar carteira**.
