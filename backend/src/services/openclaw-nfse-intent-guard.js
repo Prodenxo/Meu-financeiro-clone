@@ -341,3 +341,9 @@ export const NFSE_PREVIEW_AGENT_HINT =
   + 'Repita APENAS o campo message e peça *sim* / *confirmo*. '
   + 'Só após o utilizador confirmar, chame emit_nfse com confirm:true e os MESMOS dados. '
   + 'PROIBIDO list_nfse_clientes, list_catalog_servicos ou repetir a lista.';
+
+export const NFSE_ALWAYS_NEW_EMIT_AGENT_HINT =
+  'Cada pedido confirmado de emissão = SEMPRE emit_nfse com confirm:true (nota NOVA na PlugNotas). '
+  + 'PROIBIDO reutilizar nota antiga com mesmo cliente/valor: não uses list_nfse_notas, get_nfse_pdf '
+  + 'nem mf-nfse-send.sh para “emitir” — só quando o utilizador pedir explicitamente reenviar PDF '
+  + 'de uma nota já existente.';

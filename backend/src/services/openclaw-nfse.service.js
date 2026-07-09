@@ -52,7 +52,6 @@ import {
 import {
   buildOpenclawNfseEmitFingerprint,
   extractValorFromNfsePayloadJson,
-  findRecentDuplicateOpenclawNfse,
   tryRecoverOpenclawNfseEmitAfterError,
   withOpenclawNfseEmitInflight,
 } from './openclaw-nfse-emit-dedup.js';
@@ -1351,29 +1350,6 @@ export const emitOpenclawNfse = async (userId, payload = {}) => {
   const fingerprint = buildOpenclawNfseEmitFingerprint(userId, input);
 
   return withOpenclawNfseEmitInflight(fingerprint, async () => {
-    const duplicate = await findRecentDuplicateOpenclawNfse({
-      userId,
-      input,
-      listarNotas,
-    });
-    if (duplicate) {
-      const preview = {
-        documentType: 'NFSE',
-        tomadorRazaoSocial: input.tomadorRazaoSocial,
-        tomadorCpfCnpj: input.tomadorCpfCnpj,
-        valorServico: input.servico.valorServico,
-        discriminacao: input.servico.discriminacao,
-        codigoServico: input.servico.codigo,
-      };
-      return {
-        nota: duplicate,
-        preview,
-        requiresConfirm: false,
-        notEmitted: false,
-        duplicatePrevented: true,
-      };
-    }
-
     try {
       const created = await emitirNota(userId, input);
       const preview = {

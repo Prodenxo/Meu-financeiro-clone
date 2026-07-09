@@ -24,7 +24,7 @@ test('extractValorFromNfsePayloadJson lê servico[0].valor.servico', () => {
   assert.equal(valor, 4);
 });
 
-test('findRecentDuplicateOpenclawNfse encontra nota recente igual', async () => {
+test('findRecentDuplicateOpenclawNfse ignora nota concluída (só processando)', async () => {
   const now = new Date().toISOString();
   const listarNotas = async () => ([
     {
@@ -46,7 +46,30 @@ test('findRecentDuplicateOpenclawNfse encontra nota recente igual', async () => 
     input,
     listarNotas,
   });
-  assert.equal(dup?.id, 'nota-1');
+  assert.equal(dup, null);
+});
+
+test('findRecentDuplicateOpenclawNfse encontra nota em processamento igual', async () => {
+  const now = new Date().toISOString();
+  const listarNotas = async () => ([
+    {
+      id: 'nota-proc',
+      status: 'processando',
+      cnpj_tomador: '11953257704',
+      created_at: now,
+      payload_json: { servico: [{ codigo: '140101', valor: { servico: 4 } }] },
+    },
+  ]);
+
+  const dup = await findRecentDuplicateOpenclawNfse({
+    userId: 'user-1',
+    input: {
+      tomadorCpfCnpj: '11953257704',
+      servico: { valorServico: 4, codigo: '140101' },
+    },
+    listarNotas,
+  });
+  assert.equal(dup?.id, 'nota-proc');
 });
 
 test('findRecentDuplicateOpenclawNfse ignora nota rejeitada', async () => {

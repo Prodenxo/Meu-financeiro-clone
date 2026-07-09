@@ -46,6 +46,12 @@ export const extractCodigoFromNfsePayloadJson = (payloadJson) => {
   return String(servico.codigo || '').replace(/\D/g, '');
 };
 
+const isProcessandoNfseEmitStatus = (status) => {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (!normalized) return true;
+  return normalized.includes('process');
+};
+
 const isActiveNfseEmitStatus = (status) => {
   const normalized = String(status || '').trim().toLowerCase();
   if (!normalized) return true;
@@ -55,18 +61,21 @@ const isActiveNfseEmitStatus = (status) => {
 };
 
 /**
- * Procura nota NFSe recente com mesmo tomador, valor e código de serviço.
+ * Procura nota NFSe **ainda em processamento** com mesmo tomador, valor e código.
+ * Usado só para recuperar emissão após timeout — não bloqueia pedido novo do utilizador.
  * @param {object} params
  * @param {string} params.userId
  * @param {Record<string, unknown>} params.input
  * @param {(userId: string, opts?: object) => Promise<Array<Record<string, unknown>>>} params.listarNotas
  * @param {number} [params.windowMs]
+ * @param {boolean} [params.processandoOnly]
  */
 export const findRecentDuplicateOpenclawNfse = async ({
   userId,
   input,
   listarNotas,
   windowMs = DEFAULT_DEDUP_WINDOW_MS,
+  processandoOnly = true,
 }) => {
   const tomador = normalizeDoc(input?.tomadorCpfCnpj);
   const valor = roundMoney(input?.servico?.valorServico);
@@ -80,6 +89,7 @@ export const findRecentDuplicateOpenclawNfse = async ({
     const createdAt = row?.created_at ? new Date(row.created_at).getTime() : 0;
     if (!createdAt || createdAt < cutoff) continue;
     if (!isActiveNfseEmitStatus(row.status)) continue;
+    if (processandoOnly && !isProcessandoNfseEmitStatus(row.status)) continue;
 
     const rowTomador = normalizeDoc(row.cnpj_tomador);
     const rowValor = extractValorFromNfsePayloadJson(row.payload_json);
@@ -151,5 +161,6 @@ export const tryRecoverOpenclawNfseEmitAfterError = async ({
     input,
     listarNotas,
     windowMs,
+    processandoOnly: true,
   });
 };

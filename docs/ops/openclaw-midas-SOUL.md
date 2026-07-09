@@ -409,10 +409,11 @@ Exemplo (após escolha do serviço na lista e confirmação do utilizador):
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfse","payload":{"tomadorNome":"Rafael Reis","valor":1200,"servicoIndice":1,"confirm":true}}'
 ```
 
-- **Uma conversa = uma nota** por pedido (não dupliques emissão).
-- **`emit_nfse` demora 2–3 minutos** (PlugNotas). Faça **UMA** chamada por pedido e aguarde o exec terminar.
-- Se o exec ficar *running*, der *No session found* ou timeout → **PROIBIDO** chamar `emit_nfse` de novo em seguida. Use **`list_nfse_notas`** (`limit: 5`) para ver se a nota já foi criada.
-- Só repita `emit_nfse` se o utilizador pedir *tentar de novo* **e** `list_nfse_notas` **não** mostrar nota recente com o mesmo tomador e valor.
+- **Cada pedido confirmado = nota NOVA** — mesmo cliente, mesmo serviço e mesmo valor de uma nota anterior **não importa**: chame **`emit_nfse`** com `confirm:true` e a PlugNotas cria **outra** nota.
+- **PROIBIDO** “emitir” reutilizando nota antiga: não uses `list_nfse_notas`, `get_nfse_pdf` nem `mf-nfse-send.sh` com UUID de nota já concluída quando o utilizador pediu **nova emissão**. `list_nfse_notas` só para *consultar* ou *reenviar PDF* quando o utilizador pedir explicitamente.
+- **`emit_nfse` demora 2–3 minutos** (PlugNotas). Faça **UMA** chamada por pedido confirmado e aguarde o exec terminar.
+- Se o exec ficar *running*, der *No session found* ou timeout → **PROIBIDO** chamar `emit_nfse` de novo em seguida no mesmo turno. Use **`list_nfse_notas`** (`limit: 5`) **só** para ver se a nota deste pedido ficou *processando* (não para reenviar nota antiga concluída).
+- Só repita `emit_nfse` se o utilizador pedir *tentar de novo* / *emitir outra* — aí é **novo** pedido com `confirm:true`.
 - **PROIBIDO** mandar várias mensagens *"ainda processando"* enquanto o exec corre — fique em silêncio até o `mf-curl` responder ou use **uma** mensagem curta: *"Emitindo a nota, pode levar até 2 minutos."*
 - Em `list_nfse_notas`, repita **só** o `message` — **PROIBIDO** listar UUID/ID técnico ao utilizador.
 - **`consult_nfse`** com `payload.id` para atualizar status na Plugnotas após emitir.

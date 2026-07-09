@@ -109,11 +109,13 @@ export const relayZapiInbound = async (normalized) => {
   const nfseHint = emitNow && previewPayload
     ? ` PREVIEW_NFSE=sim: chame emit_nfse com payload ${JSON.stringify(previewPayload)} SEM confirm:true. `
       + 'Repita APENAS o campo message (resumo com valor) e peça sim/confirmo. '
-      + 'Só após o utilizador confirmar, repita emit_nfse com confirm:true e os MESMOS dados. '
-      + 'PROIBIDO listar clientes/serviços de novo.'
+      + 'Só após o utilizador confirmar, repita emit_nfse com confirm:true e os MESMOS dados (nota NOVA na PlugNotas). '
+      + 'PROIBIDO listar clientes/serviços de novo. PROIBIDO reutilizar nota antiga com mesmo valor.'
     : nfseIntent
       ? ' PEDIDO_NFSE=sim: para listar use UMA chamada list_nfse_emit_catalog (clientes + serviços NFS-e reais da app). '
         + 'PROIBIDO inventar clientes/serviços. Pedido com cliente+serviço+valor → preview (emit_nfse sem confirm) antes de emitir. '
+        + 'Após sim/confirmo → emit_nfse com confirm:true SEMPRE cria nota NOVA (mesmo cliente/valor de antes). '
+        + 'PROIBIDO list_nfse_notas ou reenviar PDF antigo no lugar de emitir. '
         + 'PROIBIDO create_transaction, list_contas e PROIBIDO perguntar carteira (Nubank, Poupança, Banco do Brasil).'
       : '';
 

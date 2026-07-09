@@ -86,6 +86,7 @@ import {
   isCompleteNfseEmitOrderFromUserText,
   mapMisroutedTransactionToNfsePayload,
   NFSE_PREVIEW_AGENT_HINT,
+  NFSE_ALWAYS_NEW_EMIT_AGENT_HINT,
   NFSE_NO_CARTEIRA_FOOTER,
 } from './openclaw-nfse-intent-guard.js';
 import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
@@ -416,7 +417,7 @@ const buildOpenclawEmitNfseActionResponse = async ({
       });
 
   let agentInstructions =
-    `${BOT_NF_EMIT_SLOW_EXEC_INSTRUCTION} `
+    `${BOT_NF_EMIT_SLOW_EXEC_INSTRUCTION} ${NFSE_ALWAYS_NEW_EMIT_AGENT_HINT} `
     + 'Repita APENAS o campo message ao utilizador. PROIBIDO mencionar payload, confirm:true ou ações técnicas. '
     + 'PROIBIDO chamar emit_nfse de novo neste turno.';
   if (duplicatePrevented) {
