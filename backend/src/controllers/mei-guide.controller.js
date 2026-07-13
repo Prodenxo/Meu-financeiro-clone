@@ -54,12 +54,15 @@ export const downloadGuide = async (req, res, next) => {
       numero: req.query.contribuinteNumero,
       tipo: req.query?.contribuinteTipo
     } : null;
+    const forceRefresh = String(req.query?.forceRefresh || '').toLowerCase() === 'true'
+      || String(req.query?.refresh || '').toLowerCase() === 'true';
     const file = await meiGuideService.downloadGuide({
       userId: req.user.id,
       cnpj: req.query?.cnpj,
       periodoApuracao: id,
       autorPedidoDados,
-      contribuinte
+      contribuinte,
+      forceRefresh,
     });
     const buffer = file?.buffer;
     if (!buffer?.length) {
@@ -79,6 +82,12 @@ export const downloadGuide = async (req, res, next) => {
       periodoApuracao: id,
       pdfBase64: buffer.toString('base64')
     });
+    if (file.refreshed) {
+      res.setHeader('X-DAS-Refreshed', '1');
+    }
+    if (file.vencida) {
+      res.setHeader('X-DAS-Vencida', '1');
+    }
     res.setHeader('Content-Type', file.contentType || 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
     return res.send(buffer);

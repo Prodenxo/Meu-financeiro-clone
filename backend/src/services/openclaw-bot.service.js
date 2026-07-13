@@ -24,7 +24,6 @@ import {
 import * as categoriesService from './categories.service.js';
 import * as rbacCatalogService from './rbac-catalog.service.js';
 import {
-  deleteDasBase64,
   upsertDasBase64,
 } from './mei-guide-das-base64.service.js';
 import * as meiGuideService from './mei-guide.service.js';
@@ -2626,12 +2625,7 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'refresh_das_pdf') {
     const { display, periodoDigits } = resolveDasCompetencia();
-    try {
-      await deleteDasBase64({ userId: dasUserId, periodoApuracao: periodoDigits });
-    } catch {
-      /* linha pode não existir */
-    }
-    const guide = await meiGuideService.createGuide(dasUserId, {
+    const guide = await meiGuideService.regenerateDasPdf(dasUserId, {
       cnpj: payload?.cnpj,
       periodoApuracao: periodoDigits,
       contribuinte: payload?.contribuinte,

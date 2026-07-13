@@ -46,6 +46,10 @@ import {
 } from './mei-guide-storage.service.js';
 import { clearCompetenciaPaidStatus } from './mei-period-status.service.js';
 import {
+  enrichDasPeriodWithVencimento,
+  isDasCompetenciaVencida,
+} from './mei-das-vencimento.js';
+import {
   assertSerproDasPeriodoDisponivel,
   competenciaLabelFromPeriod,
   isPeriodoIndisponivelSerproError,
@@ -1906,9 +1910,11 @@ export const regenerateDasPdf = async (userId, payload) => {
   return await createGuideByCnpj(userId, { cnpj, periodoApuracao: period });
 };
 
-/** Obtém PDF (cache → bucket → SERPRO). Usado pelo WhatsApp/OpenClaw e download. */
+/** Obtém PDF (cache → bucket → SERPRO). Usado pelo WhatsApp/OpenClaw e download.
+ * Guias vencidas (após dia 20) e não pagas: regenera na Receita para valor atualizado.
+ */
 export const fetchDasPdfBase64ForUser = async (userId, payload = {}) => {
-  const { periodoApuracao, cnpj, contribuinte } = payload || {};
+  const { periodoApuracao, cnpj, contribuinte, forceRefresh = false } = payload || {};
   const period = normalizePeriodoApuracao(periodoApuracao);
   if (!period) {
     throw badRequest('Período de apuração inválido');
@@ -1916,6 +1922,30 @@ export const fetchDasPdfBase64ForUser = async (userId, payload = {}) => {
   const competencia = periodoApuracaoToCompetencia(period);
   const label = competencia ? competencia.replace('-', '/') : period;
   const fileName = `DAS-${String(label).replace('/', '-')}.pdf`;
+
+  const paid = userId && competencia
+    ? await isCompetenciaPaid({ userId, competencia })
+    : false;
+  const shouldRefresh = Boolean(forceRefresh)
+    || (Boolean(competencia) && !paid && isDasCompetenciaVencida(competencia));
+
+  if (shouldRefresh && userId) {
+    const guide = await regenerateDasPdf(userId, {
+      cnpj,
+      periodoApuracao: period,
+      contribuinte,
+    });
+    if (!guide?.pdfBase64) {
+      throw notFound(`SERPRO não devolveu PDF atualizado para ${label}.`);
+    }
+    return {
+      pdfBase64: guide.pdfBase64,
+      fileName: guide.filename || fileName,
+      source: 'serpro_refresh',
+      refreshed: true,
+      vencida: isDasCompetenciaVencida(competencia),
+    };
+  }
 
   const cached = userId ? await tryLoadLocalDasPdfBase64(userId, period) : null;
   if (cached) {
@@ -1927,7 +1957,8 @@ export const fetchDasPdfBase64ForUser = async (userId, payload = {}) => {
     userId,
     periodoApuracao: period,
     cnpj: cnpjResolved || cnpj,
-    contribuinte
+    contribuinte,
+    forceRefresh: false,
   });
   const pdfBase64 = file.buffer.toString('base64');
   if (userId) {
@@ -1936,20 +1967,26 @@ export const fetchDasPdfBase64ForUser = async (userId, payload = {}) => {
   return {
     pdfBase64,
     fileName: file.filename || fileName,
-    source: 'serpro'
+    source: 'serpro',
   };
 };
 
 export const downloadGuide = async (payload, dependencies = {}) => {
   ensureConfigured();
-  const { userId, cnpj, periodoApuracao, contribuinte } = payload || {};
+  const {
+    userId,
+    cnpj,
+    periodoApuracao,
+    contribuinte,
+    forceRefresh = false,
+  } = payload || {};
   if (!periodoApuracao) throw badRequest('Período de apuração é obrigatório');
   const {
     isCompetenciaPaidFn = isCompetenciaPaid,
     markCompetenciaAsPaidFn = markCompetenciaAsPaid,
     createGuideFn = createGuide,
     createGuideByCnpjFn = createGuideByCnpj,
-    getDasBase64Fn = getDasBase64
+    getDasBase64Fn = getDasBase64,
   } = dependencies;
   const period = normalizePeriodoApuracao(periodoApuracao);
   const competencia = periodoApuracaoToCompetencia(periodoApuracao);
@@ -1957,7 +1994,31 @@ export const downloadGuide = async (payload, dependencies = {}) => {
   const cnpjFromRequest = normalizeDoc(contribuinte?.numero || cnpj);
   const hasCert = userId ? await userHasMeiCertificate(userId) : false;
 
-  if (userId && competencia && period) {
+  const paid = userId && competencia
+    ? await isCompetenciaPaidFn({ userId, competencia })
+    : false;
+  const shouldRefreshExpired = Boolean(forceRefresh)
+    || (Boolean(competencia) && !paid && isDasCompetenciaVencida(competencia));
+
+  if (shouldRefreshExpired && userId && period) {
+    const guide = await regenerateDasPdf(userId, {
+      cnpj,
+      periodoApuracao: period,
+      contribuinte,
+    });
+    if (guide?.pdfBase64) {
+      const label = (competencia || period).replace('-', '/');
+      return {
+        buffer: Buffer.from(guide.pdfBase64, 'base64'),
+        contentType: 'application/pdf',
+        filename: guide.filename || `DAS-${String(label).replace('/', '-')}.pdf`,
+        refreshed: true,
+        vencida: isDasCompetenciaVencida(competencia),
+      };
+    }
+  }
+
+  if (userId && competencia && period && !shouldRefreshExpired) {
     const storedBase64 = await getDasBase64Fn({ userId, periodoApuracao: period });
     if (storedBase64 && String(storedBase64).trim()) {
       const label = competencia.replace('-', '/');
@@ -2234,7 +2295,9 @@ const buildPeriodsFromPdf = async (userId, options = {}, dependencies = {}) => {
     }
   }
 
-  return items.filter((item) => item.status !== 'indisponivel');
+  return items
+    .filter((item) => item.status !== 'indisponivel')
+    .map((item) => enrichDasPeriodWithVencimento(item));
 };
 
 export const __buildPeriodsFromPdfForTests = async (userId, options = {}, dependencies = {}) => {

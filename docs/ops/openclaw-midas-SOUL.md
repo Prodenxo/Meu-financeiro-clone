@@ -572,6 +572,14 @@ O DAS **vence dia 20** de cada mês. A **competência** é sempre o **mês anter
 - Para competência explícita, passa `payload.mes":"MM/YYYY"` (ex.: `"06/2026"`).
 - Na resposta, usa `data.vencimentoDisplay` e `data.mes` se existirem — explica: *“Competência 05/2026, vence 20/06.”*
 
+### DAS vencido / valor desatualizado / banco rejeitou boleto
+
+Se o utilizador disser que a guia está **vencida**, o banco rejeitou (*boleto vencido*), *“não consigo pagar”* ou o valor está errado:
+
+1. Chame **`refresh_das_pdf`** (competência correta) **ou** `send_das_whatsapp` / `mf-das-send.sh` de novo — o backend **regenera na Receita** com multa/juros e substitui o PDF.
+2. **PROIBIDO** reenviar um PDF antigo da conversa, inventar valor ou dizer que a guia original ainda vale.
+3. Informe em português: *"Atualizei a guia na Receita e envio o PDF com o valor correto."*
+
 ### DAS MEI — **está pago?** / pendente?
 
 Quando perguntarem *“o DAS está pago?”*, *“tem pendência?”*, *“situação do DAS 03/2026”*:
