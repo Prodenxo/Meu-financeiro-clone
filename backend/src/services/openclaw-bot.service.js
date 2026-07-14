@@ -16,6 +16,7 @@ import {
 export { buildPhoneLookupCandidates } from './n8n-link-phone.service.js';
 import * as transactionsService from './transactions.service.js';
 import * as contasFinanceirasService from './contas-financeiras.service.js';
+import * as contasMoedaGlobalService from './contas-moeda-global.service.js';
 import {
   normalizeOpenclawTransactionPayload,
   normalizeOpenclawTransactionUpdate,
@@ -895,6 +896,27 @@ export const runOpenclawAction = async (input) => {
     marcar_concluido: 'complete_calendar_event',
     conclui_compromisso: 'complete_calendar_event',
     complete_calendar_event: 'complete_calendar_event',
+    list_moedas_globais: 'list_moedas_globais',
+    listar_moedas_globais: 'list_moedas_globais',
+    minhas_moedas: 'list_moedas_globais',
+    get_conta_global: 'get_conta_global',
+    saldo_conta_global: 'get_conta_global',
+    saldo_moeda_global: 'get_conta_global',
+    create_moeda_global: 'create_moeda_global',
+    criar_moeda_global: 'create_moeda_global',
+    adicionar_moeda: 'create_moeda_global',
+    update_moeda_global: 'update_moeda_global',
+    atualizar_moeda_global: 'update_moeda_global',
+    delete_moeda_global: 'delete_moeda_global',
+    remover_moeda_global: 'delete_moeda_global',
+    get_cotacao: 'get_cotacao',
+    cotacao: 'get_cotacao',
+    consulta_cotacao: 'get_cotacao',
+    convert_moeda: 'convert_moeda',
+    converter_moeda: 'convert_moeda',
+    calcular_moeda: 'convert_moeda',
+    list_catalogo_moedas: 'list_catalogo_moedas',
+    catalogo_moedas: 'list_catalogo_moedas',
   };
   let action = String(input?.action || '').trim();
   const rawAction = action;
@@ -2654,7 +2676,84 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  // —— Conta Global (moedas estrangeiras; não confundir com get_saldo / create_conta em BRL) ——
+  if (action === 'list_moedas_globais' || action === 'get_conta_global') {
+    const resumo = await contasMoedaGlobalService.getContaGlobalResumo(userId, payload);
+    return {
+      ok: true,
+      message: resumo.message,
+      data: {
+        ...resumo,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Conta Global ≠ carteiras em reais. '
+          + 'list_moedas_globais / get_conta_global: saldo por moeda + ≈ BRL + total. '
+          + 'Filtro: payload.moeda ("USD" ou "dólar"). '
+          + 'Criar: create_moeda_global { moeda, valor, nome? }. '
+          + 'Cotação: get_cotacao { moeda }. Cálculo: convert_moeda { valor, de, para }. '
+          + 'Catálogo: list_catalogo_moedas. '
+          + 'Repita o campo message ao utilizador. Não diga "cria na app" sem ter chamado a action.',
+      },
+    };
+  }
+
+  if (action === 'create_moeda_global') {
+    const created = await contasMoedaGlobalService.createContaMoedaGlobal(userId, payload);
+    return {
+      ok: true,
+      message: created.message,
+      data: { ...created, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'update_moeda_global') {
+    const updated = await contasMoedaGlobalService.updateContaMoedaGlobal(userId, payload);
+    return {
+      ok: true,
+      message: updated.message,
+      data: { ...updated, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'delete_moeda_global') {
+    const removed = await contasMoedaGlobalService.deleteContaMoedaGlobal(userId, payload);
+    return {
+      ok: true,
+      message: removed.message,
+      data: { ...removed, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'get_cotacao') {
+    const quote = await contasMoedaGlobalService.getCotacaoResumo(payload);
+    return {
+      ok: true,
+      message: quote.message,
+      data: { ...quote, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'convert_moeda') {
+    const conv = await contasMoedaGlobalService.convertMoeda(payload);
+    return {
+      ok: true,
+      message: conv.message,
+      data: { ...conv, userId, actorContext, ...linkDebug },
+    };
+  }
+
+  if (action === 'list_catalogo_moedas') {
+    const catalog = await contasMoedaGlobalService.listCatalogoMoedas();
+    return {
+      ok: true,
+      message: catalog.message,
+      data: { ...catalog, userId, actorContext, ...linkDebug },
+    };
+  }
+
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_agenda_checklist_today, complete_calendar_event, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, list_catalog_servicos, list_nfe_produtos, register_nfse_produto, register_nfe_cliente, register_nfe_produto, preview_nfse, emit_nfse, preview_nfe, emit_nfe, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_agenda_checklist_today, complete_calendar_event, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, list_moedas_globais, get_conta_global, create_moeda_global, update_moeda_global, delete_moeda_global, get_cotacao, convert_moeda, list_catalogo_moedas, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, list_catalog_servicos, list_nfe_produtos, register_nfse_produto, register_nfe_cliente, register_nfe_produto, preview_nfse, emit_nfse, preview_nfe, emit_nfe, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };
