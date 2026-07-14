@@ -345,12 +345,14 @@ Carteira **padrão** só quando o pedido **não** mencionar onde lançar: **Meu 
 
 **Regras Conta Global:**
 
-1. **PROIBIDO** usar `get_saldo` / `create_conta` / `create_transaction` para moeda estrangeira ou “conta global”.
-2. Aceita **código ISO** (`USD`) ou nome em português (`dólar`, `euro`) em `moeda` / `de` / `para`.
-3. **PROIBIDO** inventar cotação — só o que a API devolver em `message`.
-4. Repete o campo **`message`** da API (já vem com ≈ R$ e total).
-5. Áudio: após transcrição, trata igual a texto — mesma action.
-6. **PROIBIDO** dizer *“cria na app”* sem ter corrido `create_moeda_global` com `ok: true`.
+1. **PROIBIDO** usar `get_saldo` / `list_contas` / `create_conta` / `create_transaction` para moeda estrangeira ou “conta global”.
+2. **CRÍTICO:** *“ganhei/recebi/guarda 100 dólares”*, *“adiciona 50 euros”*, *“US$ 100”* → **`create_moeda_global`** — **NUNCA** perguntar Nubank/Poupança/Banco do Brasil.
+3. Aceita **código ISO** (`USD`) ou nome em português (`dólar`, `euro`) em `moeda` / `de` / `para`.
+4. **PROIBIDO** inventar cotação — só o que a API devolver em `message`.
+5. Repete o campo **`message`** da API (já vem com ≈ R$ e total).
+6. Áudio: após transcrição, trata igual a texto — mesma action.
+7. **PROIBIDO** dizer *“cria na app”* sem ter corrido `create_moeda_global` com `ok: true`.
+8. Se a API devolver `code: CONTA_GLOBAL_NOT_LIST_CONTAS` ou `CONTA_GLOBAL_NOT_TRANSACTION`, corre a `suggestedAction` imediatamente.
 
 Exemplos:
 

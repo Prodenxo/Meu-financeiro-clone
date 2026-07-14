@@ -89,6 +89,12 @@ import {
   NFSE_ALWAYS_NEW_EMIT_AGENT_HINT,
   NFSE_NO_CARTEIRA_FOOTER,
 } from './openclaw-nfse-intent-guard.js';
+import {
+  isContaGlobalIntentFromUserText,
+  isContaGlobalIntentPayload,
+  extractContaGlobalCreateHints,
+  CONTA_GLOBAL_NO_CARTEIRA_FOOTER,
+} from './openclaw-conta-global-intent-guard.js';
 import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
 import { formatCnpjDisplay } from '../utils/cpf-cnpj.js';
 import {
@@ -1146,6 +1152,33 @@ export const runOpenclawAction = async (input) => {
       };
     }
 
+    if (isContaGlobalIntentFromUserText(payload?.userText || payload?.texto || payload?.contexto)) {
+      const hints = extractContaGlobalCreateHints(payload);
+      return {
+        ok: false,
+        message:
+          'Pedido de Conta Global / moeda estrangeira — não use carteiras em reais. '
+          + CONTA_GLOBAL_NO_CARTEIRA_FOOTER,
+        data: {
+          userId,
+          actorContext,
+          ...linkDebug,
+          code: 'CONTA_GLOBAL_NOT_LIST_CONTAS',
+          suggestedAction: hints.valor != null ? 'create_moeda_global' : 'get_conta_global',
+          suggestedPayload: {
+            ...(hints.moeda ? { moeda: hints.moeda } : { moeda: 'USD' }),
+            ...(hints.valor != null ? { valor: hints.valor } : {}),
+          },
+          agentInstructions:
+            'PROIBIDO list_contas / get_saldo / perguntar Nubank/Poupança. '
+            + 'Se for criar/adicionar/ganhei/recebi valor em dólar/euro → create_moeda_global. '
+            + 'Se for saldo/listar → get_conta_global ou list_moedas_globais. '
+            + 'Se for cotação → get_cotacao. Se for converter → convert_moeda. '
+            + 'Repita só message ao utilizador após a action correcta.',
+        },
+      };
+    }
+
     const summary = await contasFinanceirasService.listContasWithSaldo(userId);
     const filterPayload = action === 'get_saldo' ? payload : {};
     const filtered =
@@ -1283,6 +1316,51 @@ export const runOpenclawAction = async (input) => {
       } catch (err) {
         rethrowNfseErrorForBot(err);
       }
+    }
+
+    if (isContaGlobalIntentPayload(payload)) {
+      const hints = extractContaGlobalCreateHints(payload);
+      if (hints.moeda && hints.valor != null) {
+        const created = await contasMoedaGlobalService.createContaMoedaGlobal(userId, {
+          moeda: hints.moeda,
+          valor: hints.valor,
+          nome: payload?.nome || undefined,
+        });
+        return {
+          ok: true,
+          message: created.message,
+          data: {
+            ...created,
+            userId,
+            actorContext,
+            ...linkDebug,
+            redirectedFromCreateTransaction: true,
+            code: 'CONTA_GLOBAL_REDIRECTED',
+            agentInstructions:
+              'Pedido era Conta Global — gravado com create_moeda_global. '
+              + 'PROIBIDO perguntar carteira. Repita APENAS o campo message.',
+          },
+        };
+      }
+      return {
+        ok: false,
+        message:
+          'Pedido de moeda estrangeira / Conta Global — não é lançamento em carteira BRL. '
+          + CONTA_GLOBAL_NO_CARTEIRA_FOOTER,
+        data: {
+          userId,
+          actorContext,
+          ...linkDebug,
+          code: 'CONTA_GLOBAL_NOT_TRANSACTION',
+          suggestedAction: 'create_moeda_global',
+          suggestedPayload: {
+            moeda: hints.moeda || 'USD',
+            ...(hints.valor != null ? { valor: hints.valor } : {}),
+          },
+          agentInstructions:
+            'Chame create_moeda_global com moeda + valor. NÃO use create_transaction nem list_contas.',
+        },
+      };
     }
 
     const account = await fetchOpenclawAccountSummary(userId);
