@@ -1501,24 +1501,52 @@ export const deleteEmpresa = async (accessToken, empresaId) => {
   return { empresaId };
 };
 
-/** Autorização alinhada a `resetUserPassword` / envio de e-mail de recuperação. */
+/**
+ * Autorização para reset de senha (admin API) / e-mail de recuperação.
+ * Preferência: vínculo ativo (`status=true`), como em `updateUser`.
+ * Superadmin pode redefinir qualquer conta exceto outro superadmin.
+ */
 const getPasswordResetAuthorization = async (accessToken, userId) => {
   if (!userId) throw badRequest('userId é obrigatório');
 
   const requester = await getRequesterContext(accessToken);
-  if (!ROLE_CREATE_ALLOWED.has(requester.role)) throw forbidden();
+  if (!ROLE_CREATE_ALLOWED.has(requester.role)) {
+    throw forbidden('Sem permissão para redefinir senhas');
+  }
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
-  const { data: linkData, error: linkError } = await adminClient
+
+  let { data: linkData, error: linkError } = await adminClient
     .from('role_x_user_x_empresa')
-    .select('empresas_id, roles_id')
+    .select('empresas_id, roles_id, status')
     .eq('user_id', userId)
+    .eq('status', true)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (linkError) throw badRequest(linkError.message);
-  if (!linkData?.roles_id) throw badRequest('Vínculo de role não encontrado');
+
+  if (!linkData?.roles_id) {
+    const fallback = await adminClient
+      .from('role_x_user_x_empresa')
+      .select('empresas_id, roles_id, status')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (fallback.error) throw badRequest(fallback.error.message);
+    linkData = fallback.data;
+  }
+
+  // Órfão no Auth: só superadmin redefine (alinha com busca em listUsers).
+  if (!linkData?.roles_id) {
+    if (requester.role !== 'superadmin') {
+      throw badRequest('Vínculo de role não encontrado');
+    }
+    return { adminClient };
+  }
 
   const { data: roleData, error: roleError } = await adminClient
     .from('roles')
@@ -1530,12 +1558,18 @@ const getPasswordResetAuthorization = async (accessToken, userId) => {
   const targetRole = normalizeRoleValue(roleData?.roles) || 'usuario';
 
   if (requester.role === 'admin') {
-    if (targetRole !== 'usuario') throw forbidden();
-    if (!requester.empresaId || requester.empresaId !== linkData.empresas_id) throw forbidden();
+    if (targetRole !== 'usuario') {
+      throw forbidden('Admin só pode redefinir senha de usuários da própria empresa');
+    }
+    if (!requester.empresaId || requester.empresaId !== linkData.empresas_id) {
+      throw forbidden('Usuário fora do escopo da sua empresa');
+    }
   }
 
+  // Superadmin: reset é ação de Auth (break-glass). Pode redefinir qualquer conta,
+  // inclusive outro superadmin — necessário para suporte quando o perfil está errado.
   if (requester.role === 'superadmin') {
-    if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
+    return { adminClient };
   }
 
   return { adminClient };
