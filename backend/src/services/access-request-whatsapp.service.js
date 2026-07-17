@@ -102,10 +102,15 @@ const firstName = (fullName, email) => {
   return fromEmail || 'Cliente';
 };
 
-const formatCnpjDisplay = (cnpj) => {
-  const d = String(cnpj || '').replace(/\D/g, '');
-  if (d.length !== 14) return d || '—';
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+const formatEmpresaDocDisplay = (doc) => {
+  const d = String(doc || '').replace(/\D/g, '');
+  if (d.length === 14) {
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  }
+  if (d.length === 11) {
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+  return d || '—';
 };
 
 /**
@@ -119,6 +124,8 @@ const formatCnpjDisplay = (cnpj) => {
  * }} input
  */
 export const buildAccessRequestSubmittedSuperadminMessage = (input) => {
+  const digits = String(input.cnpj || '').replace(/\D/g, '');
+  const docLabel = digits.length === 11 ? 'CPF' : 'CNPJ';
   const lines = [
     '🔔 Nova solicitação de acesso — Meu Financeiro',
     '',
@@ -126,7 +133,7 @@ export const buildAccessRequestSubmittedSuperadminMessage = (input) => {
     `E-mail: ${input.email || '—'}`,
     `Telefone: ${input.phone || '—'}`,
     `Empresa: ${input.empresaNome || '—'}`,
-    `CNPJ: ${formatCnpjDisplay(input.cnpj)}`,
+    `${docLabel}: ${formatEmpresaDocDisplay(input.cnpj)}`,
   ];
   if (input.observacao) {
     lines.push('', `Observação: ${input.observacao}`);

@@ -30,18 +30,34 @@ const normalizeText = (value: unknown) => {
 }
 
 const buildEmpresaInsert = (empresaInput: Record<string, unknown> = {}) => {
-  const cnpj = String(empresaInput.cnpj || '').replace(/\D/g, '')
-  if (cnpj.length !== 14) throw new Error('CNPJ inválido (14 dígitos).')
+  const tipoRaw = String(empresaInput.tipoPessoa || empresaInput.tipo_pessoa || 'pj')
+    .trim()
+    .toLowerCase()
+  const tipoPessoa = tipoRaw === 'pf' || tipoRaw === 'pessoa_fisica' ? 'pf' : 'pj'
+  const doc = String(empresaInput.cnpj || empresaInput.cpf || '').replace(/\D/g, '')
+
+  if (tipoPessoa === 'pf') {
+    if (doc.length !== 11) throw new Error('CPF inválido (11 dígitos).')
+  } else if (doc.length !== 14) {
+    throw new Error('CNPJ inválido (14 dígitos).')
+  }
+
   const razaoSocial = normalizeText(empresaInput.razaoSocial)
   const nomeFantasia = normalizeText(empresaInput.nomeFantasia)
   const empresaNome = razaoSocial || nomeFantasia
-  if (!empresaNome) throw new Error('Informe razão social ou nome fantasia.')
+  if (!empresaNome) {
+    throw new Error(
+      tipoPessoa === 'pf'
+        ? 'Informe o nome do negócio ou o nome completo.'
+        : 'Informe razão social ou nome fantasia.',
+    )
+  }
 
   return {
     empresa: empresaNome,
-    cnpj,
-    razao_social: razaoSocial,
-    nome_fantasia: nomeFantasia,
+    cnpj: doc,
+    razao_social: razaoSocial || empresaNome,
+    nome_fantasia: nomeFantasia || empresaNome,
     cep: String(empresaInput.cep || '').replace(/\D/g, '') || null,
     logradouro: normalizeText(empresaInput.logradouro),
     numero: normalizeText(empresaInput.numero),

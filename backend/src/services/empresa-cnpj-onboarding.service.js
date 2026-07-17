@@ -1,10 +1,19 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest, forbidden } from '../utils/errors.js';
 import { getRequesterContext } from './users.service.js';
+import { isValidCpf, isValidCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
 
-const ONLY_DIGITS = (s) => String(s || '').replace(/\D/g, '');
+const ONLY_DIGITS = (s) => normalizeDocDigits(s);
 
-export const isValidEmpresaCnpj = (cnpj) => ONLY_DIGITS(cnpj).length === 14;
+export const isValidEmpresaCnpj = (cnpj) => isValidCnpj(cnpj);
+
+/** Documento cadastral aceito: CNPJ (PJ) ou CPF (PF). Ambos dispensam o gate de onboarding. */
+export const hasEmpresaDocumentoCadastral = (doc) => {
+  const digits = ONLY_DIGITS(doc);
+  if (digits.length === 14) return isValidCnpj(digits);
+  if (digits.length === 11) return isValidCpf(digits);
+  return false;
+};
 
 const EMPRESA_ONBOARDING_FIELDS = [
   'empresa',
@@ -90,7 +99,7 @@ export const getEmpresaCnpjOnboardingStatus = async (accessToken) => {
   if (!data?.id) throw badRequest('Empresa não encontrada');
 
   return {
-    required: !isValidEmpresaCnpj(data.cnpj),
+    required: !hasEmpresaDocumentoCadastral(data.cnpj),
     empresa: data,
   };
 };
@@ -117,7 +126,7 @@ export const completeEmpresaCnpjOnboarding = async (accessToken, input = {}) => 
   if (loadErr) throw badRequest(loadErr.message);
   if (!existing?.id) throw badRequest('Empresa não encontrada');
 
-  if (isValidEmpresaCnpj(existing.cnpj)) {
+  if (hasEmpresaDocumentoCadastral(existing.cnpj) && isValidEmpresaCnpj(existing.cnpj)) {
     throw badRequest('O CNPJ desta empresa já foi cadastrado');
   }
 

@@ -11,6 +11,7 @@ import {
 } from '../services/access-request-manage.service.js';
 import { notifySuperadminAccessRequestSubmitted } from '../services/access-request-whatsapp.service.js';
 import { canonicalizeBrazilWhatsappPhone } from '../utils/whatsapp-phone.js';
+import { isValidCpf, isValidCnpj } from '../utils/cpf-cnpj.js';
 
 const router = Router();
 
@@ -152,13 +153,30 @@ router.post('/submit', requireInternalSecret, async (req, res, next) => {
     if (!fullName) return next(badRequest('Nome completo é obrigatório.'));
     if (password.length < 8) return next(badRequest('Senha deve ter pelo menos 8 caracteres.'));
 
-    const cnpj = String(empresaInput.cnpj || '').replace(/\D/g, '');
-    if (cnpj.length !== 14) return next(badRequest('CNPJ inválido (14 dígitos).'));
+    const tipoRaw = String(empresaInput.tipoPessoa || empresaInput.tipo_pessoa || 'pj')
+      .trim()
+      .toLowerCase();
+    const tipoPessoa = tipoRaw === 'pf' || tipoRaw === 'pessoa_fisica' ? 'pf' : 'pj';
+    const doc = String(empresaInput.cnpj || empresaInput.cpf || '').replace(/\D/g, '');
+
+    if (tipoPessoa === 'pf') {
+      if (!isValidCpf(doc)) return next(badRequest('CPF inválido.'));
+    } else if (!isValidCnpj(doc)) {
+      return next(badRequest('CNPJ inválido.'));
+    }
 
     const razaoSocial = normalizeText(empresaInput.razaoSocial);
     const nomeFantasia = normalizeText(empresaInput.nomeFantasia);
     const empresaNome = razaoSocial || nomeFantasia;
-    if (!empresaNome) return next(badRequest('Informe razão social ou nome fantasia.'));
+    if (!empresaNome) {
+      return next(
+        badRequest(
+          tipoPessoa === 'pf'
+            ? 'Informe o nome do negócio ou o nome completo.'
+            : 'Informe razão social ou nome fantasia.',
+        ),
+      );
+    }
 
     const sb = getServiceRoleClient();
 
@@ -170,14 +188,14 @@ router.post('/submit', requireInternalSecret, async (req, res, next) => {
     );
     if (emailTaken) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
 
-    // Cria empresa com status pending
+    // Cria empresa com status pending (CPF ou CNPJ no campo cnpj)
     const { data: empresaRow, error: empresaErr } = await sb
       .from('empresas')
       .insert({
         empresa: empresaNome,
-        cnpj,
-        razao_social: razaoSocial,
-        nome_fantasia: nomeFantasia,
+        cnpj: doc,
+        razao_social: razaoSocial || empresaNome,
+        nome_fantasia: nomeFantasia || empresaNome,
         cep: String(empresaInput.cep || '').replace(/\D/g, '') || null,
         logradouro: normalizeText(empresaInput.logradouro),
         numero: normalizeText(empresaInput.numero),
@@ -265,7 +283,7 @@ router.post('/submit', requireInternalSecret, async (req, res, next) => {
       email,
       phone: phone || null,
       empresaNome,
-      cnpj,
+      cnpj: doc,
       observacao,
     }).catch(() => {});
 
