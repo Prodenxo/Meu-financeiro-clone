@@ -1,7 +1,7 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest, forbidden } from '../utils/errors.js';
 import { getRequesterContext } from './users.service.js';
-import { isValidCpf, isValidCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
+import { isValidCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
 
 const ONLY_DIGITS = (s) => normalizeDocDigits(s);
 
@@ -11,7 +11,9 @@ export const isValidEmpresaCnpj = (cnpj) => isValidCnpj(cnpj);
 export const hasEmpresaDocumentoCadastral = (doc) => {
   const digits = ONLY_DIGITS(doc);
   if (digits.length === 14) return isValidCnpj(digits);
-  if (digits.length === 11) return isValidCpf(digits);
+  // PF: presença de 11 dígitos libera o app (MEI/NFSe pedem CNPJ depois).
+  // Não exige checksum aqui para não prender cadastros legados.
+  if (digits.length === 11) return true;
   return false;
 };
 
