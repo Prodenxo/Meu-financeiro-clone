@@ -92,7 +92,9 @@ const normalizeCidadePreflightPayload = (payload, { codigoIbge, environment }) =
     root,
     toObject(root.data),
     toObject(root.cidade),
-    toObject(toObject(root.data).cidade)
+    toObject(toObject(root.data).cidade),
+    // PlugNotas às vezes devolve metadados da cidade em error.data (HTTP 400 "não homologada")
+    toObject(toObject(root.error).data)
   ].filter((entry) => Object.keys(entry).length > 0);
 
   for (const candidate of candidates) {
@@ -137,6 +139,32 @@ const normalizeCidadePreflightPayload = (payload, { codigoIbge, environment }) =
   );
 };
 
+/**
+ * Carmo/RJ e similares: GET /nfse/cidades/{ibge} pode retornar HTTP 400
+ * "cidade ainda não foi homologada" com `error.data.padraoNacional.{producao|homologacao}=true`.
+ * Nesse caso o padrão nacional está disponível e o preflight não deve bloquear o POST /empresa.
+ *
+ * @returns {ReturnType<typeof normalizeCidadePreflightPayload>|null}
+ */
+const tryRecoverNacionalPreflightFromCidadeError = (payload, { codigoIbge, environment }) => {
+  const root = toObject(payload);
+  const errData = toObject(toObject(root.error).data);
+  if (!Object.keys(errData).length) return null;
+  if (!hasOwn(errData, 'padraoNacional') && !hasOwn(errData, 'padraoNacionalEnabled')) {
+    return null;
+  }
+
+  let recovered;
+  try {
+    recovered = normalizeCidadePreflightPayload(payload, { codigoIbge, environment });
+  } catch {
+    return null;
+  }
+
+  if (recovered.padraoNacionalEnabled !== true) return null;
+  return recovered;
+};
+
 export const consultarCidadePlugNotas = async ({ codigoIbge, environment }) => {
   ensureConfigured();
 
@@ -159,6 +187,34 @@ export const consultarCidadePlugNotas = async ({ codigoIbge, environment }) => {
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
       const gateway = resolvePlugnotasGatewayUpstreamForClient(response.status);
+
+      // Só recupera 400 com padraoNacional do ambiente === true (não engole 401/403/5xx nem 400 sem nacional).
+      if (!gateway && response.status === 400) {
+        const recovered = tryRecoverNacionalPreflightFromCidadeError(payload, {
+          codigoIbge,
+          environment
+        });
+        if (recovered) {
+          if (process.env.NODE_ENV !== 'production' || isPlugnotasDebugExplicitlyEnabled()) {
+            // eslint-disable-next-line no-console
+            console.error(
+              JSON.stringify({
+                provider: 'PlugNotas',
+                operation: 'consultar-cidade-preflight',
+                method: 'GET',
+                path,
+                cityIbge: codigoIbge,
+                environment,
+                providerStatus: response.status,
+                padraoNacionalEnabled: recovered.padraoNacionalEnabled,
+                note: 'RECOVERED: HTTP 400 com padraoNacional do ambiente true — preflight nacional segue'
+              })
+            );
+          }
+          return recovered;
+        }
+      }
+
       const message = gateway
         ? gateway.publicMessage
         : toMessage(payload, 'Não foi possível consultar a disponibilidade do município no emissor fiscal.');
@@ -215,4 +271,7 @@ export const consultarCidadePlugNotas = async ({ codigoIbge, environment }) => {
   }
 };
 
-export { normalizeCidadePreflightPayload };
+export {
+  normalizeCidadePreflightPayload,
+  tryRecoverNacionalPreflightFromCidadeError
+};
