@@ -47,6 +47,15 @@ export const isContaGlobalIntentFromUserText = (text) => {
   const raw = String(text || '').trim();
   if (!raw) return false;
   const s = fold(raw);
+
+  // Carteira BRL explícita (banco BR + reais/centavos/R$) → nunca Conta Global
+  const hasBrlMoney = /\b(reais?|centavos?|brl)\b/i.test(s) || /\br\s*\$/i.test(raw);
+  const hasBrBank =
+    /\b(c6(\s*bank)?|nubank|inter|itau|bradesco|santander|banco\s*do\s*brasil|\bbb\b|caixa|picpay|neon|will bank|pagbank|mercado\s*pago)\b/i.test(
+      s,
+    );
+  if (hasBrlMoney && hasBrBank) return false;
+
   if (CONTA_GLOBAL_RE.test(raw) || /\b(conta global|moeda global|moedas globais|cambio)\b/i.test(s)) {
     return true;
   }
@@ -63,7 +72,10 @@ export const isContaGlobalIntentFromUserText = (text) => {
   if (hasFx && hasActionHint) return true;
   // "100 dolares" / "US$ 50" mesmo sem verbo explícito
   if (/\b\d+([.,]\d+)?\s*(dolar(es)?|usd|euro?s?|eur|libra?s?)\b/i.test(s)) return true;
-  if (/\$\s*\d+/.test(raw) && !/\br\$\b/i.test(s)) return true;
+  // "$50" / "US$ 50" — mas NÃO "R$ 50" (o $ de reais não é dólar)
+  // Obs: /\br\$\b/ falha em "r$ 0,29" porque $ não forma word-boundary.
+  const withoutBrlCurrency = String(raw).replace(/\br\s*\$/gi, ' ');
+  if (/\$\s*\d+/.test(withoutBrlCurrency)) return true;
   return false;
 };
 
