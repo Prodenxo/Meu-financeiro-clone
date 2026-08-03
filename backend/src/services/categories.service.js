@@ -29,6 +29,39 @@ const normalizeCategoryName = (value) => {
 const categoryCopyKey = (nome, tipo) =>
   `${normalizeCategoryName(nome)}:${normalizeTipo(tipo) || ''}`;
 
+const mergeOrcadoValues = (left, right) => {
+  if (left == null) return right ?? null;
+  if (right == null) return left;
+  return Math.max(Number(left), Number(right));
+};
+
+/**
+ * Colapsa categorias duplicadas (mesmo nome + tipo) num único ID canónico (menor id).
+ * Evita linhas repetidas e soma duplicada do realizado na matriz DRE/BPO.
+ */
+export const dedupeCategoriesByCopyKey = (categories) => {
+  const groups = new Map();
+  for (const cat of categories || []) {
+    const key = categoryCopyKey(cat.nome, cat.tipo);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(cat);
+  }
+
+  const canonicalCategories = [];
+  const categoryIdAlias = new Map();
+
+  for (const list of groups.values()) {
+    const sorted = [...list].sort((a, b) => Number(a.id) - Number(b.id));
+    const keep = sorted[0];
+    canonicalCategories.push(keep);
+    for (const cat of sorted) {
+      categoryIdAlias.set(cat.id, keep.id);
+    }
+  }
+
+  return { canonicalCategories, categoryIdAlias };
+};
+
 /**
  * Garante cópias das categorias globais (user_id IS NULL) para o utilizador.
  * Idempotente — alinhado à migração copy_global_categories_to_users + RLS categorias_select_own.
@@ -261,6 +294,23 @@ export const createCategory = async (userId, payload) => {
   if (!nome || !tipo) throw badRequest('Nome e tipo são obrigatórios');
 
   const dbClient = createSupabaseClient({ useServiceRole: true });
+  await ensureGlobalCategoriesCopiedForUser(dbClient, userId);
+
+  const { data: existingCategories, error: existingError } = await dbClient
+    .from('categorias_id')
+    .select('id, nome, tipo')
+    .eq('user_id', userId);
+
+  if (existingError) throw badRequest(existingError.message);
+
+  const incomingKey = categoryCopyKey(nome, tipo);
+  const duplicate = (existingCategories || []).find(
+    (cat) => categoryCopyKey(cat.nome, cat.tipo) === incomingKey,
+  );
+  if (duplicate) {
+    throw badRequest(`Categoria "${nome}" (${normalizeTipo(tipo)}) já existe`);
+  }
+
   const { data, error } = await dbClient
     .from('categorias_id')
     .insert({ nome, tipo: normalizeTipo(tipo), user_id: userId })
@@ -393,7 +443,7 @@ export const listCategoryBudgetsSummary = async (userId, { year, month } = {}) =
 
   if (catError) throw badRequest(catError.message);
 
-  const allCategories = categories || [];
+  const { canonicalCategories, categoryIdAlias } = dedupeCategoriesByCopyKey(categories || []);
 
   const range = getMonthRangeFromInput(year, month);
   const monthStartDate = range ? range.startDate : await ensureMonthlyBudgets(dbClient, userId);
@@ -449,10 +499,19 @@ export const listCategoryBudgetsSummary = async (userId, { year, month } = {}) =
 
   const budgetByCategoryId = new Map();
   (budgets || []).forEach((budget) => {
-    budgetByCategoryId.set(budget.categorias_id, budget.valor_orçado ?? null);
+    const canonicalId = categoryIdAlias.get(budget.categorias_id) ?? budget.categorias_id;
+    const incoming = budget.valor_orçado ?? null;
+    if (!budgetByCategoryId.has(canonicalId)) {
+      budgetByCategoryId.set(canonicalId, incoming);
+      return;
+    }
+    budgetByCategoryId.set(
+      canonicalId,
+      mergeOrcadoValues(budgetByCategoryId.get(canonicalId), incoming),
+    );
   });
 
-  return allCategories.map((categoria) => {
+  return canonicalCategories.map((categoria) => {
     const key = normalizeCategoryName(categoria.nome);
     return {
       categorias_id: categoria.id,
@@ -573,7 +632,7 @@ export const listCategoryBudgetsDreMatrix = async (userId, year) => {
 
   if (userError) throw badRequest(userError.message);
 
-  const allCategories = userCategories || [];
+  const { canonicalCategories, categoryIdAlias } = dedupeCategoriesByCopyKey(userCategories || []);
 
   const { data: budgetRows, error: budgetsError } = await dbClient
     .from('orçamentos')
@@ -609,8 +668,14 @@ export const listCategoryBudgetsDreMatrix = async (userId, year) => {
   (budgetRows || []).forEach((row) => {
     const month = parseMonthFromBudgetDate(row.date);
     if (!month) return;
-    const key = `${row.categorias_id}_${month}`;
-    budgetMap.set(key, row.valor_orçado ?? null);
+    const canonicalId = categoryIdAlias.get(row.categorias_id) ?? row.categorias_id;
+    const key = `${canonicalId}_${month}`;
+    const incoming = row.valor_orçado ?? null;
+    if (!budgetMap.has(key)) {
+      budgetMap.set(key, incoming);
+      return;
+    }
+    budgetMap.set(key, mergeOrcadoValues(budgetMap.get(key), incoming));
   });
 
   const spentMap = new Map();
@@ -636,7 +701,7 @@ export const listCategoryBudgetsDreMatrix = async (userId, year) => {
   });
 
   const results = [];
-  for (const categoria of allCategories) {
+  for (const categoria of canonicalCategories) {
     const nomeKey = normalizeCategoryName(categoria.nome);
     for (let month = 1; month <= 12; month += 1) {
       const budgetKey = `${categoria.id}_${month}`;

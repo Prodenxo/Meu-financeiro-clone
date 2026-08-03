@@ -44,6 +44,21 @@ describe('bpoMatrix — view model', () => {
     expect(model.resultado[0].realizado).toBe(200);
   });
 
+  it('não duplica categoria com mesmo nome (Spotify)', () => {
+    const dupCategories: Category[] = [
+      { id: 12, nome: 'Spotify', tipo: 'saida', user_id: 'u1' },
+      { id: 50, nome: 'Spotify', tipo: 'saida', user_id: 'u1' }
+    ];
+    const dupCells: DreMatrixCell[] = [
+      { categorias_id: 12, month: 3, valor_orcado: null, valor_gasto: 1, valor_recebido: 0 }
+    ];
+    const model = buildBpoMatrixViewModel(dupCategories, dupCells, [], 2026);
+    expect(model.despesas).toHaveLength(1);
+    expect(model.despesas[0].nome).toBe('Spotify');
+    expect(model.despesas[0].categoriasId).toBe(12);
+    expect(model.despesas[0].byMonth[2].realizado).toBe(1);
+  });
+
   it('inclui previsto de transações pendentes', () => {
     const model = buildBpoMatrixViewModel(categories, cells, [
       {

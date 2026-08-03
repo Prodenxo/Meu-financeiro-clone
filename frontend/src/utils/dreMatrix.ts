@@ -79,6 +79,27 @@ export function isSaidaTipo(tipo: string): boolean {
   return tipo === 'saida' || tipo === 'saída';
 }
 
+function dreCategoryCopyKey(cat: Category): string {
+  const tipo = isSaidaTipo(cat.tipo) ? 'saida' : isEntradaTipo(cat.tipo) ? 'entrada' : cat.tipo;
+  return `${cat.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()}|${tipo}`;
+}
+
+/** Uma categoria por nome+tipo (menor id) para evitar linhas duplicadas na DRE. */
+export function dedupeDreCategories(categories: Category[]): Category[] {
+  const groups = new Map<string, Category[]>();
+  for (const cat of categories) {
+    const key = dreCategoryCopyKey(cat);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(cat);
+  }
+  const canonical: Category[] = [];
+  for (const list of groups.values()) {
+    const sorted = [...list].sort((a, b) => a.id - b.id);
+    canonical.push(sorted[0]);
+  }
+  return canonical;
+}
+
 export function formatDreCurrency(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
@@ -262,8 +283,9 @@ export function buildDreMatrixViewModel(
   monthNames: string[],
   options?: BuildDreMatrixViewModelOptions
 ): DreMatrixViewModel {
+  const uniqueCategories = dedupeDreCategories(categories);
   const allow = options?.categoryIdsAllowlist;
-  const eligible = categories.filter((c) => {
+  const eligible = uniqueCategories.filter((c) => {
     if (!isEntradaTipo(c.tipo) && !isSaidaTipo(c.tipo)) return false;
     if (allow) return allow.has(c.id);
     return isCategoryEligibleInPeriod(c.id, c.tipo, period, cells);

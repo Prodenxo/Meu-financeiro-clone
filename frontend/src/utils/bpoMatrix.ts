@@ -48,6 +48,27 @@ export function normalizeBpoCategoryName(value: string): string {
     .trim();
 }
 
+function bpoCategoryCopyKey(cat: Category): string {
+  const tipo = cat.tipo === 'saída' ? 'saida' : cat.tipo;
+  return `${normalizeBpoCategoryName(cat.nome)}|${tipo}`;
+}
+
+/** Mantém uma linha por nome+tipo (menor id) — paridade com dedupe do backend. */
+export function dedupeBpoCategories(categories: Category[]): Category[] {
+  const groups = new Map<string, Category[]>();
+  for (const cat of categories) {
+    const key = bpoCategoryCopyKey(cat);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(cat);
+  }
+  const canonical: Category[] = [];
+  for (const list of groups.values()) {
+    const sorted = [...list].sort((a, b) => a.id - b.id);
+    canonical.push(sorted[0]);
+  }
+  return canonical;
+}
+
 export function getBpoTxnDate(t: BpoPendingTxn): Date {
   return t.data ? new Date(`${t.data}T00:00:00-03:00`) : new Date(t.criado_em || Date.now());
 }
@@ -214,14 +235,15 @@ export function buildBpoMatrixViewModel(
   pendingTxns: BpoPendingTxn[],
   year: number
 ): BpoMatrixViewModel {
+  const uniqueCategories = dedupeBpoCategories(categories);
   const categoryNameToId = new Map<string, number>();
-  for (const cat of categories) {
+  for (const cat of uniqueCategories) {
     categoryNameToId.set(normalizeBpoCategoryName(cat.nome), cat.id);
   }
 
   const previstoMap = buildPrevistoMap(pendingTxns, year, categoryNameToId);
 
-  const rows = categories
+  const rows = uniqueCategories
     .filter((c) => isEntradaTipo(c.tipo) || isSaidaTipo(c.tipo))
     .map((c) => buildRowForCategory(c, cells, previstoMap))
     .filter((r) => isRowEligible(r.byMonth))
