@@ -129,7 +129,16 @@ export const completeEmpresaCnpjOnboarding = async (accessToken, input = {}) => 
   if (!existing?.id) throw badRequest('Empresa não encontrada');
 
   if (hasEmpresaDocumentoCadastral(existing.cnpj) && isValidEmpresaCnpj(existing.cnpj)) {
-    throw badRequest('O CNPJ desta empresa já foi cadastrado');
+    const { data: empresaAtual, error: reloadErr } = await adminClient
+      .from('empresas')
+      .select(EMPRESA_ONBOARDING_FIELDS.join(', '))
+      .eq('id', empresaId)
+      .maybeSingle();
+
+    if (reloadErr) throw badRequest(reloadErr.message);
+    if (!empresaAtual?.id) throw badRequest('Empresa não encontrada');
+
+    return { empresa: empresaAtual, required: false, alreadyCompleted: true };
   }
 
   const updates = buildOnboardingPayload(input, { requireEmail: true });
