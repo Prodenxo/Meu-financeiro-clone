@@ -107,12 +107,30 @@ export const updateTransaction = async (userId, payload) => {
   if (!id) throw badRequest('ID da transação é obrigatório');
 
   const dbClient = createSupabaseClient({ useServiceRole: true });
+
+  let tipoForStatus = updates.tipo ? normalizeTipo(updates.tipo) : null;
+  if (!tipoForStatus && updates.status != null) {
+    const { data: existing, error: loadErr } = await dbClient
+      .from('lancamentos_id')
+      .select('tipo')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (loadErr) throw badRequest(loadErr.message);
+    tipoForStatus = existing?.tipo ? normalizeTipo(existing.tipo) : null;
+  }
+
+  const patch = {
+    ...updates,
+    ...(updates.tipo ? { tipo: normalizeTipo(updates.tipo) } : {}),
+  };
+  if (updates.status != null && tipoForStatus) {
+    patch.status = normalizeTransactionStatus(tipoForStatus, updates.status);
+  }
+
   const { data, error } = await dbClient
     .from('lancamentos_id')
-    .update({
-      ...updates,
-      ...(updates.tipo ? { tipo: normalizeTipo(updates.tipo) } : {})
-    })
+    .update(patch)
     .eq('id', id)
     .eq('user_id', userId)
     .select()

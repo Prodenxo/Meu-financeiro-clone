@@ -482,8 +482,8 @@ export const listCategoryBudgetsSummary = async (userId, { year, month } = {}) =
     .from('lancamentos_id')
     .select('classificacao, valor, tipo, data, status')
     .eq('user_id', userId)
-    .eq('status', 'recebido')
     .eq('tipo', 'entrada')
+    .in('status', ['recebido', 'pago'])
     .gte('data', startOfMonth)
     .lte('data', endOfMonth);
 
@@ -657,8 +657,8 @@ export const listCategoryBudgetsDreMatrix = async (userId, year) => {
     .from('lancamentos_id')
     .select('classificacao, valor, tipo, data, status')
     .eq('user_id', userId)
-    .eq('status', 'recebido')
     .eq('tipo', 'entrada')
+    .in('status', ['recebido', 'pago'])
     .gte('data', startDate)
     .lte('data', endDate);
 
