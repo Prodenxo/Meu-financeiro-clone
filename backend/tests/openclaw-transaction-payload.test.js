@@ -125,6 +125,38 @@ test('update_transaction com carteira inválida falha', () => {
   );
 });
 
+test('create_transaction mapeia almoço para categoria Alimentação', () => {
+  const cats = [
+    { nome: 'Alimentação', tipo: 'saida' },
+    { nome: 'Combustível', tipo: 'saida' },
+  ];
+  const r = normalizeOpenclawTransactionPayload(
+    {
+      tipo: 'saida',
+      valor: 32.4,
+      classificacao: 'Almoço',
+      data: '2026-08-10',
+      carteira: 'Nubank',
+    },
+    { categories: cats, contas },
+  );
+  assert.equal(r.classificacao, 'Alimentação');
+});
+
+test('create_transaction mapeia descricao comida para Alimentação', () => {
+  const cats = [{ nome: 'Alimentação', tipo: 'saida' }];
+  const r = normalizeOpenclawTransactionPayload(
+    {
+      tipo: 'saida',
+      valor: 15,
+      descricao: 'café da manhã',
+      data: 'hoje',
+    },
+    { categories: cats, contas: [contas[0]] },
+  );
+  assert.equal(r.classificacao, 'Alimentação');
+});
+
 test('update_transaction altera carteira para Nubank', () => {
   const patch = normalizeOpenclawTransactionUpdate(
     { id: 'tx-1', carteira: 'Nubank' },

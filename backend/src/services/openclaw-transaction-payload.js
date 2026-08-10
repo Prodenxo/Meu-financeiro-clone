@@ -48,6 +48,72 @@ const normalizeCategoryKey = (value) =>
     .replace(/[\u0300-\u036f]/g, '')
     .trim();
 
+/** Descrições comuns do WhatsApp → padrões de nome de categoria na app. */
+const CLASSIFICACAO_CATEGORY_HINTS = [
+  {
+    test: (key) =>
+      /\b(almoco|jantar|cafe|lanche|comida|restaurante|ifood|delivery|supermercado|mercado|padaria|lanchonete|refeicao|pizza|hamburguer|sorvete|acai|lanchonete)\b/.test(
+        key,
+      ),
+    categoryPatterns: ['alimentacao', 'comida', 'refeicao', 'restaurante'],
+  },
+  {
+    test: (key) =>
+      /\b(gasolina|combustivel|etanol|diesel|posto|abastec)\b/.test(key),
+    categoryPatterns: ['combustivel', 'gasolina', 'transporte'],
+  },
+  {
+    test: (key) => /\b(uber|99|taxi|onibus|metro|estacionamento|pedagio)\b/.test(key),
+    categoryPatterns: ['transporte', 'mobilidade', 'deslocamento'],
+  },
+  {
+    test: (key) => /\b(farmacia|remedio|medicamento|consulta|medico|dentista|plano de saude)\b/.test(key),
+    categoryPatterns: ['saude', 'farmacia', 'medico'],
+  },
+];
+
+/**
+ * Resolve classificacao para nome exacto de categoria existente (sinónimos + match parcial).
+ * @param {string} rawClassificacao
+ * @param {Array<{ nome?: string, tipo?: string }>} categories
+ * @param {'entrada'|'saida'|string} [tipo]
+ */
+const resolveClassificacaoFromCategories = (rawClassificacao, categories = [], tipo = '') => {
+  let classificacao = String(rawClassificacao || '').trim();
+  if (!classificacao || !categories.length) return classificacao;
+
+  const key = normalizeCategoryKey(classificacao);
+  const scoped = tipo
+    ? categories.filter((c) => {
+      const catTipo = normalizeCategoryKey(c?.tipo);
+      if (!catTipo) return true;
+      if (tipo === 'entrada') return catTipo === 'entrada';
+      return catTipo !== 'entrada';
+    })
+    : categories;
+
+  const exact = scoped.find((c) => normalizeCategoryKey(c?.nome) === key);
+  if (exact?.nome) return exact.nome;
+
+  const partial = scoped.find(
+    (c) => {
+      const catKey = normalizeCategoryKey(c?.nome);
+      return catKey.includes(key) || key.includes(catKey);
+    },
+  );
+  if (partial?.nome) return partial.nome;
+
+  for (const hint of CLASSIFICACAO_CATEGORY_HINTS) {
+    if (!hint.test(key)) continue;
+    for (const pattern of hint.categoryPatterns) {
+      const found = scoped.find((c) => normalizeCategoryKey(c?.nome).includes(pattern));
+      if (found?.nome) return found.nome;
+    }
+  }
+
+  return classificacao;
+};
+
 const parseValor = (raw) => {
   if (raw === null || raw === undefined || raw === '') return null;
   if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
@@ -217,17 +283,7 @@ export const normalizeOpenclawTransactionPayload = (payload = {}, options = {}) 
   }
 
   if (classificacao && categories.length) {
-    const key = normalizeCategoryKey(classificacao);
-    const match = categories.find((c) => normalizeCategoryKey(c?.nome) === key);
-    if (match?.nome) classificacao = match.nome;
-    else {
-      const partial = categories.find(
-        (c) =>
-          normalizeCategoryKey(c?.nome).includes(key)
-          || key.includes(normalizeCategoryKey(c?.nome)),
-      );
-      if (partial?.nome) classificacao = partial.nome;
-    }
+    classificacao = resolveClassificacaoFromCategories(classificacao, categories, tipo);
   }
 
   if (!classificacao) {
@@ -317,9 +373,12 @@ export const normalizeOpenclawTransactionUpdate = (payload = {}, options = {}) =
     if (isNumericCategoryCode(classificacao)) classificacao = '';
     if (!classificacao) throw badRequest('classificacao inválida');
     if (categories.length) {
-      const key = normalizeCategoryKey(classificacao);
-      const match = categories.find((c) => normalizeCategoryKey(c?.nome) === key);
-      if (match?.nome) classificacao = match.nome;
+      const tipoForHint = patch.tipo || payload?.tipo || payload?.type || '';
+      classificacao = resolveClassificacaoFromCategories(
+        classificacao,
+        categories,
+        TIPO_ALIASES[String(tipoForHint).trim().toLowerCase()] || tipoForHint,
+      );
     }
     patch.classificacao = classificacao;
   }
