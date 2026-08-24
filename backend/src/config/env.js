@@ -316,4 +316,9 @@ export const env = {
    * Por defeito `true` para o limite na plataforma acompanhar o contratado na Stripe. Defina `false` para só ajustar limite à mão.
    */
   STRIPE_SYNC_MAX_MEI: process.env.STRIPE_SYNC_MAX_MEI || "true",
+  /** ScrumHub — chamados de suporte (proxy server-side; nunca expor API Key no frontend). */
+  SCRUMHUB_API_KEY: normalizeEnvSecret(process.env.SCRUMHUB_API_KEY || ""),
+  SCRUMHUB_TICKET_SLUG: (process.env.SCRUMHUB_TICKET_SLUG || "").trim(),
+  SCRUMHUB_API_BASE_URL: (process.env.SCRUMHUB_API_BASE_URL || "").trim().replace(/\/$/, ""),
+  SCRUMHUB_PUBLIC_ORIGIN: (process.env.SCRUMHUB_PUBLIC_ORIGIN || "https://scrumhub.com.br").trim().replace(/\/$/, ""),
 };
