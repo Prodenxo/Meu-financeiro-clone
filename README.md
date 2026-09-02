@@ -120,10 +120,14 @@ Por padrão o Vite está configurado para rodar na porta `3000`.
 ## Scripts na raiz
 
 ```
-npm run dev         # roda o frontend
+npm run dev              # roda o frontend (Vite)
 npm run dev:frontend
 npm run dev:backend
+npm run build            # build frontend → dist/ (gerado localmente, não versionado)
+npm run db:migrate:prod  # migrations Supabase em produção
 ```
+
+Build web: `npm run build` gera `frontend/dist/` e copia para `dist/` na raiz (Vercel/Easypanel). Essas pastas **não** entram no Git.
 
 ## Supabase: migrations e convites por empresa (US-INV-07)
 

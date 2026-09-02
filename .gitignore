@@ -16,9 +16,42 @@ node_modules
 
 # Build & Logs (AIOX)
 dist/
+frontend/dist/
 build/
 *.log
 logs/
+artifacts/
+
+# AIOX bootstrap local (estado gerado; regras ficam em .cursor/)
+.aiox/
+
+# Squads AIOX (framework; não faz parte do produto)
+squads/
+
+# Exports one-time (dados de clientes)
+backend/scripts/one-time/exports/*
+!backend/scripts/one-time/exports/.gitignore
+
+# Assets temporários / duplicatas na raiz (canônicos: frontend/public/)
+frontend-screenshot.png
+logo.png
+site.webmanifest
+favicon.ico
+favicon-16x16.png
+favicon-32x32.png
+apple-touch-icon.png
+android-chrome-192x192.png
+android-chrome-512x512.png
+
+# Windows Zone.Identifier (lixo de download)
+*Zone.Identifier*
+*:Zone.Identifier
+
+# Tooling IA duplicado (config canônica: .cursor/ e .agent/)
+final_review_gate.mjs
+AGENTS.md
+cursorrules
+.cursorrules
 
 # IDE & OS (AIOX)
 .DS_Store
