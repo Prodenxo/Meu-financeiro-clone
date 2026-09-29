@@ -1,0 +1,501 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(360px, 44%) 1fr;
+  background: var(--mf-bg);
+}
+
+/* ---- Painel da marca (esquerda) ---- */
+.brandPanel {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--sp-10) 48px;
+  color: var(--mf-text-on-dark);
+  background:
+    radial-gradient(80% 60% at 0% 0%, rgba(139, 130, 242, 0.35) 0%, transparent 60%),
+    radial-gradient(70% 50% at 100% 100%, rgba(91, 79, 233, 0.35) 0%, transparent 60%),
+    var(--mf-navy);
+  overflow: hidden;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: inherit;
+}
+
+.brandMark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.pitch {
+  max-width: 440px;
+}
+
+.pitchTitle {
+  margin: 0;
+  font-size: clamp(26px, 2.6vw, 36px);
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.pitchText {
+  margin: var(--sp-4) 0 var(--sp-6);
+  font-size: var(--fs-lg);
+  line-height: 1.55;
+  color: var(--mf-text-on-dark-2);
+}
+
+.features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-md);
+  color: var(--mf-text-on-dark);
+}
+
+.featureIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.brandFoot {
+  font-size: var(--fs-sm);
+  color: var(--mf-text-on-dark-2);
+}
+
+/* ---- Área do formulário (direita) ---- */
+.formSide {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 72px var(--sp-6) var(--sp-8);
+  min-width: 0;
+}
+
+.topBar {
+  position: absolute;
+  top: var(--sp-5);
+  right: var(--sp-6);
+  left: var(--sp-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.mobileBrand {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--mf-text);
+}
+
+.mobileBrand .brandMark {
+  width: 30px;
+  height: 30px;
+  background: var(--mf-primary-soft);
+  color: var(--mf-primary);
+}
+
+.topRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.formWrap {
+  width: 100%;
+  max-width: 420px;
+}
+
+.formWrapWide {
+  max-width: 760px;
+}
+
+.eyebrow {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mf-primary);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.subtitle {
+  margin: var(--sp-2) 0 var(--sp-6);
+  color: var(--mf-text-2);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.rowBetween {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: calc(-1 * var(--sp-2));
+}
+
+.link {
+  color: var(--mf-primary);
+  font-weight: 600;
+  font-size: var(--fs-md);
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--mf-text-3);
+  font-size: var(--fs-sm);
+  margin: var(--sp-2) 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--mf-border);
+}
+
+.bottomText {
+  text-align: center;
+  font-size: var(--fs-md);
+  color: var(--mf-text-2);
+  margin: 0;
+}
+
+.legal {
+  margin: var(--sp-6) auto 0;
+  max-width: 420px;
+  text-align: center;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--mf-text-3);
+}
+
+.legal a {
+  color: var(--mf-text-2);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* Senha */
+.pwdWrap {
+  position: relative;
+}
+
+.pwdWrap input {
+  padding-right: 44px;
+}
+
+.eyeBtn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  color: var(--mf-text-2);
+}
+
+.eyeBtn:hover {
+  background: var(--mf-card-muted);
+}
+
+.rules {
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--mf-card-muted);
+  display: grid;
+  gap: 4px;
+}
+
+.rule {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+}
+
+.ruleOk {
+  color: var(--mf-success);
+}
+
+.strength {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+}
+
+.strengthBars {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.strengthBar {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--mf-border);
+}
+
+/* Telefone */
+.phone {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: var(--sp-2);
+}
+
+/* Grade de formulário largo */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.addrRow {
+  display: grid;
+  grid-template-columns: 2fr 2fr 90px;
+  gap: var(--sp-4);
+}
+
+.section {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mf-text-3);
+}
+
+.section::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--mf-border);
+}
+
+.choice {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.choiceBtn {
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--mf-border-strong);
+  background: var(--mf-card);
+  color: var(--mf-text);
+  font-size: var(--fs-md);
+  font-weight: 500;
+}
+
+.choiceBtnOn {
+  border-color: var(--mf-primary);
+  background: var(--mf-primary-soft);
+  color: var(--mf-primary);
+  font-weight: 700;
+}
+
+.hint {
+  margin: 6px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+  line-height: 1.5;
+}
+
+.required {
+  color: var(--mf-danger);
+}
+
+.success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) 0;
+}
+
+.successIcon {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--r-pill);
+  display: grid;
+  place-items: center;
+  background: var(--mf-success-soft);
+  color: var(--mf-success);
+}
+
+.successTitle {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+}
+
+.successText {
+  margin: 0;
+  color: var(--mf-text-2);
+  font-size: var(--fs-md);
+  line-height: 1.55;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--mf-success-soft);
+  color: var(--mf-success);
+  font-size: var(--fs-md);
+  line-height: 1.45;
+}
+
+.center {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-6) 0;
+  color: var(--mf-text-2);
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.linkButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  border-radius: var(--r-md);
+  background: var(--mf-primary);
+  color: #fff;
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.linkButton:hover {
+  background: var(--mf-primary-hover);
+}
+
+.center {
+  flex-direction: column;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  border: 3px solid var(--mf-border);
+  border-top-color: var(--mf-primary);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+@media (max-width: 1023px) {
+  .page {
+    grid-template-columns: 1fr;
+  }
+
+  .brandPanel {
+    display: none;
+  }
+
+  .mobileBrand {
+    display: flex;
+  }
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .addrRow {
+    grid-template-columns: 1fr;
+  }
+
+  .formSide {
+    padding: 72px var(--sp-4) var(--sp-6);
+    justify-content: flex-start;
+  }
+}

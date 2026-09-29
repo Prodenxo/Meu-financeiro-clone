@@ -1,0 +1,16 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-6);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--mf-card);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--mf-shadow);
+  padding: var(--sp-6);
+}

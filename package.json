@@ -1,15 +1,16 @@
 {
-  "name": "financas-pessoais-app",
+  "name": "meu-financeiro-refactor",
   "private": true,
   "version": "1.0.0",
-  "description": "Aplicação de finanças pessoais - Frontend e Backend",
+  "description": "Refactor: backend/ + frontend/ (Expo) — sem Vite legado",
   "scripts": {
-    "dev": "cd frontend && npm run dev",
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && npm run dev",
-    "build": "cd frontend && npm run build && cd .. && node scripts/copy-dist-to-root.js",
-    "preview": "cd frontend && npm run preview",
-    "lint": "npm run lint --workspaces --if-present",
+    "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev.ps1",
+    "dev:api": "cd backend && npm run dev",
+    "dev:frontend": "npm start --prefix frontend",
+    "dev:web": "npm run dev --prefix web",
+    "lint:web": "npm run lint --prefix web",
+    "test:web": "npm test --prefix web",
+    "build:web": "npm run build --prefix web",
     "lint:backend": "npm run lint -w backend",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
@@ -23,8 +24,8 @@
     "smoke:plugnotas:nfe-nfce": "node scripts/smoke-nfe-nfce-plugnotas.mjs"
   },
   "workspaces": [
-    "frontend",
-    "backend"
+    "backend",
+    "frontend"
   ],
   "devDependencies": {
     "@playwright/test": "^1.58.2",

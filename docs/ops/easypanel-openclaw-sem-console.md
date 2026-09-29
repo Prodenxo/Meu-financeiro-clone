@@ -4,7 +4,7 @@ Quando o **Console do Serviço** mostra `container is not running`, não dá par
 
 ## Backend Site: `Validar` / `Criar guia` → 404
 
-No repo actual existem `POST /api/mei-guide` e `POST /api/mei-guide/validate`. **404** na app = serviço **auto-back-meufinanceiro-site** com imagem antiga → **Redeploy** (Dockerfile.backend).
+No repo actual existem `POST /api/mei-guide` e `POST /api/mei-guide/validate`. **404** na app = serviço **auto-back-meufinanceiro-site** com imagem antiga → **Redeploy** (`Dockerfile` na raiz do repo).
 
 Confirma no browser: `GET https://auto-back-meufinanceiro-site.4tnf3f.easypanel.host/`
 

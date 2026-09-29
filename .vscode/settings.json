@@ -1,0 +1,10 @@
+{
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/package-lock.json": true,
+    ".cursor": true,
+    "docs/stories": true,
+    "docs/ux-audit": true,
+    "docs/technical": true
+  }
+}

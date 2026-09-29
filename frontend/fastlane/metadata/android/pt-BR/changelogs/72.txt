@@ -1,0 +1,5 @@
+Versão 2.2.2
+• Menu lateral redesenhado com visual mais moderno
+• Correção do cabeçalho em celulares (área segura)
+• Melhoria visual nos cards de saldo e totais
+• Correções gerais de interface

@@ -1,0 +1,198 @@
+/*
+ * Design tokens do Meu Financeiro (web).
+ * Fonte única de cores, espaçamentos, tipografia e raios — componentes só consomem variáveis.
+ */
+:root {
+  color-scheme: light;
+
+  /* Superfícies */
+  --mf-bg: #f5f5fa;
+  --mf-bg-elevated: #ffffff;
+  --mf-sidebar-bg: #fafafc;
+  --mf-card: #ffffff;
+  --mf-card-muted: #f7f7fb;
+  --mf-border: #ececf3;
+  --mf-border-strong: #dcdce8;
+  --mf-shadow: 0 1px 2px rgba(20, 20, 43, 0.04), 0 4px 16px rgba(20, 20, 43, 0.04);
+  --mf-shadow-pop: 0 12px 40px rgba(20, 20, 43, 0.14);
+
+  /* Texto */
+  --mf-text: #16162a;
+  --mf-text-2: #6b6b80;
+  --mf-text-3: #9a9aaf;
+  --mf-text-on-dark: #ffffff;
+  --mf-text-on-dark-2: rgba(255, 255, 255, 0.72);
+
+  /* Marca / ações */
+  --mf-primary: #5b4fe9;
+  --mf-primary-hover: #4d42d6;
+  --mf-primary-soft: #eeedfb;
+  --mf-primary-soft-2: #e3e1fa;
+  --mf-primary-ring: rgba(91, 79, 233, 0.35);
+
+  /* Card escuro (saldo) */
+  --mf-navy: #14142b;
+  --mf-navy-2: #1e1e3f;
+
+  /* Semântica */
+  --mf-success: #16a34a;
+  --mf-success-soft: #e8f7ee;
+  --mf-danger: #ef4444;
+  --mf-danger-soft: #fdecec;
+  --mf-warning: #f59e0b;
+  --mf-warning-soft: #fff4e5;
+  --mf-info: #2563eb;
+  --mf-info-soft: #e8f0fe;
+
+  /* Espaçamento (escala 4pt) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 28px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+
+  /* Raios */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* Tipografia */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+  --fs-kpi: 28px;
+
+  /* Layout */
+  --sidebar-w: 232px;
+  --content-max: 1360px;
+  --aside-w: 300px;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --mf-bg: #0f0f1c;
+  --mf-bg-elevated: #161628;
+  --mf-sidebar-bg: #12121f;
+  --mf-card: #181830;
+  --mf-card-muted: #1e1e36;
+  --mf-border: #262640;
+  --mf-border-strong: #33334f;
+  --mf-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.28);
+  --mf-shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.55);
+
+  --mf-text: #f1f1f7;
+  --mf-text-2: #a4a4bd;
+  --mf-text-3: #74748f;
+
+  --mf-primary: #8b82f2;
+  --mf-primary-hover: #a19af5;
+  --mf-primary-soft: rgba(139, 130, 242, 0.16);
+  --mf-primary-soft-2: rgba(139, 130, 242, 0.26);
+  --mf-primary-ring: rgba(139, 130, 242, 0.45);
+
+  --mf-navy: #23234a;
+  --mf-navy-2: #2d2d5c;
+
+  --mf-success: #34d399;
+  --mf-success-soft: rgba(52, 211, 153, 0.14);
+  --mf-danger: #f87171;
+  --mf-danger-soft: rgba(248, 113, 113, 0.14);
+  --mf-warning: #fbbf24;
+  --mf-warning-soft: rgba(251, 191, 36, 0.14);
+  --mf-info: #60a5fa;
+  --mf-info-soft: rgba(96, 165, 250, 0.14);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--mf-bg);
+  color: var(--mf-text);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: var(--fs-md);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--mf-primary);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

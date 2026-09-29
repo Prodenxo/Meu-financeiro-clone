@@ -47,7 +47,10 @@ android-chrome-512x512.png
 *Zone.Identifier*
 *:Zone.Identifier
 
-# Tooling IA duplicado (config canônica: .cursor/ e .agent/)
+.agent/
+.playwright-mcp/
+
+# Tooling IA duplicado (config canônica: .cursor/)
 final_review_gate.mjs
 AGENTS.md
 cursorrules

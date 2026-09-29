@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** Única fonte de valores padrão NFC-e (cadastro empresa / QR v1) — ver `config/plugnotas-nfce-empresa-defaults.json`. */
+/** Única fonte de valores padrão NFC-e (cadastro empresa / QR v1) — ver `backend/config/plugnotas-nfce-empresa-defaults.json`. */
 const loadDefaults = () => {
-  const path = join(__dirname, '../../../../config/plugnotas-nfce-empresa-defaults.json');
+  const path = join(__dirname, '../../../config/plugnotas-nfce-empresa-defaults.json');
   const raw = JSON.parse(readFileSync(path, 'utf8'));
   const base = { ...raw.nfceConfigQrV1 };
   return {

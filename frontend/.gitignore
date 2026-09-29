@@ -1,5 +1,25 @@
-.env
-.env.*
-.env.local
+# Expo
+.expo/
+.expo-web-check/
+.expo-tmp-bundle/
+dist/
+dist-test/
+web-build/
+expo-env.d.ts
 
-.vercel
+# Env local
+.env
+.env*.local
+
+# Native gerado localmente (android/ versionado de propósito no repo)
+# ios/
+
+# Build / logs
+*.log
+*.tsbuildinfo
+
+# Changelog gerado localmente (git-cliff)
+CHANGELOG.md
+
+# OS
+.DS_Store

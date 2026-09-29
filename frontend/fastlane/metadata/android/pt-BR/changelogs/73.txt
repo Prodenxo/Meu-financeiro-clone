@@ -1,0 +1,4 @@
+Versão 2.2.3
+• Correção da área segura no celular (login, dashboard e orçamentos)
+• Menu de tema alinhado ao modo claro e escuro
+• Melhorias na visão BPO e correções de interface

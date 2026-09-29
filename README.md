@@ -1,145 +1,61 @@
-# FINANCAS-PESSOAIS-APP
+# Meu Financeiro
 
-Monorepo com frontend (Vite + React), backend (Express) e camada Supabase centralizada em `/supabase`.
+API Express + app **Expo** + Supabase, num so repositorio.
 
-## Estrutura (alto nível)
+## Comece aqui
 
-```
-/backend
-  /src
-    /config
-    /controllers
-    /middlewares
-    /models
-    /routes
-    /services
-    /utils
-  package.json
-  .env
-/frontend
-  /src
-  /public
-  /services
-  package.json
-/supabase
-/financas-pessoais-mobile (se existir)
-README.md
+```powershell
+npm install        # instala backend + frontend (workspaces)
+npm run dev        # abre a API (:3333) noutro terminal e o Expo neste (web: tecla w -> :8081)
 ```
 
-## Variáveis de ambiente
+Antes disso, crie os `.env` copiando os exemplos de cada pasta:
 
-- **Nunca commite `.env`.** Use `backend/.env.example` e `frontend/.env.example` como referência; copie para `.env` em cada pasta e preencha com valores reais.
-- Arquivos `.env` estão no `.gitignore`; em caso de exposição acidental, rode a rotação de segredos conforme política do projeto.
+- `backend/.env.example` -> `backend/.env`
+- `frontend/.env.example` -> `frontend/.env`
+- `web/.env.example` -> `web/.env.local` (Next.js)
 
-## Backend (Express)
+## Web em Next.js (`web/`) — migração em andamento
 
-### Variáveis de ambiente (`backend/.env`)
+O front web esta a ser migrado do Expo para **Next.js (App Router, JavaScript)**. A pasta `web/` e um
+pacote separado (nao entra nos workspaces para nao misturar versoes de React com o Expo).
 
-```
-NODE_ENV=development
-PORT=3333
-CORS_ORIGIN=http://localhost:3000
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-FRONTEND_URL=http://localhost:3000
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=
-PLUGNOTAS_API_BASE_URL=
-PLUGNOTAS_API_KEY=
-PLUGNOTAS_TIMEOUT_MS=15000
-PLUGNOTAS_WEBHOOK_TOKEN=
+```powershell
+cd web && npm install     # uma vez
+npm run dev:web           # na raiz -> http://localhost:3000
 ```
 
-Observações sobre CORS:
+Ja migrado: telas de acesso (login, **Cadastre-se** = solicitacao de acesso PF/PJ com CNPJ automatico,
+cadastro por convite `/register?convite=`, recuperar e redefinir senha, termos/privacidade), casca do app
+(menu lateral, tema claro/escuro) e a **Visao geral**.
+Os itens do menu ainda nao migrados abrem no app Expo (`NEXT_PUBLIC_LEGACY_APP_URL`, ex.: `http://localhost:8081`).
 
-- `CORS_ORIGIN` aceita múltiplas origens separadas por vírgula (ex.: `https://meu-financeiro-frontend.vercel.app,http://localhost:3000,http://localhost:3001`).
-- Em produção, se `CORS_ORIGIN` não estiver definido, o backend usa `FRONTEND_URL` como fallback.
-
-### Instalação e execução
-
-```
-cd backend
-npm install
-npm run dev
-```
-
-**Smoke test (saúde):** com o backend no ar na porta configurada (padrão `3333`), use `GET http://localhost:3333/health` — resposta esperada `{"status":"ok"}`. Esta rota está na **raiz** do `Express`, não sob `/api`. Para a Guia MEI e erros _Failed to fetch_ vs Plugnotas, veja [Antes de atribuir erro ao Plugnotas](docs/operacao-mei-nfse.md#guia-mei-conectividade-local).
-
-### Rotas principais
-
-Lista **não exaustiva** (amostra histórica de onboarding). Para o mapa real de prefixos, use `backend/src/routes/index.js` (`router.use`). Rotas fiscais / Guia MEI / Plugnotas: ver [`docs/operacao-mei-nfse.md`](docs/operacao-mei-nfse.md).
-
-- `GET /health` (raiz do servidor — smoke test rápido)
-- `GET /api/health/supabase` (checagem Supabase; ver `backend/src/routes/health.routes.js`)
-- `POST /api/auth/signup`
-- `POST /api/auth/signin`
-- `POST /api/auth/signout`
-- `GET /api/auth/session`
-- `POST /api/auth/reset-password`
-- `POST /api/auth/process-recovery-hash`
-- `POST /api/auth/exchange-code-for-session`
-- `POST /api/auth/update-password`
-- `POST /api/auth/update-phone`
-- `POST /api/auth/update-display-name`
-- `POST /api/auth/update-role`
-- `GET /api/transactions`
-- `POST /api/transactions`
-- `PUT /api/transactions`
-- `DELETE /api/transactions`
-- `GET /api/categories`
-- `POST /api/categories`
-- `PUT /api/categories`
-- `DELETE /api/categories`
-- `POST /api/users/sync-phone`
-- `GET /api/users/empresas/current`
-- `GET /api/users/empresas/:empresaId`
-- `GET/POST /api/google-calendar/:path`
-
-## Frontend (Vite + React)
-
-### Variáveis de ambiente (`frontend/.env`)
+## Estrutura
 
 ```
-VITE_API_URL=http://localhost:3333
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
+backend/     API Express (porta 3333) — config em backend/config/
+frontend/    App Expo (celular + web :8081)
+web/         Front web em Next.js (:3000) — migração em andamento
+supabase/    migrations e config do banco
+scripts/     utilitarios da raiz (dev.ps1, migrate, smoke)
+docs/        documentacao (ops, stories, tecnico)
+Dockerfile   imagem da API (Easypanel / Docker)
 ```
 
-### Instalação e execução
+## Comandos na raiz
 
-```
-cd frontend
-npm install
-npm run dev
-```
+| Comando | Efeito |
+|---------|--------|
+| `npm run dev` | API + Expo |
+| `npm run dev:api` | So a API |
+| `npm run dev:frontend` | So o Expo |
+| `npm run dev:web` | So o Next.js (`web/`) |
+| `npm run lint:web` / `test:web` / `build:web` | Gates do `web/` |
+| `npm run typecheck` / `npm test` | Nos workspaces |
+| `npm run db:migrate:prod:check` | Verifica migrations em prod |
 
-Por padrão o Vite está configurado para rodar na porta `3000`.
+## Deploy
 
-## Scripts na raiz
-
-```
-npm run dev              # roda o frontend (Vite)
-npm run dev:frontend
-npm run dev:backend
-npm run build            # build frontend → dist/ (gerado localmente, não versionado)
-npm run db:migrate:prod  # migrations Supabase em produção
-```
-
-Build web: `npm run build` gera `frontend/dist/` e copia para `dist/` na raiz (Vercel/Easypanel). Essas pastas **não** entram no Git.
-
-## Supabase: migrations e convites por empresa (US-INV-07)
-
-Se o backend retornar erro de banco do tipo **`relation "public.empresa_invites" does not exist`** ao usar **Convites por link** (`POST /api/invites`), em geral faltam **aplicar as migrations** no Postgres **do mesmo** projeto que `SUPABASE_URL` do `backend/.env`, ou o `.env` aponta para outro projeto.
-
-- **Runbook completo** (local, remoto, smoke SQL, checklist de release, triagem de suporte): [`docs/runbooks/supabase-empresa-invites-migrations.md`](docs/runbooks/supabase-empresa-invites-migrations.md).
-- **PR (GitHub):** ao alterar migrations ou convites, usar o modelo [`supabase-migrations`](.github/PULL_REQUEST_TEMPLATE/supabase-migrations.md) na descrição do pull request (se o repositório estiver no GitHub).
-- **Brief do sintoma:** [`docs/brief/brief-empresa-invites-relation-does-not-exist.md`](docs/brief/brief-empresa-invites-relation-does-not-exist.md).
-
-**NFR-07:** não promover backend com `/api/invites` para staging/produção sem migrations aplicadas e smoke `to_regclass('public.empresa_invites')` no banco alvo (detalhes no runbook).
-
-## Observações
-
-- A fonte canônica de Edge Functions e migrations é `supabase/`.
-- O frontend consome o backend via `VITE_API_URL`, usando a camada `frontend/src/services`.
+- **API:** `Dockerfile` na raiz (Easypanel / Docker). Se o painel ainda apontar para `Dockerfile.backend`, troque para `Dockerfile` (era uma copia identica).
+- **App:** EAS / lojas — ver `frontend/docs/DEPLOY.md`.
+- Front **Vite** antigo (Render/Vercel): removido; fica so no historico do git.

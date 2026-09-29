@@ -11,9 +11,11 @@ Não grave secrets, tokens nem dados pessoais.
 
 | Área | Caminho |
 |------|---------|
-| Frontend | `frontend/` |
+| Frontend (Expo — celular + web legado :8081) | `frontend/` |
+| Front web Next.js (migração em curso, :3000) | `web/` |
 | Backend | `backend/` |
-| Scripts raiz | `scripts/` |
+| Scripts raiz (incl. `dev.ps1`) | `scripts/` |
+| Config JSON do backend (ex.: Plugnotas NFC-e) | `backend/config/` |
 | Documentação / stories | `docs/` |
 | Runbook Supabase / deploy | `docs/runbook/supabase-ambientes-e-deploy.md` |
 | Template MR GitLab / Bitbucket | `docs/runbook/gitlab-merge-request-template.md` |
@@ -23,6 +25,8 @@ Não grave secrets, tokens nem dados pessoais.
 | Bootstrap / squads | `squads/` |
 
 ## Decisões de arquitetura
+
+- **2026-09-29 — Migração web Expo → Next.js (`web/`):** decisão do utilizador: «transformar tudo para Next». Etapa 1 entregue: login (`@supabase/ssr`, cookies), `proxy.js` (guarda de rotas), casca (sidebar agrupada, drawer mobile, tema claro/escuro via cookie `mf-theme`) e **Visão geral**. `web/` é pacote **fora dos workspaces** (React 19.2.0 fixado = Expo; evita hoisting cruzado). Regras de negócio portadas 1:1 para JS puro em `web/lib/finance/*` (testes `npm test` em `web/`); dados carregados no servidor (`web/lib/data/dashboard.js`, categorias via `MEI_API_URL` com fallback Supabase). Itens de menu ainda não migrados apontam para o Expo web (`NEXT_PUBLIC_LEGACY_APP_URL`) — nunca links falsos. Ícones de bancos: `@edusites/bancos-brasil` só no servidor (`/api/bank-icon/[slug]` carrega `src/core.js` por caminho, porque o `index.js` puxa Vue). Tokens de design em `web/app/globals.css`.
 
 - **2026-04-15 — FR-PFLNAT (P2):** runbook [`docs/operacao-mei-nfse.md`](docs/operacao-mei-nfse.md) — âncora `#pflnat-preflight-nacional-vs-login-municipal-suporte`; linha REC500 «BFF / classificação» pré vs pós-motor; seguimento @qa: «Decisão formal» §18 (épico/rollout) vs motor PFLNAT + parágrafo «Leitura conjunta».
 - **2026-04-15 — FR-PFLNAT (P1) QA:** [`docs/qa/pflnat-p1-matriz-preflight-hibrido-evidencia.md`](docs/qa/pflnat-p1-matriz-preflight-hibrido-evidencia.md) — gate P0/CI (§0), pacote PR §2.1, spot check `/guias-mei` §3, sign-off §4; testes `fiscalUserError` / `nfseNacionalPlugnotasErrorHints`.
@@ -87,10 +91,13 @@ GitHub Actions: `.github/workflows/corr03-smoke-backend.yml` executa o mesmo smo
 
 ## Contexto em aberto
 
-- (pendências que afetam mais do que uma story)
+- **Migração Next (`web/`) — próximas etapas:** Transações, Minhas contas, Orçamentos, Categorias, Agenda, Conta global, Meu MEI, Configurações/usuários/solicitações, onboarding (ativação, empresa-cnpj); visão BPO (matriz anual) do dashboard; toggle Google Agenda ao criar lançamento. Só então trocar o deploy web e aposentar o Expo web.
 
 ## Última atualização
 
+- **2026-09-29** — `web/` auth completo (paridade Expo): `/login`, `/forgot` (backend `POST /api/auth/reset-password`), `/solicitar-acesso` (= «Cadastre-se», Edge `submit-access-request`, BrasilAPI no CNPJ), `/register?convite=` (valida `GET /api/invites/validate` no servidor → signUp → `ensure-profile` → `POST /api/invites/accept`), `/reset-password` (verifyOtp `token_hash` ou setSession; tentativa em cache por causa do StrictMode, o token só vale uma vez), `/privacidade` e `/termos` (HTML estático em `web/public` + rewrites). Regras em `web/lib/auth/validation.js` (testes). `proxy.js`: rotas só-visitante vs sempre abertas.
+- **2026-09-29** — `web/` (Next.js 16, App Router, JS): login + casca + Visão geral com o novo design; scripts raiz `dev:web`, `lint:web`, `test:web`, `build:web`; `metro.config.js` do Expo resolve `@edusites/bancos-brasil/src/core.js` também na `node_modules` da raiz (hoisting).
+- **2026-09-29** — Raiz enxuta: `config/` → `backend/config/`; `dev.ps1` → `scripts/dev.ps1` (`npm run dev`); removidos `Dockerfile.backend` (duplicado de `Dockerfile`), `shared/` (tokens sem uso), `infra/legacy` (Vite, só histórico git), `.env.example` da raiz (usar os de `backend/` e `frontend/`), `START-AQUI.txt` e `.code-workspace` (excludes agora em `.vscode/settings.json`).
 - **2026-05-06** — Migração legado PIX: sempre pacote `next_cycle` na Stripe (sem ramo só-metadata).
 - **2026-05-06** — `GET /users/empresas` (superadmin): merge automático `max_mei` com soma Stripe ativa (`mergeStripeContractedMeiIntoEmpresaLimits`).
 - **2026-05-06** — Webhooks / confirmação Stripe chamam `syncEmpresaMaxMeiFromLines` com `force: true` (atualiza `max_mei` mesmo com `STRIPE_SYNC_MAX_MEI=false`). UI: recarrega empresas ao abrir separador Empresas, ao voltar à página (`visibilitychange`) e ao fechar modal de cobrança.
