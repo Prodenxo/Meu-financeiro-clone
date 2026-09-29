@@ -10,8 +10,7 @@ function valueClass(tipo) {
   return tipo === 'entrada' ? s.trendUp : undefined;
 }
 
-export function RecentTable({ rows, hideValues, legacyAppUrl }) {
-  const allHref = legacyAppUrl ? `${legacyAppUrl}/transacoes` : null;
+export function RecentTable({ rows, hideValues, allHref }) {
   const money = (row) => (hideValues ? 'R$ ••••' : formatSignedBrl(row.valor, row.tipo));
 
   return (
@@ -19,13 +18,7 @@ export function RecentTable({ rows, hideValues, legacyAppUrl }) {
       <CardHeader
         title="Últimas movimentações"
         id="recent-title"
-        action={
-          allHref ? (
-            <ArrowLink href={allHref} external title="Transações — abre no app atual">
-              Ver todas
-            </ArrowLink>
-          ) : null
-        }
+        action={<ArrowLink href={allHref}>Ver todas</ArrowLink>}
       />
 
       {rows.length === 0 ? (

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": "node .cursor/hooks/scrumhub-dev-ticket.mjs",
+        "timeout": 45
+      }
+    ]
+  }
+}

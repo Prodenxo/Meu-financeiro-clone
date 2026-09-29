@@ -88,6 +88,7 @@ export function DashboardView({
         <div className={s.mainCol}>
           <KpiRow
             model={model}
+            selectedMonth={selectedMonth}
             hideValues={hideValues}
             onToggleHide={() => setHideValues((v) => !v)}
             legacyAppUrl={legacyAppUrl}
@@ -105,7 +106,7 @@ export function DashboardView({
 
           <IndicatorStrip insights={model.insights} hideValues={hideValues} />
 
-          <RecentTable rows={model.recent} hideValues={hideValues} legacyAppUrl={legacyAppUrl} />
+          <RecentTable rows={model.recent} hideValues={hideValues} allHref={`/transacoes?mes=${toMonthParam(selectedMonth)}`} />
 
           <ExpensesByCategoryCard data={model.expensesByCategory} hideValues={hideValues} />
         </div>

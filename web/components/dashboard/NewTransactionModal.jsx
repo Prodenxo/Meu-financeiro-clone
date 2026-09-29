@@ -1,20 +1,35 @@
 'use client';
 
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
-import { createTransactionAction } from '@/app/(app)/visao-geral/actions';
+import { saveTransactionAction } from '@/app/(app)/transacoes/actions';
 import { Alert, Button, Field, Input, Segmented, Select } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
 import { formatBrl } from '@/lib/finance/format';
+import { normalizarTipo } from '@/lib/finance/normalize';
+import { isRealizedLancamentoStatus } from '@/lib/finance/status';
 import m from './modal.module.css';
 
+const TITLES = {
+  create: 'Nova transação',
+  edit: 'Editar transação',
+  duplicate: 'Duplicar transação',
+  materialize: 'Lançar recorrência',
+};
+
+function toMoneyInput(valor) {
+  const n = Number(valor);
+  return Number.isFinite(n) && n > 0 ? n.toFixed(2).replace('.', ',') : '';
+}
+
 /**
- * Nova transação (mesma gravação do app: `lancamentos_id`).
+ * Formulário de lançamento (mesma gravação do app: `lancamentos_id`).
+ * `mode`: create | edit (usa `draft.id`) | duplicate | materialize (projeção de recorrência).
  * Modal acessível: <dialog> nativo com foco preso, Esc fecha, título ligado por aria.
  */
-export function NewTransactionModal({ initialTipo, categories, contas, todayKey, onClose }) {
+export function NewTransactionModal({ initialTipo, mode = 'create', draft = null, categories, contas, todayKey, onClose }) {
   const dialogRef = useRef(null);
-  const [tipo, setTipo] = useState(initialTipo || 'saida');
-  const [state, formAction, pending] = useActionState(createTransactionAction, null);
+  const [tipo, setTipo] = useState(draft ? normalizarTipo(draft.tipo) : initialTipo || 'saida');
+  const [state, formAction, pending] = useActionState(saveTransactionAction, null);
 
   useEffect(() => {
     const el = dialogRef.current;
@@ -29,12 +44,20 @@ export function NewTransactionModal({ initialTipo, categories, contas, todayKey,
     return undefined;
   }, [state, onClose]);
 
-  const categoriasDoTipo = useMemo(
-    () => categories.filter((c) => c.tipo === tipo).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
-    [categories, tipo],
-  );
+  const draftTipo = draft ? normalizarTipo(draft.tipo) : null;
+  const draftCategoria = draft && draftTipo === tipo ? String(draft.classificacao || '') : '';
+
+  const categoriasDoTipo = useMemo(() => {
+    const list = categories.filter((c) => c.tipo === tipo).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    if (draftCategoria && !list.some((c) => c.nome === draftCategoria)) {
+      list.unshift({ id: `draft-${draftCategoria}`, nome: draftCategoria });
+    }
+    return list;
+  }, [categories, tipo, draftCategoria]);
 
   const errors = state?.errors || {};
+  const isEdit = mode === 'edit' && draft?.id;
+  const realizadoDefault = draft ? isRealizedLancamentoStatus(draft.status) : true;
 
   return (
     <dialog
@@ -49,7 +72,7 @@ export function NewTransactionModal({ initialTipo, categories, contas, todayKey,
       <div className={m.body}>
         <header className={m.head}>
           <h2 className={m.title} id="ntx-title">
-            Nova transação
+            {TITLES[mode] || TITLES.create}
           </h2>
           <button type="button" className={m.close} onClick={onClose} aria-label="Fechar">
             <Icon name="x" size={18} />
@@ -58,11 +81,23 @@ export function NewTransactionModal({ initialTipo, categories, contas, todayKey,
 
         {state?.ok ? (
           <Alert tone="success">
-            {state.tipo === 'entrada' ? 'Entrada' : 'Saída'} de {formatBrl(state.valor)} salva com sucesso.
+            {state.tipo === 'entrada' ? 'Entrada' : 'Saída'} de {formatBrl(state.valor)} {state.edited ? 'atualizada' : 'salva'} com
+            sucesso.
           </Alert>
         ) : (
           <form action={formAction} className={m.form} noValidate>
             <input type="hidden" name="tipo" value={tipo} />
+            {isEdit ? <input type="hidden" name="id" value={draft.id} /> : null}
+            {mode === 'materialize' && draft?.recorrencia_id ? (
+              <>
+                <input type="hidden" name="recorrencia_id" value={draft.recorrencia_id} />
+                <input type="hidden" name="recorrencia_ano_mes" value={draft.recorrencia_ano_mes || ''} />
+              </>
+            ) : null}
+
+            {mode === 'materialize' ? (
+              <Alert tone="info">Este lançamento vem de uma recorrência. Ao salvar, ele passa a valer de verdade neste mês.</Alert>
+            ) : null}
 
             <Segmented
               ariaLabel="Tipo de lançamento"
@@ -76,16 +111,32 @@ export function NewTransactionModal({ initialTipo, categories, contas, todayKey,
 
             <div className={m.row}>
               <Field label="Valor (R$)" htmlFor="ntx-valor" error={errors.valor}>
-                <Input id="ntx-valor" name="valor" inputMode="decimal" placeholder="0,00" required invalid={Boolean(errors.valor)} autoFocus />
+                <Input
+                  id="ntx-valor"
+                  name="valor"
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  defaultValue={toMoneyInput(draft?.valor)}
+                  required
+                  invalid={Boolean(errors.valor)}
+                  autoFocus
+                />
               </Field>
               <Field label="Data" htmlFor="ntx-data" error={errors.data}>
-                <Input id="ntx-data" name="data" type="date" defaultValue={todayKey} required invalid={Boolean(errors.data)} />
+                <Input
+                  id="ntx-data"
+                  name="data"
+                  type="date"
+                  defaultValue={draft?.data ? String(draft.data).slice(0, 10) : todayKey}
+                  required
+                  invalid={Boolean(errors.data)}
+                />
               </Field>
             </div>
 
             <Field label="Categoria" htmlFor="ntx-cat" error={errors.classificacao}>
               {categoriasDoTipo.length > 0 ? (
-                <Select id="ntx-cat" name="classificacao" required defaultValue="">
+                <Select key={tipo} id="ntx-cat" name="classificacao" required defaultValue={draftCategoria}>
                   <option value="" disabled>
                     Escolha uma categoria
                   </option>
@@ -96,13 +147,13 @@ export function NewTransactionModal({ initialTipo, categories, contas, todayKey,
                   ))}
                 </Select>
               ) : (
-                <Input id="ntx-cat" name="classificacao" placeholder="Nome da categoria" required />
+                <Input id="ntx-cat" name="classificacao" placeholder="Nome da categoria" defaultValue={draftCategoria} required />
               )}
             </Field>
 
             {contas.length > 0 ? (
               <Field label="Conta" htmlFor="ntx-conta">
-                <Select id="ntx-conta" name="conta_id" defaultValue="">
+                <Select id="ntx-conta" name="conta_id" defaultValue={draft?.conta_id || ''}>
                   <option value="">Sem conta vinculada</option>
                   {contas.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -114,11 +165,11 @@ export function NewTransactionModal({ initialTipo, categories, contas, todayKey,
             ) : null}
 
             <Field label="Observação (opcional)" htmlFor="ntx-obs">
-              <Input id="ntx-obs" name="obs" maxLength={200} placeholder="Ex.: conta de luz de setembro" />
+              <Input id="ntx-obs" name="obs" maxLength={200} defaultValue={draft?.obs || ''} placeholder="Ex.: conta de luz de setembro" />
             </Field>
 
             <label className={m.check}>
-              <input type="checkbox" name="realizado" defaultChecked />
+              <input type="checkbox" name="realizado" defaultChecked={realizadoDefault} />
               <span>{tipo === 'entrada' ? 'Já recebi este valor' : 'Já paguei este valor'}</span>
             </label>
 
@@ -129,7 +180,7 @@ export function NewTransactionModal({ initialTipo, categories, contas, todayKey,
                 Cancelar
               </Button>
               <Button type="submit" disabled={pending} aria-busy={pending}>
-                {pending ? 'Salvando…' : 'Salvar'}
+                {pending ? 'Salvando…' : isEdit ? 'Salvar alterações' : 'Salvar'}
               </Button>
             </footer>
           </form>

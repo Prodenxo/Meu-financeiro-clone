@@ -1,6 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
+import { toMonthParam } from '@/lib/date';
 import { cx } from '@/components/ui';
 import { formatBrl } from '@/lib/finance/format';
 import { resolveBankVisual } from '@/lib/finance/bankCatalog';
@@ -71,11 +73,11 @@ function legacyHref(legacyAppUrl, path) {
   return legacyAppUrl ? `${legacyAppUrl}${path}` : null;
 }
 
-export function KpiRow({ model, hideValues, onToggleHide, legacyAppUrl }) {
+export function KpiRow({ model, selectedMonth, hideValues, onToggleHide, legacyAppUrl }) {
   const { balance, totals, contasComSaldo } = model;
   const money = (v) => (hideValues ? HIDDEN : formatBrl(v));
   const contasHref = legacyHref(legacyAppUrl, '/contas');
-  const txHref = legacyHref(legacyAppUrl, '/transacoes');
+  const txHref = `/transacoes?mes=${toMonthParam(selectedMonth)}`;
 
   const eyeButton = (
     <button
@@ -123,11 +125,9 @@ export function KpiRow({ model, hideValues, onToggleHide, legacyAppUrl }) {
             <span className={s.kpiFootText}>
               {totals.countIncome} recebimento{totals.countIncome === 1 ? '' : 's'}
             </span>
-            {txHref ? (
-              <a href={txHref} className={s.kpiFootLink} title="Transações — abre no app atual">
-                Ver <Icon name="arrow-right" size={13} />
-              </a>
-            ) : null}
+            <Link href={txHref} className={s.kpiFootLink}>
+              Ver <Icon name="arrow-right" size={13} />
+            </Link>
           </>
         }
       />
@@ -143,11 +143,9 @@ export function KpiRow({ model, hideValues, onToggleHide, legacyAppUrl }) {
             <span className={s.kpiFootText}>
               {totals.countExpenses} pagamento{totals.countExpenses === 1 ? '' : 's'}
             </span>
-            {txHref ? (
-              <a href={txHref} className={s.kpiFootLink} title="Transações — abre no app atual">
-                Ver <Icon name="arrow-right" size={13} />
-              </a>
-            ) : null}
+            <Link href={txHref} className={s.kpiFootLink}>
+              Ver <Icon name="arrow-right" size={13} />
+            </Link>
           </>
         }
       />
