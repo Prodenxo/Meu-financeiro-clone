@@ -58,6 +58,13 @@ export function findBankByNome(nome) {
   });
 }
 
+/** Busca do seletor de bancos (mesma regra do Expo: nome ou palavras-chave). */
+export function filterBanksByQuery(query) {
+  const q = normalizeSearch(query);
+  if (!q) return BANK_CATALOG;
+  return BANK_CATALOG.filter((b) => normalizeSearch(b.nome).includes(q) || b.keywords?.some((k) => normalizeSearch(k).includes(q)));
+}
+
 export function isKnownLibrarySlug(slug) {
   return LIBRARY_SLUGS.has(String(slug || ''));
 }

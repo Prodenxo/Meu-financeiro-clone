@@ -1,0 +1,471 @@
+/* Tela Contas — reutiliza tokens e padrões da Visão geral / Transações. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/* ===== Resumo — 2 cards iguais ===== */
+.summary {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+  align-items: stretch;
+}
+
+.summary .kpiValueOverride {
+  font-size: clamp(20px, 5cqw, var(--fs-kpi));
+}
+
+.miniBars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 36px;
+  margin-left: auto;
+}
+
+.miniBar {
+  width: 8px;
+  min-height: 4px;
+  border-radius: 3px;
+  background: var(--mf-primary-soft, rgba(91, 79, 233, 0.18));
+}
+
+.miniBarStrong {
+  background: var(--mf-primary);
+}
+
+/* ===== Minhas contas ===== */
+.sectionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.accountsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.accountCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px 14px 12px;
+  border-radius: var(--r-lg);
+  background: var(--mf-card);
+  border: 1px solid var(--mf-border);
+  box-shadow: var(--mf-shadow);
+  border-left: 3px solid var(--conta-cor, var(--mf-primary));
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.accountCard:hover {
+  box-shadow: var(--mf-shadow-pop);
+}
+
+.accountTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.accountLogo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--mf-border);
+  background: #fff;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.accountLogo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.accountNameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.accountName {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.accountType {
+  margin: 2px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--mf-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.balanceLabel {
+  margin: 12px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.balanceValue {
+  margin: 4px 0 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.balancePositive {
+  color: var(--mf-success);
+}
+
+.balanceNegative {
+  color: var(--mf-danger);
+}
+
+.accountLimit {
+  margin: 4px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+}
+
+.accountFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--mf-border);
+  min-width: 0;
+}
+
+.footText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.footLabel {
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+  white-space: nowrap;
+}
+
+.footDate {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.footArrow {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  display: grid;
+  place-items: center;
+  color: var(--mf-text-2);
+  background: var(--mf-card-muted);
+  flex-shrink: 0;
+}
+
+.footArrow:hover {
+  color: var(--mf-primary);
+  background: var(--mf-primary-soft, rgba(91, 79, 233, 0.12));
+}
+
+/* ===== Coluna direita ===== */
+.instLogo {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--mf-border);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.instLogo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.instShare {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 40px;
+  text-align: right;
+}
+
+.instMeta {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+}
+
+.soonPill {
+  margin-left: auto;
+}
+
+.listFoot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--sp-3);
+}
+
+/* ===== Gráfico ===== */
+.chartControls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.variationUp {
+  color: var(--mf-success);
+}
+
+.variationDown {
+  color: var(--mf-danger);
+}
+
+/* ===== Modal de conta ===== */
+.bankSearch {
+  margin-bottom: var(--sp-2);
+}
+
+.bankGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 232px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.bankTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px 8px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-card);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--mf-text-2);
+  text-align: center;
+  min-width: 0;
+}
+
+.bankTile span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bankTile:hover {
+  border-color: var(--mf-border-strong);
+}
+
+.bankTileActive {
+  border-color: var(--mf-primary);
+  box-shadow: 0 0 0 2px var(--mf-primary-ring, rgba(91, 79, 233, 0.25));
+  color: var(--mf-text);
+}
+
+.bankTileLogo {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-pill);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.bankTileLogo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.customTile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px dashed var(--mf-border-strong);
+  background: var(--mf-card);
+  text-align: left;
+  width: 100%;
+  margin-top: var(--sp-2);
+  color: var(--mf-text);
+}
+
+.customTile:hover {
+  background: var(--mf-card-muted);
+}
+
+.customTileActive {
+  border-style: solid;
+  border-color: var(--mf-primary);
+  box-shadow: 0 0 0 2px var(--mf-primary-ring, rgba(91, 79, 233, 0.25));
+}
+
+.customTileText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.customTileTitle {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.customTileHint {
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+}
+
+.selectedBank {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-card-muted);
+}
+
+.selectedBankName {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--mf-border-strong);
+  background: var(--mf-card);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--mf-text-2);
+}
+
+.chipActive {
+  border-color: var(--mf-primary);
+  background: var(--mf-primary);
+  color: #fff;
+}
+
+.fieldHint {
+  margin: 4px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+}
+
+.colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.colorDot {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.colorDotActive {
+  border-color: var(--mf-text);
+}
+
+.row3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+}
+
+/* ===== Responsivo ===== */
+@media (max-width: 1023px) {
+  .accountsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bankGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .row3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 639px) {
+  .accountsGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

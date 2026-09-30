@@ -91,7 +91,6 @@ export function DashboardView({
             selectedMonth={selectedMonth}
             hideValues={hideValues}
             onToggleHide={() => setHideValues((v) => !v)}
-            legacyAppUrl={legacyAppUrl}
           />
 
           <SaldoChart

@@ -37,7 +37,7 @@ function KpiCard({ navy, label, icon, iconTone, value, hint, foot, extra }) {
   );
 }
 
-function BankChips({ contas }) {
+export function BankChips({ contas }) {
   const visible = contas.slice(0, 4);
   const rest = contas.length - visible.length;
   return (
@@ -69,14 +69,9 @@ function BankChips({ contas }) {
   );
 }
 
-function legacyHref(legacyAppUrl, path) {
-  return legacyAppUrl ? `${legacyAppUrl}${path}` : null;
-}
-
-export function KpiRow({ model, selectedMonth, hideValues, onToggleHide, legacyAppUrl }) {
+export function KpiRow({ model, selectedMonth, hideValues, onToggleHide }) {
   const { balance, totals, contasComSaldo } = model;
   const money = (v) => (hideValues ? HIDDEN : formatBrl(v));
-  const contasHref = legacyHref(legacyAppUrl, '/contas');
   const txHref = `/transacoes?mes=${toMonthParam(selectedMonth)}`;
 
   const eyeButton = (
@@ -105,11 +100,9 @@ export function KpiRow({ model, selectedMonth, hideValues, onToggleHide, legacyA
         foot={
           <>
             {contasLabel ? <span className={s.kpiFootText}>{contasLabel}</span> : <BankChips contas={contasComSaldo} />}
-            {contasHref ? (
-              <a href={contasHref} className={s.kpiFootLink} title="Minhas contas — abre no app atual">
-                Ver contas <Icon name="arrow-right" size={13} />
-              </a>
-            ) : null}
+            <Link href="/contas" className={s.kpiFootLink}>
+              Ver contas <Icon name="arrow-right" size={13} />
+            </Link>
           </>
         }
       />

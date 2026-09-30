@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 import { formatBrl } from '@/lib/finance/format';
 import { normalizarTipo } from '@/lib/finance/normalize';
 import { isRealizedLancamentoStatus } from '@/lib/finance/status';
+import { toMoneyInput } from '@/lib/finance/money';
 import m from './modal.module.css';
 
 const TITLES = {
@@ -15,11 +16,6 @@ const TITLES = {
   duplicate: 'Duplicar transação',
   materialize: 'Lançar recorrência',
 };
-
-function toMoneyInput(valor) {
-  const n = Number(valor);
-  return Number.isFinite(n) && n > 0 ? n.toFixed(2).replace('.', ',') : '';
-}
 
 /**
  * Formulário de lançamento (mesma gravação do app: `lancamentos_id`).
@@ -116,7 +112,7 @@ export function NewTransactionModal({ initialTipo, mode = 'create', draft = null
                   name="valor"
                   inputMode="decimal"
                   placeholder="0,00"
-                  defaultValue={toMoneyInput(draft?.valor)}
+                  defaultValue={Number(draft?.valor) > 0 ? toMoneyInput(draft.valor) : ''}
                   required
                   invalid={Boolean(errors.valor)}
                   autoFocus

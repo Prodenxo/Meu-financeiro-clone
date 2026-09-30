@@ -29,6 +29,8 @@ export function normalizeContaRow(row) {
         : typeof row.limite_credito === 'number'
           ? row.limite_credito
           : parseFloat(String(row.limite_credito)) || null,
+    dia_fechamento: row.dia_fechamento == null ? null : Number(row.dia_fechamento) || null,
+    dia_vencimento: row.dia_vencimento == null ? null : Number(row.dia_vencimento) || null,
     cor: row.cor ? String(row.cor) : null,
     instituicao_id: row.instituicao_id ? String(row.instituicao_id) : null,
     ativo: row.ativo !== false,

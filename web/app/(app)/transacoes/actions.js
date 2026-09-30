@@ -3,16 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth/session';
 import { normalizeTransactionStatus } from '@/lib/finance/status';
+import { parseMoney } from '@/lib/finance/money';
 
 const MAX_IDS = 200;
-
-/** "1.234,56" | "1234.56" | "1234" → número. */
-function parseMoney(raw) {
-  const s = String(raw || '').trim().replace(/\s|R\$/g, '');
-  if (!s) return NaN;
-  const normalized = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s;
-  return Number(normalized);
-}
 
 function revalidateAll() {
   revalidatePath('/transacoes');

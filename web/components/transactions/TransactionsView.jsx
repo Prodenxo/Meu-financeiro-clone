@@ -58,10 +58,10 @@ function toRow(t, categoriasMap, contasById) {
  * Tela "Transações". Recebe os dados brutos do servidor e aplica período, busca e
  * filtros no cliente (instantâneo). Gravações são Server Actions que revalidam a rota.
  */
-export function TransactionsView({ data, initialMonth, currentMonth, todayKey }) {
+export function TransactionsView({ data, initialMonth, initialContaFilter = 'all', currentMonth, todayKey }) {
   const today = useMemo(() => dayKeyToDate(todayKey), [todayKey]);
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS, contaFilter: initialContaFilter }));
   const [sort, setSort] = useState('recentes');
   const [pageState, setPageState] = useState({ key: '', page: 1 });
   const [selected, setSelected] = useState(() => new Set());

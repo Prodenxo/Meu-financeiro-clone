@@ -27,8 +27,9 @@ npm run dev:web           # na raiz -> http://localhost:3000
 
 Ja migrado: telas de acesso (login, **Cadastre-se** = solicitacao de acesso PF/PJ com CNPJ automatico,
 cadastro por convite `/register?convite=`, recuperar e redefinir senha, termos/privacidade), casca do app
-(menu lateral, tema claro/escuro), a **Visao geral** e **Transacoes** (filtros, recorrencias previstas,
-editar/duplicar/excluir, marcar como pago e exportar Excel).
+(menu lateral, tema claro/escuro), a **Visao geral**, **Transacoes** (filtros, recorrencias previstas,
+editar/duplicar/excluir, marcar como pago e exportar Excel) e **Contas** (cadastro/edicao/exclusao com catalogo de
+bancos, saldo real por conta, resumo por instituicao e evolucao do saldo).
 Os itens do menu ainda nao migrados abrem no app Expo (`NEXT_PUBLIC_LEGACY_APP_URL`, ex.: `http://localhost:8081`).
 
 ## Estrutura

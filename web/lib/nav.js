@@ -11,7 +11,7 @@ export const NAV_GROUPS = [
     items: [
       { id: 'dashboard', label: 'Visão geral', icon: 'layout-dashboard', href: '/visao-geral' },
       { id: 'transacoes', label: 'Transações', icon: 'arrow-left-right', href: '/transacoes' },
-      { id: 'contas', label: 'Minhas contas', icon: 'credit-card', legacyPath: '/contas' },
+      { id: 'contas', label: 'Minhas contas', icon: 'credit-card', href: '/contas' },
     ],
   },
   {
