@@ -1,0 +1,824 @@
+/* Tela Agenda — mesmos tokens e padrões das telas Visão geral / Transações / Contas / Orçamentos / Categorias. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/* Calendário ~60% / compromissos do dia ~40% (a coluna lateral precisa de mais largura que no painel). */
+.topGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+
+.sideCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+
+.quickActions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+/* ===== Controle de período + vistas ===== */
+.periodBar {
+  display: flex;
+  justify-content: center;
+}
+
+.viewTabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--r-lg);
+  background: var(--mf-card);
+  border: 1px solid var(--mf-border);
+  box-shadow: var(--mf-shadow);
+}
+
+.viewTab {
+  height: 36px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--mf-text-2);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.viewTab:hover {
+  background: var(--mf-card-muted);
+  color: var(--mf-text);
+}
+
+.viewTab[aria-selected='true'] {
+  background: var(--mf-primary);
+  color: #fff;
+}
+
+/* ===== Calendário mensal ===== */
+.calHead {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-top: var(--sp-2);
+}
+
+.calHeadCell {
+  text-align: center;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--mf-text-3);
+  padding: 6px 0;
+}
+
+.calGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.dayCell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  min-height: 62px;
+  padding: 8px 2px 6px;
+  border-radius: var(--r-md);
+  transition: background 0.15s ease;
+}
+
+.dayCell:hover {
+  background: var(--mf-card-muted);
+}
+
+.dayNum {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--mf-text);
+  font-variant-numeric: tabular-nums;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dayOut .dayNum {
+  color: var(--mf-text-3);
+  opacity: 0.55;
+}
+
+.dayToday .dayNum {
+  box-shadow: inset 0 0 0 1.5px var(--mf-primary);
+  color: var(--mf-primary);
+}
+
+.daySelected .dayNum {
+  background: var(--mf-primary);
+  color: #fff;
+  box-shadow: 0 6px 14px var(--mf-primary-ring);
+}
+
+.dots {
+  display: flex;
+  gap: 3px;
+  min-height: 6px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--mf-border);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+}
+
+/* ===== Vista semana ===== */
+.weekGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: var(--sp-3);
+}
+
+.weekCol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 260px;
+  padding: 8px 6px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-card);
+}
+
+.weekColSelected {
+  background: var(--mf-primary-soft);
+  border-color: var(--mf-primary-ring);
+}
+
+.weekColHead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--mf-border);
+  border-radius: var(--r-sm);
+}
+
+.weekColHead:hover {
+  background: var(--mf-card-muted);
+}
+
+.weekDayName {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--mf-text-3);
+}
+
+.chip {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 5px 7px;
+  border-radius: var(--r-sm);
+  border-left: 3px solid;
+  text-align: left;
+  font-size: var(--fs-xs);
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.chip:hover {
+  filter: brightness(0.97);
+}
+
+.chipTitle {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mf-text);
+}
+
+.chipMeta {
+  color: var(--mf-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.more {
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+/* ===== Vista dia ===== */
+.dayTimeline {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--sp-3);
+}
+
+.timeRow {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: var(--sp-3);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--mf-border);
+}
+
+.timeRow:last-child {
+  border-bottom: 0;
+}
+
+.timeLabel {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--mf-text-2);
+  font-variant-numeric: tabular-nums;
+  padding-top: 6px;
+}
+
+/* ===== Lista diária (mobile) ===== */
+.mobileDays {
+  display: none;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.mobileDay {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+}
+
+.mobileDayChips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ===== Compromissos do dia ===== */
+.apptHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.apptList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.appt {
+  display: grid;
+  grid-template-columns: 52px 3px minmax(0, 1fr);
+  gap: var(--sp-3);
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-card);
+}
+
+.apptTime {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--mf-text);
+  padding-top: 2px;
+}
+
+.apptTimeAll {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--mf-text-3);
+  line-height: 1.2;
+  padding-top: 4px;
+}
+
+.apptBar {
+  border-radius: 3px;
+  align-self: stretch;
+}
+
+.apptBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.apptTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.apptTitle {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apptSub {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apptAmount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+}
+
+.apptFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.apptActions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.miniBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-card);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--mf-text-2);
+}
+
+.miniBtn:hover:not(:disabled) {
+  background: var(--mf-card-muted);
+  color: var(--mf-text);
+}
+
+.miniBtn:disabled {
+  opacity: 0.5;
+}
+
+.googleMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  background: var(--mf-card-muted);
+  font-size: 11px;
+  font-weight: 800;
+  color: #4285f4;
+  flex-shrink: 0;
+}
+
+/* ===== Próximos compromissos ===== */
+.upList {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--sp-3);
+}
+
+.upRow {
+  display: grid;
+  grid-template-columns: 40px 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--mf-border);
+}
+
+.upRow:last-child {
+  border-bottom: 0;
+}
+
+.dateBadge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
+  background: var(--mf-card-muted);
+  border: 1px solid var(--mf-border);
+  line-height: 1;
+}
+
+.dateBadgeDay {
+  font-size: var(--fs-md);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.dateBadgeMon {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--mf-text-3);
+  margin-top: 2px;
+}
+
+.upRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+.upValue {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.upValuePrimary {
+  color: var(--mf-primary);
+}
+
+/* ===== Resumo do mês ===== */
+.donutWrap {
+  position: relative;
+  height: 170px;
+  margin-top: var(--sp-2);
+}
+
+.donutCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.donutTotal {
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.donutLabel {
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+  line-height: 1.3;
+  margin-top: 4px;
+}
+
+.sumList {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--sp-2);
+}
+
+.sumRow {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 24px 44px;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--mf-border);
+  font-size: var(--fs-sm);
+}
+
+.sumRow:last-child {
+  border-bottom: 0;
+}
+
+.sumName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sumCount,
+.sumPct {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--mf-text-2);
+}
+
+.sumCount {
+  font-weight: 700;
+  color: var(--mf-text);
+}
+
+/* ===== Google Agenda ===== */
+.gAccount {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-card);
+  margin-top: var(--sp-3);
+}
+
+.gLogo {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--mf-border);
+  display: grid;
+  place-items: center;
+  background: #fff;
+  color: #4285f4;
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.gName {
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.gEmail {
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gButtons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.syncTitle {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.syncList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.syncItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+}
+
+.syncItem svg {
+  color: var(--mf-success);
+  flex-shrink: 0;
+}
+
+.gHint {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+}
+
+/* ===== Linha inferior ===== */
+.bottomGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-5);
+  align-items: start;
+}
+
+/* ===== Modal de compromisso ===== */
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-card-muted);
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+
+.switchRow input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--mf-primary);
+}
+
+.switchText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.switchHint {
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+}
+
+.colorRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-pill);
+  border: 2px solid transparent;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  transition: transform 0.12s ease;
+}
+
+.swatch:hover {
+  transform: scale(1.08);
+}
+
+.swatchActive {
+  border-color: var(--mf-text);
+}
+
+.swatchDefault {
+  background: var(--mf-card-muted);
+  color: var(--mf-text-2);
+  border-color: var(--mf-border-strong);
+}
+
+/* ===== Detalhes ===== */
+.detailList {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px var(--sp-3);
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-md);
+}
+
+.detailList dt {
+  color: var(--mf-text-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.detailList dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.detailActions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-4);
+}
+
+/* ===== Responsivo ===== */
+@media (max-width: 1279px) {
+  .topGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bottomGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dayCell {
+    min-height: 54px;
+  }
+}
+
+@media (max-width: 767px) {
+  .topGrid,
+  .bottomGrid,
+  .quickActions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .calHead,
+  .calGrid,
+  .legend {
+    display: none;
+  }
+
+  .mobileDays {
+    display: flex;
+  }
+
+  .weekGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .weekCol {
+    min-height: 0;
+  }
+
+  .appt {
+    grid-template-columns: 44px 3px minmax(0, 1fr);
+    padding: 10px;
+  }
+
+  .apptTitle,
+  .apptSub {
+    white-space: normal;
+  }
+
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .detailList {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .detailList dd {
+    margin-bottom: 8px;
+  }
+}

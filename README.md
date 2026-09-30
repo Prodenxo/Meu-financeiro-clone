@@ -30,8 +30,10 @@ cadastro por convite `/register?convite=`, recuperar e redefinir senha, termos/p
 (menu lateral, tema claro/escuro), a **Visao geral**, **Transacoes** (filtros, recorrencias previstas,
 editar/duplicar/excluir, marcar como pago e exportar Excel), **Contas** (cadastro/edicao/exclusao com catalogo de
 bancos, saldo real por conta, resumo por instituicao e evolucao do saldo), **Orcamentos** (limite por categoria e
-mes, orcado x realizado, copiar mes anterior, evolucao por categoria e tabela completa) e **Categorias** (criar,
-editar e excluir, saidas/entradas, total e participacao por categoria no mes, distribuicao em rosca).
+mes, orcado x realizado, copiar mes anterior, evolucao por categoria e tabela completa), **Categorias** (criar,
+editar e excluir, saidas/entradas, total e participacao por categoria no mes, distribuicao em rosca) e **Agenda**
+(calendario mes/semana/dia com lancamentos e eventos do Google Agenda, compromissos do dia, proximos compromissos,
+resumo do mes, conectar/sincronizar/desconectar Google Agenda e criar/editar/excluir compromissos e lembretes).
 Os itens do menu ainda nao migrados abrem no app Expo (`NEXT_PUBLIC_LEGACY_APP_URL`, ex.: `http://localhost:8081`).
 
 ## Estrutura

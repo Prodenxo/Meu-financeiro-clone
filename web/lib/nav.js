@@ -20,7 +20,7 @@ export const NAV_GROUPS = [
     items: [
       { id: 'orcamentos', label: 'Orçamentos', icon: 'target', href: '/orcamentos' },
       { id: 'categorias', label: 'Categorias', icon: 'tag', href: '/categorias' },
-      { id: 'agenda', label: 'Agenda', icon: 'calendar-days', legacyPath: '/agenda' },
+      { id: 'agenda', label: 'Agenda', icon: 'calendar-days', href: '/agenda' },
     ],
   },
   {

@@ -10,6 +10,7 @@ const MAX_IDS = 200;
 function revalidateAll() {
   revalidatePath('/transacoes');
   revalidatePath('/visao-geral');
+  revalidatePath('/agenda');
 }
 
 function cleanIds(ids) {
