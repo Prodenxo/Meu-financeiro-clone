@@ -113,7 +113,7 @@ export function DashboardView({
         <aside className={s.asideCol} aria-label="Resumo e ações">
           <QuickActions onNew={(tipo) => setModal({ tipo })} />
           <AttentionCard pending={model.pending} hideValues={hideValues} />
-          <BudgetsCard budgets={model.budgets} hideValues={hideValues} legacyAppUrl={legacyAppUrl} />
+          <BudgetsCard budgets={model.budgets} hideValues={hideValues} />
           <TodayCard flow={model.todayFlow} isCurrentMonth={isCurrentMonth} hideValues={hideValues} />
           {role === 'superadmin' ? <AccessRequestsCard /> : null}
         </aside>

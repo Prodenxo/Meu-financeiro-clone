@@ -18,7 +18,7 @@ export const NAV_GROUPS = [
     id: 'planejamento',
     label: 'Planejamento',
     items: [
-      { id: 'orcamentos', label: 'Orçamentos', icon: 'target', legacyPath: '/orcamentos' },
+      { id: 'orcamentos', label: 'Orçamentos', icon: 'target', href: '/orcamentos' },
       { id: 'categorias', label: 'Categorias', icon: 'tag', legacyPath: '/categorias' },
       { id: 'agenda', label: 'Agenda', icon: 'calendar-days', legacyPath: '/agenda' },
     ],

@@ -9,7 +9,7 @@ const W = 120;
 const H = 44;
 
 /** Linha do saldo acumulado no período (SVG leve, sem biblioteca de gráfico). */
-function Sparkline({ values, color }) {
+export function Sparkline({ values, color }) {
   const gradientId = useId();
   if (values.length === 0) return null;
   const pts = values.length === 1 ? [values[0], values[0]] : values;
@@ -34,7 +34,7 @@ function Sparkline({ values, color }) {
 }
 
 /** Barras dos totais por faixa do período. */
-function MiniBars({ values, color }) {
+export function MiniBars({ values, color }) {
   const max = Math.max(...values, 0);
   const n = values.length || 1;
   const gap = 4;

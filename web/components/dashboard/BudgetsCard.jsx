@@ -14,23 +14,12 @@ const TONE_COLOR = {
 
 const LIMIT = 4;
 
-export function BudgetsCard({ budgets, hideValues, legacyAppUrl }) {
-  const href = legacyAppUrl ? `${legacyAppUrl}/orcamentos` : null;
+export function BudgetsCard({ budgets, hideValues }) {
   const sorted = [...budgets].sort((a, b) => b.percentual - a.percentual).slice(0, LIMIT);
 
   return (
     <Card aria-labelledby="budgets-title">
-      <CardHeader
-        title="Seus orçamentos"
-        id="budgets-title"
-        action={
-          href ? (
-            <ArrowLink href={href} external title="Orçamentos — abre no app atual">
-              Ver todos
-            </ArrowLink>
-          ) : null
-        }
-      />
+      <CardHeader title="Seus orçamentos" id="budgets-title" action={<ArrowLink href="/orcamentos">Ver todos</ArrowLink>} />
       {sorted.length === 0 ? (
         <EmptyState icon="target" title="Nenhum orçamento neste mês" text="Defina limites por categoria na tela de Orçamentos." />
       ) : (
