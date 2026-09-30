@@ -29,8 +29,9 @@ Ja migrado: telas de acesso (login, **Cadastre-se** = solicitacao de acesso PF/P
 cadastro por convite `/register?convite=`, recuperar e redefinir senha, termos/privacidade), casca do app
 (menu lateral, tema claro/escuro), a **Visao geral**, **Transacoes** (filtros, recorrencias previstas,
 editar/duplicar/excluir, marcar como pago e exportar Excel), **Contas** (cadastro/edicao/exclusao com catalogo de
-bancos, saldo real por conta, resumo por instituicao e evolucao do saldo) e **Orcamentos** (limite por categoria e
-mes, orcado x realizado, copiar mes anterior, evolucao por categoria e tabela completa).
+bancos, saldo real por conta, resumo por instituicao e evolucao do saldo), **Orcamentos** (limite por categoria e
+mes, orcado x realizado, copiar mes anterior, evolucao por categoria e tabela completa) e **Categorias** (criar,
+editar e excluir, saidas/entradas, total e participacao por categoria no mes, distribuicao em rosca).
 Os itens do menu ainda nao migrados abrem no app Expo (`NEXT_PUBLIC_LEGACY_APP_URL`, ex.: `http://localhost:8081`).
 
 ## Estrutura
