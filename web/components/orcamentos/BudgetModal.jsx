@@ -31,7 +31,7 @@ function CatIcon({ id, nome }) {
  * Novo/editar orçamento — mesmas regras do `BudgetModal` do app atual: escolher a
  * categoria (fixa ao editar) e informar o valor orçado do mês. Grava em `orçamentos`.
  */
-export function BudgetModal({ item = null, categories, mes, monthLabel, onClose }) {
+export function BudgetModal({ item = null, categories, hasCategories = true, mes, monthLabel, onClose }) {
   const dialogRef = useRef(null);
   const [categoriaId, setCategoriaId] = useState(item ? item.categorias_id : '');
   const [query, setQuery] = useState('');
@@ -92,7 +92,11 @@ export function BudgetModal({ item = null, categories, mes, monthLabel, onClose 
                   <span>{item.nome}</span>
                 </div>
               ) : categories.length === 0 ? (
-                <Alert tone="info">Todas as suas categorias já têm orçamento neste mês.</Alert>
+                <Alert tone="info">
+                  {hasCategories
+                    ? 'Todas as suas categorias já têm orçamento neste mês.'
+                    : 'Você ainda não tem categorias cadastradas. Cadastre uma categoria para definir o limite.'}
+                </Alert>
               ) : (
                 <>
                   <Input id="budget-cat" placeholder="Buscar categoria…" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />

@@ -264,7 +264,16 @@ export function OrcamentosView({ data, userId, initialMonth, currentMonth, today
         </aside>
       </div>
 
-      {modal ? <BudgetModal item={modal.item} categories={availableCategories} mes={mesParam} monthLabel={monthLabel} onClose={closeModal} /> : null}
+      {modal ? (
+        <BudgetModal
+          item={modal.item}
+          categories={availableCategories}
+          hasCategories={categories.length > 0}
+          mes={mesParam}
+          monthLabel={monthLabel}
+          onClose={closeModal}
+        />
+      ) : null}
 
       {deleteTarget ? (
         <DeleteBudgetDialog

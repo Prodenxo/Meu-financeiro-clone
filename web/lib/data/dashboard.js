@@ -1,6 +1,7 @@
 import 'server-only';
 import { getMonthStart, normalizarTipo, normalizeCategoryKey, normalizeLancamentoRow } from '@/lib/finance/normalize';
 import { normalizeContaRow } from '@/lib/finance/contas';
+import { unwrapApiList } from '@/lib/data/unwrapApi';
 
 /** Mesma query do `transactionStore.fetchTransactions` (todos os lançamentos do usuário). */
 export async function fetchTransactions(supabase, userId) {
@@ -44,8 +45,9 @@ export async function fetchCategories(supabase, userId) {
           cache: 'no-store',
         });
         if (res.ok) {
-          const rows = await res.json();
-          return toCategoryMaps(Array.isArray(rows) ? rows : []);
+          const rows = unwrapApiList(await res.json());
+          if (rows) return toCategoryMaps(rows);
+          console.warn('[categories] API devolveu um formato inesperado — usando Supabase.');
         }
         console.warn('[categories] API respondeu', res.status, '— usando Supabase.');
       }
