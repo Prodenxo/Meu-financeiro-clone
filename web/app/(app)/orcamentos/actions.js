@@ -77,6 +77,59 @@ export async function deleteBudgetAction(categoriaIdRaw, mes) {
   return { ok: true };
 }
 
+/**
+ * Cola limites copiados na tela (categoria + valor) no mês escolhido.
+ * Atualiza a linha do mês se já existir; senão cria. Categorias de outra conta são ignoradas.
+ */
+export async function pasteBudgetsAction(mes, entries) {
+  const session = await requireUser();
+  const month = parseMonthParam(String(mes || ''), null);
+  if (!month) return { ok: false, error: 'Mês inválido.' };
+  if (!Array.isArray(entries) || entries.length === 0) return { ok: false, error: 'Não há orçamento copiado.' };
+  if (entries.length > 200) return { ok: false, error: 'Há limites demais para colar de uma vez.' };
+
+  const parsed = [];
+  for (const entry of entries) {
+    const categoriaId = Number(entry?.categorias_id);
+    const valor = Number(entry?.valor);
+    if (!Number.isInteger(categoriaId) || categoriaId <= 0 || !Number.isFinite(valor) || valor < 0) continue;
+    parsed.push({ categoriaId, valor });
+  }
+  if (parsed.length === 0) return { ok: false, error: 'O orçamento copiado não tem limites válidos.' };
+
+  const { supabase, userId } = session;
+  const ids = [...new Set(parsed.map((p) => p.categoriaId))];
+  const { data: owned, error: ownErr } = await supabase.from('categorias_id').select('id').eq('user_id', userId).in('id', ids);
+  if (ownErr) return { ok: false, error: `Não foi possível colar: ${ownErr.message}` };
+  const ownedSet = new Set((owned || []).map((row) => Number(row.id)));
+  const safe = parsed.filter((p) => ownedSet.has(p.categoriaId));
+  if (safe.length === 0) return { ok: false, error: 'Nenhuma categoria copiada pertence à sua conta.' };
+
+  const date = monthStartKey(month);
+  const { data: currentRows, error: curErr } = await supabase.from(BUDGETS).select('id, categorias_id').eq('date', date).eq('user_id', userId);
+  if (curErr) return { ok: false, error: `Não foi possível colar: ${curErr.message}` };
+
+  const currentByCat = {};
+  for (const row of currentRows || []) currentByCat[Number(row.categorias_id)] = row.id;
+
+  const inserts = [];
+  for (const { categoriaId, valor } of safe) {
+    if (currentByCat[categoriaId]) {
+      const { error } = await supabase.from(BUDGETS).update({ [VALOR]: valor, date }).eq('id', currentByCat[categoriaId]).eq('user_id', userId);
+      if (error) return { ok: false, error: `Não foi possível colar: ${error.message}` };
+    } else {
+      inserts.push({ categorias_id: categoriaId, [VALOR]: valor, user_id: userId, date });
+    }
+  }
+  if (inserts.length > 0) {
+    const { error } = await supabase.from(BUDGETS).insert(inserts);
+    if (error) return { ok: false, error: `Não foi possível colar: ${error.message}` };
+  }
+
+  revalidateAll();
+  return { ok: true, count: safe.length };
+}
+
 /** Porta de `duplicateMonthlyBudgets`: copia os limites do mês anterior para o mês escolhido. */
 export async function copyPreviousMonthBudgetsAction(mes) {
   const session = await requireUser();

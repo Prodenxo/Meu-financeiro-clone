@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
-import { copyPreviousMonthBudgetsAction, deleteBudgetAction } from '@/app/(app)/orcamentos/actions';
+import { deleteBudgetAction, pasteBudgetsAction } from '@/app/(app)/orcamentos/actions';
 import { Alert, Button, Card, EmptyState, Select, cx } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
 import { MiniBars, Sparkline } from '@/components/transactions/TransactionsKpis';
@@ -72,6 +72,7 @@ export function OrcamentosView({ data, userId, initialMonth, currentMonth, today
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteError, setDeleteError] = useState('');
   const [toast, setToast] = useState(null);
+  const [clipboard, setClipboard] = useState(null);
   const [isPending, startTransition] = useTransition();
 
   const categories = data.categories.list;
@@ -136,15 +137,36 @@ export function OrcamentosView({ data, userId, initialMonth, currentMonth, today
     });
   };
 
-  const copyPrevious = () => {
+  const { items, visible, totals, attention, trend, history, availableCategories } = model;
+  const sameMonth = (a, b) => a?.year === b?.year && a?.month === b?.month;
+  const canPaste = Boolean(clipboard) && !sameMonth(clipboard.month, selectedMonth);
+
+  const copyCurrentMonth = () => {
+    if (items.length === 0) {
+      setToast({ tone: 'info', text: 'Este mês não tem orçamentos para copiar.' });
+      return;
+    }
+    setClipboard({
+      month: selectedMonth,
+      label: monthLabel,
+      entries: items.map((item) => ({ categorias_id: item.categorias_id, valor: item.orcado })),
+    });
+    setToast({ tone: 'success', text: `Orçamento de ${monthLabel} copiado. Troque de mês para colar.` });
+  };
+
+  const pasteClipboard = () => {
+    if (!clipboard) return;
     startTransition(async () => {
-      const res = await copyPreviousMonthBudgetsAction(mesParam);
-      if (res?.ok) setToast({ tone: 'success', text: `${res.count} ${res.count === 1 ? 'limite copiado' : 'limites copiados'} de ${formatMonthLabel(prevMonth(selectedMonth))}.` });
-      else setToast({ tone: 'error', text: res?.error || 'Não foi possível copiar os orçamentos.' });
+      const res = await pasteBudgetsAction(mesParam, clipboard.entries);
+      if (res?.ok) {
+        const n = res.count;
+        setToast({ tone: 'success', text: `${n} ${n === 1 ? 'limite colado' : 'limites colados'} de ${clipboard.label} em ${monthLabel}.` });
+      } else {
+        setToast({ tone: 'error', text: res?.error || 'Não foi possível colar o orçamento.' });
+      }
     });
   };
 
-  const { items, visible, totals, attention, trend, history, availableCategories } = model;
   const pctUsed = Math.round(totals.percentual);
   const usedOver = totals.orcado > 0 && totals.realizado > totals.orcado;
   const hasBudgets = items.length > 0;
@@ -258,7 +280,7 @@ export function OrcamentosView({ data, userId, initialMonth, currentMonth, today
         </div>
 
         <aside className={d.asideCol}>
-          <BudgetActions onNew={openNew} onCopy={copyPrevious} onAdjust={scrollToTable} busy={isPending} />
+          <BudgetActions onNew={openNew} onCopy={copyCurrentMonth} onPaste={pasteClipboard} onAdjust={scrollToTable} canPaste={canPaste} canCopy={hasBudgets} busy={isPending} />
           <BudgetAttentionCard items={attention} onSelect={openEdit} onSeeAll={scrollToTable} />
           <BudgetMonthlySummary totals={totals} />
         </aside>
