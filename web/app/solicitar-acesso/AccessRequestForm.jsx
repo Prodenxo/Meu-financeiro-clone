@@ -176,11 +176,7 @@ export function AccessRequestForm() {
               </button>
             ))}
           </div>
-          {pf ? (
-            <p className={s.hint}>
-              Após a aprovação você fica como administrador. MEI e notas fiscais só liberam depois de cadastrar um CNPJ.
-            </p>
-          ) : null}
+          {pf ? <p className={s.hint}>Após a aprovação você fica como administrador do seu espaço.</p> : null}
         </div>
 
         <div className={s.full}>

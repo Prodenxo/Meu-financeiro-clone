@@ -28,7 +28,7 @@ export const NAV_GROUPS = [
     label: 'Serviços',
     items: [
       { id: 'conta-global', label: 'Conta global', icon: 'globe', legacyPath: '/conta-global' },
-      { id: 'mei', label: 'Meu MEI', icon: 'briefcase-business', legacyPath: '/mei', requiresMeiAccess: true },
+      // «Meu MEI» não faz parte do novo site (decisão de 2026-09-30) — a área MEI fica só no app Expo.
     ],
   },
 ];
@@ -49,10 +49,4 @@ export function resolveNavTarget(item, legacyAppUrl) {
     return { href: `${legacyAppUrl}${item.legacyPath}`, external: true };
   }
   return null;
-}
-
-export function filterNavGroups(groups, { showMei }) {
-  return groups
-    .map((g) => ({ ...g, items: g.items.filter((i) => !i.requiresMeiAccess || showMei) }))
-    .filter((g) => g.items.length > 0);
 }

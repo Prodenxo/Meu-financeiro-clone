@@ -10,7 +10,7 @@ const FEATURES = [
   { icon: 'arrow-left-right', text: 'Entradas e saídas organizadas por categoria' },
   { icon: 'credit-card', text: 'Saldo de cada conta bancária em um só lugar' },
   { icon: 'target', text: 'Orçamentos do mês com alerta de limite' },
-  { icon: 'briefcase-business', text: 'Área do MEI: DAS e notas fiscais' },
+  { icon: 'calendar-days', text: 'Agenda de contas, recebimentos e lembretes' },
 ];
 
 /** Layout das telas de acesso: painel da marca à esquerda, formulário à direita. */

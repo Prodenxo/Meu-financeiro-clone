@@ -1,4 +1,4 @@
-/** Porta de `frontend/lib/auth-roles.ts` + `frontend/lib/meiAccess.ts`. */
+/** Porta de `frontend/lib/auth-roles.ts`. (A área MEI ficou fora do novo site; `mei` do vínculo é só lido para a sessão.) */
 
 export function normalizeRoleValue(role) {
   if (!role) return null;
@@ -6,13 +6,6 @@ export function normalizeRoleValue(role) {
   if (normalized === 'user') return 'usuario';
   if (['superadmin', 'admin', 'usuario', 'outsider'].includes(normalized)) return normalized;
   return null;
-}
-
-/** MEI liberado só com `mei === true` no vínculo; superadmin mantém bypass operacional. */
-export function canAccessMeiArea(role, mei) {
-  if (role === 'superadmin') return true;
-  if (role === 'admin' || role === 'usuario') return mei === true;
-  return false;
 }
 
 /**

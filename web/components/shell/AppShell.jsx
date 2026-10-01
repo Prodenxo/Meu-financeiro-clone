@@ -1,6 +1,5 @@
 import { cookies } from 'next/headers';
-import { NAV_FOOTER_ITEMS, NAV_GROUPS, filterNavGroups, getLegacyAppUrl } from '@/lib/nav';
-import { canAccessMeiArea } from '@/lib/auth/roles';
+import { NAV_FOOTER_ITEMS, NAV_GROUPS, getLegacyAppUrl } from '@/lib/nav';
 import { THEME_COOKIE, normalizeTheme } from '@/lib/theme';
 import { signOutAction } from '@/lib/auth/actions';
 import { ShellNavProvider } from './ShellNavContext';
@@ -26,8 +25,7 @@ const ROLE_LABEL = {
 export async function AppShell({ session, children }) {
   const cookieStore = await cookies();
   const theme = normalizeTheme(cookieStore.get(THEME_COOKIE)?.value);
-  const showMei = canAccessMeiArea(session.role, session.mei);
-  const groups = filterNavGroups(NAV_GROUPS, { showMei });
+  const groups = NAV_GROUPS;
   const legacyAppUrl = getLegacyAppUrl();
 
   const profile = {
