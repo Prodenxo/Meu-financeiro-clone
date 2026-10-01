@@ -1,0 +1,551 @@
+/* Tela Conta global — mesmos tokens e ritmo das telas Visão geral / Contas / Agenda. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/* ===== Resumo — 3 cards idênticos (mesmo KpiCard da Visão geral) ===== */
+.kpis {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+  align-items: stretch;
+}
+
+.kpis .kpiValueOverride {
+  font-size: clamp(18px, 3.4cqw, var(--fs-kpi));
+}
+
+.kpiCode,
+.kpiCodePlaceholder {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--mf-text-2);
+  margin-top: 8px;
+  height: 14px;
+  line-height: 14px;
+}
+
+.kpiCodePlaceholder {
+  visibility: hidden;
+}
+
+.kpiFlag {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+/* ===== Aviso de contexto ===== */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--mf-primary-soft);
+  color: var(--mf-text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.noticeIcon {
+  color: var(--mf-primary);
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.notice a {
+  color: var(--mf-primary);
+  font-weight: 600;
+}
+
+.notice a:hover {
+  text-decoration: underline;
+}
+
+/* ===== Suas moedas ===== */
+.moedasHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.moedasSearch {
+  flex: 0 1 220px;
+  min-width: 180px;
+}
+
+.moedasGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.moedaCard,
+.addCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 150px;
+  padding: 14px 14px 12px;
+  border-radius: var(--r-lg);
+  background: var(--mf-card);
+  border: 1px solid var(--mf-border);
+  box-shadow: var(--mf-shadow);
+  transition: box-shadow 0.15s ease;
+}
+
+.moedaCard:hover {
+  box-shadow: var(--mf-shadow-pop);
+}
+
+.moedaTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.moedaIdentity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.moedaCode {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+.moedaName {
+  font-size: var(--fs-sm);
+  color: var(--mf-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moedaValor {
+  margin: 14px 0 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moedaValorNegativo {
+  color: var(--mf-danger);
+}
+
+.moedaBrl {
+  margin: 4px 0 0;
+  font-size: var(--fs-md);
+  color: var(--mf-text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moedaBrlMissing {
+  color: var(--mf-warning);
+}
+
+.moedaFoot {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--mf-border);
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Card tracejado "Adicionar moeda" */
+.addCard {
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1.5px dashed var(--mf-border-strong);
+  background: var(--mf-card-muted);
+  box-shadow: none;
+  color: var(--mf-text-2);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.addCard:hover,
+.addCard:focus-visible {
+  border-color: var(--mf-primary);
+  color: var(--mf-primary);
+  background: var(--mf-primary-soft);
+}
+
+.addIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-pill);
+  display: grid;
+  place-items: center;
+  background: var(--mf-primary-soft);
+  color: var(--mf-primary);
+}
+
+/* ===== Bandeira ===== */
+.flag {
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--mf-card-muted);
+  border: 1px solid var(--mf-border);
+}
+
+.flag img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.flagFallback {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--mf-text-2);
+}
+
+/* ===== Coluna direita ===== */
+.rateRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--mf-border);
+  min-width: 0;
+}
+
+.rateRow:last-child {
+  border-bottom: 0;
+}
+
+.rateCode {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rateCodeText {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.rateName {
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rateValue {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rateMissing {
+  color: var(--mf-warning);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+
+.rateNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+  line-height: 1.4;
+}
+
+.rateNote svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.rateSource {
+  margin: 6px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+}
+
+.infoRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--mf-border);
+}
+
+.infoRow:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.infoIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--mf-card-muted);
+  color: var(--mf-text-2);
+  flex-shrink: 0;
+}
+
+.infoText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.infoTitle {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.infoDesc {
+  font-size: var(--fs-sm);
+  color: var(--mf-text-3);
+  line-height: 1.4;
+}
+
+.footNote {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+}
+
+/* ===== Modal: seletor de moeda ===== */
+.selected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-card-muted);
+}
+
+.selectedText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.selectedCode {
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.selectedName {
+  font-size: var(--fs-sm);
+  color: var(--mf-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickerSearch {
+  position: relative;
+}
+
+.pickerSearch input {
+  padding-left: 34px;
+}
+
+.pickerSearchIcon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--mf-text-3);
+  pointer-events: none;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 6px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-card);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--mf-text-2);
+  letter-spacing: 0.04em;
+}
+
+.chip:hover {
+  border-color: var(--mf-primary);
+  color: var(--mf-primary);
+}
+
+.chipActive {
+  border-color: var(--mf-primary);
+  background: var(--mf-primary-soft);
+  color: var(--mf-primary);
+}
+
+.pickerList {
+  margin-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--mf-border);
+  border-radius: var(--r-md);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.pickerItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  text-align: left;
+  color: var(--mf-text);
+  width: 100%;
+}
+
+.pickerItem:hover,
+.pickerItem:focus-visible {
+  background: var(--mf-card-muted);
+}
+
+.pickerItemActive {
+  background: var(--mf-primary-soft);
+}
+
+.pickerItemText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pickerItemCode {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.pickerItemName {
+  font-size: var(--fs-sm);
+  color: var(--mf-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickerEmpty {
+  margin: 0;
+  padding: 14px 8px;
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--mf-text-3);
+}
+
+.fieldHint {
+  margin: 6px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+}
+
+.preview {
+  margin: 6px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== Responsivo ===== */
+@media (max-width: 1279px) {
+  .moedasGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kpis .kpiValueOverride {
+    font-size: var(--fs-kpi);
+  }
+
+  .moedasSearch {
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 639px) {
+  .moedasGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .moedaCard,
+  .addCard {
+    min-height: 0;
+  }
+
+  .addCard {
+    flex-direction: row;
+    justify-content: flex-start;
+    min-height: 64px;
+  }
+
+  .addIcon {
+    width: 32px;
+    height: 32px;
+  }
+}

@@ -27,7 +27,7 @@ export const NAV_GROUPS = [
     id: 'servicos',
     label: 'Serviços',
     items: [
-      { id: 'conta-global', label: 'Conta global', icon: 'globe', legacyPath: '/conta-global' },
+      { id: 'conta-global', label: 'Conta global', icon: 'globe', href: '/conta-global' },
       // «Meu MEI» não faz parte do novo site (decisão de 2026-09-30) — a área MEI fica só no app Expo.
     ],
   },
