@@ -8,7 +8,10 @@
  * - Remoção pura (só arquivos apagados) não abre ticket.
  * - Enquanto não houver commit novo, o mesmo ticket é atualizado em vez de
  *   abrir outro. Commit novo = ticket novo.
- * - Título e texto em linguagem de gente: área + módulos mexidos.
+ * - Título e texto em linguagem de gente: o que a pessoa vê na tela.
+ *   Se existir ~/.cursor/scrumhub/nota-em-andamento.txt, a primeira linha
+ *   vira o título e o resto vira a descrição (e o arquivo é apagado).
+ *   Sem essa nota, o ticket cai no resumo automático por arquivo.
  *
  * Login fica em ~/.cursor/scrumhub/scrumhub.local.env (nunca no git).
  * Uso manual: node .cursor/hooks/scrumhub-dev-ticket.mjs --commit <sha>
@@ -184,6 +187,20 @@ function agruparPorArea(map) {
     grupos.get(area).push({ file, status });
   }
   return grupos;
+}
+
+const notaFile = path.join(configDir, 'nota-em-andamento.txt');
+
+/** Primeira linha = título. O resto = o que mudou, em linguagem de gente. */
+function notaHumana() {
+  if (!fs.existsSync(notaFile)) return null;
+  const raw = fs.readFileSync(notaFile, 'utf8').trim();
+  if (!raw) return null;
+  const [primeira, ...resto] = raw.split(/\r?\n/);
+  const nome = primeira.replace(/^#\s*/, '').trim().slice(0, 140);
+  const descricao = resto.join('\n').replace(/^\s*\n/, '').trim();
+  if (!nome) return null;
+  return { nome, descricao: descricao || nome };
 }
 
 function tituloDoTicket(map) {
@@ -417,8 +434,9 @@ async function main() {
       return reply({ user_message: `Correção anotada no ticket #${ticketAlvo} (sem abrir ticket novo).` });
     }
 
-    const nome = tituloDoTicket(map);
-    const descricao = descricaoDoTicket(map);
+    const nota = notaHumana();
+    const nome = nota?.nome || tituloDoTicket(map);
+    const descricao = nota?.descricao || descricaoDoTicket(map);
 
     // Mesmo commit de base e ticket recente: atualiza o ticket em vez de abrir outro.
     const reaproveitar = !sha
@@ -437,6 +455,7 @@ async function main() {
         cookie,
       });
       if (atualizado.ok && atualizado.json?.success !== false) {
+        if (nota) fs.rmSync(notaFile, { force: true });
         writeState({ ...readState(), fingerprint, at: new Date().toISOString(), sessionCookie: cookie, sessionAt: Date.now() });
         return reply({ user_message: `Ticket #${state.ticketId} atualizado no ScrumHub.` });
       }
@@ -462,6 +481,7 @@ async function main() {
       return reply({ user_message: `Não consegui criar o ticket interno no ScrumHub: ${created.json?.error || created.json?.message || `HTTP ${created.status}`}` });
     }
 
+    if (nota) fs.rmSync(notaFile, { force: true });
     const ticket = created.json?.data || created.json || {};
     const id = Number(ticket.id || ticket.ticket_id) || null;
     const anterior = readState();
