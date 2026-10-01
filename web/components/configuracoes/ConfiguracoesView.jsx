@@ -19,7 +19,7 @@ const isAdmin = (role) => role === 'admin' || role === 'superadmin';
  * Tela Configurações. Dados do perfil, papel e status do Google vêm do servidor;
  * cada card cuida do próprio fluxo (perfil, equipe, suporte, Google, aparência, sessão).
  */
-export function ConfiguracoesView({ profile, role, google, themePref, legacyAppUrl }) {
+export function ConfiguracoesView({ profile, role, google, themePref }) {
   const [googleConnected, setGoogleConnected] = useState(google.connected);
   const [googleError, setGoogleError] = useState(google.error);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -82,7 +82,7 @@ export function ConfiguracoesView({ profile, role, google, themePref, legacyAppU
       <div className={s.layout}>
         <div className={s.col}>
           <ProfileCard profile={profile} onToast={setToast} />
-          {isAdmin(role) ? <TeamCard role={role} legacyAppUrl={legacyAppUrl} /> : null}
+          {isAdmin(role) ? <TeamCard role={role} /> : null}
           <GoogleAgendaCard
             connected={googleConnected}
             email={profile.email}

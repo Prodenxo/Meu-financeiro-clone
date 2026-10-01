@@ -3,19 +3,12 @@
 import s from './configuracoes.module.css';
 import { SettingsCard, SettingsLinkRow } from './SettingsCard';
 
-/** «Solicitações de acesso» ainda vive no app atual (mesmo caminho de `SETTINGS_ROUTES`). */
-const LEGACY_ROUTES = {
-  solicitacoes: '/configuracoes/solicitacoes',
-};
-
 /**
  * Equipe — só para admin/superadmin (papel resolvido no servidor em `requireUser`).
- * «Gerenciar acessos» já é do novo site; «Solicitações de acesso» é exclusivo do superadmin.
+ * «Solicitações de acesso» é exclusivo do superadmin; a rota confere o papel de novo no servidor.
  */
-export function TeamCard({ role, legacyAppUrl }) {
+export function TeamCard({ role }) {
   const isSuperadmin = role === 'superadmin';
-  const base = legacyAppUrl || '';
-  const disabledReason = 'Disponível na próxima etapa da migração';
 
   return (
     <SettingsCard id="equipe" icon="users" title="Equipe" description="Gerencie usuários e permissões.">
@@ -32,11 +25,8 @@ export function TeamCard({ role, legacyAppUrl }) {
             icon="shield-check"
             title="Solicitações de acesso"
             description="Aprovar novos pedidos de entrada"
-            href={base ? `${base}${LEGACY_ROUTES.solicitacoes}` : undefined}
-            external={Boolean(base)}
-            disabled={!base}
-            disabledReason={disabledReason}
-            ariaLabel="Solicitações de acesso — abre no app atual"
+            href="/configuracoes/solicitacoes"
+            ariaLabel="Solicitações de acesso"
           />
         ) : null}
       </div>

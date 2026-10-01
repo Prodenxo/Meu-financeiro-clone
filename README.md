@@ -40,8 +40,9 @@ nome, telefone com DDI e troca de e-mail, suporte com abertura de chamado e What
 aparencia claro/automatico/escuro e sair da conta; «Equipe» aparece para admin e super admin), **Gerenciar acessos**
 (`/configuracoes/acessos`: resumo em cinco cards, abas Usuarios / Convites / Empresas, busca, filtros, ordenacao e paginacao
 feitas no servidor, criar/editar/bloquear/liberar/excluir usuario, redefinir senha, acessar como outro usuario com aviso
-para voltar, gerar/copiar/revogar convites e, para o super admin, cadastrar/editar/excluir empresas; «Solicitacoes de acesso»
-ainda abre no Expo) e **Tutoriais**
+para voltar, gerar/copiar/revogar convites e, para o super admin, cadastrar/editar/excluir empresas), **Solicitacoes de acesso**
+(`/configuracoes/solicitacoes`, so super admin: pendentes com aprovar/negar apos confirmacao e historico de pedidos enviados e
+aprovados) e **Tutoriais**
 (central com busca e filtro por módulo; só o super admin cadastra, publica e exclui; o antigo atalho Ajuda agora abre esta tela).
 Os itens do menu ainda nao migrados abrem no app Expo (`NEXT_PUBLIC_LEGACY_APP_URL`, ex.: `http://localhost:8081`).
 

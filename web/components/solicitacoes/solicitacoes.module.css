@@ -1,0 +1,394 @@
+/* Tela "Solicitações de acesso" — mesmos tokens de Gerenciar acessos (card branco, violeta nas ações). */
+
+.exclusiveTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--mf-primary);
+  background: var(--mf-primary-soft);
+  white-space: nowrap;
+}
+
+/* ===== Card principal + abas sublinhadas ===== */
+.panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-5);
+  border-bottom: 1px solid var(--mf-border);
+  overflow-x: auto;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 var(--sp-4);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--mf-text-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--mf-text);
+}
+
+.tabActive {
+  color: var(--mf-primary);
+}
+
+.tabActive::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--mf-primary);
+}
+
+.tab:focus-visible,
+.retryLink:focus-visible {
+  outline: 2px solid var(--mf-primary);
+  outline-offset: -2px;
+  border-radius: var(--r-sm);
+}
+
+.tabCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  background: var(--mf-primary-soft);
+  color: var(--mf-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.content {
+  position: relative;
+  padding: var(--sp-5);
+  min-height: 320px;
+}
+
+.panelFoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 var(--sp-5);
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--mf-border);
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+}
+
+.pageNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0 var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+}
+
+/* ===== Estado vazio (referência: escudo grande em círculo lavanda) ===== */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--sp-2);
+  padding: var(--sp-8, 48px) var(--sp-4);
+}
+
+.emptyIcon {
+  width: 100px;
+  height: 100px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--mf-primary-soft);
+  color: var(--mf-primary);
+  margin-bottom: var(--sp-3);
+}
+
+.emptyIconDanger {
+  background: var(--mf-danger-soft);
+  color: var(--mf-danger);
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--mf-text);
+}
+
+.emptyText {
+  margin: 0;
+  max-width: 440px;
+  font-size: var(--fs-md);
+  color: var(--mf-text-2);
+}
+
+.emptyAction {
+  margin-top: var(--sp-4);
+}
+
+/* ===== Lista de pendentes ===== */
+.requestList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.request {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-md);
+  border: 1px solid var(--mf-border);
+  background: var(--mf-card);
+}
+
+.requestGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.4fr) minmax(0, 0.8fr) auto;
+  gap: var(--sp-4) var(--sp-5);
+  align-items: start;
+}
+
+.person {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.stack {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mf-text-3);
+  margin-bottom: 2px;
+}
+
+.strong {
+  font-weight: 600;
+  color: var(--mf-text);
+  overflow-wrap: anywhere;
+}
+
+.line {
+  font-size: var(--fs-sm);
+  color: var(--mf-text-2);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  grid-column: 4;
+  grid-row: 1;
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.rejectBtn,
+.rejectBtn:hover:not(:disabled) {
+  color: var(--mf-danger);
+  border-color: color-mix(in srgb, var(--mf-danger) 45%, transparent);
+}
+
+.rejectBtn:hover:not(:disabled) {
+  background: var(--mf-danger-soft);
+}
+
+.obs {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  background: var(--mf-card-muted);
+  font-size: var(--fs-sm);
+  font-style: italic;
+  color: var(--mf-text-2);
+  overflow-wrap: anywhere;
+}
+
+/* ===== Histórico (tabela no desktop) ===== */
+.colPerson {
+  width: 26%;
+}
+
+.colEmpresa {
+  width: 24%;
+}
+
+.colStatus {
+  width: 16%;
+}
+
+.colDate {
+  width: 17%;
+}
+
+.colActor {
+  width: 17%;
+}
+
+/* ===== Resumo dentro do diálogo de decisão ===== */
+.summary {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 12px 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--mf-card-muted);
+  border: 1px solid var(--mf-border);
+  font-size: var(--fs-sm);
+}
+
+.summary dt {
+  color: var(--mf-text-3);
+}
+
+.summary dd {
+  margin: 0;
+  color: var(--mf-text);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.busyBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  overflow: hidden;
+  background: var(--mf-primary-soft);
+}
+
+.busyBar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: var(--mf-primary);
+  animation: busy 1.1s ease-in-out infinite;
+}
+
+@keyframes busy {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busyBar::after {
+    animation: none;
+    width: 100%;
+  }
+}
+
+@media (max-width: 1180px) {
+  .requestGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .actions {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+  }
+}
+
+@media (max-width: 767px) {
+  .tabs {
+    padding: 0 var(--sp-3);
+  }
+
+  .tab {
+    flex: 1;
+    justify-content: center;
+    padding: 0 var(--sp-2);
+  }
+
+  .content {
+    padding: var(--sp-4);
+  }
+
+  .panelFoot {
+    margin: 0 var(--sp-4);
+    align-items: flex-start;
+  }
+
+  .request {
+    padding: var(--sp-4);
+  }
+
+  .requestGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .actions {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .actions > * {
+    flex: 1;
+  }
+
+  .exclusiveTag {
+    height: 40px;
+    justify-content: center;
+  }
+
+  .summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .summary dd {
+    margin-bottom: 6px;
+  }
+}

@@ -12,6 +12,10 @@ const nextConfig = {
       { source: '/termos', destination: '/termos.html' },
     ];
   },
+  // Caminho antigo do app (`/solicitacoes`), mantido como no Expo.
+  async redirects() {
+    return [{ source: '/solicitacoes', destination: '/configuracoes/solicitacoes', permanent: false }];
+  },
 };
 
 export default nextConfig;

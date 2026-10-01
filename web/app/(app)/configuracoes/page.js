@@ -1,7 +1,6 @@
 import { cookies } from 'next/headers';
 import { requireUser } from '@/lib/auth/session';
 import { checkGoogleAuth } from '@/lib/data/googleCalendar';
-import { getLegacyAppUrl } from '@/lib/nav';
 import { THEME_COOKIE, normalizeThemePref } from '@/lib/theme';
 import { ConfiguracoesView } from '@/components/configuracoes/ConfiguracoesView';
 
@@ -35,7 +34,6 @@ export default async function ConfiguracoesPage({ searchParams }) {
       role={session.role}
       google={{ connected: googleConnected, error: googleError, oauthStatus }}
       themePref={normalizeThemePref(cookieStore.get(THEME_COOKIE)?.value)}
-      legacyAppUrl={getLegacyAppUrl()}
     />
   );
 }
