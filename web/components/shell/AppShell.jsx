@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { NAV_FOOTER_ITEMS, NAV_GROUPS, getLegacyAppUrl } from '@/lib/nav';
-import { THEME_COOKIE, normalizeTheme } from '@/lib/theme';
+import { THEME_COOKIE, normalizeThemePref } from '@/lib/theme';
 import { signOutAction } from '@/lib/auth/actions';
 import { ShellNavProvider } from './ShellNavContext';
 import { Sidebar } from './Sidebar';
@@ -24,7 +24,7 @@ const ROLE_LABEL = {
 /** Casca do app (Server Component): sidebar + conteúdo. Recebe a sessão já resolvida pelo layout. */
 export async function AppShell({ session, children }) {
   const cookieStore = await cookies();
-  const theme = normalizeTheme(cookieStore.get(THEME_COOKIE)?.value);
+  const theme = normalizeThemePref(cookieStore.get(THEME_COOKIE)?.value);
   const groups = NAV_GROUPS;
   const legacyAppUrl = getLegacyAppUrl();
 

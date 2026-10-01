@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { Icon } from '@/components/ui/Icon';
 import { BrandMark } from '@/components/shell/BrandMark';
 import { ThemeToggle } from '@/components/shell/ThemeToggle';
-import { THEME_COOKIE, normalizeTheme } from '@/lib/theme';
+import { THEME_COOKIE, normalizeThemePref } from '@/lib/theme';
 import s from './auth.module.css';
 
 const FEATURES = [
@@ -16,7 +16,7 @@ const FEATURES = [
 /** Layout das telas de acesso: painel da marca à esquerda, formulário à direita. */
 export async function AuthShell({ eyebrow, title, subtitle, wide = false, topRight, children, footer }) {
   const cookieStore = await cookies();
-  const theme = normalizeTheme(cookieStore.get(THEME_COOKIE)?.value);
+  const theme = normalizeThemePref(cookieStore.get(THEME_COOKIE)?.value);
 
   return (
     <div className={s.page}>

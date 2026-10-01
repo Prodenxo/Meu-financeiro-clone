@@ -34,8 +34,9 @@ export const NAV_GROUPS = [
 ];
 
 export const NAV_FOOTER_ITEMS = [
-  { id: 'ajuda', label: 'Ajuda', icon: 'circle-help', legacyPath: '/configuracoes' },
-  { id: 'configuracoes', label: 'Configurações', icon: 'settings', legacyPath: '/configuracoes' },
+  // «Ajuda» no app atual abre Configurações (bloco Suporte) — mesmo destino aqui.
+  { id: 'ajuda', label: 'Ajuda', icon: 'circle-help', href: '/configuracoes#suporte' },
+  { id: 'configuracoes', label: 'Configurações', icon: 'settings', href: '/configuracoes' },
 ];
 
 export function getLegacyAppUrl() {

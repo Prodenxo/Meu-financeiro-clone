@@ -1,29 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { THEME_COOKIE, normalizeTheme } from '@/lib/theme';
+import { useThemePref } from '@/lib/themeClient';
 import { Icon } from '@/components/ui/Icon';
 import s from './shell.module.css';
 
-/** Alterna claro/escuro: aplica no <html> e grava cookie (servidor renderiza já no tema certo). */
+/**
+ * Atalho claro/escuro da sidebar. Alterna o tema efetivo e grava a preferência explícita;
+ * «Automático» continua disponível em Configurações → Aparência.
+ */
 export function ThemeToggle({ initialTheme }) {
-  const [theme, setTheme] = useState(normalizeTheme(initialTheme));
+  const { resolved, setPref } = useThemePref(initialTheme);
+  const next = resolved === 'dark' ? 'light' : 'dark';
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.cookie = `${THEME_COOKIE}=${theme}; path=/; max-age=31536000; samesite=lax`;
-  }, [theme]);
-
-  const next = theme === 'dark' ? 'light' : 'dark';
   return (
     <button
       type="button"
       className={s.iconBtn}
-      onClick={() => setTheme(next)}
+      onClick={() => setPref(next)}
       aria-label={next === 'dark' ? 'Ativar modo escuro' : 'Ativar modo claro'}
       title={next === 'dark' ? 'Modo escuro' : 'Modo claro'}
     >
-      <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
+      <Icon name={resolved === 'dark' ? 'sun' : 'moon'} size={16} />
     </button>
   );
 }
