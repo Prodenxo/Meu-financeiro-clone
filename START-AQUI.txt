@@ -1,0 +1,38 @@
+Meu Financeiro — comece por aqui
+Atualizado em 2026-10-01. Este arquivo vale só para este clone.
+Por agora o trabalho e só no localhost. Sem deploy e sem push.
+
+ESTE CLONE E O AMBIENTE DE DEV
+  Pasta: C:\Users\Usuário\Documents\Dev\Meu-financeiro-clone
+  Aqui ficam a API, o app Expo e o site novo em Next.js.
+  A pasta Site (C:\Users\Usuário\Documents\Dev\Meu Financeiro\Site) nao e o
+  lugar de desenvolver. Nao rode git pull la: ela parou em e4e508b6 e o
+  Master deste clone esta 10 commits na frente, com web/ e mudancas no Expo.
+
+O QUE E CADA PASTA
+  backend/   API Express (porta 3333).
+  frontend/  App Expo (celular e web na porta 8081).
+  web/       Site novo em Next.js (porta 3000). Nao entra no npm workspaces.
+  supabase/  Migrations e config do banco.
+  scripts/   Atalhos da raiz (dev.ps1, migrate, smoke).
+  docs/      Documentacao de operacao e stories.
+
+COMO RODAR
+  npm install
+  Copie os .env: backend/.env.example, frontend/.env.example, web/.env.example -> web/.env.local
+
+  API + Expo:   npm run dev
+  So a API:     npm run dev:api
+  So o Expo:    npm run dev:frontend
+  Site Next:    cd web; npm install; cd ..; npm run dev:web
+                abre http://localhost:3000
+
+GITHUB (plano A, parado ate voce pedir)
+  Os dois diretorios ainda apontam para:
+    https://github.com/contabhub/Meu-financeiro.git
+  Nao faca push. O repositorio novo (Meu-financeiro-app) so entra quando
+  voce pedir. Ate la, commit fica só nesta maquina.
+
+DEPOIS (nao agora)
+  Agenda WhatsApp que manda 4 vezes: a trava no banco ainda nao existe.
+  Fica para quando voltar a falar de producao.
