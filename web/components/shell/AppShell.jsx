@@ -2,9 +2,11 @@ import { cookies } from 'next/headers';
 import { NAV_FOOTER_ITEMS, NAV_GROUPS, getLegacyAppUrl } from '@/lib/nav';
 import { THEME_COOKIE, normalizeThemePref } from '@/lib/theme';
 import { signOutAction } from '@/lib/auth/actions';
+import { getImpersonationInfo } from '@/lib/auth/impersonation';
 import { ShellNavProvider } from './ShellNavContext';
 import { Sidebar } from './Sidebar';
 import { MobileBar } from './MobileBar';
+import { ImpersonationBanner } from './ImpersonationBanner';
 import s from './shell.module.css';
 
 function initialsOf(name) {
@@ -27,6 +29,7 @@ export async function AppShell({ session, children }) {
   const theme = normalizeThemePref(cookieStore.get(THEME_COOKIE)?.value);
   const groups = NAV_GROUPS;
   const legacyAppUrl = getLegacyAppUrl();
+  const impersonation = await getImpersonationInfo();
 
   const profile = {
     name: session.displayName,
@@ -46,6 +49,7 @@ export async function AppShell({ session, children }) {
           signOutAction={signOutAction}
         />
         <div className={s.main}>
+          {impersonation ? <ImpersonationBanner info={impersonation} /> : null}
           <MobileBar />
           <main className={s.content} id="conteudo">
             {children}

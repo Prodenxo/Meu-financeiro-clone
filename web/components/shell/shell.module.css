@@ -244,6 +244,51 @@
   padding: var(--sp-6) var(--sp-7) var(--sp-10);
 }
 
+/* ---- Aviso "acessando como" ---- */
+.impersonation {
+  position: sticky;
+  top: 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: 10px var(--sp-5);
+  background: var(--mf-warning-soft);
+  color: #7c3a00;
+  border-bottom: 1px solid color-mix(in srgb, var(--mf-warning) 40%, transparent);
+  font-size: var(--fs-base);
+}
+
+[data-theme='dark'] .impersonation {
+  color: var(--mf-warning);
+}
+
+.impersonationText {
+  flex: 1;
+  min-width: 200px;
+}
+
+.impersonationBtn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
+  background: var(--mf-card);
+  border: 1px solid color-mix(in srgb, var(--mf-warning) 50%, transparent);
+  color: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+
+.impersonationBtn:hover {
+  background: var(--mf-card-muted);
+}
+
+.impersonationBtn:focus-visible {
+  outline: 2px solid var(--mf-primary);
+  outline-offset: 2px;
+}
+
 /* ---- Mobile ---- */
 .mobileBar {
   display: none;

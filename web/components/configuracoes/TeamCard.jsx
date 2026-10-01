@@ -3,15 +3,14 @@
 import s from './configuracoes.module.css';
 import { SettingsCard, SettingsLinkRow } from './SettingsCard';
 
-/** Rotas de equipa — ainda vivem no app atual (mesmos caminhos de `SETTINGS_ROUTES`). */
-const ROUTES = {
-  usuarios: '/configuracoes/usuarios',
+/** «Solicitações de acesso» ainda vive no app atual (mesmo caminho de `SETTINGS_ROUTES`). */
+const LEGACY_ROUTES = {
   solicitacoes: '/configuracoes/solicitacoes',
 };
 
 /**
  * Equipe — só para admin/superadmin (papel resolvido no servidor em `requireUser`).
- * «Solicitações de acesso» é exclusivo do superadmin, como no app atual.
+ * «Gerenciar acessos» já é do novo site; «Solicitações de acesso» é exclusivo do superadmin.
  */
 export function TeamCard({ role, legacyAppUrl }) {
   const isSuperadmin = role === 'superadmin';
@@ -23,20 +22,17 @@ export function TeamCard({ role, legacyAppUrl }) {
       <div className={s.linkList}>
         <SettingsLinkRow
           icon="users"
-          title="Gerenciar usuários"
-          description="Convites, papéis e bloqueios"
-          href={base ? `${base}${ROUTES.usuarios}` : undefined}
-          external={Boolean(base)}
-          disabled={!base}
-          disabledReason={disabledReason}
-          ariaLabel="Gerenciar usuários — abre no app atual"
+          title="Gerenciar acessos"
+          description="Usuários, convites, bloqueios e empresas"
+          href="/configuracoes/acessos"
+          ariaLabel="Gerenciar acessos"
         />
         {isSuperadmin ? (
           <SettingsLinkRow
             icon="shield-check"
             title="Solicitações de acesso"
             description="Aprovar novos pedidos de entrada"
-            href={base ? `${base}${ROUTES.solicitacoes}` : undefined}
+            href={base ? `${base}${LEGACY_ROUTES.solicitacoes}` : undefined}
             external={Boolean(base)}
             disabled={!base}
             disabledReason={disabledReason}

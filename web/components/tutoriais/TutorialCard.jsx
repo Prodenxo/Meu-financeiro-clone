@@ -1,20 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ModuleArt } from './ModuleArt';
 import s from './tutoriais.module.css';
 
+/** O card usa `key={capaUrl}`, então cada URL monta uma instância nova (estado volta a "loading"). */
 function CoverImage({ src }) {
-  const ref = useRef(null);
   const [status, setStatus] = useState('loading');
 
-  useEffect(() => {
-    setStatus('loading');
-    const img = ref.current;
+  // Imagem vinda do cache já chega "completa" sem disparar onLoad/onError.
+  const attach = useCallback((img) => {
     if (img?.complete) setStatus(img.naturalWidth > 0 ? 'ok' : 'error');
-  }, [src]);
+  }, []);
 
   if (status === 'error') return null;
 
@@ -22,7 +21,7 @@ function CoverImage({ src }) {
     // Capa https informada pelo super admin, fora do domínio do Next/Image.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      ref={ref}
+      ref={attach}
       className={status === 'ok' ? s.coverImg : s.coverImgPending}
       src={src}
       alt=""
