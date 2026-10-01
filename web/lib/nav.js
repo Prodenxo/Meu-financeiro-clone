@@ -34,8 +34,9 @@ export const NAV_GROUPS = [
 ];
 
 export const NAV_FOOTER_ITEMS = [
-  // «Ajuda» no app atual abre Configurações (bloco Suporte) — mesmo destino aqui.
-  { id: 'ajuda', label: 'Ajuda', icon: 'circle-help', href: '/configuracoes#suporte' },
+  // Antes «Ajuda» abria o suporte em Configurações. O atalho agora é a Central de tutoriais.
+  // O suporte continua em /configuracoes#suporte (botão no fim da central).
+  { id: 'tutoriais', label: 'Tutoriais', icon: 'book-open', href: '/tutoriais' },
   { id: 'configuracoes', label: 'Configurações', icon: 'settings', href: '/configuracoes' },
 ];
 

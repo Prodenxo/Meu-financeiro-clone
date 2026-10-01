@@ -37,7 +37,8 @@ resumo do mes, conectar/sincronizar/desconectar Google Agenda e criar/editar/exc
 **Conta global** (saldos em moedas estrangeiras com conversao estimada em reais, cotacoes de referencia,
 busca por codigo/nome e adicionar/editar/excluir moeda — separado da Visao geral) e **Configuracoes** (perfil com
 nome, telefone com DDI e troca de e-mail, suporte com abertura de chamado e WhatsApp, Google Agenda conectar/desconectar,
-aparencia claro/automatico/escuro e sair da conta; «Equipe» aparece para admin e ainda abre no app Expo).
+aparencia claro/automatico/escuro e sair da conta; «Equipe» aparece para admin e ainda abre no app Expo) e **Tutoriais**
+(central com busca e filtro por módulo; só o super admin cadastra, publica e exclui; o antigo atalho Ajuda agora abre esta tela).
 Os itens do menu ainda nao migrados abrem no app Expo (`NEXT_PUBLIC_LEGACY_APP_URL`, ex.: `http://localhost:8081`).
 
 ## Estrutura
