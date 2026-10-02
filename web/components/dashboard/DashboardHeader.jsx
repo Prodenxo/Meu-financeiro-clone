@@ -4,6 +4,7 @@ import { Icon } from '@/components/ui/Icon';
 import { formatMonthLabel, MONTH_NAMES } from '@/lib/finance/format';
 import { nextMonth, prevMonth } from '@/lib/finance/dashboard';
 import { toMonthParam } from '@/lib/date';
+import { VistaSwitch } from './VistaSwitch';
 import s from './dashboard.module.css';
 
 const MONTHS_BACK = 24;
@@ -23,7 +24,7 @@ function monthOptions(currentMonth, selectedMonth) {
   return list;
 }
 
-export function DashboardHeader({ greeting, userFirstName, selectedMonth, currentMonth, onChangeMonth, pending, legacyAppUrl }) {
+export function DashboardHeader({ greeting, userFirstName, selectedMonth, currentMonth, onChangeMonth, pending }) {
   const options = monthOptions(currentMonth, selectedMonth);
   const selectedKey = toMonthParam(selectedMonth);
 
@@ -76,17 +77,7 @@ export function DashboardHeader({ greeting, userFirstName, selectedMonth, curren
             <Icon name="chevron-right" size={16} />
           </button>
         </div>
-        {legacyAppUrl ? (
-          <a
-            href={`${legacyAppUrl}/`}
-            className={s.kpiFootLink}
-            title="Visão BPO (matriz anual e gráficos) — abre no app atual"
-            style={{ marginLeft: 8 }}
-          >
-            Visão BPO
-            <Icon name="arrow-up-right" size={14} />
-          </a>
-        ) : null}
+        <VistaSwitch vista="resumo" mes={selectedKey} ano={currentMonth.year} />
       </div>
     </header>
   );

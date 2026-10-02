@@ -37,7 +37,6 @@ export function DashboardView({
   greeting,
   userFirstName,
   role,
-  legacyAppUrl,
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -79,7 +78,6 @@ export function DashboardView({
         currentMonth={currentMonth}
         onChangeMonth={goToMonth}
         pending={isPending}
-        legacyAppUrl={legacyAppUrl}
       />
 
       {isPending ? <div className={s.pendingBar} role="status" aria-label="Carregando mês" /> : null}

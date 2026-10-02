@@ -91,9 +91,11 @@ GitHub Actions: `.github/workflows/corr03-smoke-backend.yml` executa o mesmo smo
 
 ## Contexto em aberto
 
-- **Migração Next (`web/`) — próximas etapas:** onboarding (ativação, empresa-cnpj); visão BPO (matriz anual) do dashboard; toggle Google Agenda ao criar lançamento. Só então trocar o deploy web e aposentar o Expo web.
+- **Migração Next (`web/`) — próximas etapas:** onboarding (ativação, empresa-cnpj); toggle Google Agenda ao criar lançamento. Só então trocar o deploy web e aposentar o Expo web.
 
 ## Última atualização
+
+- **2026-10-02** — `web/` **Visão BPO** em `/visao-geral?vista=bpo&ano=AAAA` (o Resumo continua em `?mes=`). Matriz = porta de `bpoMatrix.ts`: variação em reais (realizado − orçado); sem orçamento → `—`; realizado 0 → `R$ 0,00`; linha só entra se algum mês tem realizado ≠ 0 ou orçado > 0. Dados: `GET /api/categories/budgets/dre-matrix` (despesa = toda saída do ano; receita = status `recebido` ou `pago`); fallback Supabase igual ao Expo (receita só `recebido`). Busca «Categoria…» só ao Aplicar e refaz subtotais. Condensar esconde categorias e subtotais. A matriz antiga **não** filtra por conta. Gráficos do topo são os subtotais da matriz (não a aba «Gráficos» antiga, que era um card por categoria em trimestres e somava qualquer lançamento do ano).
 
 - **2026-10-01** — `web/` **Solicitações de acesso** (`/configuracoes/solicitacoes?aba=pendentes|historico`; `/solicitacoes` redireciona): porta da `AccessApprovalsScreen`. Só superadmin (`canReviewAccessRequests`) — página e cada Server Action conferem antes de qualquer consulta. Pendentes/aprovar/negar = Edge Function `manage-access-requests` com o JWT da sessão (ela repassa ao backend interno com `ACCESS_REQUEST_INTERNAL_SECRET`, que confere superadmin e se ainda está pendente → 404 «já processada»). Histórico = `GET /api/admin/access-requests/report?limit=100` (`requireSuperAdmin`), fallback ação `report` da Edge. Aprovar: vínculo vira Admin ativo + empresa `active` + metadata `access_approved_*` + WhatsApp existente. Negar: apaga vínculo, empresa pendente e usuário (por isso negados não aparecem no histórico). Sem paginação no fluxo antigo.
 

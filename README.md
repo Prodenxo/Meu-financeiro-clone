@@ -27,7 +27,7 @@ npm run dev:web           # na raiz -> http://localhost:3000
 
 Ja migrado: telas de acesso (login, **Cadastre-se** = solicitacao de acesso PF/PJ com CNPJ automatico,
 cadastro por convite `/register?convite=`, recuperar e redefinir senha, termos/privacidade), casca do app
-(menu lateral, tema claro/escuro), a **Visao geral**, **Transacoes** (filtros, recorrencias previstas,
+(menu lateral, tema claro/escuro), a **Visao geral** (resumo do mes e Visao BPO com matriz anual de orcado, realizado e variacao), **Transacoes** (filtros, recorrencias previstas,
 editar/duplicar/excluir, marcar como pago e exportar Excel), **Contas** (cadastro/edicao/exclusao com catalogo de
 bancos, saldo real por conta, resumo por instituicao e evolucao do saldo), **Orcamentos** (limite por categoria e
 mes, orcado x realizado, copiar mes anterior, evolucao por categoria e tabela completa), **Categorias** (criar,
