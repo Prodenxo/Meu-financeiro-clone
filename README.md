@@ -1,77 +1,39 @@
-# Meu Financeiro
+# Meu Financeiro — Site (Next.js)
 
-API Express + app **Expo** + Supabase, num so repositorio.
+Front web em **`web/`** (Next.js, App Router, `:3000`).
 
-## Comece aqui
+**API Express, app Expo (celular) e Supabase “de produto”** ficam no repositório irmão:
 
-```powershell
-npm install        # instala backend + frontend (workspaces)
-npm run dev        # abre a API (:3333) noutro terminal e o Expo neste (web: tecla w -> :8081)
-```
+`Documents/Dev/Meu-financeiro-app`
 
-Antes disso, crie os `.env` copiando os exemplos de cada pasta:
+(Este repo ainda traz cópia de `supabase/` e scripts de migrate para quem só trabalha no site; o canônico para app+API é o repo irmão.)
 
-- `backend/.env.example` -> `backend/.env`
-- `frontend/.env.example` -> `frontend/.env`
-- `web/.env.example` -> `web/.env.local` (Next.js)
-
-## Web em Next.js (`web/`) — migração em andamento
-
-O front web esta a ser migrado do Expo para **Next.js (App Router, JavaScript)**. A pasta `web/` e um
-pacote separado (nao entra nos workspaces para nao misturar versoes de React com o Expo).
+## Começar
 
 ```powershell
-cd web && npm install     # uma vez
-npm run dev:web           # na raiz -> http://localhost:3000
+cd web && npm install    # uma vez
+npm run dev              # na raiz -> http://localhost:3000
 ```
 
-Ja migrado: telas de acesso (login, **Cadastre-se** = solicitacao de acesso PF/PJ com CNPJ automatico,
-cadastro por convite `/register?convite=`, recuperar e redefinir senha, termos/privacidade), casca do app
-(menu lateral, tema claro/escuro), a **Visao geral** (resumo do mes e Visao BPO com matriz anual de orcado, realizado e variacao), **Transacoes** (filtros, recorrencias previstas,
-editar/duplicar/excluir, marcar como pago e exportar Excel), **Contas** (cadastro/edicao/exclusao com catalogo de
-bancos, saldo real por conta, resumo por instituicao e evolucao do saldo), **Orcamentos** (limite por categoria e
-mes, orcado x realizado, copiar mes anterior, evolucao por categoria e tabela completa), **Categorias** (criar,
-editar e excluir, saidas/entradas, total e participacao por categoria no mes, distribuicao em rosca), **Agenda**
-(calendario mes/semana/dia com lancamentos e eventos do Google Agenda, compromissos do dia, proximos compromissos,
-resumo do mes, conectar/sincronizar/desconectar Google Agenda e criar/editar/excluir compromissos e lembretes) e
-**Conta global** (saldos em moedas estrangeiras com conversao estimada em reais, cotacoes de referencia,
-busca por codigo/nome e adicionar/editar/excluir moeda — separado da Visao geral) e **Configuracoes** (perfil com
-nome, telefone com DDI e troca de e-mail, suporte com abertura de chamado e WhatsApp, Google Agenda conectar/desconectar,
-aparencia claro/automatico/escuro e sair da conta; «Equipe» aparece para admin e super admin), **Gerenciar acessos**
-(`/configuracoes/acessos`: resumo em cinco cards, abas Usuarios / Convites / Empresas, busca, filtros, ordenacao e paginacao
-feitas no servidor, criar/editar/bloquear/liberar/excluir usuario, redefinir senha, acessar como outro usuario com aviso
-para voltar, gerar/copiar/revogar convites e, para o super admin, cadastrar/editar/excluir empresas), **Solicitacoes de acesso**
-(`/configuracoes/solicitacoes`, so super admin: pendentes com aprovar/negar apos confirmacao e historico de pedidos enviados e
-aprovados) e **Tutoriais**
-(central com busca e filtro por módulo; só o super admin cadastra, publica e exclui; o antigo atalho Ajuda agora abre esta tela).
-Os itens do menu ainda nao migrados abrem no app Expo (`NEXT_PUBLIC_LEGACY_APP_URL`, ex.: `http://localhost:8081`).
-
-## Estrutura
-
-```
-backend/     API Express (porta 3333) — config em backend/config/
-frontend/    App Expo (celular + web :8081)
-web/         Front web em Next.js (:3000) — migração em andamento
-supabase/    migrations e config do banco
-scripts/     utilitarios da raiz (dev.ps1, migrate, smoke)
-docs/        documentacao (ops, stories, tecnico)
-Dockerfile   imagem da API (Easypanel / Docker)
-```
+Env: `web/.env.local` ← `web/.env.example`  
+`MEI_API_URL` aponta para a API (local `:3333` ou produção).
 
 ## Comandos na raiz
 
 | Comando | Efeito |
 |---------|--------|
-| `npm run dev` | API + Expo |
-| `npm run dev:api` | So a API |
-| `npm run dev:frontend` | So o Expo |
-| `npm run dev:web` | So o Next.js (`web/`) |
-| `npm run lint:web` / `test:web` / `build:web` | Gates do `web/` |
-| `npm run typecheck` / `npm test` | Nos workspaces |
-| `npm run db:migrate:prod:check` | Verifica migrations em prod |
+| `npm run dev` | Next.js (`web/`) |
+| `npm run lint:web` / `test:web` / `build:web` | Gates do site |
 
-## Deploy
+## Estrutura
 
-- **API:** `Dockerfile` na raiz (Easypanel / Docker). Se o painel ainda apontar para `Dockerfile.backend`, troque para `Dockerfile` (era uma copia identica).
-- **App:** EAS / lojas — ver `frontend/docs/DEPLOY.md`.
-- Front **Vite** antigo (Render/Vercel): removido; fica so no historico do git.
+```
+web/         Site Next.js
+supabase/    migrations / Edge Functions (espelho; ver repo app)
+scripts/     utilitários (migrate, etc.)
+docs/        documentação (histórico compartilhado)
+```
+
+## Mobile + backend
+
+Não estão mais neste repositório. Use **Meu-financeiro-app** (`npm run dev` = API + Expo).

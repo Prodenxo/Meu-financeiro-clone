@@ -1,6 +1,0 @@
-.vercel
-.env
-.env.*
-.env.backup*
-# Exports one-time (podem conter PFX, senhas e hashes de auth)
-scripts/one-time/exports/
