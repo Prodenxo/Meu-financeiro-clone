@@ -2,8 +2,16 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth/session';
-import { normalizeTransactionStatus } from '@/lib/finance/status';
+import { checkGoogleAuth, getGoogleAuthUrl, upsertTransactionGoogleEvent } from '@/lib/data/googleCalendar';
+import { formToGooglePayload } from '@/lib/finance/agenda';
 import { parseMoney } from '@/lib/finance/money';
+import { normalizeTransactionStatus } from '@/lib/finance/status';
+import {
+  buildRecurrenceRow,
+  buildTransactionGooglePayload,
+  parseRecurrenceQuantity,
+  validateTransactionGoogleForm,
+} from '@/lib/finance/transactionModal';
 
 const MAX_IDS = 200;
 
@@ -37,12 +45,19 @@ export async function saveTransactionAction(_prevState, formData) {
   const contaId = String(formData.get('conta_id') || '').trim();
   const recorrenciaId = String(formData.get('recorrencia_id') || '').trim();
   const recorrenciaAnoMes = String(formData.get('recorrencia_ano_mes') || '').trim();
+  const recorrente = formData.get('recorrente') === 'on';
+  const maxOcorrencias = parseRecurrenceQuantity(formData.get('max_ocorrencias'));
 
   const errors = {};
   if (!tipo) errors.tipo = 'Escolha entrada ou saída.';
   if (!Number.isFinite(valor) || valor <= 0) errors.valor = 'Informe um valor maior que zero.';
   if (!classificacao) errors.classificacao = 'Escolha uma categoria.';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) errors.data = 'Informe uma data válida.';
+  if (recorrente && !id && !recorrenciaId) {
+    if (Number.isNaN(maxOcorrencias)) {
+      errors.max_ocorrencias = 'Informe entre 1 e 1200 repetições ou deixe em branco para sem limite.';
+    }
+  }
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
   const pendente = tipo === 'entrada' ? 'a_receber' : 'a_pagar';
@@ -56,15 +71,44 @@ export async function saveTransactionAction(_prevState, formData) {
     conta_id: contaId || null,
   };
 
-  let error;
+  let savedId = id;
+  let linkedRecorrenciaId = recorrenciaId || null;
+  let recurrenceWarning = null;
+
   if (id) {
-    ({ error } = await session.supabase
+    const { error } = await session.supabase
       .from('lancamentos_id')
       .update(payload)
       .eq('id', id)
-      .eq('user_id', session.userId));
+      .eq('user_id', session.userId);
+    if (error) {
+      console.error('[saveTransaction]', error);
+      return { ok: false, errors: { form: `Não foi possível salvar: ${error.message}` } };
+    }
   } else {
-    if (recorrenciaId && /^\d{4}-\d{2}$/.test(recorrenciaAnoMes)) {
+    if (recorrente && !recorrenciaId) {
+      const recRow = buildRecurrenceRow({
+        tipo: tipo === 'entrada' ? 'entrada' : 'saida',
+        valor,
+        classificacao,
+        data,
+        obs,
+        maxOcorrencias: Number.isNaN(maxOcorrencias) ? null : maxOcorrencias,
+      });
+      const { data: createdRec, error: recErr } = await session.supabase
+        .from('recorrencias')
+        .insert({ ...recRow, user_id: session.userId })
+        .select('id')
+        .single();
+      if (recErr || !createdRec?.id) {
+        console.error('[saveTransaction] recorrencia', recErr);
+        recurrenceWarning = 'Não foi possível criar a recorrência. O lançamento foi salvo como avulso.';
+      } else {
+        linkedRecorrenciaId = createdRec.id;
+        payload.recorrencia_id = createdRec.id;
+        payload.recorrencia_ano_mes = data.slice(0, 7);
+      }
+    } else if (recorrenciaId && /^\d{4}-\d{2}$/.test(recorrenciaAnoMes)) {
       const { data: rec } = await session.supabase
         .from('recorrencias')
         .select('id, categoria')
@@ -75,18 +119,139 @@ export async function saveTransactionAction(_prevState, formData) {
         payload.recorrencia_id = rec.id;
         payload.recorrencia_ano_mes = recorrenciaAnoMes;
         if (rec.categoria != null) payload.categoria = rec.categoria;
+        linkedRecorrenciaId = rec.id;
       }
     }
-    ({ error } = await session.supabase.from('lancamentos_id').insert({ ...payload, user_id: session.userId }));
-  }
 
-  if (error) {
-    console.error('[saveTransaction]', error);
-    return { ok: false, errors: { form: `Não foi possível salvar: ${error.message}` } };
+    const { data: inserted, error } = await session.supabase
+      .from('lancamentos_id')
+      .insert({ ...payload, user_id: session.userId })
+      .select('id')
+      .single();
+    if (error) {
+      console.error('[saveTransaction]', error);
+      return { ok: false, errors: { form: `Não foi possível salvar: ${error.message}` } };
+    }
+    savedId = inserted?.id;
   }
 
   revalidateAll();
-  return { ok: true, edited: Boolean(id), tipo: tipo === 'entrada' ? 'entrada' : 'saida', valor };
+  return {
+    ok: true,
+    edited: Boolean(id),
+    tipo: tipo === 'entrada' ? 'entrada' : 'saida',
+    valor,
+    transactionId: savedId,
+    recorrenciaId: linkedRecorrenciaId,
+    recurrenceWarning,
+    status: payload.status,
+    data,
+    classificacao,
+    obs: obs || null,
+  };
+}
+
+export async function checkGoogleConnectedAction() {
+  const { supabase } = await requireUser();
+  try {
+    const connected = await checkGoogleAuth(supabase);
+    return { ok: true, connected };
+  } catch {
+    return { ok: false, connected: false, error: 'Não foi possível verificar o Google Agenda.' };
+  }
+}
+
+export async function googleAuthUrlForTransactionAction(returnTo) {
+  const { supabase } = await requireUser();
+  const clean = String(returnTo || '').trim();
+  if (!/^https?:\/\//.test(clean)) return { ok: false, error: 'Endereço de retorno inválido.' };
+  try {
+    const authUrl = await getGoogleAuthUrl(supabase, clean);
+    return { ok: true, authUrl };
+  } catch (error) {
+    return { ok: false, error: error.message || 'Erro ao abrir autorização do Google.' };
+  }
+}
+
+/**
+ * Sincroniza lembrete no Google após o lançamento existir no banco.
+ * `existingEventId` evita duplicar evento ao repetir a sincronização.
+ */
+export async function syncTransactionGoogleEventAction(input) {
+  const session = await requireUser();
+  const transactionId = String(input?.transactionId || '').trim();
+  if (!transactionId) return { ok: false, error: 'Lançamento inválido.' };
+
+  const { data: tx, error: readErr } = await session.supabase
+    .from('lancamentos_id')
+    .select('id, tipo, valor, classificacao, data, obs, status, recorrencia_id')
+    .eq('id', transactionId)
+    .eq('user_id', session.userId)
+    .maybeSingle();
+  if (readErr || !tx) return { ok: false, error: 'Lançamento não encontrado.' };
+
+  const connected = await checkGoogleAuth(session.supabase);
+  if (!connected) {
+    return { ok: false, needsAuth: true, error: 'Conecte o Google Agenda em Configurações ou use o botão abaixo.' };
+  }
+
+  const tipo = String(tx.tipo).toLowerCase() === 'entrada' ? 'entrada' : 'saida';
+  const googleErrors = validateTransactionGoogleForm({
+    isAllDay: Boolean(input?.isAllDay),
+    startTime: input?.startTime,
+    endTime: input?.endTime,
+    data: tx.data?.slice(0, 10) || input?.data,
+  });
+  if (Object.keys(googleErrors).length) {
+    return { ok: false, errors: googleErrors };
+  }
+
+  const recurring = Boolean(input?.recurring && tx.recorrencia_id);
+  const recurrenceTotal = parseRecurrenceQuantity(input?.max_ocorrencias);
+  const draft = buildTransactionGooglePayload({
+    tipo,
+    valor: Number(tx.valor),
+    classificacao: tx.classificacao,
+    data: String(tx.data).slice(0, 10),
+    obs: tx.obs,
+    status: tx.status,
+    isAllDay: Boolean(input?.isAllDay),
+    startTime: input?.startTime || '09:00',
+    endTime: input?.endTime || '10:00',
+    reminderMinutes: input?.reminderMinutes ?? '',
+    recurring,
+    recurrenceTotal: Number.isNaN(recurrenceTotal) ? null : recurrenceTotal,
+  });
+  const payload = formToGooglePayload({
+    title: draft.title,
+    description: draft.description,
+    isAllDay: draft.isAllDay,
+    startDate: draft.startDate,
+    endDate: draft.endDate,
+    startTime: `${String(draft.startHour).padStart(2, '0')}:${String(draft.startMinute).padStart(2, '0')}`,
+    endTime: `${String(draft.endHour).padStart(2, '0')}:${String(draft.endMinute).padStart(2, '0')}`,
+    recurrence: draft.recurrence,
+    reminderMinutes: draft.reminderMinutes ?? '',
+    createMeetLink: false,
+  });
+
+  const existingEventId = String(input?.existingEventId || '').trim() || null;
+  try {
+    const res = await upsertTransactionGoogleEvent(session.supabase, payload, existingEventId);
+    revalidatePath('/agenda');
+    return {
+      ok: true,
+      eventId: res.eventId,
+      transactionId,
+      recorrenciaId: tx.recorrencia_id || null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      transactionSaved: true,
+      error: error.message || 'Não foi possível sincronizar com o Google Agenda.',
+    };
+  }
 }
 
 /** "Marcar como pago/recebido" — entrada vira recebido, saída vira pago (igual ao Expo). */

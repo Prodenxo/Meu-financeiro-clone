@@ -106,3 +106,12 @@ export async function deleteGoogleEvent(supabase, eventId) {
   const r = await googleCalendarRequest(supabase, 'delete-custom-event', { method: 'POST', body: { eventId } });
   if (!r.ok) throw new Error(errorMessage(r.data, 'Erro ao excluir compromisso'));
 }
+
+
+/** Evento de lembrete vinculado a lançamento (create-custom-event ou update). */
+export async function upsertTransactionGoogleEvent(supabase, payload, existingEventId) {
+  if (existingEventId) {
+    return updateGoogleEvent(supabase, existingEventId, payload);
+  }
+  return createGoogleEvent(supabase, payload);
+}
