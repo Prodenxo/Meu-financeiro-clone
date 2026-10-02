@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Button, EmptyState, Select } from '@/components/ui';
+import { useCallback, useState } from 'react';
+import { Button, EmptyState } from '@/components/ui';
+import { BpoCategorySelect } from '@/components/dashboard/BpoCategorySelect';
 import { Icon } from '@/components/ui/Icon';
 import {
   BPO_COLUMNS,
@@ -70,6 +71,20 @@ export function BpoMatrix({ model, year, error, onRetry }) {
   const [openReceitas, setOpenReceitas] = useState(true);
   const [openDespesas, setOpenDespesas] = useState(true);
 
+  const onCategoryChange = useCallback(
+    (id) => {
+      setCategoryId(id);
+      if (!id || !model) return;
+      if (model.receitas.some((row) => String(row.categoriasId) === String(id))) {
+        setOpenReceitas(true);
+      }
+      if (model.despesas.some((row) => String(row.categoriasId) === String(id))) {
+        setOpenDespesas(true);
+      }
+    },
+    [model],
+  );
+
   if (error) {
     return (
       <EmptyState
@@ -91,33 +106,13 @@ export function BpoMatrix({ model, year, error, onRetry }) {
   return (
     <>
       <div className={s.toolbar}>
-        <Select
-          className={s.search}
+        <BpoCategorySelect
+          receitas={model.receitas}
+          despesas={model.despesas}
           value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
-          aria-label="Filtrar por categoria"
+          onChange={onCategoryChange}
           disabled={!hasCategories}
-        >
-          <option value="">Todas as categorias</option>
-          {model.receitas.length > 0 ? (
-            <optgroup label="Receitas">
-              {model.receitas.map((row) => (
-                <option key={row.categoriasId} value={row.categoriasId}>
-                  {row.nome}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-          {model.despesas.length > 0 ? (
-            <optgroup label="Despesas">
-              {model.despesas.map((row) => (
-                <option key={row.categoriasId} value={row.categoriasId}>
-                  {row.nome}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-        </Select>
+        />
         <div className={s.toggles} role="group" aria-label="Colunas visíveis">
           {BPO_COLUMNS.map((col) => (
             <button
