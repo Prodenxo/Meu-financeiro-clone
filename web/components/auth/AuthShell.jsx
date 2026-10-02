@@ -74,13 +74,8 @@ export function LegalFooter({ action = 'Entrar' }) {
   return (
     <p className={s.legal}>
       Ao clicar em {action}, você concorda com nossa{' '}
-      <a href="/privacidade" target="_blank" rel="noopener noreferrer">
-        Política de Privacidade
-      </a>{' '}
-      e os{' '}
-      <a href="/termos" target="_blank" rel="noopener noreferrer">
-        Termos de Uso
-      </a>
+      <Link href="/privacidade">Política de Privacidade</Link> e os{' '}
+      <Link href="/termos">Termos de Uso</Link>
       .
     </p>
   );

@@ -5,13 +5,6 @@ const nextConfig = {
   poweredByHeader: false,
   // As regras para agentes ficam no AGENTS.md da raiz do repo.
   agentRules: false,
-  // Páginas legais estáticas (copiadas de frontend/public); os links internos delas usam o caminho sem .html.
-  async rewrites() {
-    return [
-      { source: '/privacidade', destination: '/privacidade.html' },
-      { source: '/termos', destination: '/termos.html' },
-    ];
-  },
   // Caminho antigo do app (`/solicitacoes`), mantido como no Expo.
   async redirects() {
     return [{ source: '/solicitacoes', destination: '/configuracoes/solicitacoes', permanent: false }];
