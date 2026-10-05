@@ -1286,30 +1286,37 @@ export const updateUser = async (accessToken, userId, input) => {
 
   if (updateError) throw badRequest(updateError.message);
 
-  if (requestedDisplayName || requestedPhone) {
-    const metadata = {};
+  const { data: authUserData, error: authUserError } = await adminClient.auth.admin.getUserById(userId);
+  if (authUserError) {
+    console.warn('[Users] updateUser getUserById error:', authUserError.message);
+    authService.throwAuthAdminUpdateError(authUserError, 'profile');
+  }
+  const authUser = authUserData?.user;
+  const currentMetaPhone = cleanPhone(authUser?.user_metadata?.phone || '');
+  const phoneChanged = Boolean(requestedPhone && requestedPhone !== currentMetaPhone);
+
+  if (requestedDisplayName || phoneChanged) {
+    const metadata = { ...(authUser?.user_metadata || {}) };
     if (requestedDisplayName) {
       metadata.display_name = requestedDisplayName;
       metadata.name = requestedDisplayName;
       metadata.full_name = requestedDisplayName;
     }
-    if (requestedPhone) metadata.phone = requestedPhone;
+    if (phoneChanged) {
+      await authService.releaseAuthPhoneFromOtherUsers(adminClient, requestedPhone, userId);
+      metadata.phone = requestedPhone;
+    }
     const { error: updateUserError } = await adminClient.auth.admin.updateUserById(userId, {
       user_metadata: metadata
     });
     if (updateUserError) {
       console.warn('[Users] updateUser metadata error:', updateUserError.message);
-      throw badRequest(updateUserError.message);
+      authService.throwAuthAdminUpdateError(updateUserError, phoneChanged ? 'phone' : 'profile');
     }
   }
 
   if (requestedEmail) {
-    const { data: currentAuthUser, error: getUserError } = await adminClient.auth.admin.getUserById(userId);
-    if (getUserError) {
-      console.warn('[Users] updateUser getUserById error:', getUserError.message);
-      throw badRequest(getUserError.message);
-    }
-    const currentEmail = currentAuthUser?.user?.email?.trim().toLowerCase() || '';
+    const currentEmail = authUser?.email?.trim().toLowerCase() || '';
     if (currentEmail !== requestedEmail) {
       // Sem email_confirm → Supabase envia link de confirmação para o novo endereço.
       const { error: updateEmailError } = await adminClient.auth.admin.updateUserById(userId, {
@@ -1317,12 +1324,12 @@ export const updateUser = async (accessToken, userId, input) => {
       });
       if (updateEmailError) {
         console.warn('[Users] updateUser email error:', updateEmailError.message);
-        throw badRequest(updateEmailError.message);
+        authService.throwAuthAdminUpdateError(updateEmailError, 'email');
       }
     }
   }
 
-  if (requestedPhone) {
+  if (phoneChanged) {
     await assignN8nPhoneToUser(adminClient, userId, requestedPhone);
   }
 

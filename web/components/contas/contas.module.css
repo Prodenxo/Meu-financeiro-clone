@@ -265,6 +265,59 @@
   color: var(--mf-text-3);
 }
 
+.ofShopLead {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-sm, 14px);
+  line-height: 1.5;
+  color: var(--mf-text-2);
+}
+
+.ofPlanGrid {
+  display: grid;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
+}
+
+.ofPlanCard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--radius-md, 10px);
+  cursor: pointer;
+}
+
+.ofPlanCard input {
+  margin: 0;
+}
+
+.ofPlanCardActive {
+  border-color: var(--mf-primary);
+  background: var(--mf-primary-soft, rgba(91, 79, 233, 0.08));
+}
+
+.ofPlanName {
+  flex: 1;
+  font-weight: 600;
+  color: var(--mf-text-1);
+}
+
+.ofPlanPrice {
+  font-size: var(--fs-sm, 14px);
+  color: var(--mf-text-2);
+}
+
+.ofShopConnect {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--mf-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
 .listFoot {
   display: flex;
   justify-content: flex-end;

@@ -47,7 +47,7 @@ const phoneLookupVariantSet = (cleanedPhone) => {
 };
 
 /** Supabase bloqueia telefone duplicado em `user_metadata` — liberta outras contas antes de gravar. */
-const releaseAuthPhoneFromOtherUsers = async (adminClient, cleanedPhone, userId) => {
+export const releaseAuthPhoneFromOtherUsers = async (adminClient, cleanedPhone, userId) => {
   const variants = phoneLookupVariantSet(cleanedPhone);
   let page = 1;
   const perPage = 1000;
@@ -78,15 +78,38 @@ const releaseAuthPhoneFromOtherUsers = async (adminClient, cleanedPhone, userId)
   }
 };
 
-const mapAuthPhoneUpdateError = (authError) => {
+/** @param {'email' | 'phone' | 'profile'} kind */
+export const throwAuthAdminUpdateError = (authError, kind = 'profile') => {
   const msg = String(authError?.message || '').trim();
+  const lower = msg.toLowerCase();
+  if (lower.includes('already') && (lower.includes('registered') || lower.includes('exists'))) {
+    throw badRequest('Este e-mail já está em uso em outra conta.', { code: 'EMAIL_TAKEN' });
+  }
+  if (lower.includes('invalid') && lower.includes('email')) {
+    throw badRequest('E-mail inválido.', { code: 'EMAIL_INVALID' });
+  }
   if (!msg || msg === 'Error updating user') {
-    throw badRequest(
-      'Não foi possível salvar este telefone. Ele pode já estar em outra conta ou ser inválido.',
-      { code: 'PHONE_UPDATE_FAILED' },
-    );
+    if (kind === 'email') {
+      throw badRequest(
+        'Não foi possível alterar o e-mail. Verifique se o endereço já não está em outra conta ou se é válido.',
+        { code: 'EMAIL_UPDATE_FAILED' },
+      );
+    }
+    if (kind === 'phone') {
+      throw badRequest(
+        'Não foi possível salvar este telefone. Ele pode já estar em outra conta ou ser inválido.',
+        { code: 'PHONE_UPDATE_FAILED' },
+      );
+    }
+    throw badRequest('Não foi possível atualizar os dados de login deste usuário.', {
+      code: 'AUTH_UPDATE_FAILED',
+    });
   }
   throw badRequest(msg);
+};
+
+const mapAuthPhoneUpdateError = (authError) => {
+  throwAuthAdminUpdateError(authError, 'phone');
 };
 
 const hashInviteToken = (rawToken) => crypto.createHash('sha256').update(String(rawToken).trim(), 'utf8').digest('hex');

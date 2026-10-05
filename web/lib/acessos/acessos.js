@@ -324,6 +324,12 @@ export function formatManageUserError(message) {
   if (/fetch failed|ECONNREFUSED|network/i.test(text)) {
     return 'Não foi possível falar com a API do Meu Financeiro. Verifique se o backend está no ar e tente de novo.';
   }
+  if (/Error updating user/i.test(text)) {
+    return 'Não foi possível salvar os dados de login. Confira e-mail e telefone (telefone não pode repetir em outra conta).';
+  }
+  if (/already been registered|email.*already|e-mail já está/i.test(text)) {
+    return 'Este e-mail já está em uso em outra conta.';
+  }
   return text || 'Não foi possível concluir a operação.';
 }
 

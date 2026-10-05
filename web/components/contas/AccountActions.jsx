@@ -1,11 +1,11 @@
 'use client';
 
+import { Suspense } from 'react';
 import { Button, Card, CardHeader } from '@/components/ui';
 import d from '@/components/dashboard/dashboard.module.css';
-import { OpenFinanceConnect } from './OpenFinanceConnect';
-import { OpenFinanceQuickActions } from './OpenFinanceQuickActions';
+import { OpenFinanceShop } from './OpenFinanceShop';
 
-/** Ações rápidas: nova conta e conectar banco (extrato entra automático via webhook/polling). */
+/** Ações rápidas: nova conta manual e loja Open Finance (Stripe). */
 export function AccountActions({ onNew, onOpenFinanceSynced }) {
   return (
     <Card aria-labelledby="acc-actions-title">
@@ -14,8 +14,15 @@ export function AccountActions({ onNew, onOpenFinanceSynced }) {
         <Button icon="plus" block onClick={onNew}>
           Nova conta
         </Button>
-        <OpenFinanceConnect block onSynced={onOpenFinanceSynced} />
-        <OpenFinanceQuickActions onSynced={onOpenFinanceSynced} />
+        <Suspense
+          fallback={
+            <Button variant="outline" icon="shopping-cart" block disabled>
+              Open Finance
+            </Button>
+          }
+        >
+          <OpenFinanceShop block onSynced={onOpenFinanceSynced} />
+        </Suspense>
       </div>
     </Card>
   );
