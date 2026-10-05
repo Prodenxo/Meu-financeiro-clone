@@ -3,7 +3,9 @@ import { badRequest } from '../utils/errors.js';
 import {
   buildContaRowFromPluggyAccount,
   contaMatchesPluggyInstitution,
+  inferInstituicaoIdFromPluggyAccount,
   localContaMatchesPluggyFingerprint,
+  normalizeContaNomeForMatch,
   mapPluggyAccountTipo,
   pickManualContaMergeCandidate,
   readPluggyAccountBalance,
@@ -69,6 +71,12 @@ async function findManualContaToLink(supabase, userId, pluggyAccount) {
   return picked ? { id: picked.id } : null;
 }
 
+function pickBestPluggyContaMergeTarget(rows) {
+  if (!rows?.length) return null;
+  const sorted = [...rows].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  return sorted[0];
+}
+
 /** Mesma conta no banco, id Pluggy novo (reconexão) — reutiliza linha existente. */
 async function findSiblingPluggyConta(supabase, userId, pluggyAccount, externalId) {
   const { data, error } = await supabase
@@ -79,9 +87,19 @@ async function findSiblingPluggyConta(supabase, userId, pluggyAccount, externalI
     .eq('ativo', true)
     .neq('of_external_id', externalId);
   if (error) throw badRequest(error.message || 'Erro ao buscar conta Pluggy irmã.');
-  const matches = (data || []).filter((row) => localContaMatchesPluggyFingerprint(row, pluggyAccount));
-  if (matches.length !== 1) return null;
-  return { id: matches[0].id };
+  const pool = data || [];
+  const byFingerprint = pool.filter((row) => localContaMatchesPluggyFingerprint(row, pluggyAccount));
+  const fingerprintPick = pickBestPluggyContaMergeTarget(byFingerprint);
+  if (fingerprintPick) return { id: fingerprintPick.id };
+
+  const inst = inferInstituicaoIdFromPluggyAccount(pluggyAccount);
+  const tipo = mapPluggyAccountTipo(pluggyAccount);
+  if (inst) {
+    const byInst = pool.filter((row) => row.instituicao_id === inst && row.tipo === tipo);
+    const instPick = pickBestPluggyContaMergeTarget(byInst);
+    if (instPick) return { id: instPick.id };
+  }
+  return null;
 }
 
 async function deactivateEmptyDuplicateConta(supabase, userId, keepContaId, pluggyAccount) {
@@ -136,6 +154,122 @@ async function findExistingOfLancamento(supabase, userId, externalId) {
   return data;
 }
 
+/** Evita duplicar extrato que já entrou sem of_external_id (import antigo). */
+async function linkOrSkipLegacyOpenFinanceLancamento(supabase, userId, row) {
+  const { data, error } = await supabase
+    .from('lancamentos_id')
+    .select('id, of_external_id')
+    .eq('user_id', userId)
+    .eq('conta_id', row.conta_id)
+    .eq('data', row.data)
+    .eq('valor', row.valor)
+    .eq('tipo', row.tipo)
+    .eq('classificacao', 'Open Finance')
+    .is('of_external_id', null)
+    .limit(3);
+  if (error) return { action: 'insert' };
+  const hit = (data || []).find((r) => !r.of_external_id);
+  if (!hit?.id) return { action: 'insert' };
+
+  const { error: updErr } = await supabase
+    .from('lancamentos_id')
+    .update({
+      of_provider: row.of_provider,
+      of_external_id: row.of_external_id,
+    })
+    .eq('id', hit.id)
+    .eq('user_id', userId);
+  if (updErr) return { action: 'insert' };
+  return { action: 'linked', id: hit.id };
+}
+
+async function countContaLancamentos(supabase, userId, contaId) {
+  const { count, error } = await supabase
+    .from('lancamentos_id')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('conta_id', contaId);
+  if (error) return 0;
+  return count ?? 0;
+}
+
+async function mergePluggyContaInto(supabase, userId, fromContaId, keepContaId) {
+  if (String(fromContaId) === String(keepContaId)) return;
+
+  const { data: txs, error } = await supabase
+    .from('lancamentos_id')
+    .select('id, of_external_id')
+    .eq('user_id', userId)
+    .eq('conta_id', fromContaId);
+  if (error) return;
+
+  for (const tx of txs || []) {
+    const ext = tx.of_external_id ? String(tx.of_external_id) : '';
+    if (ext) {
+      const existing = await findExistingOfLancamento(supabase, userId, ext);
+      if (existing?.id && String(existing.id) !== String(tx.id)) {
+        await supabase.from('lancamentos_id').delete().eq('id', tx.id).eq('user_id', userId);
+        continue;
+      }
+    }
+    await supabase
+      .from('lancamentos_id')
+      .update({ conta_id: keepContaId })
+      .eq('id', tx.id)
+      .eq('user_id', userId);
+  }
+
+  await supabase
+    .from('contas_financeiras')
+    .update({
+      ativo: false,
+      of_provider: null,
+      of_external_id: null,
+      of_last_synced_at: null,
+      of_institution_logo_url: null,
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq('id', fromContaId)
+    .eq('user_id', userId);
+}
+
+/** Uma conta OF ativa por instituição + tipo (ex.: três PagBank viram uma). */
+async function consolidateDuplicatePluggyContas(supabase, userId) {
+  const { data, error } = await supabase
+    .from('contas_financeiras')
+    .select('id, instituicao_id, tipo, nome, of_external_id')
+    .eq('user_id', userId)
+    .eq('of_provider', 'pluggy')
+    .eq('ativo', true);
+  if (error || !data?.length) return { merged: 0 };
+
+  const groups = new Map();
+  for (const row of data) {
+    const inst = row.instituicao_id || 'sem-inst';
+    const nomeKey = normalizeContaNomeForMatch(row.nome || '').slice(0, 32) || 'conta';
+    const key = row.instituicao_id
+      ? `${inst}|${row.tipo || 'corrente'}`
+      : `${nomeKey}|${row.tipo || 'corrente'}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+
+  let merged = 0;
+  for (const [, rows] of groups) {
+    if (rows.length < 2) continue;
+    const withCounts = await Promise.all(
+      rows.map(async (r) => ({ row: r, n: await countContaLancamentos(supabase, userId, r.id) })),
+    );
+    withCounts.sort((a, b) => b.n - a.n || String(a.row.id).localeCompare(String(b.row.id)));
+    const keeper = withCounts[0].row;
+    for (let i = 1; i < withCounts.length; i += 1) {
+      await mergePluggyContaInto(supabase, userId, withCounts[i].row.id, keeper.id);
+      merged += 1;
+    }
+  }
+  return { merged };
+}
+
 function signedLancamentoDelta(tx) {
   const tipo = String(tx.tipo || '');
   const valor = Number(tx.valor);
@@ -186,6 +320,12 @@ async function syncAccountTransactions(supabase, userId, pluggyAccount, localCon
 
     const existing = await findExistingOfLancamento(supabase, userId, row.of_external_id);
     if (existing?.id) {
+      skipped += 1;
+      continue;
+    }
+
+    const legacy = await linkOrSkipLegacyOpenFinanceLancamento(supabase, userId, row);
+    if (legacy.action === 'linked') {
       skipped += 1;
       continue;
     }
@@ -320,6 +460,8 @@ export async function syncPluggyItemForUser(userId, itemId, auth, options = {}) 
     accountSummaries.push({ id: localContaId, externalId, mode: existing?.id ? 'update' : 'create' });
   }
 
+  const { merged: contasMerged } = await consolidateDuplicatePluggyContas(supabase, userId);
+
   return {
     itemId: String(item.id),
     itemStatus: item.status ?? null,
@@ -332,6 +474,7 @@ export async function syncPluggyItemForUser(userId, itemId, auth, options = {}) 
     transactionsSkipped,
     transactionsFetched,
     accountsIgnored,
+    contasMerged,
   };
 }
 

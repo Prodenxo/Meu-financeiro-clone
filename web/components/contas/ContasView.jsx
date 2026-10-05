@@ -81,10 +81,13 @@ export function ContasView({ data, todayKey }) {
       setOfBusyContaId(null);
       if (res?.ok) {
         const n = res.data?.transactionsCreated ?? 0;
-        setToast({
-          tone: 'success',
-          text: n > 0 ? `Extrato atualizado: ${n} movimentação(ões) nova(s).` : 'Extrato atualizado. Nenhuma movimentação nova no banco ainda.',
-        });
+        const skipped = res.data?.transactionsSkipped ?? 0;
+        const merged = res.data?.contasMerged ?? 0;
+        let text =
+          n > 0 ? `Importamos ${n} lançamento(s) do banco` : 'Nenhum lançamento novo nesta sincronização.';
+        if (skipped > 0) text += ` (${skipped} já existiam).`;
+        if (merged > 0) text += ` ${merged} conta(s) duplicada(s) unificada(s).`;
+        setToast({ tone: 'success', text });
       } else {
         setToast({ tone: 'error', text: res?.error || 'Não foi possível atualizar o extrato.' });
       }

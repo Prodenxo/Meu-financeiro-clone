@@ -57,11 +57,19 @@ export function OpenFinanceQuickActions({ onSynced }) {
       }
       const items = res.data?.items ?? (res.data?.itemId ? [res.data] : []);
       const created = items.reduce((n, it) => n + (it?.transactionsCreated ?? 0), 0);
-      setMessage(
+      const skipped = items.reduce((n, it) => n + (it?.transactionsSkipped ?? 0), 0);
+      const merged = items.reduce((n, it) => n + (it?.contasMerged ?? 0), 0);
+      let text =
         created > 0
-          ? `Extrato atualizado: ${created} movimentação(ões) nova(s).`
-          : 'Extrato atualizado. Nenhuma movimentação nova no banco ainda.',
-      );
+          ? `Importamos ${created} lançamento(s) do banco`
+          : 'Nenhum lançamento novo no banco nesta sincronização.';
+      if (skipped > 0) text += ` (${skipped} já estavam no app).`;
+      if (merged > 0) text += ` Unificamos ${merged} conta(s) Open Finance duplicada(s).`;
+      if (created > 80) {
+        text +=
+          ' Se parecer repetido, confira Transações — na 1ª carga pode vir até ~90 dias de extrato.';
+      }
+      setMessage(text);
       onSynced?.();
     });
   };
