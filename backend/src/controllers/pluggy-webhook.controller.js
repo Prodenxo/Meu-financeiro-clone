@@ -23,6 +23,9 @@ export const postPluggyWebhook = (req, res) => {
             itemId: out.itemId,
             transactionsCreated: out.result?.transactionsCreated,
           });
+        } else if (out?.skipped) {
+          // eslint-disable-next-line no-console
+          console.warn('[pluggy-webhook] ignorado', out);
         }
       })
       .catch((err) => {

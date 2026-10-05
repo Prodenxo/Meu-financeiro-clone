@@ -1,4 +1,5 @@
 import { createSupabaseClient } from '../config/supabase.js';
+import { fetchPluggyItem } from './pluggy.service.js';
 import { syncPluggyItemForUser } from './openFinancePluggy.service.js';
 
 const SYNC_EVENTS = new Set([
@@ -25,8 +26,12 @@ function shouldProcessEvent(eventId) {
   return true;
 }
 
+function pluggyPayloadItemId(payload) {
+  return String(payload?.itemId || payload?.id || '').trim();
+}
+
 export async function resolveUserIdForPluggyWebhook(payload) {
-  const itemId = String(payload?.itemId || '').trim();
+  const itemId = pluggyPayloadItemId(payload);
   if (!itemId) return null;
 
   if (payload?.clientUserId && /^[0-9a-f-]{36}$/i.test(String(payload.clientUserId))) {
@@ -44,13 +49,25 @@ export async function resolveUserIdForPluggyWebhook(payload) {
   if (error && !/relation.*does not exist/i.test(error.message || '')) {
     console.warn('[pluggy-webhook] lookup connection', error.message);
   }
-  return data?.user_id ? String(data.user_id) : null;
+  if (data?.user_id) return String(data.user_id);
+
+  /** `transactions/*` não traz clientUserId — tenta ler do Item na Pluggy. */
+  try {
+    const item = await fetchPluggyItem(itemId);
+    const cuid = item?.clientUserId ?? item?.parameter?.clientUserId;
+    if (cuid && /^[0-9a-f-]{36}$/i.test(String(cuid))) {
+      return String(cuid);
+    }
+  } catch (err) {
+    console.warn('[pluggy-webhook] fetch item p/ userId', err instanceof Error ? err.message : err);
+  }
+  return null;
 }
 
 /** Processa evento Pluggy (item/transactions) e importa contas + extrato. */
 export async function processPluggyWebhookPayload(payload) {
   const event = String(payload?.event || '');
-  const itemId = String(payload?.itemId || '').trim();
+  const itemId = pluggyPayloadItemId(payload);
   const eventId = payload?.eventId ? String(payload.eventId) : null;
 
   if (!SYNC_EVENTS.has(event) || !itemId) {
