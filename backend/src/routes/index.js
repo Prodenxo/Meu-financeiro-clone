@@ -17,7 +17,6 @@ import internalAccessRequestsRoutes from './internal-access-requests.routes.js';
 import moedasGlobaisRoutes from './moedas-globais.routes.js';
 import supportRoutes from './support.routes.js';
 import openFinanceRoutes from './openFinance.routes.js';
-import * as pluggyWebhookController from '../controllers/pluggy-webhook.controller.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -39,6 +38,4 @@ router.use('/internal/access-requests', internalAccessRequestsRoutes);
 router.use('/moedas-globais', moedasGlobaisRoutes);
 router.use('/support', supportRoutes);
 router.use('/open-finance', openFinanceRoutes);
-router.get('/webhooks/pluggy', pluggyWebhookController.getPluggyWebhook);
-router.post('/webhooks/pluggy', pluggyWebhookController.postPluggyWebhook);
 export default router;

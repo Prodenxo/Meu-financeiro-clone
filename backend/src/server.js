@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { redactSensitiveUrlsForLog } from './utils/log-redact.js';
 import routes from './routes/index.js';
 import * as stripeWebhookController from './controllers/stripe-webhook.controller.js';
+import * as pluggyWebhookController from './controllers/pluggy-webhook.controller.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import { startAgendaRemindersScheduler } from './services/agenda-reminders.scheduler.js';
 import { startMonthlyDasScheduler } from './services/mei-das.service.js';
@@ -87,6 +88,26 @@ app.post(
   '/api/webhooks/stripe',
   express.raw({ type: 'application/json' }),
   (req, res, next) => stripeWebhookController.postStripeWebhook(req, res, next)
+);
+
+/** Pluggy: probe do dashboard pode enviar corpo vazio ou JSON inválido — sempre 2xx. */
+app.get('/api/webhooks/pluggy', pluggyWebhookController.getPluggyWebhook);
+app.post(
+  '/api/webhooks/pluggy',
+  express.text({ type: '*/*', limit: '512kb' }),
+  (req, res, next) => {
+    const raw = typeof req.body === 'string' ? req.body.trim() : '';
+    if (!raw) {
+      req.body = {};
+    } else {
+      try {
+        req.body = JSON.parse(raw);
+      } catch {
+        req.body = {};
+      }
+    }
+    return pluggyWebhookController.postPluggyWebhook(req, res, next);
+  },
 );
 
 app.use(express.json({ limit: '2mb' }));
