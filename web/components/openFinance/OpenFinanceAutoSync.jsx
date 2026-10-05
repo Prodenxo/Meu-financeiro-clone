@@ -19,9 +19,9 @@ function pollMsFromEnv(key, fallbackSec) {
   return (Number.isFinite(raw) && raw > 0 ? raw : fallbackSec) * 1000;
 }
 
-/** Saldo: GET contas na Pluggy, sem pedir update no banco (leve). */
+/** Poll leve: extrato + saldo (sem refresh na Pluggy). */
 const POLL_BALANCE_MS = pollMsFromEnv('NEXT_PUBLIC_OF_POLL_BALANCE_SEC', 300);
-/** Extrato completo: menos frequente; em prod o webhook costuma bastar. */
+/** Refresh na Pluggy (puxa dados novos no banco); menos frequente — webhook cobre a maior parte. */
 const POLL_FULL_MS = pollMsFromEnv('NEXT_PUBLIC_OF_POLL_FULL_SEC', 900);
 const POLL_FULL_EVERY = Math.max(1, Math.round(POLL_FULL_MS / POLL_BALANCE_MS));
 

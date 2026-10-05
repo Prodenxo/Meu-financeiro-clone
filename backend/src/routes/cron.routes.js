@@ -154,7 +154,7 @@ router.get('/nfse-whatsapp-pending', requireCronSecret, async (req, res, next) =
 
 /**
  * Open Finance — sync de todas as conexões Pluggy (extrato/saldo no servidor).
- * Agendar no Easypanel/Vercel Cron a cada 15–30 min. Query: `mode=balance` só saldo; `force=1` ignora intervalo.
+ * Agendar no Easypanel/Vercel Cron a cada 15–30 min. Query: `mode=balance` evita refresh na Pluggy (mais leve); `force=1` ignora intervalo.
  */
 router.get('/open-finance-sync', requireCronSecret, async (req, res, next) => {
   try {

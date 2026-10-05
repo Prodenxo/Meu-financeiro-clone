@@ -85,7 +85,7 @@ export async function pluggyResyncExtratoAction(options = {}) {
   return pluggySyncItemAction(itemId, { mode });
 }
 
-/** Atualiza só saldo vs Pluggy (poll automático). */
+/** Poll leve: importa extrato já na Pluggy + saldo, sem pedir refresh no banco. */
 export async function pluggyRefreshBalancesAction(itemId) {
   return pluggySyncItemAction(itemId || null, { mode: 'balance' });
 }

@@ -233,15 +233,17 @@ function resolveSupabaseForSync(auth) {
 }
 
 /**
- * @param {{ importTransactions?: boolean }} [options] — `importTransactions: false` só atualiza saldo vs Pluggy (poll leve).
+ * @param {{ importTransactions?: boolean }} [options]
+ *   - `importTransactions: false` (modo `balance`): não chama POST /items/update na Pluggy (poll leve),
+ *     mas **sempre** importa extrato já disponível + alinha saldo da conta.
  */
 export async function syncPluggyItemForUser(userId, itemId, auth, options = {}) {
-  const importTransactions = options.importTransactions !== false;
+  const requestItemRefresh = options.importTransactions !== false;
   const trimmed = String(itemId || '').trim();
   if (!trimmed) throw badRequest('itemId obrigatório.');
 
   /** POST /items/update consome cota Open Finance — só no sync completo (webhook, conectar, extrato). */
-  if (importTransactions) {
+  if (requestItemRefresh) {
     await requestPluggyItemRefresh(trimmed);
   }
   const item = await fetchPluggyItem(trimmed);
@@ -306,12 +308,10 @@ export async function syncPluggyItemForUser(userId, itemId, auth, options = {}) 
         localContaId,
         readPluggyAccountBalance(account),
       );
-      if (importTransactions) {
-        const txStats = await syncAccountTransactions(supabase, userId, account, localContaId);
-        transactionsCreated += txStats.created;
-        transactionsSkipped += txStats.skipped;
-        transactionsFetched += txStats.fetched;
-      }
+      const txStats = await syncAccountTransactions(supabase, userId, account, localContaId);
+      transactionsCreated += txStats.created;
+      transactionsSkipped += txStats.skipped;
+      transactionsFetched += txStats.fetched;
       await deactivateEmptyDuplicateConta(supabase, userId, localContaId, account);
     }
 
