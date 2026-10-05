@@ -39,5 +39,6 @@ router.use('/internal/access-requests', internalAccessRequestsRoutes);
 router.use('/moedas-globais', moedasGlobaisRoutes);
 router.use('/support', supportRoutes);
 router.use('/open-finance', openFinanceRoutes);
+router.get('/webhooks/pluggy', pluggyWebhookController.getPluggyWebhook);
 router.post('/webhooks/pluggy', pluggyWebhookController.postPluggyWebhook);
 export default router;
