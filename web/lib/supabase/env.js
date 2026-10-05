@@ -8,7 +8,7 @@ export function assertSupabaseEnv() {
   const env = getSupabasePublicEnv();
   if (!env.configured) {
     throw new Error(
-      'Supabase não configurado. Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY em web/.env.local.',
+      'Supabase não configurado. Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY (local: web/.env.local; Easypanel: Ambiente + build args do Docker).',
     );
   }
   return env;
