@@ -107,6 +107,28 @@ export async function pluggySyncContaAction(contaId, { mode = 'full' } = {}) {
   }
 }
 
+export async function pluggyDisconnectAllAction() {
+  const session = await requireUser();
+  const token = await getAccessToken(session.supabase);
+  if (!token) return { ok: false, error: 'Sessão expirada.' };
+  try {
+    const conn = await backendFetch('/open-finance/pluggy/connections', { token });
+    const itemIds = Array.isArray(conn?.itemIds) ? conn.itemIds : [];
+    if (!itemIds.length) return { ok: false, error: 'Nenhuma conexão Open Finance ativa.' };
+    for (const itemId of itemIds) {
+      await backendFetch('/open-finance/pluggy/disconnect', {
+        method: 'POST',
+        body: { itemId: String(itemId) },
+        token,
+      });
+    }
+    revalidateFinancePaths();
+    return { ok: true, disconnected: itemIds.length };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Falha ao desconectar Open Finance.' };
+  }
+}
+
 export async function pluggyDisconnectContaAction(contaId) {
   const session = await requireUser();
   const token = await getAccessToken(session.supabase);

@@ -251,6 +251,20 @@
   width: 100%;
 }
 
+.ofQuickActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.ofQuickHint {
+  margin: 0;
+  font-size: var(--fs-xs, 12px);
+  line-height: 1.4;
+  color: var(--mf-text-3);
+}
+
 .listFoot {
   display: flex;
   justify-content: flex-end;
