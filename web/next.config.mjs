@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Imagem da API no Docker/Easypanel pode usar `output: 'standalone'` quando for a vez do deploy web.
+  output: 'standalone',
   poweredByHeader: false,
   // As regras para agentes ficam no AGENTS.md da raiz do repo.
   agentRules: false,
