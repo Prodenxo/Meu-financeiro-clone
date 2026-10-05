@@ -25,7 +25,13 @@ export async function openFinancePlansAction() {
   if (!token) return { ok: false, error: 'Sessão expirada.' };
   try {
     const data = await backendFetch('/billing/open-finance/plans', { token });
-    return { ok: true, plans: data?.plans ?? [], stripeConfigured: Boolean(data?.stripeConfigured) };
+    return {
+      ok: true,
+      plans: data?.plans ?? [],
+      stripeConfigured: Boolean(data?.stripeConfigured),
+      checkoutEnabled: Boolean(data?.checkoutEnabled),
+      checkoutDisabledMessage: data?.checkoutDisabledMessage || '',
+    };
   } catch (e) {
     return { ok: false, error: e.message || 'Não foi possível carregar os planos.' };
   }

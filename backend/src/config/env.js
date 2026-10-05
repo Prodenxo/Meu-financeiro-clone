@@ -326,6 +326,12 @@ export const env = {
    * Por defeito `true` para o limite na plataforma acompanhar o contratado na Stripe. Defina `false` para só ajustar limite à mão.
    */
   STRIPE_SYNC_MAX_MEI: process.env.STRIPE_SYNC_MAX_MEI || "true",
+  /**
+   * Loja Open Finance (checkout Stripe + nova conexão Pluggy). `false` por padrão até o checkout estar pronto.
+   * Defina `OPEN_FINANCE_CHECKOUT_ENABLED=true` no Easypanel quando liberar a compra.
+   */
+  OPEN_FINANCE_CHECKOUT_ENABLED:
+    String(process.env.OPEN_FINANCE_CHECKOUT_ENABLED || "false").toLowerCase() === "true",
   /** ScrumHub — chamados de suporte (proxy server-side; nunca expor API Key no frontend). */
   SCRUMHUB_API_KEY: normalizeEnvSecret(process.env.SCRUMHUB_API_KEY || ""),
   SCRUMHUB_TICKET_SLUG: (process.env.SCRUMHUB_TICKET_SLUG || "").trim(),

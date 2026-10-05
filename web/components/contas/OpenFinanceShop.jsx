@@ -20,6 +20,8 @@ export function OpenFinanceShop({ block = true, onSynced }) {
   const [open, setOpen] = useState(false);
   const [plans, setPlans] = useState([]);
   const [stripeConfigured, setStripeConfigured] = useState(false);
+  const [checkoutEnabled, setCheckoutEnabled] = useState(false);
+  const [checkoutDisabledMessage, setCheckoutDisabledMessage] = useState('');
   const [selected, setSelected] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -33,8 +35,14 @@ export function OpenFinanceShop({ block = true, onSynced }) {
     }
     setPlans(res.plans || []);
     setStripeConfigured(Boolean(res.stripeConfigured));
+    setCheckoutEnabled(Boolean(res.checkoutEnabled));
+    setCheckoutDisabledMessage(String(res.checkoutDisabledMessage || '').trim());
     if (res.plans?.length && !selected) setSelected(res.plans[0].id);
   }, [selected]);
+
+  useEffect(() => {
+    loadPlans();
+  }, [loadPlans]);
 
   useEffect(() => {
     if (searchParams.get('of_paid') === '1') {
@@ -58,7 +66,7 @@ export function OpenFinanceShop({ block = true, onSynced }) {
   };
 
   const checkout = () => {
-    if (!selected) return;
+    if (!checkoutEnabled || !selected) return;
     setError('');
     startTransition(async () => {
       const res = await openFinanceCheckoutAction(selected);
@@ -74,7 +82,7 @@ export function OpenFinanceShop({ block = true, onSynced }) {
     <>
       <div className={cx(block && s.ofConnect)}>
         <Button variant="outline" icon="shopping-cart" block={block} onClick={() => setOpen(true)}>
-          Open Finance
+          {checkoutEnabled ? 'Open Finance' : 'Open Finance (em breve)'}
         </Button>
       </div>
 
@@ -101,55 +109,79 @@ export function OpenFinanceShop({ block = true, onSynced }) {
               </button>
             </header>
 
-            <p className={s.ofShopLead}>
-              Escolha quantas contas bancárias você quer sincronizar (extrato e saldo automáticos). Pagamento mensal
-              pelo Stripe: <strong>cartão</strong> ou <strong>boleto</strong>. PIX automático na assinatura ainda não
-              está disponível neste fluxo.
-            </p>
+            {checkoutEnabled ? (
+              <p className={s.ofShopLead}>
+                Escolha quantas contas bancárias você quer sincronizar (extrato e saldo automáticos). Pagamento mensal
+                pelo Stripe: <strong>cartão</strong> ou <strong>boleto</strong>. PIX automático na assinatura ainda não
+                está disponível neste fluxo.
+              </p>
+            ) : (
+              <p className={s.ofShopLead}>
+                Em breve você poderá contratar pacotes de contas bancárias com extrato e saldo automáticos por aqui.
+              </p>
+            )}
 
             {info ? <Alert tone="success">{info}</Alert> : null}
             {error ? <Alert tone="error">{error}</Alert> : null}
 
-            <div className={s.ofPlanGrid} role="radiogroup" aria-label="Planos Open Finance">
-              {plans.map((plan) => (
-                <label
-                  key={plan.id}
-                  className={cx(s.ofPlanCard, selected === plan.id && s.ofPlanCardActive)}
-                >
-                  <input
-                    type="radio"
-                    name="of-plan"
-                    value={plan.id}
-                    checked={selected === plan.id}
-                    onChange={() => setSelected(plan.id)}
-                  />
-                  <span className={s.ofPlanName}>{plan.label}</span>
-                  <span className={s.ofPlanPrice}>{formatBrlFromCents(plan.amountCents)}/mês</span>
-                </label>
-              ))}
-            </div>
-
-            <Button
-              icon="shopping-cart"
-              block
-              disabled={!stripeConfigured || !selected || isPending}
-              onClick={checkout}
-              aria-busy={isPending}
-            >
-              {isPending ? 'Abrindo pagamento…' : 'Ir para pagamento'}
-            </Button>
-
-            {!stripeConfigured ? (
+            {!checkoutEnabled ? (
               <Alert tone="info">
-                Pagamento ainda não configurado no servidor (STRIPE_SECRET_KEY). Peça ao suporte para ativar a
-                cobrança.
+                {checkoutDisabledMessage ||
+                  'A loja Open Finance está temporariamente fechada enquanto finalizamos o checkout. Fale com o suporte se precisar conectar bancos.'}
               </Alert>
             ) : null}
 
-            <div className={s.ofShopConnect}>
-              <p className={s.ofQuickHint}>Já assinou? Conecte seu banco:</p>
-              <OpenFinanceConnect block label="Conectar banco" onSynced={() => { onSynced?.(); setInfo('Banco conectado com sucesso.'); }} />
-            </div>
+            {checkoutEnabled ? (
+              <>
+                <div className={s.ofPlanGrid} role="radiogroup" aria-label="Planos Open Finance">
+                  {plans.map((plan) => (
+                    <label
+                      key={plan.id}
+                      className={cx(s.ofPlanCard, selected === plan.id && s.ofPlanCardActive)}
+                    >
+                      <input
+                        type="radio"
+                        name="of-plan"
+                        value={plan.id}
+                        checked={selected === plan.id}
+                        onChange={() => setSelected(plan.id)}
+                      />
+                      <span className={s.ofPlanName}>{plan.label}</span>
+                      <span className={s.ofPlanPrice}>{formatBrlFromCents(plan.amountCents)}/mês</span>
+                    </label>
+                  ))}
+                </div>
+
+                <Button
+                  icon="shopping-cart"
+                  block
+                  disabled={!stripeConfigured || !selected || isPending}
+                  onClick={checkout}
+                  aria-busy={isPending}
+                >
+                  {isPending ? 'Abrindo pagamento…' : 'Ir para pagamento'}
+                </Button>
+
+                {!stripeConfigured ? (
+                  <Alert tone="info">
+                    Pagamento ainda não configurado no servidor (STRIPE_SECRET_KEY). Peça ao suporte para ativar a
+                    cobrança.
+                  </Alert>
+                ) : null}
+
+                <div className={s.ofShopConnect}>
+                  <p className={s.ofQuickHint}>Já assinou? Conecte seu banco:</p>
+                  <OpenFinanceConnect
+                    block
+                    label="Conectar banco"
+                    onSynced={() => {
+                      onSynced?.();
+                      setInfo('Banco conectado com sucesso.');
+                    }}
+                  />
+                </div>
+              </>
+            ) : null}
           </div>
         </dialog>
       ) : null}

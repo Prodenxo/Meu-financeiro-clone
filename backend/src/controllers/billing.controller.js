@@ -8,6 +8,10 @@ export const getOpenFinancePlans = async (_req, res, next) => {
       {
         plans: ofBilling.listOpenFinancePlans(),
         stripeConfigured: ofBilling.isOpenFinanceBillingConfigured(),
+        checkoutEnabled: ofBilling.isOpenFinanceCheckoutEnabled(),
+        checkoutDisabledMessage: ofBilling.isOpenFinanceCheckoutEnabled()
+          ? null
+          : ofBilling.OPEN_FINANCE_CHECKOUT_DISABLED_MESSAGE,
       },
       'Planos Open Finance',
     );

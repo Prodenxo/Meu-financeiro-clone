@@ -8,6 +8,7 @@ import {
   syncPluggyContaForUser,
   syncPluggyItemForUser,
 } from '../services/openFinancePluggy.service.js';
+import { assertOpenFinanceCheckoutEnabled } from '../services/open-finance-billing.service.js';
 import { badRequest, serviceUnavailable } from '../utils/errors.js';
 
 export const getPluggyConnections = async (req, res, next) => {
@@ -35,6 +36,7 @@ export const getPluggyStatus = async (_req, res, next) => {
 
 export const postPluggyConnectToken = async (req, res, next) => {
   try {
+    assertOpenFinanceCheckoutEnabled();
     if (!isPluggyConfigured()) {
       return next(
         serviceUnavailable(
