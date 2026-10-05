@@ -116,6 +116,17 @@ export async function fetchPluggyAccountsByItem(itemId) {
   return Array.isArray(list) ? list : [];
 }
 
+export async function fetchPluggyAccount(accountId) {
+  if (!accountId) throw badRequest('accountId obrigatório.');
+  return fetchPluggy(`/accounts/${encodeURIComponent(accountId)}`);
+}
+
+/** Remove a conexão na Pluggy (consentimento Open Finance). */
+export async function deletePluggyItem(itemId) {
+  if (!itemId) throw badRequest('itemId obrigatório.');
+  return fetchPluggy(`/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+}
+
 function defaultSyncFromDate() {
   const d = new Date();
   d.setDate(d.getDate() - 90);

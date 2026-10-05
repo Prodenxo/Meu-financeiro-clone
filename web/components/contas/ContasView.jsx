@@ -5,6 +5,8 @@ import { Alert, Button, Card, EmptyState, Select, cx } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
 import { BankChips } from '@/components/dashboard/KpiRow';
 import { deleteContaAction } from '@/app/(app)/contas/actions';
+import { pluggyDisconnectContaAction, pluggySyncContaAction } from '@/app/(app)/contas/openFinanceActions';
+import { DisconnectOpenFinanceDialog } from './DisconnectOpenFinanceDialog';
 import { formatBrl } from '@/lib/finance/format';
 import { CONTA_TIPO_LABELS } from '@/lib/finance/contas';
 import { buildContasModel } from '@/lib/finance/contasPage';
@@ -34,6 +36,9 @@ export function ContasView({ data, todayKey }) {
   const [modal, setModal] = useState(null); // { conta } | null
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteError, setDeleteError] = useState('');
+  const [ofDisconnectTarget, setOfDisconnectTarget] = useState(null);
+  const [ofDisconnectError, setOfDisconnectError] = useState('');
+  const [ofBusyContaId, setOfBusyContaId] = useState(null);
   const [toast, setToast] = useState(null);
   const [isPending, startTransition] = useTransition();
 
@@ -66,6 +71,44 @@ export function ContasView({ data, todayKey }) {
     setMenuFor(null);
     setDeleteError('');
     setDeleteTarget(item.conta);
+  };
+
+  const onSyncOpenFinance = (item) => {
+    setMenuFor(null);
+    setOfBusyContaId(item.conta.id);
+    startTransition(async () => {
+      const res = await pluggySyncContaAction(item.conta.id, { mode: 'full' });
+      setOfBusyContaId(null);
+      if (res?.ok) {
+        const n = res.data?.transactionsCreated ?? 0;
+        setToast({
+          tone: 'success',
+          text: n > 0 ? `Extrato atualizado: ${n} movimentação(ões) nova(s).` : 'Extrato atualizado. Nenhuma movimentação nova no banco ainda.',
+        });
+      } else {
+        setToast({ tone: 'error', text: res?.error || 'Não foi possível atualizar o extrato.' });
+      }
+    });
+  };
+
+  const onDisconnectOpenFinance = (item) => {
+    setMenuFor(null);
+    setOfDisconnectError('');
+    setOfDisconnectTarget(item.conta);
+  };
+
+  const confirmOfDisconnect = () => {
+    const conta = ofDisconnectTarget;
+    if (!conta) return;
+    startTransition(async () => {
+      const res = await pluggyDisconnectContaAction(conta.id);
+      if (res?.ok) {
+        setOfDisconnectTarget(null);
+        setToast({ tone: 'success', text: `Open Finance desconectado de “${conta.nome}”. Você pode conectar de novo quando quiser.` });
+      } else {
+        setOfDisconnectError(res?.error || 'Não foi possível desconectar.');
+      }
+    });
   };
 
   const confirmDelete = () => {
@@ -185,7 +228,10 @@ export function ContasView({ data, todayKey }) {
                     onCloseMenu={closeMenu}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onSyncOpenFinance={onSyncOpenFinance}
+                    onDisconnectOpenFinance={onDisconnectOpenFinance}
                     busy={isPending}
+                    ofBusy={ofBusyContaId === item.conta.id}
                   />
                 ))}
               </div>
@@ -217,6 +263,16 @@ export function ContasView({ data, todayKey }) {
 
       {deleteTarget ? (
         <DeleteContaDialog conta={deleteTarget} pending={isPending} error={deleteError} onConfirm={confirmDelete} onClose={() => setDeleteTarget(null)} />
+      ) : null}
+
+      {ofDisconnectTarget ? (
+        <DisconnectOpenFinanceDialog
+          conta={ofDisconnectTarget}
+          pending={isPending}
+          error={ofDisconnectError}
+          onConfirm={confirmOfDisconnect}
+          onClose={() => setOfDisconnectTarget(null)}
+        />
       ) : null}
 
       {toast ? (

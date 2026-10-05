@@ -6,8 +6,8 @@
  * - Só conta arquivo de código (backend/, frontend/, web/, supabase/). Doc,
  *   .gitignore, .cursor/, README e afins não abrem ticket.
  * - Remoção pura (só arquivos apagados) não abre ticket.
- * - Enquanto não houver commit novo, o mesmo ticket é atualizado em vez de
- *   abrir outro. Commit novo = ticket novo.
+ * - Reaproveita ticket recente (12h) ou ticket interno **pendente** com o mesmo
+ *   título — evita fila cheia de duplicatas (ex.: vários "Visão BPO…").
  * - Título e texto em linguagem de gente: o que a pessoa vê na tela.
  *   Se existir ~/.cursor/scrumhub/nota-em-andamento.txt, a primeira linha
  *   vira o título e o resto vira a descrição (e o arquivo é apagado).
@@ -379,6 +379,39 @@ async function resolveStatusId(cookie) {
   return { result, statusId: Number(pendente?.id || list[0]?.id) || null };
 }
 
+function normalizeTituloTicket(nome) {
+  return String(nome || '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 48);
+}
+
+async function listarTicketsInternosProjeto(cookie) {
+  const result = await requestWithFallback(`/tickets-pai/projeto/${PROJECT_ID}`, { cookie });
+  const lista = Array.isArray(result.json?.data) ? result.json.data : (result.json?.tickets || []);
+  return lista.filter((t) => {
+    const v = t?.is_externo;
+    if (v === undefined || v === null) return true;
+    return v === false || Number(v) === 0;
+  });
+}
+
+/** Se já existir pendente com o mesmo título, atualiza em vez de criar outro. */
+async function buscarTicketInternoPendenteMesmoTitulo(cookie, nome) {
+  const alvo = normalizeTituloTicket(nome);
+  if (!alvo) return null;
+  const lista = await listarTicketsInternosProjeto(cookie);
+  const hit = lista.find((t) => {
+    if (normalizeTituloTicket(t.nome) !== alvo) return false;
+    const st = String(t?.status?.nome || t?.status_nome || '').toLowerCase();
+    return !st.includes('conclu');
+  });
+  return hit ? Number(hit.id) : null;
+}
+
 async function ticketEhExterno(id, cookie, state) {
   if ((state.criados || []).includes(id)) return false;
   const result = await requestWithFallback(`/tickets-pai/projeto/${PROJECT_ID}`, { cookie });
@@ -471,21 +504,38 @@ async function main() {
       return reply({ user_message: `[${reaproveitar ? `atualizaria #${state.ticketId}` : 'criaria ticket'}]\n${nome}\n\n${descricao}` });
     }
 
-    if (reaproveitar) {
-      const atualizado = await requestWithFallback(`/tickets-pai/${state.ticketId}`, {
+    const atualizarTicket = async (ticketId) => {
+      const atualizado = await requestWithFallback(`/tickets-pai/${ticketId}`, {
         method: 'PUT',
         body: { nome, descricao, prioridade: PRIORIDADE },
         cookie,
       });
       if (atualizado.ok && atualizado.json?.success !== false) {
         if (nota) fs.rmSync(notaFile, { force: true });
-        writeState({ ...readState(), fingerprint, at: new Date().toISOString(), sessionCookie: cookie, sessionAt: Date.now() });
-        return reply({ user_message: `Ticket #${state.ticketId} atualizado no ScrumHub.` });
+        writeState({
+          ...readState(),
+          fingerprint,
+          ticketId,
+          head,
+          at: new Date().toISOString(),
+          sessionCookie: cookie,
+          sessionAt: Date.now(),
+        });
+        return reply({ user_message: `Ticket #${ticketId} atualizado no ScrumHub.` });
       }
       const motivo = atualizado.json?.error || atualizado.json?.message || `HTTP ${atualizado.status}`;
       return reply({
-        user_message: `Não atualizei o ticket #${state.ticketId} (evitamos abrir duplicado): ${motivo}`,
+        user_message: `Não atualizei o ticket #${ticketId} (evitamos abrir duplicado): ${motivo}`,
       });
+    };
+
+    if (reaproveitar) {
+      return atualizarTicket(state.ticketId);
+    }
+
+    const mesmoTituloId = await buscarTicketInternoPendenteMesmoTitulo(cookie, nome);
+    if (mesmoTituloId) {
+      return atualizarTicket(mesmoTituloId);
     }
 
     const prazo = new Date();

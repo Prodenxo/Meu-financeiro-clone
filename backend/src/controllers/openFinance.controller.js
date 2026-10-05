@@ -1,8 +1,11 @@
 import { sendSuccess } from '../utils/response.js';
 import { createPluggyConnectToken, isPluggyConfigured } from '../services/pluggy.service.js';
 import {
+  disconnectPluggyContaForUser,
+  disconnectPluggyItemForUser,
   listUserPluggyItemIds,
   syncAllPluggyItemsForUser,
+  syncPluggyContaForUser,
   syncPluggyItemForUser,
 } from '../services/openFinancePluggy.service.js';
 import { badRequest, serviceUnavailable } from '../utils/errors.js';
@@ -47,6 +50,24 @@ export const postPluggyConnectToken = async (req, res, next) => {
   }
 };
 
+export const postPluggyDisconnect = async (req, res, next) => {
+  try {
+    const token = req.accessToken;
+    if (!token) return next(badRequest('Sessão inválida.'));
+    const itemId = String(req.body?.itemId || '').trim();
+    const contaId = String(req.body?.contaId || '').trim();
+    if (!contaId && !itemId) {
+      return next(badRequest('Informe contaId ou itemId para desconectar.'));
+    }
+    const data = contaId
+      ? await disconnectPluggyContaForUser(req.user.id, contaId, token)
+      : await disconnectPluggyItemForUser(req.user.id, itemId, token);
+    return sendSuccess(res, data, 'Open Finance desconectado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const postPluggySync = async (req, res, next) => {
   try {
     const itemId = String(req.body?.itemId || '').trim();
@@ -56,9 +77,12 @@ export const postPluggySync = async (req, res, next) => {
     }
     const mode = String(req.body?.mode || 'full').toLowerCase();
     const syncOptions = { importTransactions: mode !== 'balance' };
-    const data = itemId
-      ? await syncPluggyItemForUser(req.user.id, itemId, token, syncOptions)
-      : await syncAllPluggyItemsForUser(req.user.id, token, syncOptions);
+    const contaId = String(req.body?.contaId || '').trim();
+    const data = contaId
+      ? await syncPluggyContaForUser(req.user.id, contaId, token, syncOptions)
+      : itemId
+        ? await syncPluggyItemForUser(req.user.id, itemId, token, syncOptions)
+        : await syncAllPluggyItemsForUser(req.user.id, token, syncOptions);
     return sendSuccess(res, data, 'Open Finance sincronizado');
   } catch (error) {
     return next(error);

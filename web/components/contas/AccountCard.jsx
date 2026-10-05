@@ -49,10 +49,22 @@ export function AccountLogo({ conta, className, size = 40 }) {
  * Card de uma conta — logo, menu (editar/excluir), nome, tipo, saldo disponível e
  * última movimentação com atalho para as transações da conta.
  */
-export function AccountCard({ item, menuOpen, onToggleMenu, onCloseMenu, onEdit, onDelete, busy }) {
+export function AccountCard({
+  item,
+  menuOpen,
+  onToggleMenu,
+  onCloseMenu,
+  onEdit,
+  onDelete,
+  onSyncOpenFinance,
+  onDisconnectOpenFinance,
+  busy,
+  ofBusy,
+}) {
   const { conta, isDefault, saldo, tipoLabel, lastMovementKey } = item;
   const menuRef = useDismiss(menuOpen, onCloseMenu);
   const movementsHref = `/transacoes?conta=${encodeURIComponent(conta.id)}`;
+  const isOpenFinance = conta?.of_provider === 'pluggy' && conta?.of_external_id;
 
   return (
     <article className={s.accountCard} style={{ '--conta-cor': conta.cor || undefined }} aria-label={conta.nome}>
@@ -78,6 +90,28 @@ export function AccountCard({ item, menuOpen, onToggleMenu, onCloseMenu, onEdit,
               <Link href={movementsHref} role="menuitem" className={t.menuItem} onClick={onCloseMenu}>
                 <Icon name="arrow-left-right" size={16} /> Ver movimentações
               </Link>
+              {isOpenFinance ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={t.menuItem}
+                    disabled={ofBusy}
+                    onClick={() => onSyncOpenFinance?.(item)}
+                  >
+                    <Icon name="refresh-cw" size={16} /> Atualizar extrato
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={t.menuItem}
+                    disabled={ofBusy}
+                    onClick={() => onDisconnectOpenFinance?.(item)}
+                  >
+                    <Icon name="unplug" size={16} /> Desconectar banco
+                  </button>
+                </>
+              ) : null}
               <button type="button" role="menuitem" className={cx(t.menuItem, t.menuDanger)} onClick={() => onDelete(item)}>
                 <Icon name="trash" size={16} /> Excluir conta
               </button>
@@ -91,6 +125,7 @@ export function AccountCard({ item, menuOpen, onToggleMenu, onCloseMenu, onEdit,
           {conta.nome}
         </span>
         {isDefault ? <Pill tone="primary">Padrão</Pill> : null}
+        {isOpenFinance ? <Pill tone="neutral">Open Finance</Pill> : null}
       </div>
       <p className={s.accountType}>{tipoLabel}</p>
 

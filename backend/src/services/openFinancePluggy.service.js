@@ -10,6 +10,8 @@ import {
   shouldImportPluggyAccount,
 } from './pluggyAccountMapper.js';
 import {
+  deletePluggyItem,
+  fetchPluggyAccount,
   fetchPluggyAccountsByItem,
   fetchPluggyItem,
   fetchPluggyTransactionsForAccount,
@@ -331,6 +333,107 @@ export async function syncPluggyItemForUser(userId, itemId, auth, options = {}) 
     transactionsFetched,
     accountsIgnored,
   };
+}
+
+const OF_UNLINK_FIELDS = {
+  of_provider: null,
+  of_external_id: null,
+  of_last_synced_at: null,
+  of_institution_logo_url: null,
+};
+
+async function assertUserOwnsPluggyItem(supabase, userId, itemId) {
+  const { data, error } = await supabase
+    .from('open_finance_connections')
+    .select('item_id')
+    .eq('user_id', userId)
+    .eq('provider', 'pluggy')
+    .eq('item_id', itemId)
+    .maybeSingle();
+  if (error && /relation.*does not exist/i.test(error.message || '')) {
+    throw badRequest('Tabela de conexões Open Finance ausente. Rode a migration no Supabase.');
+  }
+  if (error) throw badRequest(error.message || 'Erro ao validar conexão.');
+  if (!data?.item_id) throw badRequest('Conexão Open Finance não encontrada para este usuário.');
+}
+
+/** Item Pluggy a partir da conta local (of_external_id = account id na Pluggy). */
+export async function resolvePluggyItemIdForConta(supabase, userId, contaId) {
+  const { data: conta, error } = await supabase
+    .from('contas_financeiras')
+    .select('of_provider, of_external_id')
+    .eq('id', contaId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw badRequest(error.message || 'Erro ao buscar conta.');
+  if (conta?.of_provider !== 'pluggy' || !conta?.of_external_id) {
+    throw badRequest('Esta conta não está vinculada ao Open Finance.');
+  }
+  const pluggyAccount = await fetchPluggyAccount(conta.of_external_id);
+  const itemId = String(pluggyAccount?.itemId ?? pluggyAccount?.item?.id ?? '').trim();
+  if (!itemId) throw badRequest('Não foi possível identificar a conexão do banco na Pluggy.');
+  return itemId;
+}
+
+/** Encerra consentimento na Pluggy, remove conexão salva e desvincula contas locais (mantém lançamentos). */
+export async function disconnectPluggyItemForUser(userId, itemId, auth) {
+  const trimmed = String(itemId || '').trim();
+  if (!trimmed) throw badRequest('itemId obrigatório.');
+
+  const supabase = resolveSupabaseForSync(auth);
+  await assertUserOwnsPluggyItem(supabase, userId, trimmed);
+
+  let accountExternalIds = [];
+  try {
+    const accounts = await fetchPluggyAccountsByItem(trimmed);
+    accountExternalIds = accounts.map((a) => String(a.id)).filter(Boolean);
+  } catch {
+    /* item pode já estar removido na Pluggy */
+  }
+
+  try {
+    await deletePluggyItem(trimmed);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/404|not found|não encontrado/i.test(msg)) {
+      throw badRequest(msg || 'Falha ao desconectar na Pluggy.');
+    }
+  }
+
+  const now = new Date().toISOString();
+  if (accountExternalIds.length) {
+    const { error: unlinkErr } = await supabase
+      .from('contas_financeiras')
+      .update({ ...OF_UNLINK_FIELDS, atualizado_em: now })
+      .eq('user_id', userId)
+      .eq('of_provider', 'pluggy')
+      .in('of_external_id', accountExternalIds);
+    if (unlinkErr) throw badRequest(unlinkErr.message || 'Erro ao desvincular contas.');
+  }
+
+  const { error: delConnErr } = await supabase
+    .from('open_finance_connections')
+    .delete()
+    .eq('user_id', userId)
+    .eq('provider', 'pluggy')
+    .eq('item_id', trimmed);
+  if (delConnErr && !/relation.*does not exist/i.test(delConnErr.message || '')) {
+    throw badRequest(delConnErr.message || 'Erro ao remover conexão salva.');
+  }
+
+  return { itemId: trimmed, unlinkedAccounts: accountExternalIds.length };
+}
+
+export async function disconnectPluggyContaForUser(userId, contaId, auth) {
+  const supabase = resolveSupabaseForSync(auth);
+  const itemId = await resolvePluggyItemIdForConta(supabase, userId, contaId);
+  return disconnectPluggyItemForUser(userId, itemId, auth);
+}
+
+export async function syncPluggyContaForUser(userId, contaId, auth, options = {}) {
+  const supabase = resolveSupabaseForSync(auth);
+  const itemId = await resolvePluggyItemIdForConta(supabase, userId, contaId);
+  return syncPluggyItemForUser(userId, itemId, auth, options);
 }
 
 /** Re-sincroniza todos os itens Pluggy já conectados do usuário. */

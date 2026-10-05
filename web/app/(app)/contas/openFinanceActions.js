@@ -90,6 +90,40 @@ export async function pluggyRefreshBalancesAction(itemId) {
   return pluggySyncItemAction(itemId || null, { mode: 'balance' });
 }
 
+export async function pluggySyncContaAction(contaId, { mode = 'full' } = {}) {
+  const session = await requireUser();
+  const token = await getAccessToken(session.supabase);
+  if (!token) return { ok: false, error: 'Sessão expirada.' };
+  try {
+    const data = await backendFetch('/open-finance/pluggy/sync', {
+      method: 'POST',
+      body: { contaId: String(contaId), mode },
+      token,
+    });
+    revalidateFinancePaths();
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Falha ao sincronizar extrato desta conta.' };
+  }
+}
+
+export async function pluggyDisconnectContaAction(contaId) {
+  const session = await requireUser();
+  const token = await getAccessToken(session.supabase);
+  if (!token) return { ok: false, error: 'Sessão expirada.' };
+  try {
+    const data = await backendFetch('/open-finance/pluggy/disconnect', {
+      method: 'POST',
+      body: { contaId: String(contaId) },
+      token,
+    });
+    revalidateFinancePaths();
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Falha ao desconectar Open Finance.' };
+  }
+}
+
 export async function pluggyConnectionsAction() {
   const session = await requireUser();
   const token = await getAccessToken(session.supabase);

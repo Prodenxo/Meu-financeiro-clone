@@ -8,5 +8,6 @@ router.get('/pluggy/status', requireAuth, controller.getPluggyStatus);
 router.get('/pluggy/connections', requireAuth, controller.getPluggyConnections);
 router.post('/pluggy/connect-token', requireAuth, controller.postPluggyConnectToken);
 router.post('/pluggy/sync', requireAuth, controller.postPluggySync);
+router.post('/pluggy/disconnect', requireAuth, controller.postPluggyDisconnect);
 
 export default router;
