@@ -6,6 +6,7 @@ import { Pill, cx } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
 import { formatBrl } from '@/lib/finance/format';
 import { resolveBankVisual } from '@/lib/finance/bankCatalog';
+import { BankLogoImage } from './BankLogoImage';
 import { formatDayKeyLong } from '@/lib/finance/contasPage';
 import t from '@/components/transactions/transactions.module.css';
 import s from './contas.module.css';
@@ -34,12 +35,12 @@ export function AccountLogo({ conta, className, size = 40 }) {
   const visual = resolveBankVisual(conta);
   return (
     <span className={className} style={{ background: visual.accent }}>
-      {visual.slug ? (
-        // eslint-disable-next-line @next/next/no-img-element -- SVG gerado no servidor, sem otimização
-        <img src={`/api/bank-icon/${visual.slug}?size=${size >= 40 ? 96 : 48}`} alt="" width={size} height={size} loading="lazy" />
-      ) : (
-        <span aria-hidden="true">{visual.initials}</span>
-      )}
+      <BankLogoImage
+        logoUrl={visual.logoUrl}
+        slug={visual.slug}
+        initials={visual.initials}
+        size={size}
+      />
     </span>
   );
 }

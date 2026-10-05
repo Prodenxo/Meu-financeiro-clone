@@ -33,6 +33,7 @@ export function normalizeContaRow(row) {
     dia_vencimento: row.dia_vencimento == null ? null : Number(row.dia_vencimento) || null,
     cor: row.cor ? String(row.cor) : null,
     instituicao_id: row.instituicao_id ? String(row.instituicao_id) : null,
+    of_institution_logo_url: row.of_institution_logo_url ? String(row.of_institution_logo_url).trim() : null,
     ativo: row.ativo !== false,
     criado_em: String(row.criado_em ?? ''),
     atualizado_em: String(row.atualizado_em ?? ''),

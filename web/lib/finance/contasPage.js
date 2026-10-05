@@ -74,7 +74,11 @@ const signedValor = (t) => (normalizarTipo(t.tipo) === 'entrada' ? 1 : -1) * nor
 /** Instituição para agrupar/mostrar: entrada do catálogo ou a própria conta. */
 export function institutionOf(conta) {
   const bank = findBankById(conta.instituicao_id) ?? findBankByNome(conta.nome);
-  return bank ? { key: `bank:${bank.id}`, nome: bank.nome, cor: bank.cor } : { key: `conta:${conta.id}`, nome: conta.nome, cor: conta.cor || '#64748B' };
+  const logoRaw = String(conta?.of_institution_logo_url || '').trim();
+  const logoUrl = /^https?:\/\//i.test(logoRaw) ? logoRaw : null;
+  return bank
+    ? { key: `bank:${bank.id}`, nome: bank.nome, cor: bank.cor, slug: bank.libraryNome, logoUrl }
+    : { key: `conta:${conta.id}`, nome: conta.nome, cor: conta.cor || '#64748B', slug: null, logoUrl };
 }
 
 /** Contas ativas (padrão primeiro) com saldo atual e última movimentação. */
@@ -103,6 +107,8 @@ export function buildInstitutionSummary(cards, { limit = 4 } = {}) {
   for (const { conta, saldo } of cards) {
     const inst = institutionOf(conta);
     const g = groups.get(inst.key) || { ...inst, saldo: 0 };
+    if (!g.logoUrl && inst.logoUrl) g.logoUrl = inst.logoUrl;
+    if (!g.slug && inst.slug) g.slug = inst.slug;
     g.saldo += saldo;
     groups.set(inst.key, g);
   }

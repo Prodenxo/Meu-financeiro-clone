@@ -7,6 +7,7 @@ import {
   mapPluggyAccountTipo,
   pickManualContaMergeCandidate,
   readPluggyAccountBalance,
+  readPluggyInstitutionLogoUrl,
   shouldImportPluggyAccount,
 } from '../src/services/pluggyAccountMapper.js';
 
@@ -59,6 +60,22 @@ describe('pluggyAccountMapper', () => {
       ),
       true,
     );
+  });
+
+  it('lê logo do conector Pluggy', () => {
+    const url = readPluggyInstitutionLogoUrl(
+      { connector: { imageUrl: 'https://cdn.pluggy.ai/logo.png' } },
+      null,
+    );
+    assert.equal(url, 'https://cdn.pluggy.ai/logo.png');
+  });
+
+  it('grava of_institution_logo_url na conta importada', () => {
+    const row = buildContaRowFromPluggyAccount(
+      { id: 'acc-2', name: 'PagBank', balance: 1, connector: { imageUrl: 'https://cdn.example/b.png' } },
+      { isNew: true, pluggyItem: null },
+    );
+    assert.equal(row.of_institution_logo_url, 'https://cdn.example/b.png');
   });
 
   it('inclui saldo_inicial só em conta nova', () => {

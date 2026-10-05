@@ -278,7 +278,7 @@ export async function syncPluggyItemForUser(userId, itemId, auth, options = {}) 
       continue;
     }
 
-    const payload = buildContaRowFromPluggyAccount(account, { isNew: !existing });
+    const payload = buildContaRowFromPluggyAccount(account, { isNew: !existing, pluggyItem: item });
 
     let localContaId = existing?.id;
 

@@ -3,21 +3,20 @@
 import { Card, CardHeader, EmptyState } from '@/components/ui';
 import { formatBrl } from '@/lib/finance/format';
 import { formatShare } from '@/lib/finance/contasPage';
-import { bankInitials, findBankById } from '@/lib/finance/bankCatalog';
+import { bankInitials } from '@/lib/finance/bankCatalog';
+import { BankLogoImage } from './BankLogoImage';
 import d from '@/components/dashboard/dashboard.module.css';
 import s from './contas.module.css';
 
 function InstLogo({ item }) {
-  const bank = item.key.startsWith('bank:') ? findBankById(item.key.slice(5)) : null;
-  const slug = bank?.libraryNome || null;
   return (
     <span className={s.instLogo} style={{ background: item.cor }}>
-      {slug ? (
-        // eslint-disable-next-line @next/next/no-img-element -- SVG gerado no servidor, sem otimização
-        <img src={`/api/bank-icon/${slug}?size=48`} alt="" width={28} height={28} loading="lazy" />
-      ) : (
-        <span aria-hidden="true">{bankInitials(item.nome)}</span>
-      )}
+      <BankLogoImage
+        logoUrl={item.logoUrl}
+        slug={item.slug}
+        initials={bankInitials(item.nome)}
+        size={28}
+      />
     </span>
   );
 }

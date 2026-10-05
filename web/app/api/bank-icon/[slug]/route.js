@@ -14,7 +14,7 @@ const CORE_REL = join('node_modules', '@edusites', 'bancos-brasil', 'src', 'core
 
 function findCorePath() {
   let dir = process.cwd();
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     const candidate = join(dir, CORE_REL);
     if (existsSync(candidate)) return candidate;
     const parent = resolve(dir, '..');

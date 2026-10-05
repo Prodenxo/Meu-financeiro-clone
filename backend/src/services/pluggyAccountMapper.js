@@ -72,6 +72,24 @@ export function localContaMatchesPluggyFingerprint(localConta, pluggyAccount) {
   );
 }
 
+/** URL da logo no conector Pluggy (PNG/JPG na CDN deles — não é SVG). */
+export function readPluggyInstitutionLogoUrl(account, pluggyItem) {
+  const candidates = [
+    account?.connector?.imageUrl,
+    account?.connector?.imageURL,
+    account?.connector?.logoUrl,
+    account?.institutionLogo,
+    pluggyItem?.connector?.imageUrl,
+    pluggyItem?.connector?.imageURL,
+    pluggyItem?.connector?.logoUrl,
+  ];
+  for (const raw of candidates) {
+    const url = String(raw || '').trim();
+    if (/^https?:\/\//i.test(url)) return url;
+  }
+  return null;
+}
+
 export function inferInstituicaoIdFromPluggyAccount(account) {
   const blob = [
     account?.name,
@@ -130,7 +148,7 @@ export function readPluggyAccountBalance(account) {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function buildContaRowFromPluggyAccount(account, { isNew }) {
+export function buildContaRowFromPluggyAccount(account, { isNew, pluggyItem } = {}) {
   const nome =
     String(account?.name || account?.marketingName || account?.number || '').trim() ||
     'Conta Open Finance';
@@ -140,6 +158,8 @@ export function buildContaRowFromPluggyAccount(account, { isNew }) {
   const limite = limiteRaw != null ? Number(limiteRaw) : null;
 
   const instituicao_id = inferInstituicaoIdFromPluggyAccount(account);
+
+  const logoUrl = readPluggyInstitutionLogoUrl(account, pluggyItem);
 
   const row = {
     nome,
@@ -158,6 +178,10 @@ export function buildContaRowFromPluggyAccount(account, { isNew }) {
 
   if (isNew) {
     row.saldo_inicial = readPluggyAccountBalance(account);
+  }
+
+  if (logoUrl) {
+    row.of_institution_logo_url = logoUrl;
   }
 
   return row;

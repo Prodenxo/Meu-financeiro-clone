@@ -84,10 +84,16 @@ export function bankInitials(nome) {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+function normalizeLogoUrl(url) {
+  const u = String(url || '').trim();
+  return /^https?:\/\//i.test(u) ? u : null;
+}
+
 /** Resolve o que a UI precisa para desenhar o ícone de uma conta. */
 export function resolveBankVisual(conta) {
   const bank = findBankById(conta.instituicao_id) ?? findBankByNome(conta.nome);
   return {
+    logoUrl: normalizeLogoUrl(conta?.of_institution_logo_url),
     slug: bank?.libraryNome ?? null,
     label: bank?.nome ?? conta.nome ?? 'Conta',
     accent: bank?.cor ?? conta.cor ?? '#64748B',
