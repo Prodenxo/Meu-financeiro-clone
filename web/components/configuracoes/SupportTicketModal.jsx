@@ -45,6 +45,10 @@ export function SupportTicketModal({ defaults, onClose }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [success, setSuccess] = useState(null);
+  const submitLockRef = useRef(false);
+  const idempotencyKeyRef = useRef(
+    typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `tk-${Date.now()}`,
+  );
 
   useEffect(() => {
     const el = dialogRef.current;
@@ -76,9 +80,11 @@ export function SupportTicketModal({ defaults, onClose }) {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (submitLockRef.current || submitting) return;
     const subject = assunto.trim();
     if (!subject) return setSubmitError('Informe o assunto do chamado.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(prazo)) return setSubmitError('Selecione uma data de prazo válida.');
+    submitLockRef.current = true;
 
     const fd = new FormData();
     fd.append('nome', subject);
@@ -92,15 +98,22 @@ export function SupportTicketModal({ defaults, onClose }) {
 
     setSubmitting(true);
     setSubmitError('');
+    let completed = false;
     try {
-      const res = await fetch('/api/support/tickets', { method: 'POST', body: fd });
+      const res = await fetch('/api/support/tickets', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKeyRef.current },
+        body: fd,
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.error) throw new Error(data?.error || 'Não foi possível abrir o chamado.');
       setSuccess({ message: data.message || 'Chamado criado com sucesso.', url: data.url || null });
+      completed = true;
     } catch (err) {
       setSubmitError(err?.message || 'Não foi possível abrir o chamado.');
     } finally {
       setSubmitting(false);
+      if (!completed) submitLockRef.current = false;
     }
   };
 

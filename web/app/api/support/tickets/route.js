@@ -56,9 +56,14 @@ export async function POST(request) {
 
   let res;
   try {
+    const idempotencyKey = String(request.headers.get('idempotency-key') || '').trim();
     res = await fetch(`${base}/support/tickets`, {
       method: 'POST',
-      headers: { Accept: 'application/json', Authorization: `Bearer ${session.access_token}` },
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+      },
       body: outgoing,
       cache: 'no-store',
     });

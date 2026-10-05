@@ -15,6 +15,8 @@ export const createTicket = async (req, res, next) => {
     const data = await scrumhubSupportService.createExternalTicket({
       body: req.body,
       files: req.files || [],
+      userId: req.user?.id,
+      idempotencyHeader: req.headers['idempotency-key'],
     })
     return sendCreated(res, data, data.message || 'Chamado criado')
   } catch (error) {

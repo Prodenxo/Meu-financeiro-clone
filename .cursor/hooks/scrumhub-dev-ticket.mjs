@@ -35,6 +35,7 @@ const REAPROVEITAR_TICKET_MS = 12 * 60 * 60 * 1000;
 const configDir = path.join(os.homedir(), '.cursor', 'scrumhub');
 const envFile = path.join(configDir, 'scrumhub.local.env');
 const stateFile = path.join(configDir, '.ticket-state-meu-financeiro-clone.json');
+const lockFile = path.join(configDir, '.ticket-lock-meu-financeiro-clone');
 const ticketFixadoFile = path.join(configDir, 'ticket-fixado-meu-financeiro-clone.txt');
 const credentialsHint = '~/.cursor/scrumhub/scrumhub.local.env';
 
@@ -95,6 +96,25 @@ function readState() {
 function writeState(state) {
   fs.mkdirSync(path.dirname(stateFile), { recursive: true });
   fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`);
+}
+
+function acquireHookLock() {
+  try {
+    const fd = fs.openSync(lockFile, 'wx');
+    fs.writeFileSync(fd, `${process.pid}\n`);
+    return fd;
+  } catch {
+    return null;
+  }
+}
+
+function releaseHookLock(fd) {
+  try {
+    if (typeof fd === 'number') fs.closeSync(fd);
+  } catch { /* ignore */ }
+  try {
+    fs.rmSync(lockFile, { force: true });
+  } catch { /* ignore */ }
 }
 
 /* ---------- o que mudou ---------- */
@@ -373,6 +393,9 @@ async function ticketEhExterno(id, cookie, state) {
 /* ---------- principal ---------- */
 
 async function main() {
+  const lockFd = acquireHookLock();
+  if (lockFd === null) return reply({});
+
   try {
     await drainStdin();
 
@@ -459,7 +482,10 @@ async function main() {
         writeState({ ...readState(), fingerprint, at: new Date().toISOString(), sessionCookie: cookie, sessionAt: Date.now() });
         return reply({ user_message: `Ticket #${state.ticketId} atualizado no ScrumHub.` });
       }
-      // Se o ticket foi apagado lá, cai para criar um novo.
+      const motivo = atualizado.json?.error || atualizado.json?.message || `HTTP ${atualizado.status}`;
+      return reply({
+        user_message: `Não atualizei o ticket #${state.ticketId} (evitamos abrir duplicado): ${motivo}`,
+      });
     }
 
     const prazo = new Date();
@@ -498,6 +524,8 @@ async function main() {
     return reply({ user_message: `Ticket interno criado: ${ORIGIN}/companies/${COMPANY_ID}/projects/${PROJECT_ID} (#${id || 'novo'})` });
   } catch (error) {
     return reply({ user_message: `Falha ao criar ticket interno: ${error instanceof Error ? error.message : String(error)}` });
+  } finally {
+    releaseHookLock(lockFd);
   }
 }
 

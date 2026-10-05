@@ -1,4 +1,39 @@
+import { createHash } from 'node:crypto'
 import { env } from '../config/env.js'
+
+const IDEMPOTENCY_TTL_MS = 2 * 60 * 1000
+/** @type {Map<string, { expiresAt: number, result: object }>} */
+const idempotencyCache = new Map()
+
+function readIdempotent(key) {
+  if (!key) return null
+  const hit = idempotencyCache.get(key)
+  if (!hit) return null
+  if (Date.now() > hit.expiresAt) {
+    idempotencyCache.delete(key)
+    return null
+  }
+  return hit.result
+}
+
+function storeIdempotent(key, result) {
+  if (!key) return
+  idempotencyCache.set(key, { expiresAt: Date.now() + IDEMPOTENCY_TTL_MS, result })
+}
+
+function buildIdempotencyKey({ userId, idempotencyHeader, body }) {
+  const header = String(idempotencyHeader || '').trim()
+  if (header && userId) return `u:${userId}:k:${header.slice(0, 128)}`
+  if (!userId) return ''
+  const fingerprint = createHash('sha256')
+    .update(String(userId))
+    .update(String(body?.nome || '').trim())
+    .update(String(body?.descricao || '').trim())
+    .update(String(body?.prazo || '').trim())
+    .update(String(body?.prioridade || '').trim())
+    .digest('hex')
+  return `u:${userId}:f:${fingerprint}`
+}
 
 const PRIORIDADES = new Set(['baixa', 'media', 'alta', 'critica'])
 const MAX_ANEXO_BYTES = 50 * 1024 * 1024
@@ -105,7 +140,11 @@ const appendAnexos = (formData, files = []) => {
   }
 }
 
-export const createExternalTicket = async ({ body, files = [] }) => {
+export const createExternalTicket = async ({ body, files = [], userId, idempotencyHeader }) => {
+  const idempotencyKey = buildIdempotencyKey({ userId, idempotencyHeader, body })
+  const cached = readIdempotent(idempotencyKey)
+  if (cached) return { ...cached, message: cached.message || 'Chamado já registrado (evitamos duplicar).' }
+
   const { base } = assertTicketsConfigured()
   const apiKey = await resolveApiKey()
 
@@ -151,12 +190,14 @@ export const createExternalTicket = async ({ body, files = [] }) => {
   }
 
   const ticket = payload?.data?.ticket || payload?.data || null
-  return {
+  const result = {
     ticket,
     url: payload?.data?.url || ticket?.url || null,
     status: payload?.data?.status || null,
     message: payload?.message || payload?.data?.message || 'Chamado criado com sucesso.',
   }
+  storeIdempotent(idempotencyKey, result)
+  return result
 }
 
 export { PRIORIDADES, MAX_ANEXO_BYTES }
