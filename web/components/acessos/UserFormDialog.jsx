@@ -111,7 +111,7 @@ export function UserFormDialog({ user = null, actorRole, actorUserId, empresas =
       onClose({
         ok: true,
         message: res.emailChanged
-          ? 'Dados salvos. Enviamos um link de confirmação para o novo e-mail; o login só muda após o clique.'
+          ? 'Dados salvos. O e-mail de login foi atualizado; o usuário entra com o novo endereço na próxima sessão.'
           : 'Dados do usuário salvos.',
       });
     });
@@ -170,7 +170,9 @@ export function UserFormDialog({ user = null, actorRole, actorUserId, empresas =
                     <Input id="uf-email" type="email" value={form.email} onChange={(e) => patch({ email: e.target.value })} placeholder="nome@empresa.com" autoComplete="off" />
                   </Field>
                 </div>
-                <p className={s.hint}>Ao trocar o e-mail, o usuário recebe um link de confirmação; o login só muda depois do clique.</p>
+                <p className={s.hint}>
+                  Ao trocar o e-mail, o login passa a ser o novo endereço (desde que ele não esteja em outra conta).
+                </p>
               </>
             ) : (
               <>

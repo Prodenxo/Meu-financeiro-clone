@@ -637,6 +637,60 @@ const toAuthUserSummary = (user) => ({
   phone: user.user_metadata?.phone || null
 });
 
+const normalizeAuthEmail = (value) => String(value || '').trim().toLowerCase();
+
+const authUserDisplayLabel = (user) => {
+  const meta = user?.user_metadata || {};
+  return (
+    meta.display_name
+    || meta.full_name
+    || meta.name
+    || user?.email
+    || user?.id
+    || 'Outro usuário'
+  );
+};
+
+/** Localiza dono do e-mail no Auth (listUsers + filtro; fallback paginado). */
+const findAuthUserByEmail = async (adminClient, email) => {
+  const target = normalizeAuthEmail(email);
+  if (!target) return null;
+
+  const { data: filteredData, error: filterError } = await adminClient.auth.admin.listUsers({
+    page: 1,
+    perPage: 100,
+    filter: target,
+  });
+  if (!filterError && filteredData?.users?.length) {
+    const hit = filteredData.users.find((u) => normalizeAuthEmail(u.email) === target);
+    if (hit) return hit;
+  }
+
+  for (let page = 1; page <= AUTH_LIST_USERS_MAX_PAGES; page += 1) {
+    const { data: { users }, error } = await adminClient.auth.admin.listUsers({
+      page,
+      perPage: AUTH_LIST_USERS_PAGE,
+    });
+    if (error || !users?.length) break;
+    const hit = users.find((u) => normalizeAuthEmail(u.email) === target);
+    if (hit) return hit;
+    if (users.length < AUTH_LIST_USERS_PAGE) break;
+  }
+
+  return null;
+};
+
+const assertEmailAvailableForUser = async (adminClient, email, userId) => {
+  const existing = await findAuthUserByEmail(adminClient, email);
+  if (!existing || existing.id === userId) return;
+  const label = authUserDisplayLabel(existing);
+  const emailHint = existing.email ? ` (${existing.email})` : '';
+  throw badRequest(
+    `Este e-mail já está na conta "${label}"${emailHint}. Troque o e-mail dali ou use outro endereço aqui.`,
+    { code: 'EMAIL_TAKEN', otherUserId: existing.id },
+  );
+};
+
 const fetchAllEmpresaUserLinks = async (adminClient, { role, empresaId }) => {
   const rows = [];
   let from = 0;
@@ -1318,9 +1372,10 @@ export const updateUser = async (accessToken, userId, input) => {
   if (requestedEmail) {
     const currentEmail = authUser?.email?.trim().toLowerCase() || '';
     if (currentEmail !== requestedEmail) {
-      // Sem email_confirm → Supabase envia link de confirmação para o novo endereço.
+      await assertEmailAvailableForUser(adminClient, requestedEmail, userId);
       const { error: updateEmailError } = await adminClient.auth.admin.updateUserById(userId, {
-        email: requestedEmail
+        email: requestedEmail,
+        email_confirm: true,
       });
       if (updateEmailError) {
         console.warn('[Users] updateUser email error:', updateEmailError.message);
