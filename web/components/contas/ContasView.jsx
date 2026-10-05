@@ -204,7 +204,10 @@ export function ContasView({ data, todayKey }) {
         </div>
 
         <aside className={d.asideCol}>
-          <AccountActions onNew={openNew} />
+          <AccountActions
+            onNew={openNew}
+            onOpenFinanceSynced={() => setToast({ tone: 'success', text: 'Contas do Open Finance atualizadas.' })}
+          />
           <InstitutionSummary institutions={model.institutions} total={model.total} />
           <RecentAccountMovements items={model.recent} />
         </aside>

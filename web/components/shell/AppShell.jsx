@@ -7,6 +7,7 @@ import { ShellNavProvider } from './ShellNavContext';
 import { Sidebar } from './Sidebar';
 import { MobileBar } from './MobileBar';
 import { ImpersonationBanner } from './ImpersonationBanner';
+import { OpenFinanceAutoSync } from '@/components/openFinance/OpenFinanceAutoSync';
 import s from './shell.module.css';
 
 function initialsOf(name) {
@@ -54,6 +55,7 @@ export async function AppShell({ session, children }) {
           <main className={s.content} id="conteudo">
             {children}
           </main>
+          <OpenFinanceAutoSync userId={session.userId} />
         </div>
       </div>
     </ShellNavProvider>

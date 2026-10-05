@@ -50,11 +50,19 @@ export function findBankById(id) {
 export function findBankByNome(nome) {
   const q = normalizeSearch(nome);
   if (!q) return undefined;
+  // PagSeguro antes de "inter" (evita falso positivo em "…INTERNET…")
+  if (/pagseguro|pagbank/.test(q)) return catalogById.get('pagbank');
+  if (/\bbanco inter\b|^inter\b|\binter\b/.test(q)) return catalogById.get('inter');
+
   const exact = BANK_CATALOG.find((b) => normalizeSearch(b.nome) === q);
   if (exact) return exact;
   return BANK_CATALOG.find((b) => {
-    if (normalizeSearch(b.nome).includes(q) || q.includes(normalizeSearch(b.nome))) return true;
-    return b.keywords?.some((k) => q.includes(normalizeSearch(k)) || normalizeSearch(k).includes(q));
+    const bn = normalizeSearch(b.nome);
+    if (bn.includes(q) || q.includes(bn)) return true;
+    return b.keywords?.some((k) => {
+      const kw = normalizeSearch(k);
+      return q.includes(kw) || kw.includes(q);
+    });
   });
 }
 
