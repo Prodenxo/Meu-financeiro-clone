@@ -9,6 +9,7 @@ import {
   syncPluggyItemForUser,
 } from '../services/openFinancePluggy.service.js';
 import { assertOpenFinanceCheckoutEnabled } from '../services/open-finance-billing.service.js';
+import { assertCanConnectNewBank } from '../services/open-finance-entitlement.service.js';
 import { badRequest, serviceUnavailable } from '../utils/errors.js';
 
 export const getPluggyConnections = async (req, res, next) => {
@@ -45,6 +46,10 @@ export const postPluggyConnectToken = async (req, res, next) => {
       );
     }
     const itemId = req.body?.itemId ? String(req.body.itemId).trim() : undefined;
+    const ownItemIds = itemId ? await listUserPluggyItemIds(req.user.id, req.accessToken) : [];
+    if (!itemId || !ownItemIds.includes(itemId)) {
+      await assertCanConnectNewBank(req.user.id, req.accessToken);
+    }
     const data = await createPluggyConnectToken(req.user.id, { itemId });
     return sendSuccess(res, data, 'Connect token gerado');
   } catch (error) {

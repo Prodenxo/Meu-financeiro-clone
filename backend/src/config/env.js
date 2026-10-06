@@ -327,11 +327,16 @@ export const env = {
    */
   STRIPE_SYNC_MAX_MEI: process.env.STRIPE_SYNC_MAX_MEI || "true",
   /**
-   * Loja Open Finance (checkout Stripe + nova conexão Pluggy). `false` por padrão até o checkout estar pronto.
-   * Defina `OPEN_FINANCE_CHECKOUT_ENABLED=true` no Easypanel quando liberar a compra.
+   * Loja Open Finance. `false` força fechada; `true` força aberta; omitido = abre se ASAAS ou Stripe existir.
    */
   OPEN_FINANCE_CHECKOUT_ENABLED:
-    String(process.env.OPEN_FINANCE_CHECKOUT_ENABLED || "false").toLowerCase() === "true",
+    String(process.env.OPEN_FINANCE_CHECKOUT_ENABLED || "").trim().toLowerCase() === "true",
+  /** Asaas — cobrança BR (PIX / assinatura). Use aspas no .env se a chave começar com `$`. */
+  ASAAS_API_KEY: normalizeEnvSecret(process.env.ASAAS_API_KEY || ""),
+  ASAAS_API_BASE_URL: (process.env.ASAAS_API_BASE_URL || "").trim().replace(/\/$/, ""),
+  ASAAS_SANDBOX: String(process.env.ASAAS_SANDBOX || "").toLowerCase() === "true",
+  /** Token opcional validado no webhook (`asaas-access-token` header). */
+  ASAAS_WEBHOOK_ACCESS_TOKEN: normalizeEnvSecret(process.env.ASAAS_WEBHOOK_ACCESS_TOKEN || ""),
   /** ScrumHub — chamados de suporte (proxy server-side; nunca expor API Key no frontend). */
   SCRUMHUB_API_KEY: normalizeEnvSecret(process.env.SCRUMHUB_API_KEY || ""),
   SCRUMHUB_TICKET_SLUG: (process.env.SCRUMHUB_TICKET_SLUG || "").trim(),

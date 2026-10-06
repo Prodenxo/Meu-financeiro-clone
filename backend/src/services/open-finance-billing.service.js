@@ -1,5 +1,6 @@
 import { env } from '../config/env.js';
 import { badRequest } from '../utils/errors.js';
+import { isAsaasConfigured } from './asaas-api.service.js';
 import { getStripe } from './stripe-billing.service.js';
 import { listOpenFinancePlans, resolveOpenFinancePlan } from './open-finance-billing-pricing.js';
 
@@ -9,7 +10,10 @@ export const OPEN_FINANCE_CHECKOUT_DISABLED_MESSAGE =
   'A compra de contas Open Finance ainda não está disponível. Estamos finalizando o checkout — fale com o suporte se precisar conectar bancos agora.';
 
 export function isOpenFinanceCheckoutEnabled() {
-  return env.OPEN_FINANCE_CHECKOUT_ENABLED === true;
+  const raw = String(process.env.OPEN_FINANCE_CHECKOUT_ENABLED ?? '').trim().toLowerCase();
+  if (raw === 'false' || raw === '0' || raw === 'no') return false;
+  if (env.OPEN_FINANCE_CHECKOUT_ENABLED === true) return true;
+  return isAsaasConfigured() || isOpenFinanceBillingConfigured();
 }
 
 export function assertOpenFinanceCheckoutEnabled() {

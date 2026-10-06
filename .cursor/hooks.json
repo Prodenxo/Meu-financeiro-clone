@@ -6,6 +6,12 @@
         "command": "node .cursor/hooks/scrumhub-dev-ticket.mjs",
         "timeout": 45
       }
+    ],
+    "sessionEnd": [
+      {
+        "command": "node .cursor/hooks/scrumhub-dev-ticket.mjs",
+        "timeout": 45
+      }
     ]
   }
 }

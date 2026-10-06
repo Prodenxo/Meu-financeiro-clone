@@ -318,6 +318,62 @@
   gap: var(--sp-2);
 }
 
+.ofPayTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 var(--sp-3);
+}
+
+.ofPayTab {
+  flex: 1;
+  min-width: 8rem;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--radius-md, 10px);
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-sm, 14px);
+  cursor: pointer;
+  color: var(--mf-text-2);
+}
+
+.ofPayTabActive {
+  border-color: var(--mf-primary);
+  background: var(--mf-primary-soft, rgba(91, 79, 233, 0.08));
+  color: var(--mf-text-1);
+  font-weight: 600;
+}
+
+.ofDocField {
+  margin-bottom: var(--sp-4);
+}
+
+.ofPixBox {
+  margin: var(--sp-3) 0;
+  padding: var(--sp-3);
+  border: 1px dashed var(--mf-border);
+  border-radius: var(--radius-md, 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.ofPixQr {
+  max-width: 220px;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm, 8px);
+}
+
+.ofPixCopy {
+  width: 100%;
+  font-size: var(--fs-xs, 12px);
+  word-break: break-all;
+  color: var(--mf-text-2);
+}
+
 .listFoot {
   display: flex;
   justify-content: flex-end;

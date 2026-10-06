@@ -19,16 +19,19 @@ async function siteOrigin() {
   return (process.env.NEXT_PUBLIC_SITE_URL || 'https://meiinfinito.com.br').replace(/\/$/, '');
 }
 
-export async function openFinancePlansAction() {
+export async function openFinancePlansAction({ fresh = false } = {}) {
   const session = await requireUser();
   const token = await getAccessToken(session.supabase);
   if (!token) return { ok: false, error: 'Sessão expirada.' };
   try {
-    const data = await backendFetch('/billing/open-finance/plans', { token });
+    const data = await backendFetch(`/billing/open-finance/plans${fresh ? '?fresh=1' : ''}`, { token });
     return {
       ok: true,
+      entitlement: data?.entitlement ?? null,
       plans: data?.plans ?? [],
       stripeConfigured: Boolean(data?.stripeConfigured),
+      asaasConfigured: Boolean(data?.asaasConfigured),
+      paymentConfigured: Boolean(data?.paymentConfigured),
       checkoutEnabled: Boolean(data?.checkoutEnabled),
       checkoutDisabledMessage: data?.checkoutDisabledMessage || '',
     };
@@ -37,22 +40,32 @@ export async function openFinancePlansAction() {
   }
 }
 
-export async function openFinanceCheckoutAction(planId) {
+export async function openFinanceCheckoutAction(planId, provider = 'stripe', cpfCnpj = '') {
   const session = await requireUser();
   const token = await getAccessToken(session.supabase);
   if (!token) return { ok: false, error: 'Sessão expirada.' };
   const origin = await siteOrigin();
+  const pay = String(provider || 'stripe').toLowerCase();
   try {
+    const body = {
+      planId: String(planId),
+      provider: pay === 'pix' || pay === 'asaas' ? 'asaas' : 'stripe',
+    };
+    if (body.provider === 'stripe') {
+      body.successUrl = `${origin}/contas?of_paid=1&session_id={CHECKOUT_SESSION_ID}`;
+      body.cancelUrl = `${origin}/contas`;
+    } else {
+      body.cpfCnpj = String(cpfCnpj || '').replace(/\D/g, '');
+    }
     const data = await backendFetch('/billing/open-finance/checkout', {
       method: 'POST',
       token,
-      body: {
-        planId: String(planId),
-        successUrl: `${origin}/contas?of_paid=1&session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${origin}/contas`,
-      },
+      body,
     });
-    return { ok: true, checkoutUrl: data?.checkoutUrl };
+    if (data?.provider === 'asaas') {
+      return { ok: true, provider: 'asaas', pix: data.pix, subscriptionId: data.subscriptionId };
+    }
+    return { ok: true, provider: 'stripe', checkoutUrl: data?.checkoutUrl };
   } catch (e) {
     return { ok: false, error: e.message || 'Não foi possível abrir o pagamento.' };
   }

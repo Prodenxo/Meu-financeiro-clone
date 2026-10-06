@@ -1,7 +1,6 @@
 /**
  * Planos Open Finance (contas conectadas via Pluggy).
- * Cobrança hoje: Stripe Checkout (assinatura — cartão/boleto no BR).
- * Para PIX recorrente ou Pix + assinatura nativa, integrar Asaas ou Mercado Pago (próxima etapa).
+ * Cobrança: Stripe (cartão/boleto) ou Asaas (assinatura PIX mensal).
  */
 export const OPEN_FINANCE_PLAN_IDS = ['of_1', 'of_3', 'of_10'];
 
