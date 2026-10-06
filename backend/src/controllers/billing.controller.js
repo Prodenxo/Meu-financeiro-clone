@@ -1,7 +1,10 @@
 import { sendCreated, sendSuccess } from '../utils/response.js';
 import { badRequest } from '../utils/errors.js';
 import { isAsaasConfigured } from '../services/asaas-api.service.js';
-import { createOpenFinanceAsaasPixCheckout } from '../services/open-finance-asaas.service.js';
+import {
+  createOpenFinanceAsaasPixCheckout,
+  getOpenFinanceAsaasPendingPix,
+} from '../services/open-finance-asaas.service.js';
 import {
   getOpenFinanceEntitlement,
   invalidateOpenFinanceEntitlement,
@@ -34,6 +37,15 @@ export const getOpenFinancePlans = async (req, res, next) => {
       },
       'Planos Open Finance',
     );
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const postOpenFinancePayPending = async (req, res, next) => {
+  try {
+    const data = await getOpenFinanceAsaasPendingPix(req.user.id);
+    return sendSuccess(res, data, 'PIX da mensalidade em aberto');
   } catch (error) {
     return next(error);
   }

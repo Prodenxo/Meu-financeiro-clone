@@ -1,6 +1,7 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { fetchPluggyItem } from './pluggy.service.js';
 import { syncPluggyItemForUser } from './openFinancePluggy.service.js';
+import { isOpenFinanceSyncPaused } from './open-finance-entitlement.service.js';
 
 const SYNC_EVENTS = new Set([
   'item/created',
@@ -80,6 +81,9 @@ export async function processPluggyWebhookPayload(payload) {
   const userId = await resolveUserIdForPluggyWebhook(payload);
   if (!userId) {
     return { skipped: true, reason: 'usuario_nao_encontrado', itemId };
+  }
+  if (await isOpenFinanceSyncPaused(userId)) {
+    return { skipped: true, reason: 'assinatura_em_aberto', userId, itemId };
   }
 
   const result = await syncPluggyItemForUser(userId, itemId, { useServiceRole: true });

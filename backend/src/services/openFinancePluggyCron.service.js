@@ -2,6 +2,7 @@ import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { isPluggyConfigured } from './pluggy.service.js';
 import { syncPluggyItemForUser } from './openFinancePluggy.service.js';
+import { isOpenFinanceSyncPaused } from './open-finance-entitlement.service.js';
 
 function minIntervalMs() {
   const min = Number(env.PLUGGY_CRON_MIN_INTERVAL_MINUTES);
@@ -52,7 +53,18 @@ export async function runOpenFinancePluggySyncJob(options = {}) {
   let skippedRecent = 0;
   let failed = 0;
 
+  const pausedByUser = new Map();
+  let skippedPaused = 0;
+
   for (const { userId, itemId, lastSyncedAt } of targets) {
+    if (!pausedByUser.has(userId)) {
+      pausedByUser.set(userId, await isOpenFinanceSyncPaused(userId).catch(() => false));
+    }
+    if (pausedByUser.get(userId)) {
+      skippedPaused += 1;
+      items.push({ userId, itemId, skipped: true, reason: 'assinatura_em_aberto' });
+      continue;
+    }
     if (!force && lastSyncedAt) {
       const t = new Date(lastSyncedAt).getTime();
       if (Number.isFinite(t) && now - t < intervalMs) {
@@ -88,6 +100,7 @@ export async function runOpenFinancePluggySyncJob(options = {}) {
     total: targets.length,
     synced,
     skippedRecent,
+    skippedPaused,
     failed,
     importTransactions,
     items,

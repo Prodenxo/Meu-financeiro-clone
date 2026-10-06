@@ -9,7 +9,10 @@ import {
   syncPluggyItemForUser,
 } from '../services/openFinancePluggy.service.js';
 import { assertOpenFinanceCheckoutEnabled } from '../services/open-finance-billing.service.js';
-import { assertCanConnectNewBank } from '../services/open-finance-entitlement.service.js';
+import {
+  assertCanConnectNewBank,
+  assertOpenFinanceSyncAllowed,
+} from '../services/open-finance-entitlement.service.js';
 import { badRequest, serviceUnavailable } from '../utils/errors.js';
 
 export const getPluggyConnections = async (req, res, next) => {
@@ -82,6 +85,7 @@ export const postPluggySync = async (req, res, next) => {
     if (!token) {
       return next(badRequest('Sessão inválida para sincronizar contas.'));
     }
+    await assertOpenFinanceSyncAllowed(req.user.id);
     const mode = String(req.body?.mode || 'full').toLowerCase();
     const syncOptions = { importTransactions: mode !== 'balance' };
     const contaId = String(req.body?.contaId || '').trim();

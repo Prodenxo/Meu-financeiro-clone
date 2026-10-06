@@ -112,6 +112,35 @@ async function fetchPixQrCode(paymentId) {
   }
 }
 
+/** PIX da mensalidade em aberto (próxima a vencer ou já vencida) da assinatura do usuário. */
+export async function getOpenFinanceAsaasPendingPix(userId) {
+  const customer = await findCustomerByExternalReference(userId);
+  const subscription = customer?.id ? await findUserSubscription(customer.id, userId) : null;
+  if (!subscription?.id) {
+    throw badRequest('Você ainda não tem assinatura da sincronização automática.', { code: 'OF_NO_SUBSCRIPTION' });
+  }
+  const payments = await listSubscriptionPayments(subscription.id);
+  const open = payments
+    .filter((p) => OPEN_STATUSES.has(String(p.status)))
+    .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0];
+  if (!open?.id) {
+    throw badRequest('Nenhuma mensalidade em aberto no momento.', { code: 'OF_NOTHING_TO_PAY' });
+  }
+  const pix = await fetchPixQrCode(open.id);
+  return {
+    provider: 'asaas',
+    subscriptionId: subscription.id,
+    paymentId: open.id,
+    dueDate: open.dueDate || null,
+    amountCents: Math.round(Number(open.value) * 100),
+    pix: {
+      payload: pix?.payload || '',
+      encodedImage: pix?.encodedImage || '',
+      expirationDate: pix?.expirationDate || null,
+    },
+  };
+}
+
 /**
  * Assinatura mensal PIX (Asaas). Se o usuário já tem assinatura, ajusta o valor/qtde de contas
  * nela mesma (cobrança nova a partir da próxima fatura) em vez de abrir outra.
@@ -137,8 +166,9 @@ export async function createOpenFinanceAsaasPixCheckout(userId, { planId, cpfCnp
     subscriptionId = existing.id;
     let payments = await listSubscriptionPayments(subscriptionId);
     const paid = payments.some((p) => PAID_STATUSES.has(String(p.status)));
+    const overdue = payments.some((p) => String(p.status) === 'OVERDUE');
     const currentSlots = resolveOpenFinancePlan(String(existing.externalReference).split(':')[1])?.slots || 0;
-    if (paid && currentSlots >= plan.slots) {
+    if (paid && !overdue && currentSlots >= plan.slots) {
       throw badRequest(
         `Sua assinatura já inclui ${currentSlots === 1 ? '1 conta' : `${currentSlots} contas`}.`,
         { code: 'OF_PLAN_ALREADY_COVERED' },
@@ -153,7 +183,7 @@ export async function createOpenFinanceAsaasPixCheckout(userId, { planId, cpfCnp
     }
     invalidateOpenFinanceEntitlement(userId);
     const open = payments.find((p) => OPEN_STATUSES.has(String(p.status)));
-    if (paid && !payments.some((p) => String(p.status) === 'OVERDUE')) {
+    if (paid && !overdue) {
       return { provider: 'asaas', upgraded: true, plan, subscriptionId };
     }
     payment = open || null;

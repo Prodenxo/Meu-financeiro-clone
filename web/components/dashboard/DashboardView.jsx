@@ -18,6 +18,7 @@ import { ExpensesByCategoryCard } from './ExpensesByCategoryCard';
 import { AccessRequestsCard } from './AccessRequestsCard';
 import { NewTransactionModal } from './NewTransactionModal';
 import { SyncPromoCard } from './SyncPromoCard';
+import { SyncRenewalNotice } from './SyncRenewalNotice';
 import { syncPromoVariant } from '@/lib/finance/syncPricing';
 import s from './dashboard.module.css';
 
@@ -117,7 +118,7 @@ export function DashboardView({
 
         <aside className={s.asideCol} aria-label="Resumo e ações">
           <QuickActions onNew={(tipo) => setModal({ tipo })} />
-          {syncPromo !== 'none' ? <SyncPromoCard variant={syncPromo} /> : null}
+          {syncPromo !== 'none' ? <SyncPromoCard variant={syncPromo} /> : <SyncRenewalNotice />}
           <AttentionCard pending={model.pending} hideValues={hideValues} />
           <BudgetsCard budgets={model.budgets} hideValues={hideValues} />
           <TodayCard flow={model.todayFlow} isCurrentMonth={isCurrentMonth} hideValues={hideValues} />

@@ -40,6 +40,18 @@ export async function openFinancePlansAction({ fresh = false } = {}) {
   }
 }
 
+export async function openFinancePayPendingAction() {
+  const session = await requireUser();
+  const token = await getAccessToken(session.supabase);
+  if (!token) return { ok: false, error: 'Sessão expirada.' };
+  try {
+    const data = await backendFetch('/billing/open-finance/pay-pending', { method: 'POST', token, body: {} });
+    return { ok: true, pix: data?.pix || null, dueDate: data?.dueDate || null, amountCents: data?.amountCents ?? null };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Não foi possível gerar o PIX da mensalidade.' };
+  }
+}
+
 export async function openFinanceCheckoutAction(planId, provider = 'stripe', cpfCnpj = '') {
   const session = await requireUser();
   const token = await getAccessToken(session.supabase);

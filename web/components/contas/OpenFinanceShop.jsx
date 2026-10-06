@@ -4,14 +4,21 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Alert, Button, Field, Input, cx } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
-import { openFinanceCheckoutAction, openFinancePlansAction } from '@/app/(app)/contas/billingActions';
+import {
+  openFinanceCheckoutAction,
+  openFinancePayPendingAction,
+  openFinancePlansAction,
+} from '@/app/(app)/contas/billingActions';
 import { isValidCnpjDigits, isValidCpfDigits, maskCnpj, maskCpf } from '@/lib/auth/validation';
 import {
   SYNC_BASE_CENTS,
   SYNC_EXTRA_CENTS,
   SYNC_MAX_ACCOUNTS,
   accountsLabel,
+  dueInLabel,
   formatCentsBrl,
+  formatDueDate,
+  renewalNotice,
   syncPlanId,
   syncPriceCents,
 } from '@/lib/finance/syncPricing';
@@ -143,6 +150,21 @@ export function OpenFinanceShop({ block = true, onSynced }) {
     (paymentProvider === 'asaas' && asaasConfigured) || (paymentProvider === 'stripe' && stripeConfigured);
   const needsDocument = paymentProvider === 'asaas' && !(licensed && entitlement?.source === 'asaas');
   const documentValid = isValidCpfCnpj(cpfCnpj);
+  const renewal = renewalNotice(entitlement?.billing);
+
+  const payPending = () => {
+    setError('');
+    setInfo('');
+    setPixCheckout(null);
+    startTransition(async () => {
+      const res = await openFinancePayPendingAction();
+      if (!res?.ok || !res.pix?.payload) {
+        setError(res?.error || 'Não foi possível gerar o PIX da mensalidade.');
+        return;
+      }
+      setPixCheckout(res.pix);
+    });
+  };
 
   const pay = (targetAccounts, provider) => {
     if (!checkoutEnabled) return;
@@ -186,10 +208,15 @@ export function OpenFinanceShop({ block = true, onSynced }) {
 
   const verifyPayment = async () => {
     const res = await loadPlans({ fresh: true });
-    if (res?.entitlement?.canConnect) {
+    const ent = res?.entitlement;
+    if (ent?.licensed && ent.billing?.paymentId !== entitlement?.billing?.paymentId) {
       setPixCheckout(null);
       setStep('offer');
-      setInfo('Pagamento confirmado. Agora é só conectar seu banco.');
+      setInfo(
+        ent.canConnect && ent.used === 0
+          ? 'Pagamento confirmado. Agora é só conectar seu banco.'
+          : 'Pagamento confirmado. Sua sincronização automática segue ativa.',
+      );
     } else {
       setInfo('Ainda não recebemos a confirmação do PIX. Pode levar alguns instantes.');
     }
@@ -357,8 +384,44 @@ export function OpenFinanceShop({ block = true, onSynced }) {
     </>
   );
 
+  const renewalBox =
+    renewal?.kind === 'due-soon' ? (
+      <div className={s.syncRenewal}>
+        <p className={s.syncRenewalText}>
+          Sua mensalidade
+          {renewal.amountCents ? ` de ${formatCentsBrl(renewal.amountCents)}` : ''} vence{' '}
+          <strong>{dueInLabel(renewal.daysLeft)}</strong> ({formatDueDate(renewal.dueDate)}).
+        </p>
+        {pixCheckout?.payload ? null : (
+          <Button variant="outline" size="sm" icon="credit-card" disabled={isPending} onClick={payPending}>
+            Pagar PIX agora
+          </Button>
+        )}
+      </div>
+    ) : null;
+
+  const renderPaused = () => (
+    <>
+      <p className={s.syncHeadline}>Sua sincronização está pausada.</p>
+      <p className={s.ofShopLead}>
+        A mensalidade
+        {renewal?.amountCents ? ` de ${formatCentsBrl(renewal.amountCents)}` : ''}
+        {renewal?.dueDate ? ` venceu em ${formatDueDate(renewal.dueDate)}` : ' está em aberto'}. Pague o PIX e suas
+        contas voltam a ser atualizadas automaticamente.
+      </p>
+      {pixCheckout?.payload ? null : (
+        <Button block icon="credit-card" disabled={isPending} aria-busy={isPending} onClick={payPending}>
+          {isPending ? 'Gerando PIX…' : 'Pagar e reativar'}
+        </Button>
+      )}
+      {pixBox}
+    </>
+  );
+
   const renderActive = () => (
     <>
+      {renewalBox}
+      {pixBox}
       <div className={s.syncSummary}>
         <span className={s.syncSummaryLabel}>{accountsLabel(used)}</span>
         <span className={s.syncSummaryValue}>{formatCentsBrl(syncPriceCents(slots))}/mês</span>
@@ -384,6 +447,7 @@ export function OpenFinanceShop({ block = true, onSynced }) {
     const upgradeProvider = entitlement?.source === 'asaas' ? 'asaas' : paymentProvider;
     return (
       <>
+        {renewalBox}
         <div className={s.syncSummary}>
           <span className={s.syncSummaryLabel}>{accountsLabel(used)}</span>
           <span className={s.syncSummaryValue}>{formatCentsBrl(syncPriceCents(slots))}/mês</span>
@@ -430,6 +494,8 @@ export function OpenFinanceShop({ block = true, onSynced }) {
         </Alert>
       </>
     );
+  } else if (!licensed && renewal?.kind === 'paused') {
+    content = renderPaused();
   } else if (licensed && entitlement?.canConnect) {
     content = renderActive();
   } else if (isUpgrade) {
@@ -464,7 +530,7 @@ export function OpenFinanceShop({ block = true, onSynced }) {
           <div className={m.body}>
             <header className={m.head}>
               <h2 className={m.title} id="of-shop-title">
-                {licensed ? 'Sincronização automática' : 'Automatize seu financeiro'}
+                {licensed || renewal?.kind === 'paused' ? 'Sincronização automática' : 'Automatize seu financeiro'}
               </h2>
               <button type="button" className={m.close} onClick={close} aria-label="Fechar" disabled={isPending}>
                 <Icon name="x" size={18} />

@@ -560,6 +560,24 @@
   color: var(--mf-text);
 }
 
+.syncRenewal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--mf-primary-soft);
+}
+
+.syncRenewalText {
+  margin: 0;
+  font-size: var(--fs-base);
+  color: var(--mf-text);
+}
+
 .syncCompare {
   display: flex;
   align-items: center;

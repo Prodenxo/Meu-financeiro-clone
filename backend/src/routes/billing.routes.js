@@ -7,6 +7,7 @@ const router = Router();
 
 router.get('/open-finance/plans', requireAuth, controller.getOpenFinancePlans);
 router.post('/open-finance/checkout', requireAuth, controller.postOpenFinanceCheckout);
+router.post('/open-finance/pay-pending', requireAuth, controller.postOpenFinancePayPending);
 router.post('/asaas/webhook', asaasWebhook.postAsaasWebhook);
 
 export default router;

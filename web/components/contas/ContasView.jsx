@@ -22,6 +22,7 @@ import { RecentAccountMovements } from './RecentAccountMovements';
 import { ContaModal } from './ContaModal';
 import { DeleteContaDialog } from './DeleteContaDialog';
 import { SyncPromoCard } from '@/components/dashboard/SyncPromoCard';
+import { SyncRenewalNotice } from '@/components/dashboard/SyncRenewalNotice';
 import { isSyncedConta } from '@/lib/finance/syncPricing';
 import s from './contas.module.css';
 
@@ -259,7 +260,11 @@ export function ContasView({ data, todayKey }) {
             onNew={openNew}
             onOpenFinanceSynced={() => setToast({ tone: 'success', text: 'Contas sincronizadas e movimentações atualizadas.' })}
           />
-          {data.contas.some(isSyncedConta) ? null : <SyncPromoCard variant="contas" href="/contas?sincronizar=1" />}
+          {data.contas.some(isSyncedConta) ? (
+            <SyncRenewalNotice />
+          ) : (
+            <SyncPromoCard variant="contas" href="/contas?sincronizar=1" />
+          )}
           <InstitutionSummary institutions={model.institutions} total={model.total} />
           <RecentAccountMovements items={model.recent} />
         </aside>
