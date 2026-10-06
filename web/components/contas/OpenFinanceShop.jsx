@@ -510,8 +510,32 @@ export function OpenFinanceShop({ block = true, onSynced }) {
     <>
       <div className={cx(block && s.ofConnect)}>
         <Button variant="outline" icon="refresh-cw" block={block} onClick={() => setOpen(true)}>
-          {licensed ? 'Sincronização automática' : 'Conectar meu banco'}
+          Conectar meu banco
         </Button>
+        {entitlement ? (
+          licensed ? (
+            <dl className={s.syncSlots}>
+              <div>
+                <dt>Contratadas</dt>
+                <dd>{slots}</dd>
+              </div>
+              <div>
+                <dt>Conectadas</dt>
+                <dd>{used}</dd>
+              </div>
+              <div>
+                <dt>Disponíveis</dt>
+                <dd>{Math.max(0, slots - used)}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className={s.ofQuickHint}>
+              {renewal?.kind === 'paused'
+                ? 'Sincronização pausada: mensalidade em aberto.'
+                : 'Nenhuma conta contratada. A partir de R$ 19,90/mês.'}
+            </p>
+          )
+        ) : null}
       </div>
 
       {open ? (

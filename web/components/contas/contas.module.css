@@ -560,6 +560,32 @@
   color: var(--mf-text);
 }
 
+.syncSlots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.syncSlots > div {
+  padding: var(--sp-2);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--r-sm);
+  text-align: center;
+}
+
+.syncSlots dt {
+  font-size: var(--fs-xs);
+  color: var(--mf-text-3);
+}
+
+.syncSlots dd {
+  margin: 2px 0 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--mf-text);
+}
+
 .syncRenewal {
   display: flex;
   flex-wrap: wrap;

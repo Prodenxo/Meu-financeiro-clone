@@ -143,7 +143,7 @@ export function ContasView({ data, todayKey }) {
         </div>
         <div className={t.headerActions}>
           <Button icon="plus" onClick={openNew}>
-            Nova conta
+            Nova conta (simulação)
           </Button>
         </div>
       </header>
