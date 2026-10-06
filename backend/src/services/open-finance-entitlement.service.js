@@ -101,13 +101,13 @@ export async function assertCanConnectNewBank(userId, accessToken) {
   const ent = await getOpenFinanceEntitlement(userId, accessToken);
   if (!ent.licensed) {
     throw badRequest(
-      'Para conectar um banco é preciso ter um plano Open Finance ativo. Contrate um plano e, após o pagamento, conecte aqui.',
+      'Para conectar um banco, ative a sincronização automática (a partir de R$ 19,90/mês). Depois do pagamento, conecte aqui.',
       { code: 'OF_LICENSE_REQUIRED' },
     );
   }
   if (!ent.canConnect) {
     throw badRequest(
-      `Seu plano permite ${ent.slots} ${ent.slots === 1 ? 'banco conectado' : 'bancos conectados'} e todos já estão em uso. Desconecte um banco ou contrate um plano maior.`,
+      `Sua assinatura inclui ${ent.slots === 1 ? '1 conta' : `${ent.slots} contas`} e todas já estão conectadas. Adicione mais uma conta por R$ 9,90/mês.`,
       { code: 'OF_SLOTS_EXHAUSTED' },
     );
   }

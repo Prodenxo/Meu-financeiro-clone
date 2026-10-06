@@ -4,6 +4,10 @@ import { badRequest } from '../utils/errors.js';
 import { asaasRequest } from './asaas-api.service.js';
 import { assertOpenFinanceCheckoutEnabled } from './open-finance-billing.service.js';
 import { resolveOpenFinancePlan } from './open-finance-billing-pricing.js';
+import { invalidateOpenFinanceEntitlement } from './open-finance-entitlement.service.js';
+
+const PAID_STATUSES = new Set(['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH']);
+const OPEN_STATUSES = new Set(['PENDING', 'OVERDUE']);
 
 function brDatePlusDays(days) {
   const d = new Date();
@@ -39,8 +43,11 @@ async function findCustomerByExternalReference(userId) {
 
 async function ensureAsaasCustomer(userId, cpfCnpj) {
   const existing = await findCustomerByExternalReference(userId);
+  if (!cpfCnpj && !isValidCpfOrCnpj(normalizeDocDigits(existing?.cpfCnpj))) {
+    throw badRequest('Informe um CPF ou CNPJ válido para gerar a cobrança PIX.', { code: 'CPF_CNPJ_INVALID' });
+  }
   if (existing?.id) {
-    if (normalizeDocDigits(existing.cpfCnpj) !== cpfCnpj) {
+    if (cpfCnpj && normalizeDocDigits(existing.cpfCnpj) !== cpfCnpj) {
       await asaasRequest(`/customers/${encodeURIComponent(existing.id)}`, {
         method: 'PUT',
         body: { cpfCnpj },
@@ -73,19 +80,22 @@ async function fetchFirstSubscriptionPayment(subscriptionId) {
   return list[0] || null;
 }
 
-async function findPendingSubscription(customerId, externalReference) {
+async function findUserSubscription(customerId, userId) {
   const json = await asaasRequest(
     `/subscriptions?customer=${encodeURIComponent(customerId)}&status=ACTIVE&limit=20`,
   );
-  const list = json?.data || [];
-  return list.find((s) => s.externalReference === externalReference && !s.deleted) || null;
+  const suffix = `:${userId}`;
+  const list = (json?.data || []).filter(
+    (s) => !s.deleted && String(s.externalReference || '').startsWith('of:') && String(s.externalReference).endsWith(suffix),
+  );
+  return list[0] || null;
 }
 
-async function fetchPendingSubscriptionPayment(subscriptionId) {
+async function listSubscriptionPayments(subscriptionId) {
   const json = await asaasRequest(
-    `/payments?subscription=${encodeURIComponent(subscriptionId)}&status=PENDING&limit=1&order=asc`,
+    `/payments?subscription=${encodeURIComponent(subscriptionId)}&limit=24&order=asc`,
   );
-  return (json?.data || [])[0] || null;
+  return json?.data || [];
 }
 
 async function fetchPixQrCode(paymentId) {
@@ -102,24 +112,52 @@ async function fetchPixQrCode(paymentId) {
   }
 }
 
-/** Assinatura mensal PIX (Asaas) para plano Open Finance. */
+/**
+ * Assinatura mensal PIX (Asaas). Se o usuário já tem assinatura, ajusta o valor/qtde de contas
+ * nela mesma (cobrança nova a partir da próxima fatura) em vez de abrir outra.
+ */
 export async function createOpenFinanceAsaasPixCheckout(userId, { planId, cpfCnpj }) {
   assertOpenFinanceCheckoutEnabled();
   const plan = resolveOpenFinancePlan(planId);
   if (!plan) throw badRequest('Plano Open Finance inválido.');
   const document = normalizeDocDigits(cpfCnpj);
-  if (!isValidCpfOrCnpj(document)) {
+  if (document && !isValidCpfOrCnpj(document)) {
     throw badRequest('Informe um CPF ou CNPJ válido para gerar a cobrança PIX.', { code: 'CPF_CNPJ_INVALID' });
   }
 
   const customerId = await ensureAsaasCustomer(userId, document);
   const externalReference = `of:${plan.id}:${userId}`;
+  const value = brlFromCents(plan.amountCents);
 
-  const pending = await findPendingSubscription(customerId, externalReference);
-  const pendingPayment = pending?.id ? await fetchPendingSubscriptionPayment(pending.id) : null;
+  let subscriptionId = null;
+  let payment = null;
 
-  let subscriptionId = pendingPayment ? pending.id : null;
-  let payment = pendingPayment;
+  const existing = await findUserSubscription(customerId, userId);
+  if (existing?.id) {
+    subscriptionId = existing.id;
+    let payments = await listSubscriptionPayments(subscriptionId);
+    const paid = payments.some((p) => PAID_STATUSES.has(String(p.status)));
+    const currentSlots = resolveOpenFinancePlan(String(existing.externalReference).split(':')[1])?.slots || 0;
+    if (paid && currentSlots >= plan.slots) {
+      throw badRequest(
+        `Sua assinatura já inclui ${currentSlots === 1 ? '1 conta' : `${currentSlots} contas`}.`,
+        { code: 'OF_PLAN_ALREADY_COVERED' },
+      );
+    }
+    if (existing.externalReference !== externalReference || Number(existing.value) !== value) {
+      await asaasRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+        method: 'PUT',
+        body: { value, externalReference, description: plan.name, updatePendingPayments: true },
+      });
+      payments = await listSubscriptionPayments(subscriptionId);
+    }
+    invalidateOpenFinanceEntitlement(userId);
+    const open = payments.find((p) => OPEN_STATUSES.has(String(p.status)));
+    if (paid && !payments.some((p) => String(p.status) === 'OVERDUE')) {
+      return { provider: 'asaas', upgraded: true, plan, subscriptionId };
+    }
+    payment = open || null;
+  }
 
   if (!subscriptionId) {
     const subscription = await asaasRequest('/subscriptions', {

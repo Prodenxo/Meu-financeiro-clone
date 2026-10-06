@@ -125,7 +125,7 @@ export function AccountCard({
           {conta.nome}
         </span>
         {isDefault ? <Pill tone="primary">Padrão</Pill> : null}
-        {isOpenFinance ? <Pill tone="neutral">Open Finance</Pill> : null}
+        {isOpenFinance ? <Pill tone="neutral">Sincronizada</Pill> : null}
       </div>
       <p className={s.accountType}>{tipoLabel}</p>
 

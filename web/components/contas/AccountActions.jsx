@@ -5,7 +5,7 @@ import { Button, Card, CardHeader } from '@/components/ui';
 import d from '@/components/dashboard/dashboard.module.css';
 import { OpenFinanceShop } from './OpenFinanceShop';
 
-/** Ações rápidas: nova conta manual e loja Open Finance (Stripe). */
+/** Ações rápidas: nova conta manual e sincronização bancária automática. */
 export function AccountActions({ onNew, onOpenFinanceSynced }) {
   return (
     <Card aria-labelledby="acc-actions-title">
@@ -16,8 +16,8 @@ export function AccountActions({ onNew, onOpenFinanceSynced }) {
         </Button>
         <Suspense
           fallback={
-            <Button variant="outline" icon="shopping-cart" block disabled>
-              Open Finance
+            <Button variant="outline" icon="refresh-cw" block disabled>
+              Conectar meu banco
             </Button>
           }
         >

@@ -35,7 +35,7 @@ export function DisconnectOpenFinanceDialog({ conta, pending, error, onConfirm, 
       <div className={m.body}>
         <header className={m.head}>
           <h2 className={m.title} id="of-disconnect-title">
-            Desconectar Open Finance
+            Desligar sincronização automática
           </h2>
           <button type="button" className={m.close} onClick={close} aria-label="Fechar" disabled={pending}>
             <Icon name="x" size={18} />
@@ -44,7 +44,7 @@ export function DisconnectOpenFinanceDialog({ conta, pending, error, onConfirm, 
         <p className={t.dialogText}>
           A conta <strong>{conta?.nome}</strong> deixa de receber extrato automático do banco. Os lançamentos que já
           entraram permanecem. Se o mesmo login tiver outras contas importadas juntas, todas serão desvinculadas — use
-          &quot;Conectar banco&quot; de novo para autorizar outra vez.
+          &quot;Conectar meu banco&quot; de novo para autorizar outra vez.
         </p>
         {error ? (
           <div style={{ marginTop: 16 }}>

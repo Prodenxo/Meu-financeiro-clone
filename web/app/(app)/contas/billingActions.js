@@ -63,7 +63,13 @@ export async function openFinanceCheckoutAction(planId, provider = 'stripe', cpf
       body,
     });
     if (data?.provider === 'asaas') {
-      return { ok: true, provider: 'asaas', pix: data.pix, subscriptionId: data.subscriptionId };
+      return {
+        ok: true,
+        provider: 'asaas',
+        upgraded: Boolean(data.upgraded),
+        pix: data.pix || null,
+        subscriptionId: data.subscriptionId,
+      };
     }
     return { ok: true, provider: 'stripe', checkoutUrl: data?.checkoutUrl };
   } catch (e) {

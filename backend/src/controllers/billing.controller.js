@@ -7,6 +7,10 @@ import {
   invalidateOpenFinanceEntitlement,
 } from '../services/open-finance-entitlement.service.js';
 import * as ofBilling from '../services/open-finance-billing.service.js';
+import {
+  OPEN_FINANCE_BASE_CENTS,
+  OPEN_FINANCE_EXTRA_CENTS,
+} from '../services/open-finance-billing-pricing.js';
 
 export const getOpenFinancePlans = async (req, res, next) => {
   try {
@@ -19,6 +23,7 @@ export const getOpenFinancePlans = async (req, res, next) => {
       {
         entitlement,
         plans: ofBilling.listOpenFinancePlans(),
+        pricing: { baseCents: OPEN_FINANCE_BASE_CENTS, extraCents: OPEN_FINANCE_EXTRA_CENTS },
         stripeConfigured,
         asaasConfigured,
         paymentConfigured: stripeConfigured || asaasConfigured,
@@ -37,7 +42,17 @@ export const getOpenFinancePlans = async (req, res, next) => {
 export const postOpenFinanceCheckout = async (req, res, next) => {
   try {
     const provider = String(req.body?.provider || 'stripe').trim().toLowerCase();
-    if (provider === 'asaas' || provider === 'pix') {
+    const isAsaas = provider === 'asaas' || provider === 'pix';
+    const entitlement = await getOpenFinanceEntitlement(req.user.id, req.accessToken);
+    if (entitlement.licensed && (!isAsaas || entitlement.source !== 'asaas')) {
+      return next(
+        badRequest(
+          'Para adicionar contas à sua assinatura atual, fale com o suporte.',
+          { code: 'OF_UPGRADE_UNSUPPORTED' },
+        ),
+      );
+    }
+    if (isAsaas) {
       const data = await createOpenFinanceAsaasPixCheckout(req.user.id, {
         planId: req.body?.planId,
         cpfCnpj: req.body?.cpfCnpj,
