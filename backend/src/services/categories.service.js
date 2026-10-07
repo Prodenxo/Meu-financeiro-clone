@@ -1,5 +1,6 @@
 import { createSupabaseClient } from '../config/supabase.js';
-import { badRequest, notFound } from '../utils/errors.js';
+import { HttpError, badRequest, notFound } from '../utils/errors.js';
+import { fetchAllPages } from './transactions.service.js';
 
 /** Cliente Supabase (service role) para leituras de orçamentos/resumo DRE; substituível em testes de paridade. */
 let getCategoriesBudgetReadClient = () => createSupabaseClient({ useServiceRole: true });
@@ -141,16 +142,33 @@ export const ensureGlobalCategoriesCopiedForUser = async (dbClient, userId) => {
   return { inserted: toInsert.length, budgetRows };
 };
 
-const parseValorOrcado = (valorOrcado) => {
+export const parseValorOrcado = (valorOrcado) => {
   if (valorOrcado === null || valorOrcado === undefined || valorOrcado === '') return null;
   const parsed = Number(String(valorOrcado).replace(',', '.'));
-  if (Number.isNaN(parsed)) throw badRequest('Valor do orçamento inválido');
-  return parsed;
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw badRequest('Informe um valor orçado válido.', { valor_orcado: 'Informe um valor orçado válido.' });
+  }
+  return Math.round(parsed * 100) / 100;
 };
 
-const getMonthStartDateString = (date = new Date()) => {
-  const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-  return monthStart.toISOString().split('T')[0];
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** `toISOString` desloca o dia conforme o fuso do servidor; a data civil local é a que vale. */
+export const formatLocalDate = (date) =>
+  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+
+const getMonthStartDateString = (date = new Date()) =>
+  formatLocalDate(new Date(date.getFullYear(), date.getMonth(), 1));
+
+/** Início do mês de `date` ("AAAA-MM-DD", "AAAA-MM-DDTHH:mm..." ou Date); string é lida sem fuso. */
+export const monthStartFromInput = (date) => {
+  if (typeof date === 'string') {
+    const match = /^(\d{4})-(\d{2})/.exec(date.trim());
+    if (match && Number(match[2]) >= 1 && Number(match[2]) <= 12) return `${match[1]}-${match[2]}-01`;
+  }
+  const parsed = date ? new Date(date) : new Date();
+  if (Number.isNaN(parsed.getTime())) throw badRequest('Mês inválido');
+  return getMonthStartDateString(parsed);
 };
 
 const ensureMonthlyBudgets = async (dbClient, userId, targetDate = new Date()) => {
@@ -199,11 +217,7 @@ const ensureMonthlyBudgets = async (dbClient, userId, targetDate = new Date()) =
 };
 
 const getYearMonthRange = (year) => {
-  const start = new Date(year, 0, 1);
-  const end = new Date(year, 11, 31);
-  const startDate = start.toISOString().split('T')[0];
-  const endDate = end.toISOString().split('T')[0];
-  return { startDate, endDate };
+  return { startDate: formatLocalDate(new Date(year, 0, 1)), endDate: formatLocalDate(new Date(year, 11, 31)) };
 };
 
 const getMonthRangeFromInput = (year, month) => {
@@ -215,9 +229,7 @@ const getMonthRangeFromInput = (year, month) => {
   }
   const start = new Date(year, month - 1, 1);
   const end = new Date(year, month, 0);
-  const startDate = start.toISOString().split('T')[0];
-  const endDate = end.toISOString().split('T')[0];
-  return { startDate, endDate, start };
+  return { startDate: formatLocalDate(start), endDate: formatLocalDate(end), start };
 };
 
 /** Mês civil 1–12 a partir de `data` em lançamento (YYYY-MM-DD ou ISO). */
@@ -484,26 +496,32 @@ export const listCategoryBudgets = async (userId) => {
 };
 
 export const upsertCategoryBudget = async (userId, payload) => {
-  const { categorias_id: categoriasId, valor_orcado: valorOrcado, date } = payload || {};
+  const { categorias_id: categoriasId, valor_orcado: valorOrcado, date, only_if_empty: onlyIfEmpty } = payload || {};
   const categoriaId = Number(categoriasId);
 
-  if (!categoriaId) throw badRequest('ID da categoria é obrigatório');
+  if (!categoriaId) throw badRequest('ID da categoria é obrigatório', { categorias_id: 'Selecione uma categoria.' });
+
+  const valorOrcadoNormalizado = parseValorOrcado(valorOrcado);
+  const currentMonthStart = monthStartFromInput(date);
 
   const dbClient = createSupabaseClient({ useServiceRole: true });
   await ensureUserCategory(dbClient, userId, categoriaId);
 
-  const valorOrcadoNormalizado = parseValorOrcado(valorOrcado);
-  const currentMonthStart = getMonthStartDateString(date ? new Date(date) : new Date());
-
   const { data: existing, error: existingError } = await dbClient
     .from('orçamentos')
-    .select('id')
+    .select('id, valor_orçado')
     .eq('user_id', userId)
     .eq('categorias_id', categoriaId)
     .eq('date', currentMonthStart)
     .maybeSingle();
 
   if (existingError) throw badRequest(existingError.message);
+
+  if (onlyIfEmpty && existing?.id && existing['valor_orçado'] != null) {
+    throw new HttpError(409, 'Esta categoria já tem orçamento neste mês.', {
+      categorias_id: 'Esta categoria já tem orçamento neste mês.',
+    });
+  }
 
   if (existing?.id) {
     const { data, error } = await dbClient
@@ -556,19 +574,21 @@ export const listCategoryBudgetsSummary = async (userId, { year, month } = {}) =
   if (budgetsError) throw badRequest(budgetsError.message);
 
   const startOfMonth = range?.startDate
-    || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+    || formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const endOfMonth = range?.endDate
-    || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0];
+    || formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
 
-  const { data: transactions, error: transactionsError } = await dbClient
-    .from('lancamentos_id')
-    .select('classificacao, valor, tipo, data')
-    .eq('user_id', userId)
-    .in('tipo', ['saida', 'saída'])
-    .gte('data', startOfMonth)
-    .lte('data', endOfMonth);
-
-  if (transactionsError) throw badRequest(transactionsError.message);
+  const transactions = await fetchAllPages((from, to) =>
+    dbClient
+      .from('lancamentos_id')
+      .select('id, classificacao, valor, tipo, data')
+      .eq('user_id', userId)
+      .in('tipo', ['saida', 'saída'])
+      .gte('data', startOfMonth)
+      .lte('data', endOfMonth)
+      .order('id', { ascending: true })
+      .range(from, to),
+  );
 
   const spentByCategoryName = new Map();
   (transactions || []).forEach((transaction) => {
@@ -578,16 +598,18 @@ export const listCategoryBudgetsSummary = async (userId, { year, month } = {}) =
     spentByCategoryName.set(key, current + Number(transaction.valor || 0));
   });
 
-  const { data: receivedTransactions, error: receivedError } = await dbClient
-    .from('lancamentos_id')
-    .select('classificacao, valor, tipo, data, status')
-    .eq('user_id', userId)
-    .eq('tipo', 'entrada')
-    .in('status', ['recebido', 'pago'])
-    .gte('data', startOfMonth)
-    .lte('data', endOfMonth);
-
-  if (receivedError) throw badRequest(receivedError.message);
+  const receivedTransactions = await fetchAllPages((from, to) =>
+    dbClient
+      .from('lancamentos_id')
+      .select('id, classificacao, valor, tipo, data, status')
+      .eq('user_id', userId)
+      .eq('tipo', 'entrada')
+      .in('status', ['recebido', 'pago'])
+      .gte('data', startOfMonth)
+      .lte('data', endOfMonth)
+      .order('id', { ascending: true })
+      .range(from, to),
+  );
 
   const receivedByCategoryName = new Map();
   (receivedTransactions || []).forEach((transaction) => {
@@ -654,14 +676,17 @@ export const duplicateMonthlyBudgets = async (userId, { year, month }) => {
   const updates = (previousBudgets || []).filter((budget) => existingMap.has(budget.categorias_id));
   const inserts = (previousBudgets || []).filter((budget) => !existingMap.has(budget.categorias_id));
 
-  await Promise.all(
+  const updateResults = await Promise.all(
     updates.map((budget) =>
       dbClient
         .from('orçamentos')
         .update({ 'valor_orçado': budget.valor_orçado })
         .eq('id', existingMap.get(budget.categorias_id))
+        .eq('user_id', userId)
     )
   );
+  const updateError = updateResults.find((result) => result?.error)?.error;
+  if (updateError) throw badRequest(updateError.message);
 
   if (inserts.length > 0) {
     const rows = inserts.map((budget) => ({
@@ -678,8 +703,11 @@ export const duplicateMonthlyBudgets = async (userId, { year, month }) => {
   }
 
   return {
+    sourceMonthStart: previousMonthStart,
     targetMonthStart,
-    duplicated: (previousBudgets || []).length
+    duplicated: (previousBudgets || []).length,
+    inserted: inserts.length,
+    updated: updates.length
   };
 };
 

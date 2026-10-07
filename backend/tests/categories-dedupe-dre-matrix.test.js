@@ -66,8 +66,17 @@ const createDupSupabaseMock = (fixture) => {
         state.filters.push(['in', field, vals]);
         return chain;
       },
+      order() {
+        return chain;
+      },
+      range(fromIdx, toIdx) {
+        state.range = [fromIdx, toIdx];
+        return chain;
+      },
       then(onFulfilled, onRejected) {
-        return Promise.resolve(execute(state)).then(onFulfilled, onRejected);
+        const result = execute(state);
+        if (state.range) result.data = result.data.slice(state.range[0], state.range[1] + 1);
+        return Promise.resolve(result).then(onFulfilled, onRejected);
       }
     };
     return chain;
