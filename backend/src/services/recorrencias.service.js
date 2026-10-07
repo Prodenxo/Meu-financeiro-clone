@@ -132,3 +132,14 @@ export const deleteRecorrencia = async (userId, id) => {
 
   if (error) throw badRequest(error.message);
 };
+
+export const listRecorrenciaSkips = async (userId) => {
+  const db = createSupabaseClient({ useServiceRole: true });
+  const { data, error } = await db
+    .from('recorrencia_skips')
+    .select('recorrencia_id, ano_mes')
+    .eq('user_id', userId);
+
+  if (error) throw badRequest(error.message);
+  return (data || []).map((s) => ({ recorrencia_id: String(s.recorrencia_id), ano_mes: String(s.ano_mes) }));
+};

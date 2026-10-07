@@ -38,3 +38,12 @@ export const deleteRecorrencia = async (req, res, next) => {
     return next(error);
   }
 };
+
+export const listRecorrenciaSkips = async (req, res, next) => {
+  try {
+    const data = await recorrenciasService.listRecorrenciaSkips(req.user.id);
+    return sendSuccess(res, data, 'Meses pulados listados');
+  } catch (error) {
+    return next(error);
+  }
+};

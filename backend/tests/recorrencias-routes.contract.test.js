@@ -16,6 +16,7 @@ const getRouteHandlers = (path, method) => {
 test('rotas de recorrências existem e usam requireAuth e controller correto', () => {
   const routes = [
     { method: 'get', path: '/', handler: controller.listRecorrencias },
+    { method: 'get', path: '/skips', handler: controller.listRecorrenciaSkips },
     { method: 'post', path: '/', handler: controller.createRecorrencia },
     { method: 'put', path: '/:id', handler: controller.updateRecorrencia },
     { method: 'delete', path: '/:id', handler: controller.deleteRecorrencia }

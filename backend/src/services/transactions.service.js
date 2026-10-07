@@ -42,6 +42,63 @@ const shouldRetryTipo = (errorMessage, tipoValue) => {
     msg.includes('violates check constraint');
 };
 
+const ANO_MES_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const PATCH_BLOCKED_KEYS = ['id', 'user_id', 'criado_em', 'recorrencia_id', 'recorrencia_ano_mes'];
+export const DELETE_SCOPES = ['este', 'futuros', 'todos'];
+
+/** Remove do patch campos que o cliente não pode alterar (dono, id, vínculo de recorrência). */
+export const sanitizeTransactionPatch = (updates = {}) => {
+  const patch = { ...updates };
+  for (const key of PATCH_BLOCKED_KEYS) delete patch[key];
+  return patch;
+};
+
+/** `escopo` da exclusão: ausente = 'este' (comportamento original). */
+export const parseDeleteScope = (raw) => {
+  if (raw == null || raw === '') return 'este';
+  const scope = String(raw).trim().toLowerCase();
+  if (!DELETE_SCOPES.includes(scope)) {
+    throw badRequest('escopo deve ser "este", "futuros" ou "todos"');
+  }
+  return scope;
+};
+
+/**
+ * Vínculo com a recorrência (lançar projeção ou primeiro lançamento de uma recorrência nova).
+ * Só aceita recorrência do próprio usuário; herda `categoria` dela, como o site.
+ */
+const resolveRecorrenciaLink = async (dbClient, userId, payload = {}) => {
+  const recorrenciaId = String(payload?.recorrencia_id || '').trim();
+  if (!recorrenciaId) return null;
+  const anoMes = String(payload?.recorrencia_ano_mes || '').trim();
+  if (!ANO_MES_RE.test(anoMes)) {
+    throw badRequest('recorrencia_ano_mes deve estar no formato AAAA-MM');
+  }
+  const { data: rec, error } = await dbClient
+    .from('recorrencias')
+    .select('id, categoria')
+    .eq('id', recorrenciaId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw badRequest(error.message);
+  if (!rec) throw badRequest('Recorrência não encontrada');
+  const link = { recorrencia_id: rec.id, recorrencia_ano_mes: anoMes };
+  if (rec.categoria != null) link.categoria = rec.categoria;
+  return link;
+};
+
+const assertContaBelongsToUser = async (dbClient, userId, contaId) => {
+  if (contaId == null || contaId === '') return;
+  const { data, error } = await dbClient
+    .from('contas_financeiras')
+    .select('id')
+    .eq('id', contaId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw badRequest(error.message);
+  if (!data) throw badRequest('Conta não encontrada');
+};
+
 export const listTransactions = async (userId) => {
   const dbClient = createSupabaseClient({ useServiceRole: true });
   const { data, error } = await dbClient
@@ -64,14 +121,17 @@ export const createTransaction = async (userId, payload) => {
 
   const statusNormalizado = normalizeTransactionStatus(tipoNormalizado, status || 'recebido');
   const dbClient = createSupabaseClient({ useServiceRole: true });
-  const contaId = await resolveContaIdForUser(dbClient, userId, {
-    conta_id: contaIdRaw,
-    conta: payload?.conta,
-    conta_nome: payload?.conta_nome,
-    contaNome: payload?.contaNome,
-    carteira: payload?.carteira,
-    wallet: payload?.wallet,
-  });
+  const contaId = payload?.sem_conta === true
+    ? null
+    : await resolveContaIdForUser(dbClient, userId, {
+      conta_id: contaIdRaw,
+      conta: payload?.conta,
+      conta_nome: payload?.conta_nome,
+      contaNome: payload?.contaNome,
+      carteira: payload?.carteira,
+      wallet: payload?.wallet,
+    });
+  const recorrenciaLink = await resolveRecorrenciaLink(dbClient, userId, payload);
 
   const tryInsert = async (tipoToUse) => {
     const row = {
@@ -84,6 +144,7 @@ export const createTransaction = async (userId, payload) => {
       user_id: userId,
     };
     if (contaId) row.conta_id = contaId;
+    if (recorrenciaLink) Object.assign(row, recorrenciaLink);
     return await dbClient
       .from('lancamentos_id')
       .insert([row])
@@ -103,10 +164,14 @@ export const createTransaction = async (userId, payload) => {
 };
 
 export const updateTransaction = async (userId, payload) => {
-  const { id, ...updates } = payload || {};
+  const { id } = payload || {};
   if (!id) throw badRequest('ID da transação é obrigatório');
+  const updates = sanitizeTransactionPatch(payload);
 
   const dbClient = createSupabaseClient({ useServiceRole: true });
+  if (updates.conta_id !== undefined) {
+    await assertContaBelongsToUser(dbClient, userId, updates.conta_id);
+  }
 
   let tipoForStatus = updates.tipo ? normalizeTipo(updates.tipo) : null;
   if (!tipoForStatus && updates.status != null) {
@@ -146,13 +211,49 @@ export const deleteTransaction = async (userId, body, query) => {
   const id = idFromQuery || idFromBody;
 
   if (!id) throw badRequest('ID da transação é obrigatório');
+  const scope = parseDeleteScope(query?.escopo ?? body?.escopo);
 
   const dbClient = createSupabaseClient({ useServiceRole: true });
-  const { error } = await dbClient
+  const { data: tx, error: readErr } = await dbClient
+    .from('lancamentos_id')
+    .select('id, data, recorrencia_id, recorrencia_ano_mes')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (readErr) throw badRequest(readErr.message);
+
+  if (scope === 'este') {
+    if (tx?.recorrencia_id && tx?.recorrencia_ano_mes) {
+      const { error: skipErr } = await dbClient
+        .from('recorrencia_skips')
+        .insert([{ user_id: userId, recorrencia_id: tx.recorrencia_id, ano_mes: tx.recorrencia_ano_mes }]);
+      if (skipErr && skipErr.code !== '23505') throw badRequest(skipErr.message);
+    }
+    const { error } = await dbClient
+      .from('lancamentos_id')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+    if (error) throw badRequest(error.message);
+    return;
+  }
+
+  if (!tx?.recorrencia_id) throw badRequest('Esta transação não faz parte de uma recorrência');
+  let del = dbClient
     .from('lancamentos_id')
     .delete()
-    .eq('id', id)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .eq('recorrencia_id', tx.recorrencia_id);
+  if (scope === 'futuros') {
+    if (!tx.data) throw badRequest('Dados insuficientes para excluir os futuros');
+    del = del.gte('data', tx.data);
+  }
+  const { error: delErr } = await del;
+  if (delErr) throw badRequest(delErr.message);
 
-  if (error) throw badRequest(error.message);
+  const recQuery = dbClient.from('recorrencias');
+  const { error: recErr } = scope === 'futuros'
+    ? await recQuery.update({ ativo: false }).eq('id', tx.recorrencia_id).eq('user_id', userId)
+    : await recQuery.delete().eq('id', tx.recorrencia_id).eq('user_id', userId);
+  if (recErr) throw badRequest(`Lançamentos excluídos, mas a recorrência não foi atualizada: ${recErr.message}`);
 };
