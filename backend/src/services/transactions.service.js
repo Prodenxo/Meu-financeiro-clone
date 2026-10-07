@@ -99,16 +99,35 @@ const assertContaBelongsToUser = async (dbClient, userId, contaId) => {
   if (!data) throw badRequest('Conta não encontrada');
 };
 
+/** O PostgREST devolve no máximo `max_rows` (1000) linhas por consulta. */
+export const LIST_PAGE_SIZE = 1000;
+
+/**
+ * Lê todas as páginas de uma consulta. `queryPage(from, to)` deve devolver `{ data, error }`
+ * com ordenação estável (senão uma linha pode aparecer em duas páginas).
+ */
+export const fetchAllPages = async (queryPage, pageSize = LIST_PAGE_SIZE) => {
+  const rows = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await queryPage(from, from + pageSize - 1);
+    if (error) throw badRequest(error.message);
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+};
+
 export const listTransactions = async (userId) => {
   const dbClient = createSupabaseClient({ useServiceRole: true });
-  const { data, error } = await dbClient
-    .from('lancamentos_id')
-    .select('*')
-    .eq('user_id', userId)
-    .order('criado_em', { ascending: false });
-
-  if (error) throw badRequest(error.message);
-  return data || [];
+  return fetchAllPages((from, to) =>
+    dbClient
+      .from('lancamentos_id')
+      .select('*')
+      .eq('user_id', userId)
+      .order('criado_em', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to),
+  );
 };
 
 export const createTransaction = async (userId, payload) => {

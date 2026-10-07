@@ -39,8 +39,8 @@ export const updateCategory = async (req, res, next) => {
 
 export const deleteCategory = async (req, res, next) => {
   try {
-    await categoriesService.deleteCategory(req.user.id, req.body, req.query);
-    return sendSuccess(res, { success: true }, 'Categoria removida');
+    const data = await categoriesService.deleteCategory(req.user.id, req.body, req.query);
+    return sendSuccess(res, { success: true, ...data }, 'Categoria removida');
   } catch (error) {
     return next(error);
   }

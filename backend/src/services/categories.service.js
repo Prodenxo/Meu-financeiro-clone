@@ -1,5 +1,5 @@
 import { createSupabaseClient } from '../config/supabase.js';
-import { badRequest } from '../utils/errors.js';
+import { badRequest, notFound } from '../utils/errors.js';
 
 /** Cliente Supabase (service role) para leituras de orçamentos/resumo DRE; substituível em testes de paridade. */
 let getCategoriesBudgetReadClient = () => createSupabaseClient({ useServiceRole: true });
@@ -289,9 +289,55 @@ export const listCategories = async (userId, tipo) => {
 export const mapCategoriesToMinimalRows = (rows) =>
   (rows || []).map(({ id, nome }) => ({ id, nome }));
 
+export const CATEGORY_NAME_MAX = 60;
+
+/** Para onde vão os lançamentos de uma categoria excluída (mesmos ids do app e do site). */
+export const DEFAULT_CATEGORY_ID = { saida: 62, entrada: 228 };
+
+/** Nome e tipo validados (mesmas regras do formulário do site). Com `partial`, o tipo pode faltar. */
+export const parseCategoryInput = (payload, { partial = false } = {}) => {
+  const nome = String(payload?.nome ?? '').trim();
+  const rawTipo = String(payload?.tipo ?? '').trim().toLowerCase();
+  const errors = {};
+  if (!nome) errors.nome = 'Informe o nome da categoria.';
+  else if (nome.length > CATEGORY_NAME_MAX) errors.nome = `Use até ${CATEGORY_NAME_MAX} caracteres.`;
+
+  let tipo = null;
+  if (rawTipo) {
+    tipo = normalizeTipo(rawTipo);
+    if (tipo !== 'entrada' && tipo !== 'saida') errors.tipo = 'O tipo deve ser entrada ou saída.';
+  } else if (!partial) {
+    errors.tipo = 'Informe o tipo da categoria.';
+  }
+
+  const messages = Object.values(errors);
+  if (messages.length > 0) throw badRequest(messages[0], errors);
+  return { nome, tipo };
+};
+
+export const isSameCategoryName = (a, b) => normalizeCategoryName(a) === normalizeCategoryName(b);
+
+/** Outra categoria com o mesmo nome (sem acento/caixa) e tipo; `ignoreId` = a que está sendo editada. */
+export const findDuplicateCategory = (categories, nome, tipo, ignoreId = null) => {
+  const key = categoryCopyKey(nome, tipo);
+  return (categories || []).find(
+    (cat) => (ignoreId == null || Number(cat.id) !== Number(ignoreId)) && categoryCopyKey(cat.nome, cat.tipo) === key,
+  ) || null;
+};
+
+const duplicateCategoryError = (duplicate, tipo) => {
+  const message = `Já existe a categoria "${duplicate.nome}" em ${tipo === 'entrada' ? 'entradas' : 'saídas'}.`;
+  return badRequest(message, { nome: message });
+};
+
+const parseCategoryId = (value) => {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) throw badRequest('ID da categoria é obrigatório');
+  return id;
+};
+
 export const createCategory = async (userId, payload) => {
-  const { nome, tipo } = payload || {};
-  if (!nome || !tipo) throw badRequest('Nome e tipo são obrigatórios');
+  const { nome, tipo } = parseCategoryInput(payload);
 
   const dbClient = createSupabaseClient({ useServiceRole: true });
   await ensureGlobalCategoriesCopiedForUser(dbClient, userId);
@@ -303,17 +349,12 @@ export const createCategory = async (userId, payload) => {
 
   if (existingError) throw badRequest(existingError.message);
 
-  const incomingKey = categoryCopyKey(nome, tipo);
-  const duplicate = (existingCategories || []).find(
-    (cat) => categoryCopyKey(cat.nome, cat.tipo) === incomingKey,
-  );
-  if (duplicate) {
-    throw badRequest(`Categoria "${nome}" (${normalizeTipo(tipo)}) já existe`);
-  }
+  const duplicate = findDuplicateCategory(existingCategories, nome, tipo);
+  if (duplicate) throw duplicateCategoryError(duplicate, tipo);
 
   const { data, error } = await dbClient
     .from('categorias_id')
-    .insert({ nome, tipo: normalizeTipo(tipo), user_id: userId })
+    .insert({ nome, tipo, user_id: userId })
     .select()
     .single();
 
@@ -333,41 +374,100 @@ export const createCategory = async (userId, payload) => {
   return data;
 };
 
+/**
+ * Edita nome/tipo (só esses campos) de uma categoria do próprio usuário.
+ * Lançamentos guardam a categoria pelo nome: renomear também renomeia os lançamentos,
+ * senão eles virariam "Sem categoria" (mesma regra do site).
+ */
 export const updateCategory = async (userId, payload) => {
-  const { id, ...updates } = payload || {};
-  if (!id) throw badRequest('ID da categoria é obrigatório');
+  const id = parseCategoryId(payload?.id);
 
   const dbClient = createSupabaseClient({ useServiceRole: true });
+  const { data: own, error: listError } = await dbClient
+    .from('categorias_id')
+    .select('id, nome, tipo')
+    .eq('user_id', userId);
+  if (listError) throw badRequest(listError.message);
+
+  const current = (own || []).find((cat) => Number(cat.id) === id);
+  if (!current) throw notFound('Categoria não encontrada');
+
+  const input = parseCategoryInput(payload, { partial: true });
+  const nome = input.nome;
+  const tipo = input.tipo || normalizeTipo(current.tipo);
+
+  const duplicate = findDuplicateCategory(own, nome, tipo, id);
+  if (duplicate) throw duplicateCategoryError(duplicate, tipo);
+
   const { data, error } = await dbClient
     .from('categorias_id')
-    .update({
-      ...updates,
-      ...(updates.tipo ? { tipo: normalizeTipo(updates.tipo) } : {})
-    })
+    .update({ nome, tipo })
     .eq('id', id)
     .eq('user_id', userId)
     .select()
     .single();
-
   if (error) throw badRequest(error.message);
-  return data;
+
+  let renamedTransactions = 0;
+  if (current.nome !== nome) {
+    const { data: renamed, error: txError } = await dbClient
+      .from('lancamentos_id')
+      .update({ classificacao: nome })
+      .eq('user_id', userId)
+      .eq('classificacao', current.nome)
+      .select('id');
+    if (txError) throw badRequest(`Categoria salva, mas os lançamentos não foram renomeados: ${txError.message}`);
+    renamedTransactions = (renamed || []).length;
+  }
+
+  return { ...data, renamed_transactions: renamedTransactions };
 };
 
+/**
+ * Exclui uma categoria do próprio usuário. Os lançamentos dela passam para a categoria
+ * padrão do tipo antes (o histórico financeiro não some); a própria padrão não pode ser excluída.
+ */
 export const deleteCategory = async (userId, body, query) => {
-  const idFromQuery = query?.id ? Number(query.id) : null;
-  const idFromBody = body?.id ? Number(body.id) : null;
-  const id = idFromQuery || idFromBody;
-
-  if (!id) throw badRequest('ID da categoria é obrigatório');
+  const id = parseCategoryId(query?.id ?? body?.id);
 
   const dbClient = createSupabaseClient({ useServiceRole: true });
+  const { data: categoria, error: catError } = await dbClient
+    .from('categorias_id')
+    .select('id, nome, tipo')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (catError) throw badRequest(catError.message);
+  if (!categoria) throw notFound('Categoria não encontrada');
+
+  const tipo = normalizeTipo(categoria.tipo) === 'entrada' ? 'entrada' : 'saida';
+  const { data: padrao, error: padraoError } = await dbClient
+    .from('categorias_id')
+    .select('nome')
+    .eq('id', DEFAULT_CATEGORY_ID[tipo])
+    .maybeSingle();
+  if (padraoError) throw badRequest(padraoError.message);
+  if (!padrao?.nome) throw badRequest('Não foi possível encontrar a categoria padrão.');
+  if (isSameCategoryName(padrao.nome, categoria.nome)) {
+    throw badRequest('Esta é a categoria padrão e não pode ser excluída.');
+  }
+
+  const { data: moved, error: moveError } = await dbClient
+    .from('lancamentos_id')
+    .update({ classificacao: padrao.nome })
+    .eq('user_id', userId)
+    .eq('classificacao', categoria.nome)
+    .select('id');
+  if (moveError) throw badRequest('Não foi possível mover os lançamentos da categoria. Nada foi excluído.');
+
   const { error } = await dbClient
     .from('categorias_id')
     .delete()
     .eq('id', id)
     .eq('user_id', userId);
+  if (error) throw badRequest('Não foi possível excluir a categoria.');
 
-  if (error) throw badRequest(error.message);
+  return { moved_to: padrao.nome, moved_transactions: (moved || []).length };
 };
 
 export const listCategoryBudgets = async (userId) => {
