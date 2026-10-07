@@ -1,6 +1,6 @@
 import { sendSuccess } from '../utils/response.js';
 import {
-  getRatesToBrl,
+  getRatesToBrlDetailed,
   listFrankfurterCurrencies,
 } from '../services/frankfurter.service.js';
 
@@ -19,8 +19,8 @@ export const getCotacoes = async (req, res, next) => {
     const codes = raw
       ? raw.split(/[,\s]+/).map((c) => c.trim()).filter(Boolean)
       : ['USD', 'EUR'];
-    const rates = await getRatesToBrl(codes);
-    return sendSuccess(res, { base: 'BRL', rates, updatedAt: new Date().toISOString() });
+    const { rates, sources, missing } = await getRatesToBrlDetailed(codes);
+    return sendSuccess(res, { base: 'BRL', rates, sources, missing, updatedAt: new Date().toISOString() });
   } catch (error) {
     return next(error);
   }
