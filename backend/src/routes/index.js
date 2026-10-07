@@ -18,6 +18,7 @@ import moedasGlobaisRoutes from './moedas-globais.routes.js';
 import supportRoutes from './support.routes.js';
 import openFinanceRoutes from './openFinance.routes.js';
 import billingRoutes from './billing.routes.js';
+import contasFinanceirasRoutes from './contas-financeiras.routes.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -40,4 +41,5 @@ router.use('/moedas-globais', moedasGlobaisRoutes);
 router.use('/support', supportRoutes);
 router.use('/open-finance', openFinanceRoutes);
 router.use('/billing', billingRoutes);
+router.use('/contas-financeiras', contasFinanceirasRoutes);
 export default router;
