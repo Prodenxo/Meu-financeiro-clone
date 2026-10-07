@@ -57,9 +57,9 @@ const makeAdminClient = ({
               };
             }
             return {
-              eq: () => ({
+              in: () => ({
                 eq: () => ({
-                  or: async () => ({ data: staleLinks, error: null })
+                  or: async () => ({ data: staleLinks.map((l) => ({ empresas_id: empresaId, ...l })), error: null })
                 })
               })
             };

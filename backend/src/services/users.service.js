@@ -317,6 +317,8 @@ const sumActiveStripeMeiSlotsByEmpresa = async (adminClient, empresaIds) => {
  * mas a UI tratava admin como liberado. Aqui: links mei=true/null → false quando módulo desligado;
  * `max_mei` > 0 sem ninguém com `mei=true` → volta para 0 (venda MEI é manual no admin).
  */
+const MEI_RECONCILE_CHUNK = 100;
+
 export const reconcileMeiModuleConsistency = async (
   adminClient,
   scopedEmpresaIds = [],
@@ -338,41 +340,50 @@ export const reconcileMeiModuleConsistency = async (
   const stripeByEmpresa = await sumActiveStripeMeiSlotsByEmpresa(adminClient, uniqueIds);
   const details = [];
   let clearedLinks = 0;
-  let resetEmpresas = 0;
+  const resetEmpresas = 0;
 
-  for (const empresa of empresas || []) {
-    const empresaId = empresa.id;
-    const stripeSlots = stripeByEmpresa.get(empresaId) || 0;
-    const dbMax = normalizeMaxMeiStored(empresa.max_mei);
-    const moduleShouldBeOff = dbMax <= 0 && stripeSlots <= 0;
+  // NOTE: Removed auto-reset of max_mei→0 when no active MEI users exist.
+  // The admin must be able to pre-configure MEI slots before linking users.
+  // max_mei is only set to 0 explicitly via the EmpresaModal toggle.
+  const offIds = (empresas || [])
+    .filter((empresa) => normalizeMaxMeiStored(empresa.max_mei) <= 0 && (stripeByEmpresa.get(empresa.id) || 0) <= 0)
+    .map((empresa) => empresa.id);
 
-    if (moduleShouldBeOff) {
-      const { data: staleLinks, error: staleError } = await adminClient
-        .from('role_x_user_x_empresa')
-        .select('id, user_id, mei')
-        .eq('empresas_id', empresaId)
-        .eq('status', true)
-        .or('mei.is.null,mei.eq.true');
+  // Em lotes: uma consulta por empresa deixa a lista de usuários lenta demais quando há muitas empresas.
+  const linkIdsByEmpresa = new Map();
+  for (let offset = 0; offset < offIds.length; offset += MEI_RECONCILE_CHUNK) {
+    const chunk = offIds.slice(offset, offset + MEI_RECONCILE_CHUNK);
+    const { data: staleLinks, error: staleError } = await adminClient
+      .from('role_x_user_x_empresa')
+      .select('id, empresas_id')
+      .in('empresas_id', chunk)
+      .eq('status', true)
+      .or('mei.is.null,mei.eq.true');
 
-      if (staleError) throw badRequest(staleError.message);
-
-      const linkIds = (staleLinks || []).map((link) => link.id).filter(Boolean);
-      if (linkIds.length > 0) {
-        clearedLinks += linkIds.length;
-        details.push({ empresaId, action: 'clear_link_mei', linkIds, dryRun });
-        if (!dryRun) {
-          const { error: updError } = await adminClient
-            .from('role_x_user_x_empresa')
-            .update({ mei: false })
-            .in('id', linkIds);
-          if (updError) throw badRequest(updError.message);
-        }
-      }
+    if (staleError) throw badRequest(staleError.message);
+    for (const link of staleLinks || []) {
+      if (!link?.id) continue;
+      const list = linkIdsByEmpresa.get(link.empresas_id) || [];
+      list.push(link.id);
+      linkIdsByEmpresa.set(link.empresas_id, list);
     }
+  }
 
-    // NOTE: Removed auto-reset of max_mei→0 when no active MEI users exist.
-    // The admin must be able to pre-configure MEI slots before linking users.
-    // max_mei is only set to 0 explicitly via the EmpresaModal toggle.
+  const allLinkIds = [];
+  for (const [empresaId, linkIds] of linkIdsByEmpresa) {
+    clearedLinks += linkIds.length;
+    details.push({ empresaId, action: 'clear_link_mei', linkIds, dryRun });
+    allLinkIds.push(...linkIds);
+  }
+
+  if (!dryRun) {
+    for (let offset = 0; offset < allLinkIds.length; offset += MEI_RECONCILE_CHUNK) {
+      const { error: updError } = await adminClient
+        .from('role_x_user_x_empresa')
+        .update({ mei: false })
+        .in('id', allLinkIds.slice(offset, offset + MEI_RECONCILE_CHUNK));
+      if (updError) throw badRequest(updError.message);
+    }
   }
 
   return { clearedLinks, resetEmpresas, details };
