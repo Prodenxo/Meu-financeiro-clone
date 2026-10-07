@@ -175,7 +175,36 @@ export const listPendingInvites = async (accessToken, query = {}) => {
 
   const { data, error } = await q;
   if (error) throw badRequest(error.message);
-  return { invites: data || [] };
+  const invites = data || [];
+  const names = await resolveCreatorNames(admin, invites.map((inv) => inv.created_by));
+  return { invites: invites.map((inv) => ({ ...inv, created_by_name: names.get(inv.created_by) || null })) };
+};
+
+/** Nome de quem criou cada convite: `profiles.display_name`, senão o e-mail da conta. */
+export const resolveCreatorNames = async (admin, ids) => {
+  const unique = [...new Set((ids || []).filter(Boolean))];
+  const names = new Map();
+  if (!unique.length) return names;
+  const { data: profiles } = await admin.from('profiles').select('id, display_name').in('id', unique);
+  for (const p of profiles || []) {
+    const name = String(p?.display_name || '').trim();
+    if (name) names.set(p.id, name);
+  }
+  await Promise.all(
+    unique
+      .filter((id) => !names.has(id))
+      .map(async (id) => {
+        try {
+          const { data } = await admin.auth.admin.getUserById(id);
+          const user = data?.user;
+          const name = String(user?.user_metadata?.display_name || user?.email || '').trim();
+          if (name) names.set(id, name);
+        } catch {
+          /* sem nome: a tela mostra "—" */
+        }
+      }),
+  );
+  return names;
 };
 
 /**
@@ -251,7 +280,7 @@ export const validateInviteToken = async (rawToken) => {
   };
 };
 
-const SELECT_INVITE_FOR_ACCEPT = 'id, empresas_id, expires_at, used_at, revoked_at';
+const SELECT_INVITE_FOR_ACCEPT = 'id, empresas_id, expires_at, used_at, revoked_at, is_reusable, uses_count';
 
 /**
  * Pós-cadastro (US-INV-03): com JWT da sessão recém-criada, consome um convite válido
@@ -284,15 +313,21 @@ export const acceptInvite = async (accessToken, rawToken, deps = {}) => {
   if (fetchErr) throw badRequest(fetchErr.message);
   if (!inviteRow?.id) throw badRequest('Convite inválido');
   if (inviteRow.revoked_at) throw badRequest('Convite revogado');
-  if (inviteRow.used_at) throw badRequest('Convite já utilizado');
+  const reusable = inviteRow.is_reusable === true;
+  // Reutilizável: continua valendo após cada cadastro (igual à validação pública e ao signup).
+  if (!reusable && inviteRow.used_at) throw badRequest('Convite já utilizado');
   if (new Date(inviteRow.expires_at) <= new Date()) throw badRequest('Convite expirado');
 
   const nowIso = new Date().toISOString();
-  const { data: claimed, error: claimErr } = await admin
+  const usesBefore = Number(inviteRow.uses_count) || 0;
+  // Corrida: único só se ainda não usado; reutilizável só se o contador não mudou no meio.
+  const claimBase = admin
     .from('empresa_invites')
-    .update({ used_at: nowIso })
-    .eq('id', inviteRow.id)
-    .is('used_at', null)
+    .update(reusable ? { uses_count: usesBefore + 1 } : { used_at: nowIso, uses_count: 1 })
+    .eq('id', inviteRow.id);
+  const { data: claimed, error: claimErr } = await (reusable
+    ? claimBase.eq('uses_count', usesBefore)
+    : claimBase.is('used_at', null))
     .is('revoked_at', null)
     .gt('expires_at', nowIso)
     .select('id, empresas_id')
@@ -304,7 +339,7 @@ export const acceptInvite = async (accessToken, rawToken, deps = {}) => {
   const releaseInvite = async () => {
     const { error: revErr } = await admin
       .from('empresa_invites')
-      .update({ used_at: null })
+      .update(reusable ? { uses_count: usesBefore } : { used_at: null, uses_count: usesBefore })
       .eq('id', claimed.id);
     if (revErr) {
       // eslint-disable-next-line no-console

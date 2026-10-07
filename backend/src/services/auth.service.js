@@ -13,6 +13,7 @@ import {
   buildPhoneLookupCandidates,
 } from './n8n-link-phone.service.js';
 import crypto from 'crypto';
+import { assertCanImpersonate, resolveAccessTarget } from './access-target.service.js';
 import {
   sendPasswordResetEmail,
   sendPasswordResetViaSupabase,
@@ -340,13 +341,14 @@ export const signUp = async ({ email, password, phone, displayName, inviteToken 
         empresaId = inviteData.empresas_id;
         
         if (inviteData.is_reusable) {
-          // Apenas incrementa o contador
-          await adminClient.rpc('increment_invite_uses', { invite_id: inviteData.id });
-          // Fallback caso a RPC não exista:
-          await adminClient
-            .from('empresa_invites')
-            .update({ uses_count: (inviteData.uses_count || 0) + 1 })
-            .eq('id', inviteData.id);
+          // Apenas incrementa o contador (RPC atômica; update direto só se a RPC não existir/falhar).
+          const { error: rpcErr } = await adminClient.rpc('increment_invite_uses', { invite_id: inviteData.id });
+          if (rpcErr) {
+            await adminClient
+              .from('empresa_invites')
+              .update({ uses_count: (inviteData.uses_count || 0) + 1 })
+              .eq('id', inviteData.id);
+          }
         } else {
           // Comportamento clássico: marca como usado
           await adminClient
@@ -724,58 +726,30 @@ export const impersonate = async (accessToken, targetUserId) => {
   if (!accessToken || !targetUserId) throw badRequest('Token e usuário alvo são obrigatórios');
 
   // 1. Resolve o contexto de quem está pedindo
-  const { userId, role, empresaId } = await resolveRequesterContext(accessToken);
-
-  if (role !== 'superadmin' && role !== 'admin') {
+  const requester = await resolveRequesterContext(accessToken);
+  if (requester.role !== 'superadmin' && requester.role !== 'admin') {
     throw forbidden('Apenas administradores podem acessar outras contas');
   }
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
 
-  // 2. Busca dados do usuário alvo (email e empresa)
+  // 2. Busca dados do usuário alvo (email, perfil e empresa — sempre com service role)
   const { data: targetUser, error: userErr } = await adminClient.auth.admin.getUserById(targetUserId);
   if (userErr || !targetUser?.user) throw badRequest('Usuário alvo não encontrado');
 
-  const { empresaId: targetEmpresaId } = await getResolvedRoleAndCompany({ 
-    userId: targetUserId, 
-    accessToken: null // Forçamos o uso do service role via getResolvedRoleAndCompany internally if possible or manual check
+  const target = await resolveAccessTarget(adminClient, targetUserId);
+
+  // 3. Validação de escopo (admin: só `usuario` da própria empresa; ninguém acessa superadmin)
+  assertCanImpersonate(requester, targetUserId, target);
+
+  console.info('[Impersonate]', {
+    requesterId: requester.userId,
+    requesterRole: requester.role,
+    targetUserId,
+    targetRole: target.role,
+    targetEmpresaId: target.empresaId,
+    at: new Date().toISOString(),
   });
-
-  // 3. Validação de Escopo
-  if (role === 'admin') {
-    // Garantir que temos o ID da empresa do alvo via service role
-    let finalTargetEmpresaId = targetEmpresaId;
-    if (!finalTargetEmpresaId) {
-      const { data: link } = await adminClient
-        .from('role_x_user_x_empresa')
-        .select('empresas_id')
-        .eq('user_id', targetUserId)
-        .eq('status', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      finalTargetEmpresaId = link?.empresas_id;
-    }
-
-    console.log('[Impersonate] Admin check:', { 
-      requesterId: userId,
-      requesterEmpresaId: empresaId, 
-      targetUserId,
-      targetEmpresaId: finalTargetEmpresaId 
-    });
-
-    if (!empresaId || empresaId !== finalTargetEmpresaId) {
-      // Mensagem detalhada para depuração (pode ser simplificada depois)
-      const msg = `Você só pode acessar usuários da sua própria empresa. (Sua: ${empresaId || 'null'}, Alvo: ${finalTargetEmpresaId || 'null'})`;
-      throw forbidden(msg);
-    }
-
-    // Segurança adicional: Admin não pode impersonar Superadmin
-    const { role: targetRole } = await getResolvedRoleAndCompany({ userId: targetUserId, accessToken: null });
-    if (targetRole === 'superadmin') {
-      throw forbidden('Administradores não podem acessar contas de Superadmin');
-    }
-  }
 
   // 4. Gera o link de acesso (silent magic link)
   const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({

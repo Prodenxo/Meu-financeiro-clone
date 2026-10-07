@@ -767,6 +767,10 @@ const buildAuthUserMapForIds = async (adminClient, userIds, seedUsers = []) => {
   return userMap;
 };
 
+/** Admin de empresa não recebe superadmins nem convidados da própria empresa (só gerencia usuário/admin). */
+export const isUserVisibleToRequester = (requesterRole, user) =>
+  requesterRole === 'superadmin' || (user?.role !== 'superadmin' && user?.role !== 'outsider');
+
 export const listUsers = async (accessToken, queryParams = {}) => {
   const { search } = queryParams;
   const { role, empresaId } = await getRequesterContext(accessToken);
@@ -892,7 +896,8 @@ export const listUsers = async (accessToken, queryParams = {}) => {
         expiresAt: link.expires_at ? new Date(link.expires_at).toISOString() : null
       };
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((u) => isUserVisibleToRequester(role, u));
 
   return { users: resultUsers };
 };
@@ -934,7 +939,7 @@ export const listEmpresas = async (accessToken) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   let query = adminClient
     .from('empresas')
-    .select('id, empresa, nome_fantasia, max_mei, max_usuarios_nao_mei, legacy_mei_slots_pix')
+    .select('id, empresa, nome_fantasia, cnpj, max_mei, max_usuarios_nao_mei, legacy_mei_slots_pix')
     .order('empresa', { ascending: true });
 
   if (role === 'admin') {
