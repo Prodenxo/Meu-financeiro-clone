@@ -20,6 +20,18 @@ test('GET / existe, exige auth e usa listContasFinanceiras', () => {
   assert.equal(handlers.includes(controller.listContasFinanceiras), true);
 });
 
+for (const [method, path, handler] of [
+  ['post', '/', 'createContaFinanceira'],
+  ['put', '/:id', 'updateContaFinanceira'],
+  ['delete', '/:id', 'deleteContaFinanceira'],
+]) {
+  test(`${method.toUpperCase()} ${path} existe, exige auth e usa ${handler}`, () => {
+    const handlers = getRouteHandlers(path, method);
+    assert.equal(handlers[0], requireAuth);
+    assert.equal(handlers.includes(controller[handler]), true);
+  });
+}
+
 test('router principal monta /contas-financeiras', () => {
   const mounted = indexRouter.stack.some((layer) => layer.handle === router);
   assert.equal(mounted, true);

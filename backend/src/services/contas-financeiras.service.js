@@ -8,6 +8,7 @@ import {
   resolveExplicitContaFromPayload,
 } from './conta-financeira-default.js';
 import { computeContaSaldoAtual, computeUnassignedSaldoDelta, formatGetSaldoMessage } from './conta-financeira-saldo.js';
+import { validateContaInput } from './conta-financeira-input.js';
 
 const CONTA_TIPOS = new Set(['corrente', 'poupanca', 'cartao_credito', 'dinheiro', 'outro']);
 
@@ -177,6 +178,71 @@ export const updateContaFinanceira = async (userId, payload = {}) => {
     .single();
   if (error) throw badRequest(error.message);
   return data;
+};
+
+const findOwnContaById = async (db, userId, contaId) => {
+  const id = String(contaId || '').trim();
+  if (!id) throw badRequest('Conta inválida.');
+  const { data, error } = await db
+    .from('contas_financeiras')
+    .select('id')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw badRequest(error.message);
+  if (!data) throw notFound('Conta não encontrada.');
+  return data;
+};
+
+const assertValidContaInput = (body) => {
+  const { errors, payload } = validateContaInput(body);
+  if (errors) throw badRequest('Revise os campos da conta.', errors);
+  return payload;
+};
+
+/** Cadastro pelo app — mesmas validações do site (`saveContaAction`). */
+export const createContaFinanceiraApp = async (userId, body = {}) => {
+  const payload = assertValidContaInput(body);
+  const db = createSupabaseClient({ useServiceRole: true });
+  const { data, error } = await db
+    .from('contas_financeiras')
+    .insert([{ ...payload, user_id: userId, atualizado_em: new Date().toISOString() }])
+    .select('*')
+    .single();
+  if (error) throw badRequest(error.message);
+  return data;
+};
+
+/** Edição pelo app; só altera conta do próprio usuário. */
+export const updateContaFinanceiraById = async (userId, contaId, body = {}) => {
+  const payload = assertValidContaInput(body);
+  const db = createSupabaseClient({ useServiceRole: true });
+  const row = await findOwnContaById(db, userId, contaId);
+  const { data, error } = await db
+    .from('contas_financeiras')
+    .update({ ...payload, atualizado_em: new Date().toISOString() })
+    .eq('id', row.id)
+    .eq('user_id', userId)
+    .select('*')
+    .single();
+  if (error) throw badRequest(error.message);
+  return data;
+};
+
+/**
+ * Exclusão pelo app, igual ao site: remove a linha; o banco (`ON DELETE SET NULL`) deixa os
+ * lançamentos vinculados sem conta — nenhum lançamento é apagado.
+ */
+export const deleteContaFinanceiraById = async (userId, contaId) => {
+  const db = createSupabaseClient({ useServiceRole: true });
+  const row = await findOwnContaById(db, userId, contaId);
+  const { error } = await db
+    .from('contas_financeiras')
+    .delete()
+    .eq('id', row.id)
+    .eq('user_id', userId);
+  if (error) throw badRequest(error.message);
+  return { id: row.id };
 };
 
 /** Desactiva carteira (ativo=false). Lançamentos mantêm conta_id histórico. */
