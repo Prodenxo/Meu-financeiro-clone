@@ -6,6 +6,7 @@ import * as activationController from '../controllers/activation.controller.js';
 const router = Router();
 
 router.get('/me/activation', requireAuth, activationController.getActivation);
+router.delete('/me', requireAuth, controller.deleteOwnAccount);
 router.get('/', requireAuth, controller.listUsers);
 router.get('/empresas', requireAuth, controller.listEmpresas);
 router.get('/empresas/cnpj-lookup/:cnpj', requireAuth, controller.lookupEmpresaCnpj);

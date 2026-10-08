@@ -1,4 +1,5 @@
 import * as usersService from '../services/users.service.js';
+import { deleteOwnAccount as deleteOwnAccountService } from '../services/account-deletion.service.js';
 import * as empresaCnpjOnboardingService from '../services/empresa-cnpj-onboarding.service.js';
 import { lookupCnpjCascade } from '../services/cnpj-lookup.service.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
@@ -93,6 +94,15 @@ export const deleteUser = async (req, res, next) => {
   try {
     const result = await usersService.deleteUser(req.accessToken, req.params.userId);
     return sendSuccess(res, result, 'Usuário excluído');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const deleteOwnAccount = async (req, res, next) => {
+  try {
+    const result = await deleteOwnAccountService(req.accessToken, req.body);
+    return sendSuccess(res, result, 'Conta excluída');
   } catch (error) {
     return next(error);
   }
