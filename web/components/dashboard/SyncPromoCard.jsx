@@ -68,7 +68,7 @@ export function SyncPromoCard({ variant = 'default', href = '/contas?sincronizar
       <Button block icon="link" onClick={() => router.push(href)}>
         {copy.cta}
       </Button>
-      <p className={s.syncPromoFoot}>Seu financeiro continua gratuito. Pague apenas se quiser automatizar.</p>
+      <p className={s.syncPromoFoot}>1 conta incluída por R$ 19,90/mês. Contas adicionais por R$ 9,90/mês.</p>
     </Card>
   );
 }

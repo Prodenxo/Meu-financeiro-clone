@@ -26,7 +26,7 @@ import { OpenFinanceConnect } from './OpenFinanceConnect';
 import m from '@/components/dashboard/modal.module.css';
 import s from './contas.module.css';
 
-const FREE_FEATURES = [
+const CURRENT_FEATURES = [
   'Controle de receitas e despesas',
   'Categorias',
   'Orçamentos',
@@ -36,7 +36,7 @@ const FREE_FEATURES = [
 ];
 
 const PLUS_FEATURES = [
-  'Tudo do plano gratuito',
+  'Tudo do seu plano atual',
   'Conexão bancária automática',
   'Transações importadas automaticamente',
   'Menos lançamentos manuais',
@@ -241,25 +241,24 @@ export function OpenFinanceShop({ block = true, onSynced }) {
   const renderOffer = () => (
     <>
       <p className={s.syncHeadline}>
-        Seu financeiro continua gratuito.
+        Chega de lançar tudo manualmente.
         <br />
-        Pague apenas se quiser automatizar.
+        Automatize seu financeiro.
       </p>
       <p className={s.ofShopLead}>
         Conecte suas contas bancárias e mantenha suas movimentações atualizadas automaticamente, sem precisar lançar
         tudo manualmente.
       </p>
       <div className={s.syncPlans}>
-        <section className={s.syncPlan} aria-labelledby="sync-free-title">
-          <p className={s.syncPlanName} id="sync-free-title">
+        <section className={s.syncPlan} aria-labelledby="sync-current-title">
+          <p className={s.syncPlanName} id="sync-current-title">
             Meu Financeiro
           </p>
-          <p className={s.syncPlanTag}>Grátis</p>
-          <p className={s.syncPlanPrice}>R$ 0/mês</p>
-          <FeatureList items={FREE_FEATURES} />
-          <Button variant="outline" block onClick={close}>
-            Continuar grátis
-          </Button>
+          <p className={s.syncPlanTag}>Seu plano atual</p>
+          <FeatureList items={CURRENT_FEATURES} />
+          <span className={s.syncCurrentBadge}>
+            <Icon name="circle-check" size={16} /> Plano atual
+          </span>
         </section>
         <section className={cx(s.syncPlan, s.syncPlanPlus)} aria-labelledby="sync-plus-title">
           <p className={s.syncPlanName} id="sync-plus-title">
@@ -488,7 +487,7 @@ export function OpenFinanceShop({ block = true, onSynced }) {
   if (!checkoutEnabled) {
     content = (
       <>
-        <p className={s.syncHeadline}>Seu financeiro continua gratuito.</p>
+        <p className={s.syncHeadline}>Sincronização bancária automática</p>
         <Alert tone="info">
           {checkoutDisabledMessage || 'A sincronização bancária automática chega em breve. Fique de olho!'}
         </Alert>

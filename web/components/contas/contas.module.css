@@ -468,6 +468,20 @@
   color: var(--mf-success);
 }
 
+.syncCurrentBadge {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 10px var(--sp-3);
+  border: 1px dashed var(--mf-border-strong);
+  border-radius: var(--r-md);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--mf-text-2);
+}
+
 .syncBack {
   display: inline-flex;
   align-items: center;
