@@ -4,6 +4,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Card } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
+import { SYNC_PURCHASE_SOON } from '@/lib/finance/syncPricing';
 import s from './dashboard.module.css';
 
 const COPY = {
@@ -65,10 +66,12 @@ export function SyncPromoCard({ variant = 'default', href = '/contas?sincronizar
         {copy.title}
       </h2>
       <p className={s.syncPromoText}>{copy.text}</p>
-      <Button block icon="link" onClick={() => router.push(href)}>
-        {copy.cta}
+      <Button block icon="link" disabled={SYNC_PURCHASE_SOON} onClick={() => router.push(href)}>
+        {SYNC_PURCHASE_SOON ? `${copy.cta} (em breve)` : copy.cta}
       </Button>
-      <p className={s.syncPromoFoot}>1 conta incluída por R$ 19,90/mês. Contas adicionais por R$ 9,90/mês.</p>
+      {SYNC_PURCHASE_SOON ? null : (
+        <p className={s.syncPromoFoot}>1 conta incluída por R$ 19,90/mês. Contas adicionais por R$ 9,90/mês.</p>
+      )}
     </Card>
   );
 }

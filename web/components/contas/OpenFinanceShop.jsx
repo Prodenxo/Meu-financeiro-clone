@@ -14,6 +14,7 @@ import {
   SYNC_BASE_CENTS,
   SYNC_EXTRA_CENTS,
   SYNC_MAX_ACCOUNTS,
+  SYNC_PURCHASE_SOON as PURCHASE_SOON,
   accountsLabel,
   dueInLabel,
   formatCentsBrl,
@@ -43,8 +44,6 @@ const PLUS_FEATURES = [
   'Visão consolidada das contas',
   'Atualização automática das movimentações',
 ];
-
-const PURCHASE_SOON = true;
 
 const EXTRAS_HINT = `1 conta incluída. Contas adicionais por ${formatCentsBrl(SYNC_EXTRA_CENTS)}/mês.`;
 
@@ -267,12 +266,14 @@ export function OpenFinanceShop({ block = true, onSynced }) {
             Meu Financeiro+
           </p>
           <p className={s.syncPlanTag}>Sincronização automática</p>
-          <p className={s.syncPlanPrice}>
-            <span className={s.syncPlanFrom}>A partir de</span>
-            {formatCentsBrl(SYNC_BASE_CENTS)}/mês
-          </p>
+          {PURCHASE_SOON ? null : (
+            <p className={s.syncPlanPrice}>
+              <span className={s.syncPlanFrom}>A partir de</span>
+              {formatCentsBrl(SYNC_BASE_CENTS)}/mês
+            </p>
+          )}
           <FeatureList items={PLUS_FEATURES} />
-          <p className={s.ofQuickHint}>{EXTRAS_HINT}</p>
+          {PURCHASE_SOON ? null : <p className={s.ofQuickHint}>{EXTRAS_HINT}</p>}
           <Button block icon="link" disabled={PURCHASE_SOON} onClick={() => setStep('checkout')}>
             {PURCHASE_SOON ? 'Conectar meu banco (em breve)' : 'Conectar meu banco'}
           </Button>
@@ -514,8 +515,16 @@ export function OpenFinanceShop({ block = true, onSynced }) {
   return (
     <>
       <div className={cx(block && s.ofConnect)}>
-        <Button variant="outline" icon="refresh-cw" block={block} onClick={() => setOpen(true)}>
-          Conectar meu banco
+        <Button
+          variant="outline"
+          icon="refresh-cw"
+          block={block}
+          disabled={PURCHASE_SOON && !licensed && renewal?.kind !== 'paused'}
+          onClick={() => setOpen(true)}
+        >
+          {PURCHASE_SOON && !licensed && renewal?.kind !== 'paused'
+            ? 'Conectar meu banco (em breve)'
+            : 'Conectar meu banco'}
         </Button>
         {entitlement ? (
           licensed ? (
@@ -537,7 +546,9 @@ export function OpenFinanceShop({ block = true, onSynced }) {
             <p className={s.ofQuickHint}>
               {renewal?.kind === 'paused'
                 ? 'Sincronização pausada: mensalidade em aberto.'
-                : 'Nenhuma conta contratada. A partir de R$ 19,90/mês.'}
+                : PURCHASE_SOON
+                  ? 'Sincronização bancária automática chegando em breve.'
+                  : 'Nenhuma conta contratada. A partir de R$ 19,90/mês.'}
             </p>
           )
         ) : null}

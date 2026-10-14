@@ -3,6 +3,9 @@ export const SYNC_BASE_CENTS = 1990;
 export const SYNC_EXTRA_CENTS = 990;
 export const SYNC_MAX_ACCOUNTS = 10;
 
+/** Venda da sincronização pausada: botões de compra ficam "em breve" e os preços não aparecem. */
+export const SYNC_PURCHASE_SOON = true;
+
 /** A partir deste volume de lançamentos manuais nos últimos 30 dias, o convite fala em economizar tempo. */
 export const MANY_MANUAL_THRESHOLD = 20;
 
