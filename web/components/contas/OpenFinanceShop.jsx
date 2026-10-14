@@ -44,6 +44,8 @@ const PLUS_FEATURES = [
   'Atualização automática das movimentações',
 ];
 
+const PURCHASE_SOON = true;
+
 const EXTRAS_HINT = `1 conta incluída. Contas adicionais por ${formatCentsBrl(SYNC_EXTRA_CENTS)}/mês.`;
 
 function maskCpfCnpj(value) {
@@ -271,8 +273,8 @@ export function OpenFinanceShop({ block = true, onSynced }) {
           </p>
           <FeatureList items={PLUS_FEATURES} />
           <p className={s.ofQuickHint}>{EXTRAS_HINT}</p>
-          <Button block icon="link" onClick={() => setStep('checkout')}>
-            Conectar meu banco
+          <Button block icon="link" disabled={PURCHASE_SOON} onClick={() => setStep('checkout')}>
+            {PURCHASE_SOON ? 'Conectar meu banco (em breve)' : 'Conectar meu banco'}
           </Button>
         </section>
       </div>
@@ -469,11 +471,15 @@ export function OpenFinanceShop({ block = true, onSynced }) {
           <Button
             block
             icon="plus"
-            disabled={isPending}
+            disabled={PURCHASE_SOON || isPending}
             aria-busy={isPending}
             onClick={() => pay(slots + 1, upgradeProvider)}
           >
-            {isPending ? 'Atualizando assinatura…' : 'Conectar nova conta'}
+            {PURCHASE_SOON
+              ? 'Conectar nova conta (em breve)'
+              : isPending
+                ? 'Atualizando assinatura…'
+                : 'Conectar nova conta'}
           </Button>
         ) : (
           <Alert tone="info">Você chegou ao limite de {SYNC_MAX_ACCOUNTS} contas. Fale com o suporte para ampliar.</Alert>
